@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 370" width="100%" height="100%" fill="none">
+  <!-- d in Brand Orange #FF6600 -->
+  <g id="letter-d">
+    <circle cx="70" cy="95" r="50" stroke="#FF6600" stroke-width="24" fill="none" />
+    <path d="M 120 14 L 120 145" stroke="#FF6600" stroke-width="24" stroke-linecap="round" />
+  </g>
+  
+  <!-- a in Brand Cyan #00B0FF -->
+  <g id="letter-a">
+    <circle cx="210" cy="95" r="50" stroke="#00B0FF" stroke-width="24" fill="none" />
+    <path d="M 260 45 L 260 145" stroke="#00B0FF" stroke-width="24" stroke-linecap="round" />
+  </g>
+  
+  <!-- g in Brand Green #00D000 -->
+  <g id="letter-g">
+    <circle cx="70" cy="235" r="50" stroke="#00D000" stroke-width="24" fill="none" />
+    <path d="M 120 185 L 120 285 C 120 335, 95 355, 60 355 C 30 355, 20 340, 20 340" stroke="#00D000" stroke-width="24" stroke-linecap="round" fill="none" />
+  </g>
+  
+  <!-- o in Brand Yellow #FFB600 -->
+  <g id="letter-o">
+    <circle cx="210" cy="235" r="50" stroke="#FFB600" stroke-width="24" fill="none" />
+  </g>
+</svg>
+
