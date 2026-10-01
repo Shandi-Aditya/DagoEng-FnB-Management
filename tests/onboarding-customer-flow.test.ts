@@ -169,4 +169,66 @@ describe("Onboarding & Customer Portal Flow Enhancements", () => {
       expect(res.member.tier).toBe("Silver");
     });
   });
+
+  describe("5. Complete Session Lifecycle: Login -> Logout -> Guest -> Re-login", () => {
+    it("handles full lifecycle without data loss or duplication", () => {
+      const db = [...mockMembersDb];
+      let sessionUser: any = null;
+      let isLoggedOut = false;
+
+      // 1. Initial Login
+      const member1 = getOrCreateMember(db, {
+        name: "Wayan Dewa",
+        phone: "+62 813-5566-7788",
+        email: "wayan.dewa@gmail.com",
+        initialPoints: 50,
+      });
+      sessionUser = {
+        name: member1.member.name,
+        phone: member1.member.phone,
+        email: member1.member.email,
+        role: "CUSTOMER",
+      };
+      isLoggedOut = false;
+
+      expect(sessionUser).not.toBeNull();
+      expect(sessionUser.name).toBe("Wayan Dewa");
+      expect(member1.isNew).toBe(true);
+
+      // 2. Perform Logout
+      sessionUser = null;
+      isLoggedOut = true;
+
+      expect(sessionUser).toBeNull();
+      expect(isLoggedOut).toBe(true);
+
+      // 3. State as Guest
+      const isCustomerLoggedIn = !!sessionUser && sessionUser.role === "CUSTOMER";
+      expect(isCustomerLoggedIn).toBe(false);
+
+      // 4. Re-login with the same account
+      const member2 = getOrCreateMember(db, {
+        name: "Wayan Dewa",
+        phone: "+62 813-5566-7788",
+        email: "wayan.dewa@gmail.com",
+        initialPoints: 50,
+      });
+
+      // Assert that re-login reuses existing member without duplicate creation
+      expect(member2.isNew).toBe(false);
+      expect(member2.member.id).toBe(member1.member.id);
+      expect(member2.member.points).toBe(50);
+
+      sessionUser = {
+        name: member2.member.name,
+        phone: member2.member.phone,
+        email: member2.member.email,
+        role: "CUSTOMER",
+      };
+      isLoggedOut = false;
+
+      expect(sessionUser.name).toBe("Wayan Dewa");
+      expect(sessionUser.role).toBe("CUSTOMER");
+    });
+  });
 });
