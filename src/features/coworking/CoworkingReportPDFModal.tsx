@@ -44,8 +44,8 @@ export function CoworkingReportPDFModal({
   const reportNumber = `COWORK-REP-${new Date().getFullYear()}${(new Date().getMonth() + 1)
     .toString()
     .padStart(2, "0")}${new Date().getDate().toString().padStart(2, "0")}-${Math.floor(
-    100 + Math.random() * 900
-  )}`;
+      100 + Math.random() * 900
+    )}`;
 
   const handlePrint = () => {
     window.print();
@@ -206,13 +206,12 @@ export function CoworkingReportPDFModal({
                       </td>
                       <td className="p-2.5 text-center">
                         <span
-                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                            b.checkInStatus === "CHECKED_IN"
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${b.checkInStatus === "CHECKED_IN"
                               ? "bg-emerald-100 text-emerald-800"
                               : b.checkInStatus === "RESERVED"
-                              ? "bg-blue-100 text-blue-800"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
                         >
                           {b.checkInStatus}
                         </span>
