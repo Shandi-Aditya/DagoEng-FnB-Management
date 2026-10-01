@@ -44,6 +44,7 @@ import {
   MessageCircle,
   ExternalLink,
   ShieldAlert,
+  Compass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,7 +76,7 @@ const HERO_SLIDES = [
     subtitle: "Dapatkan poin otomatis setiap transaksi untuk ditukar voucher diskon makan, gratis refill, dan benefit eksklusif member.",
     badge: "Member Loyalty Rewards",
     bgImage: "https://images.unsplash.com/photo-1527192491265-7e15c55b1ed2?q=80&w=1920&auto=format&fit=crop",
-    ctaText: "Cek Poin & Member",
+    ctaText: "Eksplor Program Member",
     ctaLink: "/customer?tab=LOYALTY",
   },
 ];
@@ -393,7 +394,7 @@ export default function PublicLandingPage() {
             </p>
 
             {/* Hero CTAs */}
-            <div className="pt-3 flex flex-col sm:flex-row items-center gap-4">
+            <div className="pt-3 flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
               <Link href={HERO_SLIDES[currentSlide].ctaLink} className="w-full sm:w-auto">
                 <Button
                   size="lg"
@@ -405,14 +406,31 @@ export default function PublicLandingPage() {
               </Link>
 
               <Button
-                onClick={() => setIsLoginModalOpen(true)}
+                onClick={() => scrollToSection("about")}
                 size="lg"
                 variant="outline"
-                className="w-full sm:w-auto h-13 px-7 font-bold bg-white/10 backdrop-blur-md text-white border-white/30 hover:bg-white/20 hover:border-white/60 rounded-2xl text-xs sm:text-sm transition-all"
+                className="w-full sm:w-auto h-13 px-7 font-bold bg-white/10 backdrop-blur-md text-white border-white/20 hover:bg-white/20 hover:border-white/50 rounded-2xl text-xs sm:text-sm transition-all hover:scale-105 active:scale-95"
               >
-                <LogIn className="w-4 h-4 mr-2 text-brand-orange" />
-                <span>Masuk Staf / Owner</span>
+                <Compass className="w-4 h-4 mr-2 text-brand-orange" />
+                <span>Eksplor Fasilitas Hub</span>
               </Button>
+            </div>
+
+            {/* Trust Highlights Strip */}
+            <div className="pt-4 flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs text-slate-300">
+              <div className="flex items-center space-x-1.5 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+                <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                <span className="font-bold text-white">4.9/5</span>
+                <span className="text-slate-400 text-[11px]">(1.2k+ Ulasan)</span>
+              </div>
+              <div className="flex items-center space-x-1.5 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="font-semibold text-slate-200">WiFi 100 Mbps</span>
+              </div>
+              <div className="flex items-center space-x-1.5 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+                <Coffee className="w-3.5 h-3.5 text-brand-orange" />
+                <span className="font-semibold text-slate-200">Specialty Coffee</span>
+              </div>
             </div>
 
             {/* Slide Navigation Progress */}
