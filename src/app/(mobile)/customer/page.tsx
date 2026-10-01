@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
@@ -59,6 +59,7 @@ import {
   Calendar,
   X,
   Crown,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,7 @@ interface CartItem {
 }
 
 function CustomerPortalContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const urlTab = searchParams.get("tab")?.toUpperCase() as CustomerTab | null;
   const initialTab: CustomerTab =
@@ -808,21 +810,21 @@ function CustomerPortalContent() {
 
             {/* Guest vs Logged-In Customer Access */}
             {!isCustomerLoggedIn ? (
-              <div className="flex items-center space-x-1.5">
+              <div className="flex items-center space-x-2">
                 <span className="hidden sm:inline-flex items-center space-x-1 text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
                   <User className="w-3 h-3 text-slate-400" />
                   <span>Guest</span>
                 </span>
                 <Link href={`/login?returnTo=${encodeURIComponent(`/customer?tab=${activeTab}`)}&mode=customer`}>
-                  <Button variant="outline" size="sm" className="text-xs h-8 px-2.5 font-bold text-slate-700 hover:text-slate-900 border-slate-300 rounded-xl">
-                    <LogIn className="w-3.5 h-3.5 sm:mr-1 text-brand-orange" />
-                    <span>Login</span>
+                  <Button size="sm" className="text-xs h-8 px-3.5 font-bold bg-brand-orange hover:bg-orange-600 text-white rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
+                    <LogIn className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Daftar / Masuk</span>
                   </Button>
                 </Link>
-                <Link href={`/login?returnTo=${encodeURIComponent(`/customer?tab=${activeTab}`)}&mode=register`}>
-                  <Button size="sm" className="text-xs h-8 px-3 font-bold bg-brand-orange hover:bg-orange-600 text-white rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
-                    <Sparkles className="w-3.5 h-3.5 sm:mr-1" />
-                    <span>Gabung Member</span>
+                <Link href="/">
+                  <Button variant="outline" size="sm" className="text-xs h-8 px-2.5 font-bold text-slate-600 hover:text-slate-900 border-slate-300 rounded-xl" title="Kembali ke Beranda / Onboarding">
+                    <Home className="w-3.5 h-3.5 sm:mr-1 text-slate-500" />
+                    <span className="hidden sm:inline">Ke Beranda</span>
                   </Button>
                 </Link>
               </div>
@@ -838,12 +840,14 @@ function CustomerPortalContent() {
                 <button
                   onClick={async () => {
                     await logout();
-                    showToast("Anda telah keluar dari sesi member.");
+                    showToast("Anda telah berhasil keluar dari sesi member.");
+                    router.push("/");
                   }}
-                  className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                  title="Keluar / Logout"
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 text-xs font-bold transition-all hover:scale-105 active:scale-95"
+                  title="Keluar Sesi & Kembali ke Beranda"
                 >
-                  <LogIn className="w-4 h-4 rotate-180" />
+                  <LogOut className="w-3.5 h-3.5 text-rose-500" />
+                  <span className="hidden sm:inline">Keluar</span>
                 </button>
               </div>
             )}
@@ -2426,11 +2430,19 @@ function CustomerPortalContent() {
 
                     {/* Account Actions */}
                     <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                      <Link href="/login">
-                        <Button variant="outline" size="sm" className="text-xs font-bold text-slate-700 hover:text-slate-900 rounded-xl border-slate-300">
-                          Ganti Akun / Logout
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          await logout();
+                          showToast("Anda telah keluar dari sesi member.");
+                          router.push("/");
+                        }}
+                        className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl border-rose-200 flex items-center space-x-1.5"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Keluar Sesi & Ke Beranda</span>
+                      </Button>
 
                       <Link href="/">
                         <Button variant="ghost" size="sm" className="text-xs font-bold text-brand-orange hover:bg-orange-50 rounded-xl">
