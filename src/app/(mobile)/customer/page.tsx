@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
@@ -73,7 +74,14 @@ interface CartItem {
   notes?: string;
 }
 
-export default function CustomerPortalPage() {
+function CustomerPortalContent() {
+  const searchParams = useSearchParams();
+  const urlTab = searchParams.get("tab")?.toUpperCase() as CustomerTab | null;
+  const initialTab: CustomerTab =
+    urlTab && ["HOME", "MENU", "COWORKING", "ORDERS", "LOYALTY", "PROFILE"].includes(urlTab)
+      ? urlTab
+      : "HOME";
+
   const { user, login, loginCustomer, logout } = useAuth();
   const { activeOutlet, activeOutletId, outlets, setOutlet } = useOutlet();
   const { filteredProducts } = useProducts();
@@ -84,8 +92,8 @@ export default function CustomerPortalPage() {
   const { spaces, bookings, bookSpace, confirmBookingPayment, cancelBooking } = useCoworking();
   const { settings } = useSettings();
 
-  // Active Tab
-  const [activeTab, setActiveTab] = useState<CustomerTab>("HOME");
+  // Active Tab initialized directly from URL searchParams
+  const [activeTab, setActiveTab] = useState<CustomerTab>(initialTab);
 
   // Order Cancellation State
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
@@ -123,20 +131,19 @@ export default function CustomerPortalPage() {
   const [authModalMode, setAuthModalMode] = useState<"LOGIN" | "REGISTER">("REGISTER");
   const [pendingActionAfterAuth, setPendingActionAfterAuth] = useState<"CHECKOUT_FNB" | "BOOKING_COWORK" | null>(null);
 
-  // Sync tab from URL parameters on mount
+  // React to URL search param changes
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const searchParams = new URLSearchParams(window.location.search);
-      const tabParam = searchParams.get("tab")?.toUpperCase();
-      if (tabParam && ["HOME", "MENU", "COWORKING", "ORDERS", "LOYALTY", "PROFILE"].includes(tabParam)) {
-        setActiveTab(tabParam as CustomerTab);
-      }
-      const outletParam = searchParams.get("outlet");
-      if (outletParam) {
-        setOutlet(outletParam);
-      }
+    if (urlTab && ["HOME", "MENU", "COWORKING", "ORDERS", "LOYALTY", "PROFILE"].includes(urlTab)) {
+      setActiveTab(urlTab);
     }
-  }, [setOutlet]);
+  }, [urlTab]);
+
+  const urlOutlet = searchParams.get("outlet");
+  useEffect(() => {
+    if (urlOutlet) {
+      setOutlet(urlOutlet);
+    }
+  }, [urlOutlet, setOutlet]);
 
   // Switch Tab with micro-smooth state
   const handleTabChange = (tab: CustomerTab) => {
@@ -173,16 +180,15 @@ export default function CustomerPortalPage() {
     }
   }, [currentMember, activeOutletId, setOutlet]);
 
-  // Customer Orders (Filtered strictly to current customer name / member)
+  // Customer Orders (Filtered strictly to logged in customer, empty if Guest)
   const customerOrders = useMemo(() => {
-    const custName = currentMember?.name || user?.name || "Ketut Dian";
+    if (!isCustomerLoggedIn) return [];
+    const custName = currentMember?.name || user?.name;
+    if (!custName) return [];
     return orders.filter(
-      (o) =>
-        o.customerName.toLowerCase() === custName.toLowerCase() ||
-        o.customerName.toLowerCase().includes("ketut") ||
-        o.customerName.toLowerCase().includes("pelanggan")
+      (o) => o.customerName.toLowerCase() === custName.toLowerCase()
     );
-  }, [orders, currentMember, user]);
+  }, [orders, currentMember, user, isCustomerLoggedIn]);
 
   // Active (Ongoing) Customer Orders
   const activeOrders = useMemo(() => {
@@ -198,16 +204,15 @@ export default function CustomerPortalPage() {
     );
   }, [customerOrders]);
 
-  // Customer Coworking Bookings
+  // Customer Coworking Bookings (Filtered strictly to logged in customer, empty if Guest)
   const customerBookings = useMemo(() => {
-    const custName = currentMember?.name || user?.name || "Ketut Dian";
+    if (!isCustomerLoggedIn) return [];
+    const custName = currentMember?.name || user?.name;
+    if (!custName) return [];
     return bookings.filter(
-      (b) =>
-        b.guestName.toLowerCase().includes(custName.toLowerCase()) ||
-        b.guestName.toLowerCase().includes("ketut") ||
-        b.guestName.toLowerCase().includes("sarah")
+      (b) => b.guestName.toLowerCase().includes(custName.toLowerCase())
     );
-  }, [bookings, currentMember, user]);
+  }, [bookings, currentMember, user, isCustomerLoggedIn]);
 
   // Menu Categories
   const menuCategories = useMemo(() => {
@@ -801,23 +806,17 @@ export default function CustomerPortalPage() {
               )}
             </button>
 
-            {/* Guest vs Logged-In Customer Access (Requirement 4) */}
+            {/* Guest vs Logged-In Customer Access */}
             {!isCustomerLoggedIn ? (
-              <div className="flex items-center space-x-1.5">
-                <span className="hidden sm:inline-flex items-center space-x-1 text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
+              <div className="flex items-center space-x-2">
+                <span className="hidden sm:inline-flex items-center space-x-1 text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
                   <User className="w-3 h-3 text-slate-400" />
                   <span>Guest</span>
                 </span>
                 <Link href={`/login?returnTo=${encodeURIComponent(`/customer?tab=${activeTab}`)}&mode=customer`}>
-                  <Button variant="outline" size="sm" className="text-xs h-8 px-2.5 font-bold text-slate-700 hover:text-slate-900 border-slate-300 rounded-xl">
-                    <LogIn className="w-3.5 h-3.5 sm:mr-1 text-brand-orange" />
-                    <span>Login</span>
-                  </Button>
-                </Link>
-                <Link href={`/login?returnTo=${encodeURIComponent(`/customer?tab=${activeTab}`)}&mode=register`}>
-                  <Button size="sm" className="text-xs h-8 px-3 font-bold bg-brand-orange hover:bg-orange-600 text-white rounded-xl shadow-xs">
-                    <Sparkles className="w-3.5 h-3.5 sm:mr-1" />
-                    <span>Gabung Member</span>
+                  <Button size="sm" className="text-xs h-8 px-3.5 font-bold bg-brand-orange hover:bg-orange-600 text-white rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
+                    <LogIn className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Daftar / Masuk</span>
                   </Button>
                 </Link>
               </div>
@@ -845,7 +844,7 @@ export default function CustomerPortalPage() {
           </div>
         </div>
 
-        {/* 2. Top Desktop Tab Navigation (Home -> Menu -> Co-working -> Pesanan -> Loyalty -> Profile) */}
+        {/* 2. Top Desktop Tab Navigation */}
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex space-x-1.5 border-t border-slate-100 overflow-x-auto scrollbar-none py-1.5">
           {[
             { key: "HOME", label: "Home", icon: <Home className="w-3.5 h-3.5" /> },
@@ -858,7 +857,7 @@ export default function CustomerPortalPage() {
               badge: activeOrders.length + customerBookings.length > 0 ? activeOrders.length + customerBookings.length : undefined,
             },
             { key: "LOYALTY", label: "Loyalty & Poin", icon: <Award className="w-3.5 h-3.5" /> },
-            { key: "PROFILE", label: "Profil Member", icon: <User className="w-3.5 h-3.5" /> },
+            ...(isCustomerLoggedIn ? [{ key: "PROFILE", label: "Profil Member", icon: <User className="w-3.5 h-3.5" /> }] : []),
           ].map((t) => (
             <button
               key={t.key}
@@ -902,98 +901,160 @@ export default function CustomerPortalPage() {
             {activeTab === "HOME" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 
-                {/* Greeting & Loyalty Summary Banner */}
-                <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 space-y-6 relative overflow-hidden">
-                  
-                  <div className="absolute top-0 right-0 w-80 h-80 bg-brand-orange/15 rounded-full blur-3xl pointer-events-none" />
-                  <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+                {/* Greeting & Summary Banner (Guest vs Logged In Member) */}
+                {!isCustomerLoggedIn ? (
+                  <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 space-y-6 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-80 h-80 bg-brand-orange/15 rounded-full blur-3xl pointer-events-none" />
+                    <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
 
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 relative z-10">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center space-x-2">
-                        <span className="px-3 py-0.5 rounded-full bg-brand-orange/20 text-brand-orange text-[10px] font-bold tracking-wide uppercase border border-brand-orange/30">
-                          Digital Member Card
-                        </span>
-                        <span className="text-xs text-slate-400 font-mono font-semibold">
-                          #{currentMember?.id || "mem-001"}
-                        </span>
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
+                      <div className="space-y-2 max-w-xl">
+                        <div className="flex items-center space-x-2">
+                          <span className="px-3 py-0.5 rounded-full bg-brand-orange/20 text-brand-orange text-[10px] font-bold tracking-wide uppercase border border-brand-orange/30">
+                            Dago Creative Hub • Customer Portal
+                          </span>
+                        </div>
+                        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white">
+                          Nikmati Kuliner Artisan & Coworking Nyaman ✨
+                        </h2>
+                        <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                          Pesan makanan & minuman artisan atau booking ruang kerja modern tanpa ribet. Kumpulkan poin loyalty untuk setiap transaksi.
+                        </p>
                       </div>
-                      <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white">
-                        Halo, {currentMember?.name || "Ketut Dian"} 👋
-                      </h2>
-                      <p className="text-xs sm:text-sm text-slate-300">
-                        Selamat datang di portal mandiri Dago Creative Hub!
-                      </p>
+
+                      {/* Guest CTA Card */}
+                      <div className="bg-white/10 backdrop-blur-md border border-white/15 p-4 sm:p-5 rounded-2xl flex flex-col justify-between space-y-3 min-w-[260px] shadow-lg">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center font-bold shadow-md shadow-orange-500/30">
+                            <Sparkles className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <span className="text-xs font-black text-white block">Program Member Loyalty</span>
+                            <span className="text-[11px] text-amber-300 font-semibold">+50 Poin Bonus Member Baru</span>
+                          </div>
+                        </div>
+                        <Link href={`/login?returnTo=${encodeURIComponent(`/customer?tab=${activeTab}`)}&mode=customer`}>
+                          <Button className="w-full h-9 bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
+                            <span>Daftar / Masuk Akun</span>
+                            <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                          </Button>
+                        </Link>
+                      </div>
                     </div>
 
-                    {/* Tier Badge & Points Counter */}
-                    <div className="bg-slate-800/80 backdrop-blur-md border border-slate-700/90 p-4 rounded-2xl flex items-center space-x-4 min-w-[240px] shadow-lg">
-                      <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500 via-orange-500 to-yellow-400 text-slate-950 flex items-center justify-center font-extrabold shadow-md shadow-amber-500/20">
-                        <Award className="w-6 h-6 text-slate-950" />
+                    {/* Quick Action Shortcuts */}
+                    <div className="pt-2 flex flex-wrap gap-3 relative z-10">
+                      <Button
+                        onClick={() => handleTabChange("MENU")}
+                        size="sm"
+                        className="font-bold bg-brand-orange text-white hover:bg-orange-600 text-xs h-10 px-5 rounded-xl shadow-md shadow-orange-500/20 hover:-translate-y-0.5 transition-all"
+                      >
+                        <UtensilsCrossed className="w-3.5 h-3.5 mr-1.5" />
+                        <span>Pesan Menu F&B</span>
+                      </Button>
+                      <Button
+                        onClick={() => handleTabChange("COWORKING")}
+                        size="sm"
+                        variant="outline"
+                        className="font-bold bg-white/10 border-white/20 text-white hover:bg-white/20 text-xs h-10 px-5 rounded-xl hover:-translate-y-0.5 transition-all"
+                      >
+                        <Laptop className="w-3.5 h-3.5 mr-1.5 text-brand-orange" />
+                        <span>Booking Ruang Kerja</span>
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 space-y-6 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-80 h-80 bg-brand-orange/15 rounded-full blur-3xl pointer-events-none" />
+                    <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 relative z-10">
+                      <div className="space-y-1.5">
+                        <div className="flex items-center space-x-2">
+                          <span className="px-3 py-0.5 rounded-full bg-brand-orange/20 text-brand-orange text-[10px] font-bold tracking-wide uppercase border border-brand-orange/30">
+                            Digital Member Card
+                          </span>
+                          <span className="text-xs text-slate-400 font-mono font-semibold">
+                            #{currentMember?.id || "mem-001"}
+                          </span>
+                        </div>
+                        <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white">
+                          Halo, {currentMember?.name} 👋
+                        </h2>
+                        <p className="text-xs sm:text-sm text-slate-300">
+                          Selamat datang di portal mandiri Dago Creative Hub!
+                        </p>
                       </div>
-                      <div>
-                        <span className="text-xs font-bold text-slate-300 block">
-                          {currentMember?.tier} Member
-                        </span>
-                        <div className="text-2xl font-black text-white tracking-tight">
-                          <AnimatedCounter value={currentMember?.points || 0} />{" "}
-                          <span className="text-xs text-brand-orange font-normal">Poin</span>
+
+                      {/* Tier Badge & Points Counter */}
+                      <div className="bg-slate-800/80 backdrop-blur-md border border-slate-700/90 p-4 rounded-2xl flex items-center space-x-4 min-w-[240px] shadow-lg">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500 via-orange-500 to-yellow-400 text-slate-950 flex items-center justify-center font-extrabold shadow-md shadow-amber-500/20">
+                          <Award className="w-6 h-6 text-slate-950" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-slate-300 block">
+                            {currentMember?.tier} Member
+                          </span>
+                          <div className="text-2xl font-black text-white tracking-tight">
+                            <AnimatedCounter value={currentMember?.points || 0} />{" "}
+                            <span className="text-xs text-brand-orange font-normal">Poin</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* Progress to Next Tier */}
-                  {nextTierInfo.pointsNeeded > 0 && (
-                    <div className="space-y-2 pt-3 border-t border-slate-800 relative z-10">
-                      <div className="flex items-center justify-between text-xs text-slate-300">
-                        <span>
-                          Kumpulkan <strong>{nextTierInfo.pointsNeeded} Poin lagi</strong> untuk mencapai{" "}
-                          <span className="text-brand-orange font-bold">{nextTierInfo.nextTier} Member</span>
-                        </span>
-                        <span className="font-mono text-[11px] text-slate-400">
-                          {currentMember?.points} / {nextTierInfo.target}
-                        </span>
+                    {/* Progress to Next Tier */}
+                    {nextTierInfo.pointsNeeded > 0 && (
+                      <div className="space-y-2 pt-3 border-t border-slate-800 relative z-10">
+                        <div className="flex items-center justify-between text-xs text-slate-300">
+                          <span>
+                            Kumpulkan <strong>{nextTierInfo.pointsNeeded} Poin lagi</strong> untuk mencapai{" "}
+                            <span className="text-brand-orange font-bold">{nextTierInfo.nextTier} Member</span>
+                          </span>
+                          <span className="font-mono text-[11px] text-slate-400">
+                            {currentMember?.points} / {nextTierInfo.target}
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
+                          <div
+                            className="bg-gradient-to-r from-amber-400 via-orange-500 to-brand-orange h-full rounded-full transition-all duration-700 shadow-sm"
+                            style={{ width: `${nextTierInfo.progress}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
-                        <div
-                          className="bg-gradient-to-r from-amber-400 via-orange-500 to-brand-orange h-full rounded-full transition-all duration-700 shadow-sm"
-                          style={{ width: `${nextTierInfo.progress}%` }}
-                        />
-                      </div>
+                    )}
+
+                    {/* Quick Action Shortcuts */}
+                    <div className="pt-2 flex flex-wrap gap-3 relative z-10">
+                      <Button
+                        onClick={() => handleTabChange("MENU")}
+                        size="sm"
+                        className="font-bold bg-brand-orange text-white hover:bg-orange-600 text-xs h-10 px-5 rounded-xl shadow-md shadow-orange-500/20 hover:-translate-y-0.5 transition-all"
+                      >
+                        <UtensilsCrossed className="w-3.5 h-3.5 mr-1.5" />
+                        <span>Pesan Menu F&B</span>
+                      </Button>
+                      <Button
+                        onClick={() => handleTabChange("COWORKING")}
+                        size="sm"
+                        variant="outline"
+                        className="font-bold bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 text-xs h-10 px-4 rounded-xl hover:-translate-y-0.5 transition-all"
+                      >
+                        <Laptop className="w-3.5 h-3.5 mr-1.5 text-blue-400" />
+                        <span>Booking Ruang Kerja</span>
+                      </Button>
+                      <Button
+                        onClick={() => handleTabChange("LOYALTY")}
+                        size="sm"
+                        variant="outline"
+                        className="font-bold bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 text-xs h-10 px-4 rounded-xl hover:-translate-y-0.5 transition-all"
+                      >
+                        <Award className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+                        <span>Tukar Voucher ({LOYALTY_VOUCHERS.length})</span>
+                      </Button>
                     </div>
-                  )}
-
-                  {/* Quick Action Shortcuts */}
-                  <div className="pt-2 flex flex-wrap gap-3 relative z-10">
-                    <Button
-                      onClick={() => handleTabChange("MENU")}
-                      size="sm"
-                      className="font-bold bg-brand-orange text-white hover:bg-orange-600 text-xs h-10 px-5 rounded-xl shadow-md shadow-orange-500/20 hover:-translate-y-0.5 transition-all"
-                    >
-                      <UtensilsCrossed className="w-3.5 h-3.5 mr-1.5" />
-                      <span>Pesan Menu F&B</span>
-                    </Button>
-                    <Button
-                      onClick={() => handleTabChange("COWORKING")}
-                      size="sm"
-                      variant="outline"
-                      className="font-bold bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 text-xs h-10 px-4 rounded-xl hover:-translate-y-0.5 transition-all"
-                    >
-                      <Laptop className="w-3.5 h-3.5 mr-1.5 text-blue-400" />
-                      <span>Booking Ruang Kerja</span>
-                    </Button>
-                    <Button
-                      onClick={() => handleTabChange("LOYALTY")}
-                      size="sm"
-                      variant="outline"
-                      className="font-bold bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 text-xs h-10 px-4 rounded-xl hover:-translate-y-0.5 transition-all"
-                    >
-                      <Award className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
-                      <span>Tukar Voucher ({LOYALTY_VOUCHERS.length})</span>
-                    </Button>
                   </div>
-                </div>
+                )}
 
                 {/* Active Orders & Bookings Tracker */}
                 {(activeOrders.length > 0 || customerBookings.length > 0) && (
@@ -2112,49 +2173,73 @@ export default function CustomerPortalPage() {
             {activeTab === "LOYALTY" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 
-                {/* Loyalty Card Header */}
-                <div className={`rounded-3xl p-6 sm:p-8 shadow-xl border space-y-4 relative overflow-hidden ${getTierColor(currentMember?.tier || "Bronze")}`}>
-                  
-                  <div className="flex items-center justify-between relative z-10">
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider opacity-90 block">
-                        DagoEng Loyalty Rewards
-                      </span>
-                      <h2 className="text-xl sm:text-3xl font-black text-white">
-                        {currentMember?.tier} Member Status
-                      </h2>
-                    </div>
-
-                    <div className="px-3.5 py-1 rounded-xl text-xs font-black uppercase bg-white/20 backdrop-blur-md border border-white/30 text-white">
-                      {currentMember?.tier}
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex items-baseline space-x-2 relative z-10">
-                    <span className="text-3xl sm:text-5xl font-black text-white tracking-tight">
-                      <AnimatedCounter value={currentMember?.points || 0} />
-                    </span>
-                    <span className="text-xs sm:text-sm text-white/80 font-bold">Total Poin Terkumpul</span>
-                  </div>
-
-                  {/* Progress to Next Tier */}
-                  {nextTierInfo.pointsNeeded > 0 && (
-                    <div className="space-y-2 pt-3 border-t border-white/20 relative z-10">
-                      <div className="flex justify-between text-xs text-white/90 font-medium">
-                        <span>
-                          {nextTierInfo.pointsNeeded} Poin lagi menuju <strong>{nextTierInfo.nextTier}</strong>
+                {/* Loyalty Card Header (Guest vs Member) */}
+                {!isCustomerLoggedIn ? (
+                  <div className="rounded-3xl p-6 sm:p-8 shadow-xl border bg-gradient-to-br from-amber-600 via-orange-600 to-amber-700 text-white space-y-4 relative overflow-hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider opacity-90 block">
+                          DagoEng Loyalty Rewards Program
                         </span>
-                        <span className="font-mono">{nextTierInfo.progress}%</span>
+                        <h2 className="text-xl sm:text-2xl font-black text-white">
+                          Kumpulkan Poin di Setiap Transaksi ✨
+                        </h2>
+                        <p className="text-xs text-amber-100 max-w-lg mt-1">
+                          Dapatkan 1 poin setiap kelipatan Rp 1.000 transaksi. Tukarkan dengan voucher diskon, promo menu, dan benefit coworking.
+                        </p>
                       </div>
-                      <div className="w-full bg-black/20 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/20">
-                        <div
-                          className="bg-white h-full rounded-full transition-all duration-700 shadow-sm"
-                          style={{ width: `${nextTierInfo.progress}%` }}
-                        />
+
+                      <Link href={`/login?returnTo=${encodeURIComponent(`/customer?tab=LOYALTY`)}&mode=customer`}>
+                        <Button className="bg-white text-orange-700 hover:bg-orange-50 font-bold text-xs h-10 px-5 rounded-xl shadow-md transition-all hover:scale-105 active:scale-95">
+                          <Sparkles className="w-3.5 h-3.5 mr-1.5 text-amber-500" />
+                          <span>Daftar / Masuk Member</span>
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`rounded-3xl p-6 sm:p-8 shadow-xl border space-y-4 relative overflow-hidden ${getTierColor(currentMember?.tier || "Bronze")}`}>
+                    <div className="flex items-center justify-between relative z-10">
+                      <div>
+                        <span className="text-[10px] font-black uppercase tracking-wider opacity-90 block">
+                          DagoEng Loyalty Rewards
+                        </span>
+                        <h2 className="text-xl sm:text-3xl font-black text-white">
+                          {currentMember?.tier} Member Status
+                        </h2>
+                      </div>
+
+                      <div className="px-3.5 py-1 rounded-xl text-xs font-black uppercase bg-white/20 backdrop-blur-md border border-white/30 text-white">
+                        {currentMember?.tier}
                       </div>
                     </div>
-                  )}
-                </div>
+
+                    <div className="pt-2 flex items-baseline space-x-2 relative z-10">
+                      <span className="text-3xl sm:text-5xl font-black text-white tracking-tight">
+                        <AnimatedCounter value={currentMember?.points || 0} />
+                      </span>
+                      <span className="text-xs sm:text-sm text-white/80 font-bold">Total Poin Terkumpul</span>
+                    </div>
+
+                    {/* Progress to Next Tier */}
+                    {nextTierInfo.pointsNeeded > 0 && (
+                      <div className="space-y-2 pt-3 border-t border-white/20 relative z-10">
+                        <div className="flex justify-between text-xs text-white/90 font-medium">
+                          <span>
+                            {nextTierInfo.pointsNeeded} Poin lagi menuju <strong>{nextTierInfo.nextTier}</strong>
+                          </span>
+                          <span className="font-mono">{nextTierInfo.progress}%</span>
+                        </div>
+                        <div className="w-full bg-black/20 h-2.5 rounded-full overflow-hidden p-0.5 border border-white/20">
+                          <div
+                            className="bg-white h-full rounded-full transition-all duration-700 shadow-sm"
+                            style={{ width: `${nextTierInfo.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Redeem Vouchers Grid */}
                 <div className="space-y-3.5">
@@ -2578,5 +2663,22 @@ export default function CustomerPortalPage() {
       )}
 
     </div>
+  );
+}
+
+export default function CustomerPortalPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+          <div className="flex flex-col items-center space-y-3">
+            <div className="w-8 h-8 border-3 border-brand-orange border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs font-bold text-slate-500">Memuat Customer Portal...</span>
+          </div>
+        </div>
+      }
+    >
+      <CustomerPortalContent />
+    </Suspense>
   );
 }
