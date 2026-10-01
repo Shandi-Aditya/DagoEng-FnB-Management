@@ -393,43 +393,20 @@ export default function PublicLandingPage() {
               {HERO_SLIDES[currentSlide].subtitle}
             </p>
 
-            {/* Hero CTAs */}
-            <div className="pt-3 flex flex-col sm:flex-row items-center gap-3 sm:gap-4">
-              <Link href={HERO_SLIDES[currentSlide].ctaLink} className="w-full sm:w-auto">
-                <Button
-                  size="lg"
-                  className="w-full sm:w-auto h-13 px-8 font-black bg-brand-orange text-white hover:bg-orange-600 shadow-xl shadow-orange-500/30 rounded-2xl text-xs sm:text-sm transition-all hover:scale-105 active:scale-95 border border-orange-400/40 group"
-                >
-                  <span>{HERO_SLIDES[currentSlide].ctaText}</span>
-                  <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
-                </Button>
-              </Link>
-
-              <Button
-                onClick={() => scrollToSection("about")}
-                size="lg"
-                variant="outline"
-                className="w-full sm:w-auto h-13 px-7 font-bold bg-white/10 backdrop-blur-md text-white border-white/20 hover:bg-white/20 hover:border-white/50 rounded-2xl text-xs sm:text-sm transition-all hover:scale-105 active:scale-95"
-              >
-                <Compass className="w-4 h-4 mr-2 text-brand-orange" />
-                <span>Eksplor Fasilitas Hub</span>
-              </Button>
-            </div>
-
             {/* Trust Highlights Strip */}
-            <div className="pt-4 flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs text-slate-300">
-              <div className="flex items-center space-x-1.5 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+            <div className="pt-2 flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs text-slate-300">
+              <div className="flex items-center space-x-1.5 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/15 shadow-sm">
                 <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                 <span className="font-bold text-white">4.9/5</span>
-                <span className="text-slate-400 text-[11px]">(1.2k+ Ulasan)</span>
+                <span className="text-slate-300 text-[11px]">(1.2k+ Ulasan)</span>
               </div>
-              <div className="flex items-center space-x-1.5 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+              <div className="flex items-center space-x-1.5 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/15 shadow-sm">
                 <Wifi className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="font-semibold text-slate-200">WiFi 100 Mbps</span>
               </div>
-              <div className="flex items-center space-x-1.5 bg-white/5 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+              <div className="flex items-center space-x-1.5 bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full border border-white/15 shadow-sm">
                 <Coffee className="w-3.5 h-3.5 text-brand-orange" />
-                <span className="font-semibold text-slate-200">Specialty Coffee</span>
+                <span className="font-semibold text-slate-200">Specialty Coffee & Hub</span>
               </div>
             </div>
 
