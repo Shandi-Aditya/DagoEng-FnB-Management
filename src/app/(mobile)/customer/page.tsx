@@ -57,8 +57,10 @@ import {
   Laptop,
   Calendar,
   X,
+  Crown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -72,10 +74,10 @@ interface CartItem {
 }
 
 export default function CustomerPortalPage() {
-  const { user } = useAuth();
+  const { user, login, loginCustomer, logout } = useAuth();
   const { activeOutlet, activeOutletId, outlets, setOutlet } = useOutlet();
   const { filteredProducts } = useProducts();
-  const { members, redeemPoints, reverseTransactionPoints, addPoints } = useLoyalty();
+  const { members, getOrCreateMember, redeemPoints, reverseTransactionPoints, addPoints } = useLoyalty();
   const { orders, createOrder, advanceOrderStatus } = useOrders();
   const { releaseTableToAvailable, occupyTableWithOrder } = useTables();
   const { simulateBOMDeduction } = useInventory();
@@ -116,6 +118,26 @@ export default function CustomerPortalPage() {
   const [bookingGuests, setBookingGuests] = useState<number>(1);
   const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"QRIS" | "CASH">("QRIS");
 
+  // Guest Authentication & Interceptor State
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<"LOGIN" | "REGISTER">("REGISTER");
+  const [pendingActionAfterAuth, setPendingActionAfterAuth] = useState<"CHECKOUT_FNB" | "BOOKING_COWORK" | null>(null);
+
+  // Sync tab from URL parameters on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const searchParams = new URLSearchParams(window.location.search);
+      const tabParam = searchParams.get("tab")?.toUpperCase();
+      if (tabParam && ["HOME", "MENU", "COWORKING", "ORDERS", "LOYALTY", "PROFILE"].includes(tabParam)) {
+        setActiveTab(tabParam as CustomerTab);
+      }
+      const outletParam = searchParams.get("outlet");
+      if (outletParam) {
+        setOutlet(outletParam);
+      }
+    }
+  }, [setOutlet]);
+
   // Switch Tab with micro-smooth state
   const handleTabChange = (tab: CustomerTab) => {
     setIsTabLoading(true);
@@ -126,18 +148,23 @@ export default function CustomerPortalPage() {
     }, 150);
   };
 
+  // Check if Customer is logged in
+  const isCustomerLoggedIn = !!user && user.role.slug === "CUSTOMER";
+
   // Identify Current Customer Member Profile
   const currentMember = useMemo(() => {
-    if (user?.name) {
+    if (isCustomerLoggedIn && user) {
       const match = members.find(
         (m) =>
-          m.name.toLowerCase() === user.name.toLowerCase() ||
-          (user.phone && m.phone === user.phone)
+          (user.phone && m.phone.replace(/\D/g, "") === user.phone.replace(/\D/g, "")) ||
+          (user.email && m.email?.toLowerCase() === user.email.toLowerCase()) ||
+          m.name.toLowerCase() === user.name.toLowerCase()
       );
       if (match) return match;
+      return members[0];
     }
-    return members[0]; // Default Ketut Dian
-  }, [user, members]);
+    return null;
+  }, [user, isCustomerLoggedIn, members]);
 
   // Automatically sync outlet scope to customer's registered branch
   useEffect(() => {
@@ -334,8 +361,7 @@ export default function CustomerPortalPage() {
     );
   };
 
-  const handleCheckoutSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const executeFnbOrder = () => {
     if (cart.length === 0) return;
 
     const newOrderItems = cart.map((ci, idx) => ({
@@ -378,6 +404,21 @@ export default function CustomerPortalPage() {
     setWaitingPaymentOrder(newOrder);
     setIsWaitingPaymentOpen(true);
     showToast(`Pesanan #${newOrder.orderNumber} dibuat. Menunggu pembayaran.`);
+  };
+
+  const handleCheckoutSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cart.length === 0) return;
+
+    // Authentication Guard: Guests MUST login or register before completing checkout
+    if (!isCustomerLoggedIn) {
+      setPendingActionAfterAuth("CHECKOUT_FNB");
+      setAuthModalMode("REGISTER");
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    executeFnbOrder();
   };
 
   const handleWaitingPaymentSuccess = (targetOrder: OrderRecord) => {
@@ -454,13 +495,12 @@ export default function CustomerPortalPage() {
     setIsBookingModalOpen(true);
   };
 
-  const handleCoworkingBookingSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const executeCoworkingBooking = () => {
     if (!selectedSpaceForBooking) return;
 
     const rate = selectedSpaceForBooking.hourlyRate || 15000;
     const totalAmount = rate * bookingDuration;
-    const customerName = currentMember?.name || user?.name || "Ketut Dian";
+    const customerName = currentMember?.name || user?.name || "Pelanggan Member";
 
     // 1. Create booking with PENDING payment status (requires payment before use)
     const newBooking = bookSpace({
@@ -468,8 +508,8 @@ export default function CustomerPortalPage() {
       spaceName: selectedSpaceForBooking.name,
       spaceType: selectedSpaceForBooking.type,
       guestName: customerName,
-      guestPhone: currentMember?.phone || "+62 819-1122-3344",
-      guestEmail: currentMember?.email || "customer@dagoeng.com",
+      guestPhone: currentMember?.phone || user?.phone || "+62 819-1122-3344",
+      guestEmail: currentMember?.email || user?.email || "customer@dagoeng.com",
       company: "Member Dago",
       bookingType: "HOURLY",
       date: bookingDate,
@@ -490,6 +530,32 @@ export default function CustomerPortalPage() {
     setWaitingPaymentBooking(newBooking);
     setIsWaitingPaymentOpen(true);
     showToast(`Booking ${selectedSpaceForBooking.name} dibuat. Silakan selesaikan pembayaran.`);
+  };
+
+  const handleCoworkingBookingSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSpaceForBooking) return;
+
+    // Authentication Guard: Guests MUST login or register before completing booking
+    if (!isCustomerLoggedIn) {
+      setPendingActionAfterAuth("BOOKING_COWORK");
+      setAuthModalMode("REGISTER");
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    executeCoworkingBooking();
+  };
+
+  const handleAuthSuccess = () => {
+    setIsAuthModalOpen(false);
+    if (pendingActionAfterAuth === "CHECKOUT_FNB") {
+      setPendingActionAfterAuth(null);
+      executeFnbOrder();
+    } else if (pendingActionAfterAuth === "BOOKING_COWORK") {
+      setPendingActionAfterAuth(null);
+      executeCoworkingBooking();
+    }
   };
 
   const handleUniversalPaymentSuccess = (payload: { type: "FNB" | "COWORKING"; id: string }) => {
@@ -725,6 +791,7 @@ export default function CustomerPortalPage() {
                 if (cart.length > 0) setIsCheckoutOpen(true);
               }}
               className="relative p-2 rounded-xl bg-slate-100/80 hover:bg-slate-200/80 text-slate-700 transition-all hover:scale-105 active:scale-95"
+              title="Keranjang Belanja"
             >
               <ShoppingBag className="w-4 h-4" />
               {cartTotalItems > 0 && (
@@ -734,12 +801,47 @@ export default function CustomerPortalPage() {
               )}
             </button>
 
-            <Link href="/login">
-              <Button variant="outline" size="sm" className="text-xs h-8 gap-1.5 text-slate-600 hover:text-slate-900 rounded-xl border-slate-300 font-bold">
-                <LogIn className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Staf / Logout</span>
-              </Button>
-            </Link>
+            {/* Guest vs Logged-In Customer Access (Requirement 4) */}
+            {!isCustomerLoggedIn ? (
+              <div className="flex items-center space-x-1.5">
+                <span className="hidden sm:inline-flex items-center space-x-1 text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
+                  <User className="w-3 h-3 text-slate-400" />
+                  <span>Guest</span>
+                </span>
+                <Link href={`/login?returnTo=${encodeURIComponent(`/customer?tab=${activeTab}`)}&mode=customer`}>
+                  <Button variant="outline" size="sm" className="text-xs h-8 px-2.5 font-bold text-slate-700 hover:text-slate-900 border-slate-300 rounded-xl">
+                    <LogIn className="w-3.5 h-3.5 sm:mr-1 text-brand-orange" />
+                    <span>Login</span>
+                  </Button>
+                </Link>
+                <Link href={`/login?returnTo=${encodeURIComponent(`/customer?tab=${activeTab}`)}&mode=register`}>
+                  <Button size="sm" className="text-xs h-8 px-3 font-bold bg-brand-orange hover:bg-orange-600 text-white rounded-xl shadow-xs">
+                    <Sparkles className="w-3.5 h-3.5 sm:mr-1" />
+                    <span>Gabung Member</span>
+                  </Button>
+                </Link>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 text-amber-950 text-xs font-bold shadow-2xs">
+                  <Crown className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{currentMember?.name.split(" ")[0]}</span>
+                  <span className="text-[10px] bg-amber-200/70 text-amber-900 px-1.5 py-0.2 rounded-md font-black">
+                    {currentMember?.points || 0} Pts
+                  </span>
+                </div>
+                <button
+                  onClick={async () => {
+                    await logout();
+                    showToast("Anda telah keluar dari sesi member.");
+                  }}
+                  className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                  title="Keluar / Logout"
+                >
+                  <LogIn className="w-4 h-4 rotate-180" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -2325,6 +2427,155 @@ export default function CustomerPortalPage() {
         onPaymentSuccess={handleUniversalPaymentSuccess}
         onCancelPayment={handleUniversalCancelPayment}
       />
+
+      {/* 6. GUEST AUTHENTICATION & REGISTRATION MODAL (Requirements 4, 5, 6, 7) */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-brand-orange text-white flex items-center justify-center font-bold">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm">
+                    {authModalMode === "REGISTER" ? "Daftar Member & Lanjut Pembayaran" : "Masuk Akun Pelanggan"}
+                  </h3>
+                  <p className="text-[10px] text-slate-400">
+                    {pendingActionAfterAuth === "CHECKOUT_FNB"
+                      ? "Simpan pesanan & klaim poin loyalty"
+                      : pendingActionAfterAuth === "BOOKING_COWORK"
+                      ? "Konfirmasi reservasi working space"
+                      : "Akses benefit loyalty & riwayat pesanan"}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAuthModalOpen(false);
+                  setPendingActionAfterAuth(null);
+                }}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Toggle Login vs Register */}
+              <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setAuthModalMode("REGISTER")}
+                  className={`py-2 rounded-lg transition-all flex items-center justify-center space-x-1 ${
+                    authModalMode === "REGISTER" ? "bg-brand-orange text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Daftar (+50 Poin)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthModalMode("LOGIN")}
+                  className={`py-2 rounded-lg transition-all ${
+                    authModalMode === "LOGIN" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Masuk Akun
+                </button>
+              </div>
+
+              {authModalMode === "REGISTER" ? (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const form = e.currentTarget;
+                    const name = (form.elements.namedItem("modalName") as HTMLInputElement).value;
+                    const phone = (form.elements.namedItem("modalPhone") as HTMLInputElement).value;
+                    const email = (form.elements.namedItem("modalEmail") as HTMLInputElement).value;
+
+                    if (!name.trim() || !phone.trim()) return;
+
+                    // Deduplication & Loyalty profile linking (Requirement 7)
+                    const member = getOrCreateMember({
+                      name: name.trim(),
+                      phone: phone.trim(),
+                      email: email.trim() || undefined,
+                      initialPoints: 50,
+                    });
+
+                    await loginCustomer({
+                      name: member.name,
+                      phone: member.phone,
+                      email: member.email,
+                    });
+
+                    showToast(`Selamat datang ${member.name}! +50 Poin Bonus Member.`);
+                    handleAuthSuccess();
+                  }}
+                  className="space-y-3"
+                >
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Nama Lengkap</label>
+                    <Input name="modalName" placeholder="Contoh: I Putu Agus" defaultValue="I Putu Agus" required className="h-10 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Nomor WhatsApp / HP</label>
+                    <Input name="modalPhone" type="tel" placeholder="+62 812-xxxx-xxxx" defaultValue="+62 812-3344-5566" required className="h-10 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700">Email (Opsional)</label>
+                    <Input name="modalEmail" type="email" placeholder="nama@email.com" defaultValue="agus@gmail.com" className="h-10 text-xs" />
+                  </div>
+
+                  <Button type="submit" className="w-full h-11 bg-brand-orange hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-md">
+                    <span>
+                      {pendingActionAfterAuth ? "Daftar & Lanjut Pembayaran" : "Daftar & Klaim 50 Poin"}
+                    </span>
+                    <ArrowRight className="w-4 h-4 ml-1.5" />
+                  </Button>
+                </form>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-500">Pilih akun demo atau gunakan data tersimpan:</p>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await login("CUSTOMER_DEMO");
+                        showToast("Masuk sebagai Ketut Dian (Silver Member).");
+                        handleAuthSuccess();
+                      }}
+                      className="w-full p-3 rounded-2xl border border-slate-200 hover:border-brand-orange hover:bg-orange-50/50 flex items-center justify-between text-left transition-all group"
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-black">
+                          KD
+                        </div>
+                        <div>
+                          <span className="font-bold text-xs text-slate-900 group-hover:text-brand-orange block">Ketut Dian</span>
+                          <span className="text-[10px] text-slate-500">Silver Member • 840 Poin</span>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-brand-orange" />
+                    </button>
+                  </div>
+
+                  <div className="pt-2 text-center">
+                    <Link
+                      href={`/login?returnTo=${encodeURIComponent(`/customer?tab=${activeTab}`)}&mode=customer`}
+                      className="text-xs font-bold text-brand-orange hover:underline inline-flex items-center"
+                    >
+                      <span>Buka Halaman Login Lengkap</span>
+                      <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

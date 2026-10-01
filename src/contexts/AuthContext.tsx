@@ -20,6 +20,7 @@ interface AuthContextType {
   toggleOrgModule: (moduleCode: BusinessModuleCode) => void;
   isLoading: boolean;
   login: (personaKey?: PersonaKey) => Promise<boolean>;
+  loginCustomer: (customerData: { name: string; phone: string; email?: string }) => Promise<AuthenticatedUser>;
   logout: () => Promise<void>;
   switchPersona: (personaKey: PersonaKey) => Promise<void>;
 }
@@ -184,6 +185,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       return;
     }
+    const savedCustom = localStorage.getItem("dagoeng_custom_customer");
+    if (savedCustom) {
+      try {
+        const parsed = JSON.parse(savedCustom);
+        if (parsed && parsed.role?.slug === "CUSTOMER") {
+          setUser(parsed);
+          return;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
     const savedKey = localStorage.getItem("dagoeng_active_persona") as PersonaKey | null;
     if (savedKey && DEMO_PERSONAS[savedKey]) {
       setUser(DEMO_PERSONAS[savedKey]);
@@ -201,14 +214,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const targetUser = DEMO_PERSONAS[personaKey];
     setUser(targetUser);
     localStorage.removeItem("dagoeng_is_logged_out");
+    localStorage.removeItem("dagoeng_custom_customer");
     localStorage.setItem("dagoeng_active_persona", personaKey);
     setIsLoading(false);
     return true;
   };
 
+  const loginCustomer = async (customerData: { name: string; phone: string; email?: string }): Promise<AuthenticatedUser> => {
+    setIsLoading(true);
+    const customCustomer: AuthenticatedUser = {
+      id: `user-cust-${Date.now()}`,
+      email: customerData.email?.trim() || "customer@dagoeng.com",
+      name: customerData.name.trim(),
+      phone: customerData.phone.trim(),
+      role: { id: "role-customer", slug: "CUSTOMER", name: "Customer" },
+      scopeLevel: "TENANT",
+      allowedModules: ["FNB", "CO_WORKING"],
+      organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
+      tenant: { id: "tenant-ks", name: "Kopi Senja", code: "KOPI-SENJA", businessModule: "FNB" },
+      outlet: null,
+      permissions: ["menu:view"],
+    };
+    setUser(customCustomer);
+    localStorage.removeItem("dagoeng_is_logged_out");
+    localStorage.setItem("dagoeng_custom_customer", JSON.stringify(customCustomer));
+    localStorage.setItem("dagoeng_active_persona", "CUSTOMER_DEMO");
+    setIsLoading(false);
+    return customCustomer;
+  };
+
   const logout = async () => {
     setUser(null);
     localStorage.removeItem("dagoeng_active_persona");
+    localStorage.removeItem("dagoeng_custom_customer");
     localStorage.setItem("dagoeng_is_logged_out", "true");
   };
 
@@ -217,6 +255,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (target) {
       setUser(target);
       localStorage.removeItem("dagoeng_is_logged_out");
+      localStorage.removeItem("dagoeng_custom_customer");
       localStorage.setItem("dagoeng_active_persona", personaKey);
     }
   };
@@ -229,6 +268,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         toggleOrgModule,
         isLoading,
         login,
+        loginCustomer,
         logout,
         switchPersona,
       }}

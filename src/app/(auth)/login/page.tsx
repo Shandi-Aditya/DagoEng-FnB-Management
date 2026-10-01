@@ -1,22 +1,28 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, DEMO_PERSONAS, PersonaKey } from "@/contexts/AuthContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Lock, Mail, ArrowRight, ShieldAlert, Phone, User, ArrowLeft } from "lucide-react";
+import { Lock, Mail, ArrowRight, ShieldAlert, Phone, User, ArrowLeft, Sparkles, CheckCircle2 } from "lucide-react";
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
-  const { login } = useAuth();
-  const { createMember, members } = useLoyalty();
+  const searchParams = useSearchParams();
+  const { login, loginCustomer } = useAuth();
+  const { getOrCreateMember } = useLoyalty();
+
+  const returnTo = searchParams.get("returnTo");
+  const initialMode = searchParams.get("mode");
 
   const [activeMode, setActiveMode] = useState<"STAFF" | "CUSTOMER">("STAFF");
+  const [customerSubMode, setCustomerSubMode] = useState<"LOGIN" | "REGISTER">("LOGIN");
+
   const [email, setEmail] = useState("owner.dago@dagoeng.com");
   const [password, setPassword] = useState("Password123!");
   const [isLoading, setIsLoading] = useState(false);
@@ -24,12 +30,22 @@ export default function LoginPage() {
   // Customer register/login form
   const [custName, setCustName] = useState("Ketut Dian");
   const [custPhone, setCustPhone] = useState("+62 819-1122-3344");
+  const [custEmail, setCustEmail] = useState("ketut.dian@gmail.com");
+
+  useEffect(() => {
+    if (initialMode === "register") {
+      setActiveMode("CUSTOMER");
+      setCustomerSubMode("REGISTER");
+    } else if (initialMode === "customer") {
+      setActiveMode("CUSTOMER");
+      setCustomerSubMode("LOGIN");
+    }
+  }, [initialMode]);
 
   const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Identify persona based on email
     let targetPersona: PersonaKey = "DAGO_OWNER";
     const emailLower = email.toLowerCase().trim();
 
@@ -45,7 +61,12 @@ export default function LoginPage() {
     await login(targetPersona);
     setIsLoading(false);
 
-    // Role-based redirection
+    if (returnTo) {
+      router.push(returnTo);
+      return;
+    }
+
+    // Default role-based redirection
     if (targetPersona === "CASHIER_SGR") router.push("/pos");
     else if (targetPersona === "KITCHEN_SGR") router.push("/kitchen");
     else if (targetPersona === "WAITER_SGR") router.push("/waiter");
@@ -55,25 +76,34 @@ export default function LoginPage() {
     else router.push("/dashboard");
   };
 
-  const handleCustomerLogin = async (e: React.FormEvent) => {
+  const handleCustomerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!custName.trim() || !custPhone.trim()) return;
+    if (!custPhone.trim()) return;
 
     setIsLoading(true);
 
-    // Check if member exists or create new
-    const existing = members.find((m) => m.phone === custPhone.trim());
-    if (!existing) {
-      createMember({
-        name: custName.trim(),
-        phone: custPhone.trim(),
-        initialPoints: 50, // Welcome bonus points
-      });
-    }
+    // Get existing member or create new (deduplicated)
+    const member = getOrCreateMember({
+      name: custName.trim() || "Pelanggan Member",
+      phone: custPhone.trim(),
+      email: custEmail.trim() || undefined,
+      initialPoints: customerSubMode === "REGISTER" ? 50 : 0,
+    });
 
-    await login("CUSTOMER_DEMO");
+    // Log in customer session
+    await loginCustomer({
+      name: member.name,
+      phone: member.phone,
+      email: member.email,
+    });
+
     setIsLoading(false);
-    router.push("/customer");
+
+    if (returnTo) {
+      router.push(returnTo);
+    } else {
+      router.push("/customer");
+    }
   };
 
   const handleQuickLogin = async (personaKey: PersonaKey) => {
@@ -82,6 +112,11 @@ export default function LoginPage() {
       setIsLoading(true);
       await login(personaKey);
       setIsLoading(false);
+
+      if (returnTo) {
+        router.push(returnTo);
+        return;
+      }
 
       if (personaKey === "CASHIER_SGR") router.push("/pos");
       else if (personaKey === "KITCHEN_SGR") router.push("/kitchen");
@@ -98,14 +133,19 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-5">
         
         {/* Top Back Link */}
-        <div className="flex items-center px-1">
+        <div className="flex items-center justify-between px-1">
           <Link
-            href="/"
+            href={returnTo || "/"}
             className="inline-flex items-center text-xs font-semibold text-slate-500 hover:text-slate-900 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-            <span>Kembali ke Halaman Utama</span>
+            <span>{returnTo ? "Kembali ke Fitur Sebelumnya" : "Kembali ke Halaman Utama"}</span>
           </Link>
+          {returnTo && (
+            <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2 py-0.5 rounded-md border border-amber-200">
+              Konteks Terjaga
+            </span>
+          )}
         </div>
 
         {/* Brand Header */}
@@ -158,12 +198,18 @@ export default function LoginPage() {
         <Card className="shadow-lg border-slate-200/80 bg-white overflow-hidden">
           <CardHeader className="pb-3">
             <CardTitle className="text-base font-bold text-slate-800">
-              {activeMode === "STAFF" ? "Masuk ke Sesi Akun Staf" : "Masuk / Registrasi Pelanggan"}
+              {activeMode === "STAFF"
+                ? "Masuk ke Sesi Akun Staf"
+                : customerSubMode === "REGISTER"
+                ? "Daftar Member Baru DagoEng"
+                : "Masuk Akun Pelanggan"}
             </CardTitle>
             <CardDescription className="text-xs">
               {activeMode === "STAFF"
                 ? "Gunakan email terdaftar untuk membuka dashboard atau stasiun kerja"
-                : "Masukkan nama dan nomor HP untuk akses loyalty poin & pemesanan"}
+                : customerSubMode === "REGISTER"
+                ? "Dapatkan langsung 50 Poin Selamat Datang dan diskon eksklusif member"
+                : "Masukkan nomor WhatsApp atau Nama untuk mengakses poin loyalty"}
             </CardDescription>
           </CardHeader>
 
@@ -210,46 +256,97 @@ export default function LoginPage() {
                 </Button>
               </form>
             ) : (
-              <form onSubmit={handleCustomerLogin} className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">Nama Pelanggan</label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <Input
-                      type="text"
-                      value={custName}
-                      onChange={(e) => setCustName(e.target.value)}
-                      className="pl-9 text-xs h-10"
-                      placeholder="Contoh: Ketut Dian"
-                      required
-                    />
-                  </div>
+              <div className="space-y-4">
+                {/* Customer Sub-mode Toggle (Masuk vs Daftar) */}
+                <div className="flex rounded-lg bg-slate-100 p-1 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setCustomerSubMode("LOGIN")}
+                    className={`flex-1 py-1.5 rounded-md transition-all ${
+                      customerSubMode === "LOGIN"
+                        ? "bg-white text-slate-900 shadow-xs"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
+                  >
+                    Masuk Akun
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomerSubMode("REGISTER")}
+                    className={`flex-1 py-1.5 rounded-md transition-all flex items-center justify-center space-x-1 ${
+                      customerSubMode === "REGISTER"
+                        ? "bg-brand-orange text-white shadow-xs"
+                        : "text-slate-500 hover:text-slate-900"
+                    }`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Daftar (+50 Poin)</span>
+                  </button>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700">Nomor WhatsApp / HP</label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    <Input
-                      type="tel"
-                      value={custPhone}
-                      onChange={(e) => setCustPhone(e.target.value)}
-                      className="pl-9 text-xs h-10"
-                      placeholder="+62 819-xxxx-xxxx"
-                      required
-                    />
+                <form onSubmit={handleCustomerSubmit} className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-700">Nama Lengkap</label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <Input
+                        type="text"
+                        value={custName}
+                        onChange={(e) => setCustName(e.target.value)}
+                        className="pl-9 text-xs h-10"
+                        placeholder="Contoh: Ketut Dian"
+                        required
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full h-10 text-xs font-bold space-x-2 mt-2 bg-brand-orange hover:bg-orange-600 text-white"
-                >
-                  <span>{isLoading ? "Menghubungkan..." : "Masuk Customer Portal"}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </form>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-700">Nomor WhatsApp / HP</label>
+                    <div className="relative">
+                      <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                      <Input
+                        type="tel"
+                        value={custPhone}
+                        onChange={(e) => setCustPhone(e.target.value)}
+                        className="pl-9 text-xs h-10"
+                        placeholder="+62 819-xxxx-xxxx"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {customerSubMode === "REGISTER" && (
+                    <div className="space-y-1 animate-in fade-in duration-200">
+                      <label className="text-xs font-semibold text-slate-700">Email (Opsional untuk E-Receipt)</label>
+                      <div className="relative">
+                        <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                        <Input
+                          type="email"
+                          value={custEmail}
+                          onChange={(e) => setCustEmail(e.target.value)}
+                          className="pl-9 text-xs h-10"
+                          placeholder="email@anda.com"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full h-10 text-xs font-bold space-x-2 mt-2 bg-brand-orange hover:bg-orange-600 text-white"
+                  >
+                    <span>
+                      {isLoading
+                        ? "Menghubungkan..."
+                        : customerSubMode === "REGISTER"
+                        ? "Daftar & Klaim 50 Poin"
+                        : "Masuk Customer Portal"}
+                    </span>
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </form>
+              </div>
             )}
 
             {/* Quick 1-Click Role Login for QA / Evaluator */}
@@ -311,5 +408,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-100 flex items-center justify-center text-xs text-slate-500 font-bold">Memuat Halaman Login...</div>}>
+      <LoginContent />
+    </Suspense>
   );
 }

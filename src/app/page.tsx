@@ -607,11 +607,26 @@ export default function PublicLandingPage() {
                 ))}
               </div>
 
-              <div className="pt-2">
-                <Link href="/customer">
-                  <Button className="h-12 px-7 font-black bg-brand-orange text-white hover:bg-orange-600 rounded-2xl text-xs shadow-lg shadow-orange-500/20">
-                    <span>Mulai Eksplorasi Layanan</span>
-                    <ArrowRight className="w-3.5 h-3.5 ml-2" />
+              {/* Onboarding Direct Action Buttons */}
+              <div className="pt-2 flex flex-wrap items-center gap-3">
+                <Link href="/customer?tab=COWORKING">
+                  <Button className="h-11 px-5 font-black bg-brand-orange text-white hover:bg-orange-600 rounded-xl text-xs shadow-md shadow-orange-500/20 hover:scale-105 active:scale-95 transition-all">
+                    <Laptop className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Booking Working Space</span>
+                  </Button>
+                </Link>
+
+                <Link href="/customer?tab=MENU">
+                  <Button variant="outline" className="h-11 px-5 font-bold bg-white/10 text-white border-white/20 hover:bg-white/20 hover:border-white/40 rounded-xl text-xs hover:scale-105 active:scale-95 transition-all">
+                    <UtensilsCrossed className="w-3.5 h-3.5 mr-1.5 text-brand-orange" />
+                    <span>Pesan F&B</span>
+                  </Button>
+                </Link>
+
+                <Link href={`/login?mode=register&returnTo=${encodeURIComponent("/customer?tab=LOYALTY")}`}>
+                  <Button variant="outline" className="h-11 px-4 font-bold bg-white/5 text-amber-300 border-amber-400/30 hover:bg-amber-500/10 rounded-xl text-xs hover:scale-105 active:scale-95 transition-all">
+                    <Sparkles className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
+                    <span>Gabung Member</span>
                   </Button>
                 </Link>
               </div>

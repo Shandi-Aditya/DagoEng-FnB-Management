@@ -177,6 +177,7 @@ interface LoyaltyContextType {
   filteredMembers: LoyaltyMember[];
   calculateTierForPoints: (points: number) => LoyaltyTier;
   createMember: (memberData: { name: string; phone: string; email?: string; identityNo?: string; initialPoints?: number }) => LoyaltyMember;
+  getOrCreateMember: (memberData: { name: string; phone: string; email?: string; identityNo?: string; initialPoints?: number }) => LoyaltyMember;
   addPoints: (memberId: string, points: number, reason: string, transactionId?: string) => void;
   reverseTransactionPoints: (memberId: string, transactionId: string, reason?: string) => void;
   redeemPoints: (memberId: string, points: number, reason: string) => boolean;
@@ -298,6 +299,32 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     });
 
     return newMember;
+  };
+
+  const getOrCreateMember = (memberData: {
+    name: string;
+    phone: string;
+    email?: string;
+    identityNo?: string;
+    initialPoints?: number;
+  }): LoyaltyMember => {
+    const cleanPhone = memberData.phone.replace(/\D/g, "");
+    const cleanEmail = memberData.email?.trim().toLowerCase();
+
+    // Deduplication: Check if member already exists by phone or email
+    const existing = members.find((m) => {
+      const mPhone = m.phone.replace(/\D/g, "");
+      const mEmail = m.email?.trim().toLowerCase();
+      if (cleanPhone && mPhone && cleanPhone === mPhone) return true;
+      if (cleanEmail && mEmail && cleanEmail === mEmail) return true;
+      return false;
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    return createMember(memberData);
   };
 
   const addPoints = (memberId: string, pointsEarned: number, reason: string, transactionId?: string) => {
@@ -602,6 +629,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         filteredMembers,
         calculateTierForPoints,
         createMember,
+        getOrCreateMember,
         addPoints,
         reverseTransactionPoints,
         redeemPoints,
