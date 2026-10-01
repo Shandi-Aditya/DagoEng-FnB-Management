@@ -472,8 +472,13 @@ export default function PublicLandingPage() {
                   className="bg-transparent text-xs font-bold text-white outline-none w-full cursor-pointer"
                 >
                   {outlets.map((o) => (
-                    <option key={o.id} value={o.id} className="bg-slate-900 text-white">
-                      {o.name} ({o.address})
+                    <option
+                      key={o.id}
+                      value={o.id}
+                      disabled={o.isComingSoon}
+                      className={o.isComingSoon ? "bg-slate-900 text-slate-400 italic" : "bg-slate-900 text-white font-bold"}
+                    >
+                      {o.name} {o.isComingSoon ? "— ⏳ (Segera Hadir / Ekspansi)" : `(${o.address})`}
                     </option>
                   ))}
                 </select>
@@ -873,47 +878,87 @@ export default function PublicLandingPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {outlets.map((outlet) => (
-              <div
-                key={outlet.id}
-                className="p-6 rounded-3xl bg-slate-900/60 backdrop-blur-md border border-white/10 space-y-4 flex flex-col justify-between hover:border-brand-orange/50 hover:bg-slate-900 transition-all duration-300 group shadow-xl"
-              >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="w-9 h-9 rounded-2xl bg-orange-500/20 text-brand-orange border border-orange-500/30 flex items-center justify-center font-bold">
-                        <Store className="w-4 h-4" />
+            {outlets.map((outlet) => {
+              const isComingSoon = outlet.isComingSoon;
+
+              return (
+                <div
+                  key={outlet.id}
+                  className={`p-6 rounded-3xl bg-slate-900/60 backdrop-blur-md border space-y-4 flex flex-col justify-between transition-all duration-300 group shadow-xl ${
+                    isComingSoon
+                      ? "border-amber-500/20 hover:border-amber-500/40 opacity-90"
+                      : "border-white/10 hover:border-brand-orange/50 hover:bg-slate-900"
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2.5">
+                        <div
+                          className={`w-9 h-9 rounded-2xl flex items-center justify-center font-bold ${
+                            isComingSoon
+                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                              : "bg-orange-500/20 text-brand-orange border border-orange-500/30"
+                          }`}
+                        >
+                          <Store className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-base text-white group-hover:text-brand-orange transition-colors">
+                            {outlet.name}
+                          </h3>
+                          {outlet.id === "outlet-sgr" && (
+                            <span className="text-[10px] text-emerald-400 font-bold block">
+                              📍 Kantor & Outlet Pusat
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      <h3 className="font-bold text-base text-white group-hover:text-brand-orange transition-colors">
-                        {outlet.name}
-                      </h3>
+                      <Badge
+                        className={`text-[10px] font-bold ${
+                          isComingSoon
+                            ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                            : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                        }`}
+                      >
+                        {outlet.badgeLabel || (isComingSoon ? "⏳ Segera Hadir" : "● Buka Sekarang")}
+                      </Badge>
                     </div>
-                    <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
-                      ● Buka Sekarang
-                    </Badge>
+
+                    <div className="space-y-2 text-xs text-slate-400 pt-1">
+                      <div className="flex items-start space-x-2">
+                        <MapPin className="w-3.5 h-3.5 text-brand-orange mt-0.5 flex-shrink-0" />
+                        <span>{outlet.address}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Clock className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                        <span>
+                          {isComingSoon
+                            ? "Tahap Persiapan & Renovasi Cabang"
+                            : "08:00 - 22:00 WITA (Setiap Hari)"}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="space-y-2 text-xs text-slate-400 pt-1">
-                    <div className="flex items-start space-x-2">
-                      <MapPin className="w-3.5 h-3.5 text-brand-orange mt-0.5 flex-shrink-0" />
-                      <span>{outlet.address}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Clock className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                      <span>08:00 - 22:00 WITA (Setiap Hari)</span>
-                    </div>
+                  <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs">
+                    <span className="font-mono text-[11px] text-slate-500 font-bold">{outlet.code}</span>
+                    {isComingSoon ? (
+                      <span className="text-xs font-semibold text-amber-400/80 italic flex items-center">
+                        <span>Ekspansi Mendatang</span>
+                      </span>
+                    ) : (
+                      <Link
+                        href={`/customer?outlet=${outlet.id}`}
+                        className="font-bold text-brand-orange hover:text-orange-400 flex items-center group-hover:underline"
+                      >
+                        <span>Buka Portal Cabang</span>
+                        <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                      </Link>
+                    )}
                   </div>
                 </div>
-
-                <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs">
-                  <span className="font-mono text-[11px] text-slate-500 font-bold">{outlet.code}</span>
-                  <Link href={`/customer?outlet=${outlet.id}`} className="font-bold text-brand-orange hover:text-orange-400 flex items-center">
-                    <span>Buka Portal Cabang</span>
-                    <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
-                  </Link>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
         </div>

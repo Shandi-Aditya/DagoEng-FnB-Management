@@ -8,30 +8,38 @@ export interface OutletItem {
   name: string;
   code: string;
   address: string;
-  status: "ACTIVE" | "INACTIVE";
+  status: "ACTIVE" | "COMING_SOON" | "INACTIVE";
+  badgeLabel?: string;
+  isComingSoon?: boolean;
 }
 
 export const DEMO_OUTLETS: OutletItem[] = [
   {
     id: "outlet-sgr",
-    name: "Singaraja",
+    name: "Singaraja (Pusat)",
     code: "KS-SGR",
     address: "Jl. Ngurah Rai No. 45, Singaraja",
     status: "ACTIVE",
+    badgeLabel: "● Beroperasi Aktif",
+    isComingSoon: false,
   },
   {
     id: "outlet-dps",
     name: "Denpasar",
     code: "KS-DPS",
     address: "Jl. Teuku Umar No. 88, Denpasar",
-    status: "ACTIVE",
+    status: "COMING_SOON",
+    badgeLabel: "⏳ Segera Hadir (Ekspansi)",
+    isComingSoon: true,
   },
   {
     id: "outlet-ubd",
     name: "Ubud",
     code: "KS-UBD",
     address: "Jl. Raya Ubud No. 12, Ubud",
-    status: "ACTIVE",
+    status: "COMING_SOON",
+    badgeLabel: "⏳ Segera Hadir (Ekspansi)",
+    isComingSoon: true,
   },
 ];
 
