@@ -218,10 +218,10 @@ export default function PublicLandingPage() {
       
       {/* 1. FLOATING TRANSPARENT GLASSMORPHISM NAVBAR */}
       <header
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ease-in-out ${
           isScrolled
-            ? "bg-slate-950/85 backdrop-blur-xl border-b border-white/10 shadow-2xl py-3"
-            : "bg-gradient-to-b from-slate-950/80 via-slate-950/40 to-transparent py-4 sm:py-5"
+            ? "bg-slate-950/75 backdrop-blur-2xl shadow-lg shadow-black/40 py-3"
+            : "bg-transparent py-4 sm:py-5"
         }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -513,7 +513,7 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 4. SECTION: TENTANG KAMI */}
-      <section id="about" className="py-24 bg-[#0E131F] border-b border-white/5 relative">
+      <section id="about" className="py-24 bg-[#0E131F] relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
             
@@ -622,7 +622,7 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 5. SECTION: MENU KULINER ARTISAN */}
-      <section id="menu" className="py-24 bg-[#0B0F17] border-b border-white/5 relative">
+      <section id="menu" className="py-24 bg-[#0B0F17] relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -709,7 +709,7 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 6. SECTION: CO-WORKING SPACE (DYNAMIC HOVER ORANGE GRADIENT) */}
-      <section id="coworking" className="py-24 bg-[#0E131F] border-b border-white/5 relative">
+      <section id="coworking" className="py-24 bg-[#0E131F] relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           
           <div className="text-center max-w-2xl mx-auto space-y-2">
@@ -857,7 +857,7 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 7. SECTION: CABANG OUTLET */}
-      <section id="outlets" className="py-24 bg-[#0B0F17] border-b border-white/5 relative">
+      <section id="outlets" className="py-24 bg-[#0B0F17] relative">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
           
           <div className="text-center max-w-2xl mx-auto space-y-2">
@@ -960,7 +960,7 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 8. SECTION: LOYALTY REWARDS & TIER SHOWCASE (HOVER DYNAMIC ORANGE) */}
-      <section id="loyalty" className="py-24 bg-[#0E131F] border-b border-white/5 relative overflow-hidden">
+      <section id="loyalty" className="py-24 bg-[#0E131F] relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-brand-orange/10 rounded-full blur-3xl pointer-events-none" />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12 relative z-10">
           
