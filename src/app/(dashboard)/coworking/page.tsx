@@ -40,13 +40,17 @@ export default function CoworkingPage() {
     bookings,
     members,
     checkLogs,
+    virtualOffices,
     bookSpace,
     checkInBooking,
     checkoutSpace,
     addMember,
+    approveVirtualOffice,
+    rejectVirtualOffice,
+    createVirtualOffice,
   } = useCoworking();
 
-  const [activeTab, setActiveTab] = useState<"SPACES" | "BOOKINGS" | "MEMBERS" | "LOGS">("SPACES");
+  const [activeTab, setActiveTab] = useState<"SPACES" | "BOOKINGS" | "MEMBERS" | "LOGS" | "VIRTUAL_OFFICE">("SPACES");
   const [searchMemberQuery, setSearchMemberQuery] = useState("");
   const [memberStatusFilter, setMemberStatusFilter] = useState<"ALL" | "ACTIVE" | "EXPIRED">("ALL");
   const [toastMessage, setToastMessage] = useState("");
@@ -55,6 +59,17 @@ export default function CoworkingPage() {
   // Modals
   const [isNewBookingModalOpen, setIsNewBookingModalOpen] = useState(false);
   const [isNewMemberModalOpen, setIsNewMemberModalOpen] = useState(false);
+  const [isNewVOModalOpen, setIsNewVOModalOpen] = useState(false);
+
+  // New VO Form States
+  const [voCompanyName, setVoCompanyName] = useState("");
+  const [voApplicantName, setVoApplicantName] = useState("");
+  const [voPhone, setVoPhone] = useState("");
+  const [voEmail, setVoEmail] = useState("");
+  const [voPlan, setVoPlan] = useState<"VO Starter (Alamat Bisnis)" | "VO Professional (Alamat + Kuota Meeting)" | "VO Enterprise (Lengkap + Domisili)">("VO Professional (Alamat + Kuota Meeting)");
+  const [voBusinessType, setVoBusinessType] = useState("");
+  const [voDocName, setVoDocName] = useState("Akta_Perusahaan_NIB.pdf");
+  const [voFee, setVoFee] = useState(4200000);
 
   const getCoworkingExportData = () => {
     if (activeTab === "MEMBERS") {
@@ -237,6 +252,51 @@ export default function CoworkingPage() {
     showToast("Check-out berhasil! Meja kembali TERSEDIA dan status booking diperbarui menjadi COMPLETED.");
   };
 
+  const handleCreateVO = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!voCompanyName.trim() || !voApplicantName.trim() || !voPhone.trim()) return;
+
+    const start = new Date();
+    const end = new Date();
+    end.setFullYear(start.getFullYear() + 1);
+
+    const startStr = start.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+    const endStr = end.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+
+    createVirtualOffice({
+      companyName: voCompanyName.trim(),
+      applicantName: voApplicantName.trim(),
+      applicantPhone: voPhone.trim(),
+      applicantEmail: voEmail.trim() || "applicant@company.id",
+      planName: voPlan,
+      businessType: voBusinessType.trim() || "Perdagangan & Jasa",
+      startDate: startStr,
+      expiryDate: endStr,
+      legalDocumentName: voDocName.trim() || "Akta_NIB_KTP.pdf",
+      annualFee: voFee,
+      paymentStatus: "PAID",
+      notes: "Pendaftaran baru melalui Admin Dago Working Space.",
+    });
+
+    setIsNewVOModalOpen(false);
+    setVoCompanyName("");
+    setVoApplicantName("");
+    setVoPhone("");
+    setVoEmail("");
+    setVoBusinessType("");
+    showToast(`Pendaftaran Virtual Office "${voCompanyName}" berhasil diajukan & menunggu approval!`);
+  };
+
+  const handleApproveVO = (id: string, name: string) => {
+    approveVirtualOffice(id);
+    showToast(`Virtual Office "${name}" disetujui & Surat Keterangan Domisili telah diterbitkan!`);
+  };
+
+  const handleRejectVO = (id: string, name: string) => {
+    rejectVirtualOffice(id, "Dokumen legalitas ditolak setelah verifikasi kelurahan/gedung.");
+    showToast(`Virtual Office "${name}" telah ditolak.`);
+  };
+
   const filteredMemberList = members.filter((m) => {
     const matchStatus = memberStatusFilter === "ALL" || m.status === memberStatusFilter;
     const matchQuery =
@@ -262,10 +322,10 @@ export default function CoworkingPage() {
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
             <Laptop className="w-5 h-5 text-blue-600" />
-            <span>Co-working Space Management — {activeOutlet?.name || "Singaraja"}</span>
+            <span>Co-working Space & Virtual Office — {activeOutlet?.name || "Singaraja"}</span>
           </h2>
           <p className="text-xs text-slate-500">
-            {spaces.length} Ruang/Meja ({availableSpacesCount} Tersedia • {occupiedSpacesCount} Digunakan) • {members.filter((m) => m.status === "ACTIVE").length} Member Aktif
+            {spaces.length} Ruang/Meja ({availableSpacesCount} Tersedia • {occupiedSpacesCount} Digunakan) • {members.filter((m) => m.status === "ACTIVE").length} Member Aktif • {virtualOffices.length} Virtual Office Klien
           </p>
         </div>
 
@@ -302,6 +362,16 @@ export default function CoworkingPage() {
           <Button
             size="sm"
             variant="outline"
+            onClick={() => setIsNewVOModalOpen(true)}
+            className="text-xs font-semibold border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+          >
+            <Building className="w-3.5 h-3.5 mr-1 text-indigo-600" />
+            + Virtual Office
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
             onClick={() => setIsNewMemberModalOpen(true)}
             className="text-xs font-semibold"
           >
@@ -319,11 +389,11 @@ export default function CoworkingPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex items-center space-x-2 border-b border-slate-200 pb-2">
+      <div className="flex items-center space-x-2 border-b border-slate-200 pb-2 overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveTab("SPACES")}
-          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${
+          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all shrink-0 ${
             activeTab === "SPACES"
               ? "bg-slate-900 text-white shadow-sm"
               : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -336,7 +406,7 @@ export default function CoworkingPage() {
         <button
           type="button"
           onClick={() => setActiveTab("BOOKINGS")}
-          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${
+          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all shrink-0 ${
             activeTab === "BOOKINGS"
               ? "bg-slate-900 text-white shadow-sm"
               : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -349,7 +419,7 @@ export default function CoworkingPage() {
         <button
           type="button"
           onClick={() => setActiveTab("MEMBERS")}
-          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${
+          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all shrink-0 ${
             activeTab === "MEMBERS"
               ? "bg-slate-900 text-white shadow-sm"
               : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -361,8 +431,26 @@ export default function CoworkingPage() {
 
         <button
           type="button"
+          onClick={() => setActiveTab("VIRTUAL_OFFICE")}
+          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all shrink-0 ${
+            activeTab === "VIRTUAL_OFFICE"
+              ? "bg-indigo-700 text-white shadow-sm"
+              : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+          }`}
+        >
+          <Building className="w-4 h-4 text-indigo-400" />
+          <span>Virtual Office & Domisili ({virtualOffices.length})</span>
+          {virtualOffices.filter((v) => v.status === "PENDING_APPROVAL").length > 0 && (
+            <span className="ml-1 px-1.5 py-0.2 bg-amber-400 text-slate-900 text-[10px] font-black rounded-full">
+              {virtualOffices.filter((v) => v.status === "PENDING_APPROVAL").length} New
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab("LOGS")}
-          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${
+          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all shrink-0 ${
             activeTab === "LOGS"
               ? "bg-slate-900 text-white shadow-sm"
               : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -636,7 +724,181 @@ export default function CoworkingPage() {
         </div>
       )}
 
-      {/* TAB 4: CHECK-IN / CHECK-OUT AUDIT LOG */}
+      {/* TAB 4: VIRTUAL OFFICE & LEGALITAS */}
+      {activeTab === "VIRTUAL_OFFICE" && (
+        <div className="space-y-4 animate-in fade-in">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="p-4 bg-white rounded-xl border border-indigo-100 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500">Total Klien VO</p>
+                <p className="text-xl font-black text-indigo-900 mt-0.5">{virtualOffices.length}</p>
+              </div>
+              <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600">
+                <Building className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="p-4 bg-white rounded-xl border border-amber-100 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500">Menunggu Approval</p>
+                <p className="text-xl font-black text-amber-600 mt-0.5">
+                  {virtualOffices.filter((v) => v.status === "PENDING_APPROVAL").length}
+                </p>
+              </div>
+              <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600">
+                <Clock className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="p-4 bg-white rounded-xl border border-emerald-100 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500">Domisili Terbit & Aktif</p>
+                <p className="text-xl font-black text-emerald-700 mt-0.5">
+                  {virtualOffices.filter((v) => v.status === "ACTIVE" || v.status === "APPROVED").length}
+                </p>
+              </div>
+              <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-600">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+            </div>
+
+            <div className="p-4 bg-white rounded-xl border border-blue-100 shadow-xs flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500">Total ARR Kontrak VO</p>
+                <p className="text-base font-black text-blue-950 font-mono mt-0.5">
+                  {formatCurrencyIDR(virtualOffices.reduce((sum, v) => sum + (v.annualFee || 0), 0))}
+                </p>
+              </div>
+              <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600">
+                <CreditCard className="w-5 h-5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Virtual Office Applications & Legality Table */}
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
+              <CardTitle className="text-sm font-bold text-slate-900 flex items-center justify-between">
+                <span>🏢 Daftar Klien Virtual Office & Verifikasi Dokumen Legalitas (Pilar A)</span>
+                <Button
+                  size="sm"
+                  onClick={() => setIsNewVOModalOpen(true)}
+                  className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Daftarkan Klien VO
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-slate-50 border-b border-slate-100 font-semibold text-slate-600">
+                    <tr>
+                      <th className="p-3">No. Registrasi & Perusahaan</th>
+                      <th className="p-3">PIC / Pemohon</th>
+                      <th className="p-3">Paket VO & Bidang Usaha</th>
+                      <th className="p-3">Dokumen Legalitas</th>
+                      <th className="p-3">Masa Kontrak (1 Thn)</th>
+                      <th className="p-3">Status Domisili</th>
+                      <th className="p-3">Status Kontrak</th>
+                      <th className="p-3 text-right">Aksi Admin Dago</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-slate-700">
+                    {virtualOffices.map((vo) => (
+                      <tr key={vo.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-3">
+                          <p className="font-mono text-[10px] text-indigo-700 font-black">{vo.registrationNumber}</p>
+                          <p className="font-bold text-slate-900 text-xs">{vo.companyName}</p>
+                        </td>
+                        <td className="p-3">
+                          <p className="font-semibold text-slate-900">{vo.applicantName}</p>
+                          <p className="font-mono text-[10px] text-slate-500">{vo.applicantPhone}</p>
+                          <p className="text-[10px] text-slate-400">{vo.applicantEmail}</p>
+                        </td>
+                        <td className="p-3">
+                          <p className="font-semibold text-indigo-900">{vo.planName}</p>
+                          <p className="text-[10px] text-slate-500 italic">{vo.businessType}</p>
+                          <p className="font-mono text-[10px] font-bold text-slate-700 mt-0.5">
+                            {formatCurrencyIDR(vo.annualFee)} / thn
+                          </p>
+                        </td>
+                        <td className="p-3">
+                          <div className="inline-flex items-center space-x-1 px-2 py-1 bg-slate-100 border border-slate-200 rounded-lg text-[10px] text-slate-700 font-mono font-medium">
+                            <FileText className="w-3 h-3 text-blue-600" />
+                            <span className="truncate max-w-[120px]">{vo.legalDocumentName}</span>
+                          </div>
+                        </td>
+                        <td className="p-3 font-mono text-[11px] text-slate-600">
+                          <p>{vo.startDate}</p>
+                          <p className="text-slate-400">s/d {vo.expiryDate}</p>
+                        </td>
+                        <td className="p-3">
+                          {vo.domicileLetterIssued ? (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-bold">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Terbit</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center space-x-1 px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-200 rounded-full text-[10px] font-bold">
+                              <Clock className="w-3 h-3 text-amber-600" />
+                              <span>Menunggu Approval</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              vo.status === "ACTIVE" || vo.status === "APPROVED"
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                : vo.status === "PENDING_APPROVAL"
+                                ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                : "bg-rose-100 text-rose-800 border border-rose-200"
+                            }`}
+                          >
+                            {vo.status === "PENDING_APPROVAL"
+                              ? "MENUNGGU PERSETUJUAN"
+                              : vo.status === "ACTIVE" || vo.status === "APPROVED"
+                              ? "AKTIF"
+                              : vo.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          {vo.status === "PENDING_APPROVAL" ? (
+                            <div className="flex items-center justify-end space-x-1">
+                              <Button
+                                size="sm"
+                                onClick={() => handleApproveVO(vo.id, vo.companyName)}
+                                className="text-[10px] h-7 px-2 font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+                              >
+                                Approve & Terbitkan Domisili
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleRejectVO(vo.id, vo.companyName)}
+                                className="text-[10px] h-7 px-2 font-bold text-rose-600 border-rose-300 hover:bg-rose-50"
+                              >
+                                Tolak
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-medium italic">Verified ✓</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* TAB 5: CHECK-IN / CHECK-OUT AUDIT LOG */}
       {activeTab === "LOGS" && (
         <Card className="shadow-sm animate-in fade-in">
           <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
@@ -905,6 +1167,142 @@ export default function CoworkingPage() {
                 </Button>
                 <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
                   Simpan & Aktifkan Member
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: PENDAFTARAN VIRTUAL OFFICE BARU */}
+      {isNewVOModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5 border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900 flex items-center space-x-1.5">
+                  <Building className="w-4 h-4 text-indigo-600" />
+                  <span>Pendaftaran Virtual Office & Legalitas Baru</span>
+                </h3>
+                <p className="text-[11px] text-slate-500">Pilar A: Alamat Bisnis & Izin Domisili Gedung Dago</p>
+              </div>
+              <button
+                onClick={() => setIsNewVOModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateVO} className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Nama Perusahaan / Entitas Bisnis *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: PT Kreasi Solusi Nusantara"
+                  value={voCompanyName}
+                  onChange={(e) => setVoCompanyName(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Nama PIC / Direktur *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Bpk. Budi Santoso"
+                    value={voApplicantName}
+                    onChange={(e) => setVoApplicantName(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">No. HP / WhatsApp *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="+62 812-xxxx-xxxx"
+                    value={voPhone}
+                    onChange={(e) => setVoPhone(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Email Resmi Bisnis</label>
+                  <input
+                    type="email"
+                    placeholder="official@company.id"
+                    value={voEmail}
+                    onChange={(e) => setVoEmail(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Bidang Usaha</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Software House / Konsultan"
+                    value={voBusinessType}
+                    onChange={(e) => setVoBusinessType(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Paket Virtual Office (Durasi Kontrak: 1 Tahun)</label>
+                <select
+                  value={voPlan}
+                  onChange={(e) => {
+                    const plan = e.target.value as any;
+                    setVoPlan(plan);
+                    if (plan === "VO Starter (Alamat Bisnis)") setVoFee(2900000);
+                    else if (plan === "VO Professional (Alamat + Kuota Meeting)") setVoFee(4200000);
+                    else setVoFee(6500000);
+                  }}
+                  className="w-full px-3 py-2 border rounded-xl bg-white font-bold text-slate-900"
+                >
+                  <option value="VO Starter (Alamat Bisnis)">VO Starter (Alamat Bisnis & Mailbox) — Rp 2.900.000 / thn</option>
+                  <option value="VO Professional (Alamat + Kuota Meeting)">VO Professional (+ Kuota 10 Jam Meeting) — Rp 4.200.000 / thn</option>
+                  <option value="VO Enterprise (Lengkap + Domisili)">VO Enterprise (Domisili Resmi + Dedicated Line) — Rp 6.500.000 / thn</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Nama Berkas Legalitas (Akta / NIB / KTP)</label>
+                <input
+                  type="text"
+                  value={voDocName}
+                  onChange={(e) => setVoDocName(e.target.value)}
+                  placeholder="Akta_NIB_PT_Company.pdf"
+                  className="w-full px-3 py-2 border rounded-xl font-mono text-slate-700"
+                />
+              </div>
+
+              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex items-start space-x-2 text-indigo-900">
+                <ShieldCheck className="w-4 h-4 text-indigo-600 mt-0.5 shrink-0" />
+                <p className="text-[11px] leading-relaxed">
+                  Setelah data diajukan, status aplikasi akan menjadi <b>PENDING_APPROVAL</b>. Admin Gedung Dago dapat memverifikasi berkas dan menekan tombol persetujuan untuk menerbitkan Surat Domisili Resmi.
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsNewVOModalOpen(false)}
+                >
+                  Batal
+                </Button>
+                <Button type="submit" size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold">
+                  Ajukan Pendaftaran VO
                 </Button>
               </div>
             </form>

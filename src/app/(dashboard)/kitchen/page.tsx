@@ -30,6 +30,7 @@ export default function KitchenKDSPage() {
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
   const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(true);
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("ALL");
+  const [selectedTenantFilter, setSelectedTenantFilter] = useState<string>("ALL");
   const prevOrderCountRef = useRef<number>(filteredOrders.length);
 
   // Real-time second tick for active SLA timers
@@ -38,7 +39,7 @@ export default function KitchenKDSPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Filter kitchen active orders
+  // Filter kitchen active orders & tenant scope (Pilar B)
   const activeOrders = useMemo(() => {
     return filteredOrders
       .filter(
@@ -52,8 +53,19 @@ export default function KitchenKDSPage() {
       .filter((o) => {
         if (selectedTypeFilter === "ALL") return true;
         return o.orderType === selectedTypeFilter;
+      })
+      .filter((o) => {
+        if (selectedTenantFilter === "ALL") return true;
+        // Tenant Kopi Senja handles Drinks/Coffee; Tenant Dago Kitchen handles Food
+        if (selectedTenantFilter === "tenant-kopi-senja") {
+          return o.items.some((it) => it.productName.toLowerCase().includes("kopi") || it.productName.toLowerCase().includes("tea") || it.productName.toLowerCase().includes("latte") || it.productName.toLowerCase().includes("espresso"));
+        }
+        if (selectedTenantFilter === "tenant-dago-kitchen") {
+          return o.items.some((it) => !it.productName.toLowerCase().includes("kopi") && !it.productName.toLowerCase().includes("tea") && !it.productName.toLowerCase().includes("latte") && !it.productName.toLowerCase().includes("espresso"));
+        }
+        return true;
       });
-  }, [filteredOrders, selectedTypeFilter]);
+  }, [filteredOrders, selectedTypeFilter, selectedTenantFilter]);
 
   // Ring bell when new ticket arrives
   useEffect(() => {
@@ -233,27 +245,62 @@ export default function KitchenKDSPage() {
       </div>
 
       {/* Filter Tabs & Target SLA Indicator */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-slate-200">
-        <div className="flex items-center space-x-1 text-xs">
-          <span className="text-slate-400 font-semibold px-2 flex items-center space-x-1">
-            <Filter className="w-3 h-3" />
-            <span>Tipe:</span>
-          </span>
-          {["ALL", "DINE_IN", "TAKE_AWAY"].map((type) => (
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-2.5 rounded-xl border border-slate-200">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {/* Tenant KDS Station Scoping (Pilar B) */}
+          <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-lg">
             <button
-              key={type}
-              onClick={() => setSelectedTypeFilter(type)}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
-                selectedTypeFilter === type
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-100"
+              onClick={() => setSelectedTenantFilter("ALL")}
+              className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                selectedTenantFilter === "ALL"
+                  ? "bg-white text-slate-900 shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              {type === "ALL" && "Semua Pesanan"}
-              {type === "DINE_IN" && "🍽️ Dine In"}
-              {type === "TAKE_AWAY" && "🛍️ Takeaway / Delivery"}
+              Semua Tenant
             </button>
-          ))}
+            <button
+              onClick={() => setSelectedTenantFilter("tenant-kopi-senja")}
+              className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                selectedTenantFilter === "tenant-kopi-senja"
+                  ? "bg-amber-500 text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              ☕ Barista (Kopi Senja)
+            </button>
+            <button
+              onClick={() => setSelectedTenantFilter("tenant-dago-kitchen")}
+              className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                selectedTenantFilter === "tenant-dago-kitchen"
+                  ? "bg-brand-orange text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              🍳 Dapur (Dago Kitchen)
+            </button>
+          </div>
+
+          <span className="text-slate-300">|</span>
+
+          {/* Order Type Filter */}
+          <div className="flex items-center space-x-1">
+            {["ALL", "DINE_IN", "TAKE_AWAY"].map((type) => (
+              <button
+                key={type}
+                onClick={() => setSelectedTypeFilter(type)}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
+                  selectedTypeFilter === type
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {type === "ALL" && "Semua Pesanan"}
+                {type === "DINE_IN" && "🍽️ Dine In"}
+                {type === "TAKE_AWAY" && "🛍️ Takeaway / Delivery"}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex items-center space-x-3 text-xs text-slate-600 pr-2">

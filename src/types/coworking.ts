@@ -71,3 +71,22 @@ export interface CoworkingMembershipPlan {
   fnbVoucherCode: string;
   amenities: string[];
 }
+
+export interface VirtualOfficeApplication {
+  id: string;
+  registrationNumber: string;
+  companyName: string;
+  applicantName: string;
+  applicantPhone: string;
+  applicantEmail: string;
+  planName: "VO Starter (Alamat Bisnis)" | "VO Professional (Alamat + Kuota Meeting)" | "VO Enterprise (Lengkap + Domisili)";
+  businessType: string;
+  startDate: string;
+  expiryDate: string;
+  legalDocumentName: string;
+  status: "PENDING_APPROVAL" | "APPROVED" | "ACTIVE" | "EXPIRED" | "REJECTED";
+  annualFee: number;
+  paymentStatus: "PAID" | "PENDING";
+  domicileLetterIssued: boolean;
+  notes?: string;
+}
