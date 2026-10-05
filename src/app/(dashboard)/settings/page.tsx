@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
+import { useOutlet } from "@/contexts/OutletContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { PromoConfig, PromoType, TargetType } from "@/lib/promo";
 import {
@@ -25,16 +26,24 @@ import {
   Tag,
   Plus,
   Trash2,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function SettingsPage() {
-  const { activeOrgModules, toggleOrgModule } = useAuth();
+  const { user, activeOrgModules, toggleOrgModule } = useAuth();
   const { settings, updateSettings } = useSettings();
+  const { outlets } = useOutlet();
+
+  const isSuperAdmin = user?.role.slug === "SUPER_ADMIN";
+  const isOrgOwner = user?.role.slug === "OWNER" && user?.scopeLevel === "ORGANIZATION";
+  const isTenantOwner = user?.role.slug === "OWNER" && user?.scopeLevel === "TENANT";
+  const canAccessSettings = isSuperAdmin || isOrgOwner || isTenantOwner;
 
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [tenantSavedSuccess, setTenantSavedSuccess] = useState(false);
 
-  // Form State
+  // Platform Form State
   const [language, setLanguage] = useState<"id" | "en">(settings.language);
   const [timezone, setTimezone] = useState(settings.timezone);
   const [currency, setCurrency] = useState(settings.currency);
@@ -49,6 +58,55 @@ export default function SettingsPage() {
 
   // Promos
   const [promos, setPromos] = useState<PromoConfig[]>(settings.promos || []);
+
+  // Tenant Settings Form State (Owner Mitra)
+  const [tenantBrandName, setTenantBrandName] = useState(user?.tenant?.name || "Kopi Senja");
+  const [tenantTagline, setTenantTagline] = useState("Specialty Coffee & Beverages");
+  const [tenantDesc, setTenantDesc] = useState(
+    "Single origin espresso blend Kintamani, olahan susu segar & gula aren organik Bali."
+  );
+  const [tenantPhone, setTenantPhone] = useState("+62 812-3456-7890");
+  const [tenantReceiptHeader, setTenantReceiptHeader] = useState("Kopi Senja — Specialty Coffee & Beverages");
+  const [tenantReceiptFooter, setTenantReceiptFooter] = useState("Terima kasih telah berkunjung ke Kopi Senja!");
+  const [tenantLowStock, setTenantLowStock] = useState(35);
+
+  // Rekening Pencairan Dana & Pembayaran Mitra
+  const [bankName, setBankName] = useState<string>("BCA");
+  const [bankAccountNumber, setBankAccountNumber] = useState<string>("");
+  const [bankAccountHolder, setBankAccountHolder] = useState<string>("");
+  const [bankFormError, setBankFormError] = useState<string>("");
+
+  useEffect(() => {
+    if (!isTenantOwner) return;
+    try {
+      /**
+       * NOTE: LocalStorage persistence below serves as an isolated prototype/demo persistence layer
+       * specifically scoped per tenantId without requiring destructive Prisma database migrations.
+       */
+      const saved = localStorage.getItem("dagoeng_tenant_settings_v1");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const currentTenantId = user?.tenant?.id || "tenant-ks";
+        // Support both map-by-tenantId and legacy single object
+        const tenantData = parsed[currentTenantId] || (parsed.tenantId === currentTenantId ? parsed : null);
+
+        if (tenantData) {
+          if (tenantData.brandName) setTenantBrandName(tenantData.brandName);
+          if (tenantData.tagline) setTenantTagline(tenantData.tagline);
+          if (tenantData.description) setTenantDesc(tenantData.description);
+          if (tenantData.contactPhone) setTenantPhone(tenantData.contactPhone);
+          if (tenantData.receiptHeader) setTenantReceiptHeader(tenantData.receiptHeader);
+          if (tenantData.receiptFooter) setTenantReceiptFooter(tenantData.receiptFooter);
+          if (tenantData.lowStockThresholdPercent !== undefined) setTenantLowStock(tenantData.lowStockThresholdPercent);
+          if (tenantData.bankName) setBankName(tenantData.bankName);
+          if (tenantData.bankAccountNumber) setBankAccountNumber(tenantData.bankAccountNumber);
+          if (tenantData.bankAccountHolder) setBankAccountHolder(tenantData.bankAccountHolder);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load tenant settings from localStorage", e);
+    }
+  }, [user, isTenantOwner]);
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +133,60 @@ export default function SettingsPage() {
     setTimeout(() => setSavedSuccess(false), 3500);
   };
 
+  const handleSaveTenantSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    setBankFormError("");
+
+    // Minimal Validation for Bank Account
+    if (bankAccountNumber.trim() && !bankAccountHolder.trim()) {
+      setBankFormError("Nama pemilik rekening wajib diisi jika nomor rekening dimasukkan.");
+      return;
+    }
+
+    const currentTenantId = user?.tenant?.id || "tenant-ks";
+    let existingMap: Record<string, any> = {};
+
+    try {
+      const raw = localStorage.getItem("dagoeng_tenant_settings_v1");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          if (parsed.tenantId && typeof parsed.tenantId === "string") {
+            existingMap[parsed.tenantId] = parsed;
+          } else {
+            existingMap = parsed;
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed reading existing tenant settings map", err);
+    }
+
+    existingMap[currentTenantId] = {
+      tenantId: currentTenantId,
+      brandName: tenantBrandName.trim(),
+      tagline: tenantTagline.trim(),
+      description: tenantDesc.trim(),
+      contactPhone: tenantPhone.trim(),
+      receiptHeader: tenantReceiptHeader.trim(),
+      receiptFooter: tenantReceiptFooter.trim(),
+      lowStockThresholdPercent: Number(tenantLowStock),
+      bankName: bankName,
+      bankAccountNumber: bankAccountNumber.trim(),
+      bankAccountHolder: bankAccountHolder.trim(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    try {
+      localStorage.setItem("dagoeng_tenant_settings_v1", JSON.stringify(existingMap));
+    } catch (err) {
+      console.error("Failed saving tenant settings", err);
+    }
+
+    setTenantSavedSuccess(true);
+    setTimeout(() => setTenantSavedSuccess(false), 3500);
+  };
+
   const moduleDefinitions = [
     {
       code: "FNB",
@@ -99,6 +211,362 @@ export default function SettingsPage() {
     },
   ];
 
+  if (!canAccessSettings) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center space-y-4 bg-white border border-slate-200 rounded-2xl shadow-xs my-12 animate-in fade-in">
+        <div className="w-12 h-12 rounded-full bg-red-50 border border-red-200 text-red-600 flex items-center justify-center mx-auto">
+          <AlertTriangle className="w-6 h-6" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-base font-bold text-slate-900">Akses Dibatasi (Scope Terkunci)</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Halaman Pengaturan hanya dapat diakses oleh{" "}
+            <strong className="text-slate-700">Platform Super Admin</strong>,{" "}
+            <strong className="text-slate-700">Owner Level Organisasi (Dago Hub)</strong>, atau{" "}
+            <strong className="text-slate-700">Owner Tenant / Mitra</strong>.
+          </p>
+        </div>
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 text-left space-y-1">
+          <div className="flex justify-between">
+            <span className="text-slate-400">Akun Pengguna:</span>
+            <span className="font-semibold text-slate-800">{user?.name || "Staf"}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">Role:</span>
+            <span className="font-semibold text-slate-800">{user?.role.name || "-"}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-slate-400">Scope Level:</span>
+            <span className="font-mono font-bold text-amber-700">{user?.scopeLevel || "-"}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render Tenant Settings for Owner Mitra
+  if (isTenantOwner) {
+    return (
+      <div className="space-y-6 max-w-5xl">
+        {/* Toast Alert */}
+        {tenantSavedSuccess && (
+          <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-900 font-bold flex items-center space-x-2 animate-in fade-in shadow-xs">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>Pengaturan profil mitra dan konfigurasi operasional {tenantBrandName} berhasil disimpan!</span>
+          </div>
+        )}
+
+        {/* Top Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 flex items-center space-x-2">
+              <Coffee className="w-6 h-6 text-brand-orange" />
+              <span>Pengaturan Mitra & Profil Bisnis Tenant</span>
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Kelola profil merek, informasi operasional gerai, kontak, dan kustomisasi struk kasir untuk{" "}
+              <strong className="text-slate-800">{user?.tenant?.name || "Mitra F&B"}</strong>
+            </p>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full font-bold">
+              Scope: TENANT ({user?.tenant?.code || "KOPI-SENJA"})
+            </span>
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveTenantSettings} className="space-y-6 text-xs">
+          {/* Card 1: Brand & Profile Info */}
+          <Card className="shadow-xs border border-slate-200">
+            <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
+              <CardTitle className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                <Store className="w-4 h-4 text-brand-orange" />
+                <span>Identitas Merek & Profil Mitra</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Informasi yang ditampilkan kepada pelanggan di Portal Pemesanan & QR Menu.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Nama Brand Mitra *</label>
+                  <input
+                    type="text"
+                    required
+                    value={tenantBrandName}
+                    onChange={(e) => setTenantBrandName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-slate-900 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Kode Mitra (Sistem)</label>
+                  <input
+                    type="text"
+                    disabled
+                    value={user?.tenant?.code || "KOPI-SENJA"}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-100 text-slate-500 font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Modul Bisnis Terdaftar</label>
+                  <input
+                    type="text"
+                    disabled
+                    value="Food & Beverage (F&B)"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-slate-100 text-slate-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Tagline Singkat</label>
+                  <input
+                    type="text"
+                    value={tenantTagline}
+                    onChange={(e) => setTenantTagline(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
+                    placeholder="cth. Specialty Coffee & Beverages"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Nomor WhatsApp / Hotline Pelanggan</label>
+                  <input
+                    type="text"
+                    value={tenantPhone}
+                    onChange={(e) => setTenantPhone(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
+                    placeholder="+62 812-xxxx-xxxx"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Deskripsi Profil Bisnis</label>
+                <textarea
+                  rows={3}
+                  value={tenantDesc}
+                  onChange={(e) => setTenantDesc(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800"
+                  placeholder="Jelaskan keunikan dan filosofi menu kuliner/minuman Anda..."
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Rekening Pencairan Dana & Pembayaran Mitra */}
+          <Card className="shadow-xs border border-slate-200">
+            <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                  <CreditCard className="w-4 h-4 text-brand-orange" />
+                  <span>Rekening Pencairan Dana & Pembayaran Mitra</span>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Informasi nomor rekening bank atau e-wallet untuk pencairan bagi hasil (settlement) penjualan berkala.
+                </CardDescription>
+              </div>
+              <div>
+                {bankAccountNumber.trim() ? (
+                  <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full flex items-center space-x-1 border border-emerald-200">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>Tersimpan</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full flex items-center space-x-1 border border-amber-200">
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>Belum Diisi</span>
+                  </span>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              {bankFormError && (
+                <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs font-medium flex items-center space-x-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>{bankFormError}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Bank / Penyedia E-Wallet *</label>
+                  <select
+                    value={bankName}
+                    onChange={(e) => setBankName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-slate-900 bg-white"
+                  >
+                    <option value="BCA">Bank BCA</option>
+                    <option value="Mandiri">Bank Mandiri</option>
+                    <option value="BRI">Bank BRI</option>
+                    <option value="BNI">Bank BNI</option>
+                    <option value="BSI">Bank Syariah Indonesia (BSI)</option>
+                    <option value="GoPay">GoPay (No. HP)</option>
+                    <option value="OVO">OVO (No. HP)</option>
+                    <option value="DANA">DANA (No. HP)</option>
+                    <option value="ShopeePay">ShopeePay (No. HP)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Nomor Rekening / No. HP *</label>
+                  <input
+                    type="text"
+                    value={bankAccountNumber}
+                    onChange={(e) => setBankAccountNumber(e.target.value)}
+                    placeholder="cth. 8830192841"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-slate-900 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Nama Pemilik Rekening (a.n.) *</label>
+                  <input
+                    type="text"
+                    value={bankAccountHolder}
+                    onChange={(e) => setBankAccountHolder(e.target.value)}
+                    placeholder="cth. Kopi Senja Utama"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-slate-900 bg-white"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 space-y-1">
+                <p className="font-semibold text-slate-700">📌 Catatan Operasional & Keamanan:</p>
+                <p>• Data rekening di atas hanya dapat diakses dan diubah oleh Owner Mitra <strong>{user?.tenant?.name || "terkait"}</strong>.</p>
+                <p>• DAGO Creative Hub menggunakan data ini sebagai tujuan transfer pencairan bagi hasil (settlement) bersih berkala.</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 3: Receipt & Operational Customization */}
+          <Card className="shadow-xs border border-slate-200">
+            <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
+              <CardTitle className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                <Receipt className="w-4 h-4 text-emerald-600" />
+                <span>Format Nota Struk Kasir & Operasional Gerai</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Kustomisasi teks cetak struk POS dan parameter peringatan stok internal tenant.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Header Struk POS Kasir</label>
+                  <input
+                    type="text"
+                    value={tenantReceiptHeader}
+                    onChange={(e) => setTenantReceiptHeader(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-slate-900"
+                    placeholder="Header struk kasir"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Dicetak di bagian atas setiap struk pembayaran.</p>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-semibold mb-1">Footer Struk POS Kasir</label>
+                  <input
+                    type="text"
+                    value={tenantReceiptFooter}
+                    onChange={(e) => setTenantReceiptFooter(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-slate-900"
+                    placeholder="Footer struk kasir"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Pesan ucapan terima kasih / sosial media di akhir struk.</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-semibold mb-1">Ambang Batas Peringatan Stok Rendah (%)</label>
+                <div className="max-w-xs">
+                  <input
+                    type="number"
+                    value={tenantLowStock}
+                    onChange={(e) => setTenantLowStock(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-amber-700"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Bahan baku dengan sisa di bawah persentase ini akan memicu badge Stok Menipis pada panel Inventory mitra.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 3: Outlets List */}
+          <Card className="shadow-xs border border-slate-200">
+            <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
+              <CardTitle className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                <Store className="w-4 h-4 text-purple-600" />
+                <span>Gerai / Cabang Outlet Terdaftar ({outlets.length})</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Daftar outlet fisik yang terafiliasi dengan akun kemitraan Anda di platform DAGO.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {outlets.map((outlet) => (
+                  <div key={outlet.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 text-xs">{outlet.name}</span>
+                      <span
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${outlet.status === "ACTIVE"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                          }`}
+                      >
+                        {outlet.status === "ACTIVE" ? "AKTIF" : "EKSPANSI"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 font-mono">Kode: {outlet.code}</p>
+                    <p className="text-[11px] text-slate-600">{outlet.address || "Alamat belum diatur"}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Save Bar */}
+          <div className="flex items-center justify-end pt-3 border-t border-slate-200">
+            <Button
+              type="submit"
+              size="sm"
+              className="bg-brand-orange hover:bg-orange-600 text-white font-bold px-6 space-x-1.5 shadow-sm"
+            >
+              <Save className="w-4 h-4" />
+              <span>Simpan Pengaturan Mitra</span>
+            </Button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  const [selectedMasterTab, setSelectedMasterTab] = useState("Paket Membership");
+
+  const MASTER_DATA_TABS = [
+    "User",
+    "Tenant",
+    "Kategori Produk",
+    "Produk",
+    "Kategori Ruangan",
+    "Ruangan",
+    "Paket Membership",
+    "Paket Virtual Office",
+    "Promo",
+    "Event Spaces",
+    "Acara",
+    "COA",
+    "FAQ",
+  ];
+
   return (
     <div className="space-y-6 max-w-5xl">
       {/* Toast Alert */}
@@ -114,13 +582,132 @@ export default function SettingsPage() {
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center space-x-2">
             <Settings className="w-6 h-6 text-slate-700" />
-            <span>Pengaturan Platform & Konfigurasi Organisasi</span>
+            <span>Master Data & Pengaturan Platform DAGO</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Konfigurasi bahasa, zona waktu, ambang batas stok, tier loyalty, pajak, dan aktivasi modul Dago Creative Hub
+            Manajemen Master Data terpusat, paket layanan, pajak global (10%), dan konfigurasi organisasi.
           </p>
         </div>
       </div>
+
+      {/* Master Data Horizontal Scrolling Navigation Tabs */}
+      <Card className="shadow-xs border border-slate-200 overflow-hidden">
+        <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <span className="font-bold text-xs text-slate-800 uppercase tracking-wide">Master Data:</span>
+            <span className="text-xs bg-brand-orange/10 text-brand-orange font-bold px-2.5 py-0.5 rounded-full border border-brand-orange/20">
+              {selectedMasterTab}
+            </span>
+          </div>
+
+          <Button
+            size="sm"
+            onClick={() => alert(`Modal Tambah ${selectedMasterTab} Baru dibuka.`)}
+            className="bg-brand-orange hover:bg-orange-600 text-white font-bold text-xs space-x-1.5 shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Tambah {selectedMasterTab} Baru</span>
+          </Button>
+        </div>
+
+        {/* Scrollable Tabs */}
+        <div className="flex items-center space-x-2 overflow-x-auto p-3 bg-white scrollbar-thin border-b border-slate-100">
+          {MASTER_DATA_TABS.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setSelectedMasterTab(tab)}
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all flex-shrink-0 ${selectedMasterTab === tab
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {/* Master Data Table Preview */}
+        <div className="p-4 overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px]">
+                <th className="pb-2 font-bold">Item / Entitas</th>
+                <th className="pb-2 font-bold">Kode / Kategori</th>
+                <th className="pb-2 font-bold">Nilai / Kuota / Tarif</th>
+                <th className="pb-2 font-bold">Status</th>
+                <th className="pb-2 font-bold text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-slate-700">
+              <tr>
+                <td className="py-2.5 font-bold text-slate-900">
+                  {selectedMasterTab === "Paket Membership" ? "Flexi Nomad Pass (50 Jam)" : `${selectedMasterTab} Contoh #01`}
+                </td>
+                <td className="py-2.5 font-mono text-slate-500">
+                  {selectedMasterTab === "Paket Membership" ? "MEMB-50H" : "DAGO-MASTER-01"}
+                </td>
+                <td className="py-2.5 font-bold text-brand-orange">
+                  {selectedMasterTab === "Paket Membership" ? "Rp 500.000 / 30 Hari" : "Aktif"}
+                </td>
+                <td className="py-2.5">
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    AKTIF
+                  </span>
+                </td>
+                <td className="py-2.5 text-right space-x-1">
+                  <button
+                    type="button"
+                    onClick={() => alert(`Edit ${selectedMasterTab}`)}
+                    className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => alert(`Hapus ${selectedMasterTab}`)}
+                    className="p-1 text-red-600 hover:bg-red-50 rounded"
+                  >
+                    🗑️
+                  </button>
+                </td>
+              </tr>
+              <tr>
+                <td className="py-2.5 font-bold text-slate-900">
+                  {selectedMasterTab === "Paket Membership" ? "Resident Dedicated Desk (1 Bulan)" : `${selectedMasterTab} Contoh #02`}
+                </td>
+                <td className="py-2.5 font-mono text-slate-500">
+                  {selectedMasterTab === "Paket Membership" ? "MEMB-DEDICATED" : "DAGO-MASTER-02"}
+                </td>
+                <td className="py-2.5 font-bold text-brand-orange">
+                  {selectedMasterTab === "Paket Membership" ? "Rp 1.500.000 / Bulan" : "Aktif"}
+                </td>
+                <td className="py-2.5">
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    AKTIF
+                  </span>
+                </td>
+                <td className="py-2.5 text-right space-x-1">
+                  <button
+                    type="button"
+                    onClick={() => alert(`Edit ${selectedMasterTab}`)}
+                    className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => alert(`Hapus ${selectedMasterTab}`)}
+                    className="p-1 text-red-600 hover:bg-red-50 rounded"
+                  >
+                    🗑️
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Card>
 
       {/* Form Settings Container */}
       <form onSubmit={handleSaveSettings} className="space-y-6">

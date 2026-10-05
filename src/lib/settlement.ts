@@ -62,9 +62,17 @@ export function calculateSettlement(
         
         const netRevenue = data.gross - allocatedDiscount + allocatedTax;
         
+        const defaultTenantNames: Record<string, string> = {
+          "tenant-ks": "Kopi Senja",
+          "tenant-kitchen": "Dapur Mama",
+          "tenant-bakery": "Manis Bakery",
+          "tenant-tea": "Warung Bu Narti",
+          "DAGO_HUB": "Dago Hub",
+        };
+
         const current = settlementMap.get(tenantId) || {
           tenantId,
-          tenantName: tenantMap?.[tenantId] || (tenantId === "DAGO_HUB" ? "Dago Hub" : tenantId),
+          tenantName: tenantMap?.[tenantId] || defaultTenantNames[tenantId] || (tenantId === "DAGO_HUB" ? "Dago Hub" : tenantId),
           grossRevenue: 0,
           discount: 0,
           tax: 0,
@@ -101,3 +109,118 @@ export function calculateSettlement(
   // Sort descending by netRevenue
   return result.sort((a, b) => b.netRevenue - a.netRevenue);
 }
+
+export interface TenantProfitSharing {
+  tenantId: string;
+  tenantName: string;
+  grossSales: number;
+  platformFee: number; // 15% DAGO Platform Fee
+  qrisMdr: number;     // 0.7% Bank Indonesia QRIS MDR
+  netPayout: number;   // 84.3% Net Payout
+  orderCount: number;
+}
+
+/**
+ * Calculates profit-sharing breakdown for a tenant (Gross - 15% Platform Fee - 0.7% QRIS MDR)
+ */
+export function calculateTenantProfitSharing(
+  orders: OrderRecord[],
+  tenantId: string,
+  tenantName: string,
+  commissionPercent: number = 15.0
+): TenantProfitSharing {
+  const tenantOrders = orders.filter(
+    (o) => o.paymentStatus === "PAID" && o.status !== "CANCELLED"
+  );
+
+  let grossSales = 0;
+  let orderCount = 0;
+
+  tenantOrders.forEach((order) => {
+    let hasTenantItem = false;
+    order.items.forEach((item) => {
+      if (item.tenantId === tenantId) {
+        hasTenantItem = true;
+        grossSales += (item.unitPrice || 0) * (item.quantity || 1);
+      }
+    });
+    if (hasTenantItem) orderCount++;
+  });
+
+  const platformFee = Math.round(grossSales * (commissionPercent / 100));
+  const qrisMdr = Math.round(grossSales * 0.007);
+  const netPayout = grossSales - platformFee - qrisMdr;
+
+  return {
+    tenantId,
+    tenantName,
+    grossSales,
+    platformFee,
+    qrisMdr,
+    netPayout,
+    orderCount,
+  };
+}
+
+export interface TenantPayoutAccount {
+  tenantId: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  isConfigured: boolean;
+}
+
+/**
+ * Masks account number for secure operational display (e.g. "•••• •••• 7890")
+ */
+export function maskAccountNumber(accountNumber: string): string {
+  const clean = (accountNumber || "").replace(/\s+/g, "");
+  if (!clean) return "-";
+  if (clean.length <= 4) return clean;
+  const last4 = clean.slice(-4);
+  return `•••• •••• ${last4}`;
+}
+
+export const DEFAULT_TENANT_PAYOUT_ACCOUNTS: Record<string, { bankName: string; accountNumber: string; accountHolder: string }> = {
+  "tenant-ks": { bankName: "BCA", accountNumber: "8830192841", accountHolder: "Kopi Senja Utama" },
+  "tenant-kitchen": { bankName: "Mandiri", accountNumber: "1420019283741", accountHolder: "Dapur Mama Kuliner" },
+  "tenant-bakery": { bankName: "BCA", accountNumber: "7720194821", accountHolder: "Manis Bakery Artisan" },
+  "tenant-tea": { bankName: "BRI", accountNumber: "002101928374501", accountHolder: "Warung Bu Narti" },
+};
+
+/**
+ * Resolves tenant payout account info with fallback to default demo data.
+ */
+export function getTenantPayoutAccount(tenantId: string, customMap?: Record<string, any>): TenantPayoutAccount {
+  if (customMap && customMap[tenantId]?.bankAccountNumber) {
+    const item = customMap[tenantId];
+    return {
+      tenantId,
+      bankName: item.bankName || "BCA",
+      accountNumber: item.bankAccountNumber,
+      accountHolder: item.bankAccountHolder || "-",
+      isConfigured: true,
+    };
+  }
+
+  const def = DEFAULT_TENANT_PAYOUT_ACCOUNTS[tenantId];
+  if (def) {
+    return {
+      tenantId,
+      bankName: def.bankName,
+      accountNumber: def.accountNumber,
+      accountHolder: def.accountHolder,
+      isConfigured: true,
+    };
+  }
+
+  return {
+    tenantId,
+    bankName: "BCA",
+    accountNumber: "-",
+    accountHolder: "-",
+    isConfigured: false,
+  };
+}
+
+

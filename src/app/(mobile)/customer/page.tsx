@@ -66,6 +66,55 @@ import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
+interface FnbPartner {
+  id: string;
+  name: string;
+  tagline: string;
+  desc: string;
+  category: string;
+  icon: string;
+  badge: string;
+}
+
+const FNB_PARTNERS: FnbPartner[] = [
+  {
+    id: "tenant-ks",
+    name: "Kopi Senja",
+    tagline: "Specialty Coffee & Beverages",
+    desc: "Sajian kopi pilihan dan aneka minuman segar untuk menemani aktivitas Anda.",
+    category: "Signature Coffee",
+    icon: "☕",
+    badge: "Official Mitra Kopi",
+  },
+  {
+    id: "tenant-kitchen",
+    name: "Dapur Mama",
+    tagline: "Masakan Rumahan & Hidangan Utama",
+    desc: "Hidangan utama hangat, aneka olahan nasi, dan lauk lezat khas masakan rumah.",
+    category: "Main Course",
+    icon: "🍽️",
+    badge: "Official Kitchen",
+  },
+  {
+    id: "tenant-bakery",
+    name: "Manis Bakery",
+    tagline: "Roti, Kue & Pastry Segar",
+    desc: "Roti segar, pastry mentega lembut, dan camilan lezat yang dipanggang setiap hari.",
+    category: "Pastry & Snacks",
+    icon: "🥐",
+    badge: "Fresh Baked Daily",
+  },
+  {
+    id: "tenant-tea",
+    name: "Warung Bu Narti",
+    tagline: "Kuliner Tradisional & Minuman Nusantara",
+    desc: "Aneka seduhan teh segar, minuman rempah tradisional, dan sajian khas nusantara.",
+    category: "Artisan Tea & Refreshers",
+    icon: "🍃",
+    badge: "Mitra Nusantara",
+  },
+];
+
 type CustomerTab = "HOME" | "MENU" | "COWORKING" | "ORDERS" | "LOYALTY" | "PROFILE";
 
 interface CartItem {
@@ -94,8 +143,18 @@ function CustomerPortalContent() {
   const { spaces, bookings, bookSpace, confirmBookingPayment, cancelBooking } = useCoworking();
   const { settings } = useSettings();
 
+  const urlPartner = searchParams.get("partner");
+  const initialPartnerId =
+    urlPartner && FNB_PARTNERS.some((p) => p.id === urlPartner)
+      ? urlPartner
+      : "tenant-ks";
+
   // Active Tab initialized directly from URL searchParams
   const [activeTab, setActiveTab] = useState<CustomerTab>(initialTab);
+
+  // Active F&B Partner State (Segmented Mitra Navigation)
+  const [activePartnerId, setActivePartnerId] = useState<string>(initialPartnerId);
+  const [partnerSwitchModal, setPartnerSwitchModal] = useState<{ isOpen: boolean; targetPartnerId: string } | null>(null);
 
   // Order Cancellation State
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
@@ -139,6 +198,12 @@ function CustomerPortalContent() {
       setActiveTab(urlTab);
     }
   }, [urlTab]);
+
+  useEffect(() => {
+    if (urlPartner && FNB_PARTNERS.some((p) => p.id === urlPartner)) {
+      setActivePartnerId(urlPartner);
+    }
+  }, [urlPartner]);
 
   const urlOutlet = searchParams.get("outlet");
   useEffect(() => {
@@ -216,22 +281,58 @@ function CustomerPortalContent() {
     );
   }, [bookings, currentMember, user, isCustomerLoggedIn]);
 
-  // Menu Categories
-  const menuCategories = useMemo(() => {
-    const cats = Array.from(new Set(filteredProducts.map((p) => p.category)));
-    return ["ALL", ...cats];
-  }, [filteredProducts]);
+  // Active Partner Object Memo
+  const activePartner = useMemo(() => {
+    return FNB_PARTNERS.find((p) => p.id === activePartnerId) || FNB_PARTNERS[0];
+  }, [activePartnerId]);
 
-  // Filtered Menu Items
+  const handleSelectPartner = (targetPartnerId: string) => {
+    if (targetPartnerId === activePartnerId) return;
+
+    // Check if cart has items from another partner
+    const hasItemsFromOtherPartner = cart.some(
+      (item) => item.product.tenantId && item.product.tenantId !== targetPartnerId
+    );
+
+    if (hasItemsFromOtherPartner && cart.length > 0) {
+      setPartnerSwitchModal({ isOpen: true, targetPartnerId });
+    } else {
+      setActivePartnerId(targetPartnerId);
+      setMenuCatFilter("ALL");
+    }
+  };
+
+  const confirmPartnerSwitch = () => {
+    if (partnerSwitchModal) {
+      setCart([]);
+      setActivePartnerId(partnerSwitchModal.targetPartnerId);
+      setMenuCatFilter("ALL");
+      setPartnerSwitchModal(null);
+      showToast("Keranjang dikosongkan untuk beralih ke mitra baru.");
+    }
+  };
+
+  // Menu Categories scoped to active partner
+  const menuCategories = useMemo(() => {
+    const partnerProducts = filteredProducts.filter(
+      (p) => (p.tenantId || "tenant-ks") === activePartnerId && p.status === "ACTIVE"
+    );
+    const cats = Array.from(new Set(partnerProducts.map((p) => p.category)));
+    return ["ALL", ...cats];
+  }, [filteredProducts, activePartnerId]);
+
+  // Filtered Menu Items scoped to active partner (No mixing of products)
   const filteredMenuItems = useMemo(() => {
     return filteredProducts.filter((item) => {
+      const matchPartner = (item.tenantId || "tenant-ks") === activePartnerId;
+      const matchStatus = item.status === "ACTIVE";
       const matchCat = menuCatFilter === "ALL" || item.category === menuCatFilter;
       const matchSearch =
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.category.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchCat && matchSearch;
+      return matchPartner && matchStatus && matchCat && matchSearch;
     });
-  }, [filteredProducts, menuCatFilter, searchQuery]);
+  }, [filteredProducts, activePartnerId, menuCatFilter, searchQuery]);
 
   // Filtered Coworking Spaces
   const filteredSpaces = useMemo(() => {
@@ -245,16 +346,13 @@ function CustomerPortalContent() {
     });
   }, [spaces, spaceTypeFilter, searchQuery]);
 
-  // Extract unique tenants from AuthContext DEMO_PERSONAS as the source of truth
+  // Extract unique tenants from FNB_PARTNERS as the source of truth
   const tenantMap = useMemo(() => {
     const map = new Map<string, { name: string; logoUrl?: string }>();
-    Object.values(DEMO_PERSONAS).forEach((persona) => {
-      if (persona.tenant) {
-        map.set(persona.tenant.id, { 
-          name: persona.tenant.name, 
-          logoUrl: (persona.tenant as any).logoUrl 
-        });
-      }
+    FNB_PARTNERS.forEach((partner) => {
+      map.set(partner.id, { 
+        name: partner.name, 
+      });
     });
     return map;
   }, []);
@@ -340,6 +438,17 @@ function CustomerPortalContent() {
   // Cart Operations
   const addToCart = (product: MasterProduct) => {
     if (!product.isAvailable) return;
+
+    // Check if cart already has items from another partner
+    const hasItemsFromOtherPartner = cart.some(
+      (item) => item.product.tenantId && item.product.tenantId !== product.tenantId
+    );
+
+    if (hasItemsFromOtherPartner && product.tenantId) {
+      setPartnerSwitchModal({ isOpen: true, targetPartnerId: product.tenantId });
+      return;
+    }
+
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
@@ -1128,6 +1237,77 @@ function CustomerPortalContent() {
                   </Card>
                 )}
 
+                {/* Explore Mitra Kuliner (F&B Partners Grid) */}
+                <div className="space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-black text-base text-slate-900 flex items-center space-x-2">
+                        <span>Pilih Mitra Kuliner DAGO (F&B)</span>
+                        <Badge className="bg-orange-100 text-brand-orange border-orange-200 text-[10px] font-bold">
+                          Multi-Mitra
+                        </Badge>
+                      </h3>
+                      <p className="text-xs text-slate-500">Pilih mitra favorit Anda untuk melihat katalog menu khusus dan memesan</p>
+                    </div>
+                    <Button
+                      onClick={() => handleTabChange("MENU")}
+                      size="sm"
+                      variant="ghost"
+                      className="text-xs font-bold text-brand-orange hover:bg-orange-50 h-8"
+                    >
+                      Buka Menu &rarr;
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {FNB_PARTNERS.map((partner) => {
+                      const partnerProductCount = filteredProducts.filter(
+                        (p) => (p.tenantId || "tenant-ks") === partner.id && p.status === "ACTIVE"
+                      ).length;
+                      return (
+                        <div
+                          key={partner.id}
+                          onClick={() => {
+                            handleSelectPartner(partner.id);
+                            handleTabChange("MENU");
+                          }}
+                          className="bg-white border border-slate-200/90 hover:border-brand-orange/50 hover:shadow-lg rounded-3xl p-4 sm:p-5 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:-translate-y-1 group"
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="w-12 h-12 rounded-2xl bg-orange-50 text-brand-orange border border-orange-200 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                                {partner.icon}
+                              </div>
+                              <Badge className="bg-slate-100 text-slate-700 text-[10px] font-bold">
+                                {partner.badge}
+                              </Badge>
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-sm text-slate-900 group-hover:text-brand-orange transition-colors">
+                                {partner.name}
+                              </h4>
+                              <p className="text-[11px] text-slate-400 font-medium">{partner.category}</p>
+                              <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">
+                                {partner.desc}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="pt-3.5 mt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                            <span className="text-[11px] font-semibold text-slate-500">
+                              {partnerProductCount} Menu Tersedia
+                            </span>
+                            <span className="text-brand-orange font-bold flex items-center group-hover:translate-x-1 transition-transform">
+                              <span>Pesan</span>
+                              <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 {/* Loyalty Perks & Promo Highlight */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-6 rounded-3xl bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 text-white space-y-3 shadow-lg shadow-orange-500/15 flex flex-col justify-between hover:scale-[1.01] transition-all">
@@ -1180,18 +1360,64 @@ function CustomerPortalContent() {
             )}
 
             {/* ---------------------------------------------------- */}
-            {/* TAB B: MENU & F&B (Katalog & Keranjang) */}
+            {/* TAB B: MENU & F&B (Katalog & Keranjang Multi-Mitra) */}
             {/* ---------------------------------------------------- */}
             {activeTab === "MENU" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 
-                {/* Search & Category Filter */}
+                {/* 1. Active Mitra Header Banner (Primary: Mitra, Secondary: Powered by DAGO) */}
+                <div className="p-5 sm:p-6 rounded-3xl bg-white border border-slate-200/90 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start space-x-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-orange-100 text-brand-orange border border-orange-200 flex items-center justify-center text-2xl flex-shrink-0 shadow-2xs">
+                        {activePartner.icon}
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h2 className="text-xl font-black text-slate-900">{activePartner.name}</h2>
+                          <Badge className="bg-orange-50 text-brand-orange border-orange-200 text-[10px] font-bold">
+                            {activePartner.badge}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-slate-600 font-semibold mt-0.5">{activePartner.tagline}</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">{activePartner.desc}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-1.5 self-start sm:self-center px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-500">
+                      <span>Powered by</span>
+                      <span className="font-black text-slate-800">DAGO</span>
+                    </div>
+                  </div>
+
+                  {/* Horizontal Segmented Partner Navigation Tabs */}
+                  <div className="pt-3 border-t border-slate-100 flex items-center space-x-2 overflow-x-auto scrollbar-none pb-1">
+                    {FNB_PARTNERS.map((partner) => {
+                      const isSelected = activePartnerId === partner.id;
+                      return (
+                        <button
+                          key={partner.id}
+                          onClick={() => handleSelectPartner(partner.id)}
+                          className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all duration-200 flex items-center space-x-2 ${
+                            isSelected
+                              ? "bg-slate-900 text-white shadow-md shadow-slate-900/20 scale-[1.02]"
+                              : "bg-slate-100/90 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                          }`}
+                        >
+                          <span className="text-sm">{partner.icon}</span>
+                          <span>{partner.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Search & Category Filter for Active Mitra */}
                 <div className="flex flex-col sm:flex-row gap-3 justify-between items-stretch sm:items-center">
                   <div className="relative flex-1 max-w-md">
                     <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                     <input
                       type="text"
-                      placeholder="Cari kopi, hidangan utama, pastry..."
+                      placeholder={`Cari menu di ${activePartner.name}...`}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all shadow-2xs"
@@ -1217,7 +1443,33 @@ function CustomerPortalContent() {
 
                 {/* Menu Items Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredMenuItems.map((item) => {
+                  {filteredMenuItems.length === 0 ? (
+                    <div className="col-span-full py-12 text-center bg-white rounded-3xl border border-slate-200/90 p-8 space-y-3 shadow-xs">
+                      <div className="w-12 h-12 mx-auto rounded-2xl bg-orange-50 text-brand-orange border border-orange-200 flex items-center justify-center text-xl">
+                        <UtensilsCrossed className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-slate-900 text-sm">Tidak ada menu yang ditemukan</h4>
+                      <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                        {searchQuery
+                          ? `Tidak ditemukan menu yang cocok dengan pencarian "${searchQuery}" pada mitra ${activePartner.name}.`
+                          : `Belum ada produk untuk kategori "${menuCatFilter}" di ${activePartner.name}.`}
+                      </p>
+                      {(searchQuery || menuCatFilter !== "ALL") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSearchQuery("");
+                            setMenuCatFilter("ALL");
+                          }}
+                          className="text-xs font-bold rounded-xl mt-2 border-slate-300 hover:bg-slate-50"
+                        >
+                          Reset Filter Menu
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    filteredMenuItems.map((item) => {
                     const isAvailable = item.isAvailable;
                     const inCart = cart.find((ci) => ci.product.id === item.id);
 
@@ -1235,12 +1487,9 @@ function CustomerPortalContent() {
                             <span className="text-[10px] font-black text-brand-orange uppercase tracking-wider block">
                               {(() => {
                                 const tenantInfo = item.tenantId ? tenantMap.get(item.tenantId) : null;
-                                const tName = tenantInfo?.name || "Dago Hub";
+                                const tName = tenantInfo?.name || activePartner.name || "Mitra F&B";
                                 return (
                                   <span className="flex items-center space-x-1.5">
-                                    {tenantInfo?.logoUrl && (
-                                      <img src={tenantInfo.logoUrl} alt={tName} className="w-3 h-3 rounded-full object-cover" />
-                                    )}
                                     <span>{tName} • {item.category}</span>
                                   </span>
                                 );
@@ -1309,7 +1558,8 @@ function CustomerPortalContent() {
                         </div>
                       </div>
                     );
-                  })}
+                  })
+                )}
                 </div>
 
                 {/* Floating Bottom Cart Bar */}
@@ -2675,6 +2925,40 @@ function CustomerPortalContent() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 11. PARTNER SWITCH WARNING MODAL (Requirement: Clear cart on partner switch) */}
+      {partnerSwitchModal?.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95 duration-200 text-center">
+            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 mx-auto flex items-center justify-center font-bold">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="font-black text-base text-slate-900">Ganti Mitra Kuliner?</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Keranjang kamu saat ini berisi produk dari <strong className="text-slate-800">{activePartner.name}</strong>. Mengganti mitra akan mengosongkan keranjang. Apakah kamu ingin melanjutkan?
+              </p>
+            </div>
+            <div className="flex items-center space-x-2.5 pt-2">
+              <Button
+                type="button"
+                onClick={() => setPartnerSwitchModal(null)}
+                variant="outline"
+                className="w-1/2 h-10 text-xs font-bold rounded-xl border-slate-300 hover:bg-slate-50"
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                onClick={confirmPartnerSwitch}
+                className="w-1/2 h-10 text-xs font-bold bg-brand-orange hover:bg-orange-600 text-white rounded-xl shadow-xs"
+              >
+                Ganti Mitra
+              </Button>
             </div>
           </div>
         </div>

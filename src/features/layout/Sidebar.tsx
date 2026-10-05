@@ -74,7 +74,7 @@ export function Sidebar() {
           <div className="w-8 h-10 relative flex-shrink-0">
             <Image
               src="/logo-dago.png"
-              alt="DagoEng Creative Hub"
+              alt="Dago Creative Hub"
               width={32}
               height={40}
               priority
@@ -83,10 +83,10 @@ export function Sidebar() {
           </div>
           <div>
             <h1 className="font-bold text-sm tracking-tight text-slate-900 leading-tight">
-              DagoEng <span className="text-brand-orange">Platform</span>
+              DAGO <span className="text-brand-orange">Creative Hub</span>
             </h1>
             <p className="text-[10px] text-slate-400 font-medium tracking-wide">
-              {user?.tenant ? user.tenant.name : "Dago Creative Hub"}
+              {user?.tenant ? user.tenant.name : "Platform & Management"}
             </p>
           </div>
         </div>

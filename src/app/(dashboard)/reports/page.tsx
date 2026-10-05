@@ -10,7 +10,7 @@ import { useInventory } from "@/contexts/InventoryContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { calculateSettlement } from "@/lib/settlement";
+import { calculateSettlement, getTenantPayoutAccount, maskAccountNumber } from "@/lib/settlement";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -203,23 +203,30 @@ export default function ReportsPage() {
         const totalNetSettlement = settlementData.reduce((sum, s) => sum + s.netRevenue, 0);
         return {
           title: "Laporan Settlement & Bagi Hasil Mitra",
-          subtitle: `Rincian alokasi pendapatan, diskon, dan pajak untuk Dago Hub dan Mitra di ${activeOutlet?.name}`,
+          subtitle: `Rincian alokasi pendapatan, rekening tujuan pencairan, dan pajak untuk Dago Hub dan Mitra di ${activeOutlet?.name}`,
           summaryCards: [
             { label: "Total Net Settlement", value: `Rp ${totalNetSettlement.toLocaleString("id-ID")}` },
             { label: "Total Diskon (Prorata)", value: `Rp ${settlementData.reduce((sum, s) => sum + s.discount, 0).toLocaleString("id-ID")}` },
             { label: "Total Pajak & Charge", value: `Rp ${settlementData.reduce((sum, s) => sum + (s.tax + s.serviceCharge), 0).toLocaleString("id-ID")}` },
           ],
-          tableHeaders: ["Tenant ID", "Tenant Name", "Trx", "Item", "Gross (Rp)", "Discount", "Tax & Charge", "Net Settlement"],
-          tableRows: settlementData.map((s) => [
-            s.tenantId,
-            s.tenantName,
-            s.transactionCount,
-            s.itemCount,
-            `Rp ${s.grossRevenue.toLocaleString("id-ID")}`,
-            `-Rp ${s.discount.toLocaleString("id-ID")}`,
-            `+Rp ${(s.tax + s.serviceCharge).toLocaleString("id-ID")}`,
-            `Rp ${s.netRevenue.toLocaleString("id-ID")}`,
-          ]),
+          tableHeaders: ["Tenant ID", "Tenant Name", "Rekening Pencairan", "Trx", "Item", "Gross (Rp)", "Discount", "Tax & Charge", "Net Settlement"],
+          tableRows: settlementData.map((s) => {
+            const payout = getTenantPayoutAccount(s.tenantId);
+            const payoutDisplay = s.tenantId === "DAGO_HUB"
+              ? "Rekening Pusat DAGO"
+              : `${payout.bankName} ${maskAccountNumber(payout.accountNumber)}`;
+            return [
+              s.tenantId,
+              s.tenantName,
+              payoutDisplay,
+              s.transactionCount,
+              s.itemCount,
+              `Rp ${s.grossRevenue.toLocaleString("id-ID")}`,
+              `-Rp ${s.discount.toLocaleString("id-ID")}`,
+              `+Rp ${(s.tax + s.serviceCharge).toLocaleString("id-ID")}`,
+              `Rp ${s.netRevenue.toLocaleString("id-ID")}`,
+            ];
+          }),
         };
     }
   };

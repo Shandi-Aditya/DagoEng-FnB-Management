@@ -121,16 +121,19 @@ describe("Multi-Business & 3-Dimensional Authorization (Role + Scope + Module)",
     const dagoNavNames = dagoNav.map((n) => n.name);
     const tenantNavNames = tenantNav.map((n) => n.name);
 
-    // Dago Owner sees both F&B and Co-working
+    // Dago Owner sees both F&B, Co-working, and Organization-level Settings
     expect(dagoNavNames).toContain("Dashboard");
     expect(dagoNavNames).toContain("POS Kasir");
     expect(dagoNavNames).toContain("Co-working Space");
+    expect(dagoNavNames).toContain("Pengaturan Platform");
     expect(dagoNavNames).not.toContain("Commercial Leases"); // Commercial is inactive
 
-    // Tenant Owner sees F&B items only
+    // Tenant Owner sees F&B items only, sees Tenant Settings (Pengaturan Mitra), and CANNOT see Organization-level Settings (Pengaturan Platform)
     expect(tenantNavNames).toContain("POS Kasir");
     expect(tenantNavNames).toContain("Smart Inventory");
+    expect(tenantNavNames).toContain("Pengaturan Mitra");
     expect(tenantNavNames).not.toContain("Co-working Space");
     expect(tenantNavNames).not.toContain("Commercial Leases");
+    expect(tenantNavNames).not.toContain("Pengaturan Platform");
   });
 });

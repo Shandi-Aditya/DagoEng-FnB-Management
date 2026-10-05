@@ -1,12 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import {
-  CoworkingSpaceItem,
-  CoworkingBooking,
-  CoworkingMembershipPlan,
-  VirtualOfficeApplication,
-} from "@/types/coworking";
+import { CoworkingSpaceItem, CoworkingBooking, CoworkingMembershipPlan } from "@/types/coworking";
 import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
 import { useActivityLog } from "./ActivityLogContext";
@@ -283,69 +278,11 @@ export const INITIAL_CHECK_LOGS: CheckInOutLog[] = [
   },
 ];
 
-export const INITIAL_VIRTUAL_OFFICES: VirtualOfficeApplication[] = [
-  {
-    id: "vo-1",
-    registrationNumber: "VO-DAGO-2026-001",
-    companyName: "PT Nusantara Inovasi Digital",
-    applicantName: "Bpk. Rahmat Santoso",
-    applicantPhone: "+62 812-8899-0011",
-    applicantEmail: "rahmat@nusantaradigital.id",
-    planName: "VO Enterprise (Lengkap + Domisili)",
-    businessType: "Teknologi & Software Development",
-    startDate: "01 Jan 2026",
-    expiryDate: "01 Jan 2027",
-    legalDocumentName: "Akta_Pendirian_NIB_PT_Nusantara.pdf",
-    status: "ACTIVE",
-    annualFee: 6500000,
-    paymentStatus: "PAID",
-    domicileLetterIssued: true,
-    notes: "Surat Domisili Gedung Dago Working Space sudah diterbitkan dan disahkan kelurahan.",
-  },
-  {
-    id: "vo-2",
-    registrationNumber: "VO-DAGO-2026-002",
-    companyName: "CV Bali Media Kreasi",
-    applicantName: "Ibu Desak Ketut Putri",
-    applicantPhone: "+62 819-3344-5566",
-    applicantEmail: "desak.putri@balimediakreasi.com",
-    planName: "VO Professional (Alamat + Kuota Meeting)",
-    businessType: "Creative Agency & Branding",
-    startDate: "15 Feb 2026",
-    expiryDate: "15 Feb 2027",
-    legalDocumentName: "NIB_KTP_Direktur_BaliMedia.pdf",
-    status: "PENDING_APPROVAL",
-    annualFee: 4200000,
-    paymentStatus: "PAID",
-    domicileLetterIssued: false,
-    notes: "Menunggu verifikasi keabsahan NIB dan persetujuan Admin Dago.",
-  },
-  {
-    id: "vo-3",
-    registrationNumber: "VO-DAGO-2026-003",
-    companyName: "PT Global Maritim Logistik",
-    applicantName: "Bpk. Kevin Tanuwidjaja",
-    applicantPhone: "+62 821-7788-9900",
-    applicantEmail: "kevin@globalmaritim.co.id",
-    planName: "VO Starter (Alamat Bisnis)",
-    businessType: "Forwarding & Freight Logistics",
-    startDate: "01 Mar 2026",
-    expiryDate: "01 Mar 2027",
-    legalDocumentName: "Akta_Perubahan_SK_Menkumham.pdf",
-    status: "APPROVED",
-    annualFee: 2900000,
-    paymentStatus: "PAID",
-    domicileLetterIssued: true,
-    notes: "Disetujui. Mail handling service aktif.",
-  },
-];
-
 interface CoworkingContextType {
   spaces: CoworkingSpaceItem[];
   bookings: typeof INITIAL_BOOKINGS;
   members: CoworkingMemberProfile[];
   checkLogs: CheckInOutLog[];
-  virtualOffices: VirtualOfficeApplication[];
   bookSpace: (
     booking: Omit<typeof INITIAL_BOOKINGS[0], "id" | "bookingCode" | "checkInStatus" | "checkedInAt" | "checkedInBy">
   ) => typeof INITIAL_BOOKINGS[0];
@@ -354,9 +291,6 @@ interface CoworkingContextType {
   checkInBooking: (bookingId: string) => void;
   checkoutSpace: (spaceIdOrBookingId: string) => void;
   addMember: (member: Omit<CoworkingMemberProfile, "id" | "memberId" | "paymentHistory">, payment: { amount: number; paymentMethod: string }) => void;
-  createVirtualOffice: (data: Omit<VirtualOfficeApplication, "id" | "registrationNumber" | "status" | "domicileLetterIssued">) => void;
-  approveVirtualOffice: (id: string) => void;
-  rejectVirtualOffice: (id: string, reason?: string) => void;
   resetCoworkingData: () => void;
 }
 
@@ -377,10 +311,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
   const [bookings, setBookings] = useState<typeof INITIAL_BOOKINGS>(INITIAL_BOOKINGS);
   const [members, setMembers] = useState<CoworkingMemberProfile[]>(INITIAL_MEMBERSHIPS);
   const [checkLogs, setCheckLogs] = useState<CheckInOutLog[]>(INITIAL_CHECK_LOGS);
-  const [virtualOffices, setVirtualOffices] = useState<VirtualOfficeApplication[]>(INITIAL_VIRTUAL_OFFICES);
   const [isInitialized, setIsInitialized] = useState(false);
-
-  const STORAGE_KEY_VO = "dagoeng_cwk_vo_v2";
 
   useEffect(() => {
     try {
@@ -388,13 +319,11 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       const sBookings = localStorage.getItem(STORAGE_KEY_BOOKINGS);
       const sMembers = localStorage.getItem(STORAGE_KEY_MEMBERS);
       const sLogs = localStorage.getItem(STORAGE_KEY_LOGS);
-      const sVO = localStorage.getItem(STORAGE_KEY_VO);
 
       if (sSpaces) setSpaces(JSON.parse(sSpaces));
       if (sBookings) setBookings(JSON.parse(sBookings));
       if (sMembers) setMembers(JSON.parse(sMembers));
       if (sLogs) setCheckLogs(JSON.parse(sLogs));
-      if (sVO) setVirtualOffices(JSON.parse(sVO));
     } catch (e) {
       console.error("Failed to load coworking state", e);
     } finally {
@@ -409,11 +338,10 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(STORAGE_KEY_BOOKINGS, JSON.stringify(bookings));
       localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(members));
       localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(checkLogs));
-      localStorage.setItem(STORAGE_KEY_VO, JSON.stringify(virtualOffices));
     } catch (e) {
       console.error("Failed to save coworking state", e);
     }
-  }, [spaces, bookings, members, checkLogs, virtualOffices, isInitialized]);
+  }, [spaces, bookings, members, checkLogs, isInitialized]);
 
   const bookSpace = (
     bookingData: Omit<typeof INITIAL_BOOKINGS[0], "id" | "bookingCode" | "checkInStatus" | "checkedInAt" | "checkedInBy">
@@ -736,119 +664,16 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const createVirtualOffice = (
-    data: Omit<VirtualOfficeApplication, "id" | "registrationNumber" | "status" | "domicileLetterIssued">
-  ) => {
-    const regNumber = `VO-DAGO-${new Date().getFullYear()}-${String(virtualOffices.length + 1).padStart(3, "0")}`;
-    const newVO: VirtualOfficeApplication = {
-      ...data,
-      id: `vo-${Date.now()}`,
-      registrationNumber: regNumber,
-      status: "PENDING_APPROVAL",
-      domicileLetterIssued: false,
-    };
-
-    setVirtualOffices((prev) => [newVO, ...prev]);
-
-    addNotification({
-      type: "PAYMENT_RECEIVED",
-      title: "Pendaftaran Virtual Office Baru",
-      detail: `Pendaftaran VO ${newVO.companyName} (${newVO.planName}) menunggu persetujuan Admin Gedung.`,
-      relatedModule: "COWORKING",
-      actionUrl: "/coworking",
-      outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
-      outletName: activeOutlet?.name || "Singaraja",
-    });
-
-    logActivity({
-      module: "COWORKING",
-      action: "CREATE_VIRTUAL_OFFICE",
-      recordId: regNumber,
-      newValue: `${newVO.companyName} (${newVO.planName})`,
-      description: `Pendaftaran Virtual Office: ${newVO.companyName} (${regNumber})`,
-      reason: "Pendaftaran online VO / Pengajuan legalitas",
-      status: "SUCCESS",
-    });
-  };
-
-  const approveVirtualOffice = (id: string) => {
-    const vo = virtualOffices.find((v) => v.id === id);
-    if (!vo) return;
-
-    setVirtualOffices((prev) =>
-      prev.map((v) =>
-        v.id === id
-          ? {
-              ...v,
-              status: "ACTIVE",
-              domicileLetterIssued: true,
-            }
-          : v
-      )
-    );
-
-    addNotification({
-      type: "PAYMENT_RECEIVED",
-      title: "Virtual Office Disetujui & Aktif",
-      detail: `Aplikasi VO ${vo.companyName} (${vo.registrationNumber}) telah diverifikasi & Surat Domisili diterbitkan.`,
-      relatedModule: "COWORKING",
-      actionUrl: "/coworking",
-      outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
-      outletName: activeOutlet?.name || "Singaraja",
-    });
-
-    logActivity({
-      module: "COWORKING",
-      action: "APPROVE_VIRTUAL_OFFICE",
-      recordId: vo.registrationNumber,
-      previousValue: `Status: ${vo.status}`,
-      newValue: "Status: ACTIVE (Domisili Terbit)",
-      description: `Approval Virtual Office ${vo.companyName} oleh Admin Gedung Dago`,
-      reason: "Verifikasi dokumen legalitas & Akta/NIB valid",
-      status: "SUCCESS",
-    });
-  };
-
-  const rejectVirtualOffice = (id: string, reason?: string) => {
-    const vo = virtualOffices.find((v) => v.id === id);
-    if (!vo) return;
-
-    setVirtualOffices((prev) =>
-      prev.map((v) =>
-        v.id === id
-          ? {
-              ...v,
-              status: "REJECTED",
-              notes: reason || "Dokumen legalitas tidak memenuhi syarat.",
-            }
-          : v
-      )
-    );
-
-    logActivity({
-      module: "COWORKING",
-      action: "REJECT_VIRTUAL_OFFICE",
-      recordId: vo.registrationNumber,
-      previousValue: `Status: ${vo.status}`,
-      newValue: "Status: REJECTED",
-      description: `Penolakan Virtual Office ${vo.companyName}`,
-      reason: reason || "Dokumen tidak lengkap / tidak valid",
-      status: "WARNING",
-    });
-  };
-
   const resetCoworkingData = () => {
     setSpaces(INITIAL_SPACES);
     setBookings(INITIAL_BOOKINGS);
     setMembers(INITIAL_MEMBERSHIPS);
     setCheckLogs(INITIAL_CHECK_LOGS);
-    setVirtualOffices(INITIAL_VIRTUAL_OFFICES);
     try {
       localStorage.removeItem(STORAGE_KEY_SPACES);
       localStorage.removeItem(STORAGE_KEY_BOOKINGS);
       localStorage.removeItem(STORAGE_KEY_MEMBERS);
       localStorage.removeItem(STORAGE_KEY_LOGS);
-      localStorage.removeItem(STORAGE_KEY_VO);
     } catch (e) {
       console.error(e);
     }
@@ -861,16 +686,12 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
         bookings,
         members,
         checkLogs,
-        virtualOffices,
         bookSpace,
         confirmBookingPayment,
         cancelBooking,
         checkInBooking,
         checkoutSpace,
         addMember,
-        createVirtualOffice,
-        approveVirtualOffice,
-        rejectVirtualOffice,
         resetCoworkingData,
       }}
     >

@@ -34,6 +34,7 @@ export default function DashboardPage() {
   const { isAllOutlets, activeOutlet } = useOutlet();
   const { formattedRangeLabel } = useDateFilter();
   const { filteredOrders } = useOrders();
+  const [activeTab, setActiveTab] = React.useState<"LAPORAN" | "FNB" | "WORKING_SPACE" | "PAJAK">("LAPORAN");
 
   const isDagoOwner = user?.scopeLevel === "ORGANIZATION";
 
@@ -101,6 +102,29 @@ export default function DashboardPage() {
         <div className="flex items-center space-x-2">
           <DateRangePicker />
         </div>
+      </div>
+
+      {/* Top Tab Navigation per Manual Book: Laporan | FNB | Working Space | Pajak */}
+      <div className="flex items-center space-x-1 border-b border-slate-200 bg-white p-1.5 rounded-xl shadow-xs">
+        {[
+          { id: "LAPORAN", label: "Laporan Konsolidasi", icon: <TrendingUp className="w-4 h-4 mr-1.5" /> },
+          { id: "FNB", label: "F&B Mitra (Culinary)", icon: <Coffee className="w-4 h-4 mr-1.5" /> },
+          { id: "WORKING_SPACE", label: "Working Space & Suite", icon: <Laptop className="w-4 h-4 mr-1.5" /> },
+          { id: "PAJAK", label: "Pajak & Settlement (10%)", icon: <Percent className="w-4 h-4 mr-1.5" /> },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`flex items-center px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+              activeTab === tab.id
+                ? "bg-slate-900 text-white shadow-xs"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            {tab.icon}
+            <span>{tab.label}</span>
+          </button>
+        ))}
       </div>
 
       {/* ------------------------------------------------------------- */}

@@ -10,8 +10,6 @@ import { useProducts } from "@/contexts/ProductContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
-import { useCoworking } from "@/contexts/CoworkingContext";
 import { calculateOrderPricing, PromoConfig } from "@/lib/promo";
 import { LOYALTY_VOUCHERS } from "@/features/pos/mock-data";
 import {
@@ -46,9 +44,6 @@ import {
   Percent,
   AlertTriangle,
   Ban,
-  Laptop,
-  DoorOpen,
-  History as HistoryIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -62,11 +57,6 @@ export default function POSPage() {
   const { filteredMembers: membersList, addPoints, redeemPoints } = useLoyalty();
   const { logActivity } = useActivityLog();
   const { settings } = useSettings();
-  const { activeShift, openShift, closeShift, recordShiftSale } = useEmployeeShift();
-  const { spaces: coworkingSpaces } = useCoworking();
-
-  // Catalog Switcher: F&B vs Coworking Spaces (Unified Cart Pilar B)
-  const [catalogMode, setCatalogMode] = useState<"FNB" | "COWORKING">("FNB");
 
   // Search and Category Filter
   const [selectedCategory, setSelectedCategory] = useState<string>("Semua Menu");
@@ -83,13 +73,6 @@ export default function POSPage() {
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
   const [appliedVoucher, setAppliedVoucher] = useState<LoyaltyVoucher | null>(null);
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState<boolean>(false);
-
-  // Shift Operasional & Rekonsiliasi Kas Modal States
-  const [isShiftOpenModalOpen, setIsShiftOpenModalOpen] = useState<boolean>(false);
-  const [isShiftCloseModalOpen, setIsShiftCloseModalOpen] = useState<boolean>(false);
-  const [openingCashInput, setOpeningCashInput] = useState<number>(500000);
-  const [closingActualCashInput, setClosingActualCashInput] = useState<number>(activeShift?.expectedCash || 842000);
-  const [closingNotesInput, setClosingNotesInput] = useState<string>("");
 
   // Tax Settings State
   const [isTaxEnabled, setIsTaxEnabled] = useState<boolean>(true);
@@ -406,16 +389,13 @@ export default function POSPage() {
       };
     }
 
-    // 5. Update Cash Drawer Metrics & Live Shift Sales
+    // 5. Update Cash Drawer Metrics
     if (paymentData.method === "CASH") {
       setTotalCashSales((prev) => prev + grandTotal);
     } else {
       setTotalNonCashSales((prev) => prev + grandTotal);
     }
     setTotalTransactionsCount((prev) => prev + 1);
-
-    // Record sale into active employee shift session (Pilar B Sesi Kasir)
-    recordShiftSale(grandTotal, paymentData.method === "CASH");
 
     // 6. Audit Trail Logging
     logActivity({
@@ -465,54 +445,6 @@ export default function POSPage() {
     setIsReceiptModalOpen(true);
   };
 
-  const handleOpenShiftSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    openShift(
-      `Shift Operasional (${new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })})`,
-      openingCashInput,
-      user?.name || "Kasir Bertugas"
-    );
-    setIsShiftOpenModalOpen(false);
-    setPosToast(`Sesi kasir berhasil dibuka dengan Modal Awal Rp ${openingCashInput.toLocaleString("id-ID")}!`);
-    setTimeout(() => setPosToast(""), 3500);
-  };
-
-  const handleCloseShiftSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeShift) return;
-    closeShift(activeShift.id, closingActualCashInput, closingNotesInput);
-    setIsShiftCloseModalOpen(false);
-    const variance = closingActualCashInput - (activeShift.expectedCash || 0);
-    const varText =
-      variance === 0
-        ? "Cocok Sempurna (Rp 0)"
-        : variance > 0
-        ? `Lebih Rp ${variance.toLocaleString("id-ID")}`
-        : `Kurang Rp ${Math.abs(variance).toLocaleString("id-ID")}`;
-    setPosToast(`Sesi kasir ditutup! Rekonsiliasi kas: ${varText}. Laporan sesi tersimpan.`);
-    setTimeout(() => setPosToast(""), 4000);
-  };
-
-  const handleAddCoworkingToCart = (space: any, type: "HOURLY" | "DAILY") => {
-    const price = type === "HOURLY" ? space.hourlyRate : space.dailyRate;
-    const name = `${space.name} (${type === "HOURLY" ? "1 Jam" : "1 Hari"})`;
-    const cartItem: POSCartItem = {
-      cartItemId: `cwk-${space.id}-${type}-${Date.now()}`,
-      productId: space.id,
-      tenantId: "tenant-cowork",
-      productName: name,
-      basePrice: price,
-      unitFinalPrice: price,
-      quantity: 1,
-      itemTotal: price,
-      selectedModifiers: [],
-      notes: "Sewa Co-working POS",
-    };
-    setCartItems((prev) => [...prev, cartItem]);
-    setPosToast(`Ditambahkan ke keranjang: ${name}`);
-    setTimeout(() => setPosToast(""), 2500);
-  };
-
   const handleStartNewTransaction = () => {
     setIsReceiptModalOpen(false);
     setCartItems([]);
@@ -538,66 +470,27 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* Top Bar with Sesi Operasional Kasir (Pilar B) */}
+      {/* Top Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
         <div>
           <h2 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
             <Calculator className="w-5 h-5 text-brand-orange" />
-            <span>Point of Sale (POS) Multi-Tenant — {activeOutlet?.name || "Singaraja"}</span>
+            <span>Point of Sale (POS) Kasir — {activeOutlet?.name || "Singaraja"}</span>
           </h2>
-          <div className="flex items-center space-x-2 text-xs text-slate-500 mt-0.5">
-            <span>Kasir: <strong className="text-slate-800">{user?.name}</strong></span>
-            <span>•</span>
-            {activeShift ? (
-              <span className="inline-flex items-center space-x-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md font-bold">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>Sesi Aktif: {activeShift.assignedCashierName}</span>
-                <span className="font-mono text-emerald-900 font-extrabold">(Kas: Rp {activeShift.expectedCash.toLocaleString("id-ID")})</span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center space-x-1 px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md font-bold">
-                <AlertTriangle className="w-3 h-3 text-rose-600" />
-                <span>Sesi Kasir Belum Dibuka</span>
-              </span>
-            )}
-          </div>
+          <p className="text-xs text-slate-500">
+            Kasir Bertugas: <strong className="text-slate-800">{user?.name}</strong> • Scope: <strong className="text-brand-orange font-mono">{activeOutlet?.name || "Singaraja"}</strong>
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Sesi Kasir Button */}
-          {activeShift ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setClosingActualCashInput(activeShift.expectedCash);
-                setIsShiftCloseModalOpen(true);
-              }}
-              className="text-xs font-bold border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
-            >
-              <DoorOpen className="w-3.5 h-3.5 mr-1 text-amber-700" />
-              <span>Tutup Sesi (Rekonsiliasi)</span>
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              onClick={() => setIsShiftOpenModalOpen(true)}
-              className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              <span>Buka Sesi Kasir</span>
-            </Button>
-          )}
-
+        <div className="flex items-center space-x-2">
           <Button
             size="sm"
             variant="outline"
             onClick={() => setIsTaxSettingsModalOpen(true)}
-            className={`text-xs font-semibold space-x-1.5 ${
-              isTaxEnabled
+            className={`text-xs font-semibold space-x-1.5 ${isTaxEnabled
                 ? "border-emerald-300 text-emerald-800 bg-emerald-50/50"
                 : "border-slate-300 text-slate-500"
-            }`}
+              }`}
           >
             <Percent className="w-3.5 h-3.5" />
             <span>Pajak: {isTaxEnabled ? `PB1 ${taxRatePercent}%` : "Non-Aktif"}</span>
@@ -614,221 +507,96 @@ export default function POSPage() {
         </div>
       </div>
 
-      {/* Unified Cart Catalog Switcher */}
-      <div className="flex items-center space-x-2 bg-slate-100 p-1 rounded-xl max-w-md">
-        <button
-          type="button"
-          onClick={() => setCatalogMode("FNB")}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center space-x-1.5 ${
-            catalogMode === "FNB"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-        >
-          <Utensils className="w-3.5 h-3.5 text-brand-orange" />
-          <span>Menu F&B Multi-Tenant</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setCatalogMode("COWORKING")}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center space-x-1.5 ${
-            catalogMode === "COWORKING"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-        >
-          <Laptop className="w-3.5 h-3.5 text-blue-600" />
-          <span>Sewa Ruang & Co-working</span>
-        </button>
-      </div>
-
       {/* Main Grid: Left (Catalog) & Right (Cart) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left Catalog (Col 7 / 12) */}
         <div className="lg:col-span-7 xl:col-span-8 space-y-4">
-          {catalogMode === "FNB" ? (
-            <>
-              {/* Search & Category Tabs */}
-              <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Cari menu, SKU, atau kategori F&B..."
-                    className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange"
-                  />
-                </div>
-
-                {/* Category Filter Badges */}
-                <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-                  {categoryTabs.map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition-all ${
-                        selectedCategory === cat
-                          ? "bg-brand-orange text-white shadow-sm"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Product Cards Grid with Live Stock Status & Disabled Out of Stock */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                {filteredProducts.map((product) => {
-                  const isOutOfStock = product.stockStatus === "OUT_OF_STOCK" || !product.isAvailable;
-                  const isCriticalStock = product.stockStatus === "CRITICAL";
-
-                  return (
-                    <div
-                      key={product.id}
-                      onClick={() => handleSelectProduct(product)}
-                      className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between h-36 relative overflow-hidden ${
-                        isOutOfStock
-                          ? "bg-slate-100/80 border-slate-300 opacity-60 cursor-not-allowed select-none"
-                          : "bg-white border-slate-200 hover:border-brand-orange hover:shadow-md cursor-pointer group"
-                      }`}
-                    >
-                      {/* Stock Status Badge */}
-                      {isOutOfStock ? (
-                        <div className="absolute top-2 right-2 bg-rose-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded shadow-sm flex items-center space-x-1">
-                          <Ban className="w-2.5 h-2.5" />
-                          <span>Habis</span>
-                        </div>
-                      ) : isCriticalStock ? (
-                        <div className="absolute top-2 right-2 bg-amber-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-sm flex items-center space-x-1">
-                          <AlertTriangle className="w-2.5 h-2.5" />
-                          <span>Stok Menipis</span>
-                        </div>
-                      ) : null}
-
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between pr-14">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                            {product.category}
-                          </span>
-                        </div>
-                        <h4
-                          className={`font-bold text-xs line-clamp-2 transition-colors ${
-                            isOutOfStock ? "text-slate-500" : "text-slate-900 group-hover:text-brand-orange"
-                          }`}
-                        >
-                          {product.name}
-                        </h4>
-                      </div>
-
-                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
-                        <span className="font-extrabold text-xs text-slate-900 font-mono">
-                          {formatCurrencyIDR(product.basePrice)}
-                        </span>
-                        <div
-                          className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${
-                            isOutOfStock
-                              ? "bg-slate-200 text-slate-400"
-                              : "bg-slate-100 group-hover:bg-brand-orange group-hover:text-white text-slate-600"
-                          }`}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          ) : (
-            /* COWORKING SPACE CATALOG */
-            <div className="space-y-4">
-              <div className="bg-blue-50/60 p-4 rounded-xl border border-blue-200 flex items-center justify-between">
-                <div>
-                  <h3 className="font-bold text-sm text-blue-950 flex items-center space-x-1.5">
-                    <Laptop className="w-4 h-4 text-blue-600" />
-                    <span>Katalog Sewa Ruang & Hot Desk (Unified Cart)</span>
-                  </h3>
-                  <p className="text-xs text-blue-700 mt-0.5">
-                    Pilih ruang untuk dimasukkan langsung ke keranjang POS kasir bersama pesanan F&B.
-                  </p>
-                </div>
-                <span className="text-xs font-bold text-blue-900 bg-white px-2.5 py-1 rounded-lg border border-blue-200">
-                  {coworkingSpaces.length} Pilihan Ruang
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                {coworkingSpaces.map((space) => {
-                  const isOccupied = space.status === "OCCUPIED";
-
-                  return (
-                    <div
-                      key={space.id}
-                      className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${
-                        isOccupied
-                          ? "bg-slate-50 border-slate-200 opacity-70"
-                          : "bg-white border-slate-200 hover:border-blue-400 hover:shadow-sm"
-                      }`}
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                            {space.type}
-                          </span>
-                          <span
-                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                              isOccupied ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"
-                            }`}
-                          >
-                            {isOccupied ? "Terpakai" : "Tersedia"}
-                          </span>
-                        </div>
-                        <h4 className="font-bold text-xs text-slate-900 line-clamp-1">{space.name}</h4>
-                        <p className="text-[10px] text-slate-500">{space.area} • Kapasitas: {space.capacity} Org</p>
-                      </div>
-
-                      <div className="space-y-2 pt-2 border-t border-slate-100">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-[11px] text-slate-500">Per Jam:</span>
-                          <span className="font-mono font-bold text-slate-900">
-                            {formatCurrencyIDR(space.hourlyRate)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-[11px] text-slate-500">Per Hari:</span>
-                          <span className="font-mono font-bold text-blue-700">
-                            {formatCurrencyIDR(space.dailyRate)}
-                          </span>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-1.5 pt-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleAddCoworkingToCart(space, "HOURLY")}
-                            className="text-[10px] h-7 px-1 font-bold text-slate-700 hover:bg-slate-100"
-                          >
-                            + 1 Jam
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleAddCoworkingToCart(space, "DAILY")}
-                            className="text-[10px] h-7 px-1 font-bold bg-blue-600 hover:bg-blue-700 text-white"
-                          >
-                            + 1 Hari
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+          {/* Search & Category Tabs */}
+          <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari menu, SKU, atau kategori..."
+                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange"
+              />
             </div>
-          )}
+
+            {/* Category Filter Badges */}
+            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+              {categoryTabs.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition-all ${selectedCategory === cat
+                      ? "bg-brand-orange text-white shadow-sm"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Product Cards Grid with Live Stock Status & Disabled Out of Stock */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+            {filteredProducts.map((product) => {
+              const isOutOfStock = product.stockStatus === "OUT_OF_STOCK" || !product.isAvailable;
+              const isCriticalStock = product.stockStatus === "CRITICAL";
+
+              return (
+                <div
+                  key={product.id}
+                  onClick={() => handleSelectProduct(product)}
+                  className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between h-36 relative overflow-hidden ${isOutOfStock
+                      ? "bg-slate-100/80 border-slate-300 opacity-60 cursor-not-allowed select-none"
+                      : "bg-white border-slate-200 hover:border-brand-orange hover:shadow-md cursor-pointer group"
+                    }`}
+                >
+                  {/* Stock Status Badge */}
+                  {isOutOfStock ? (
+                    <div className="absolute top-2 right-2 bg-rose-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded shadow-sm flex items-center space-x-1">
+                      <Ban className="w-2.5 h-2.5" />
+                      <span>Habis</span>
+                    </div>
+                  ) : isCriticalStock ? (
+                    <div className="absolute top-2 right-2 bg-amber-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-sm flex items-center space-x-1">
+                      <AlertTriangle className="w-2.5 h-2.5" />
+                      <span>Stok Menipis</span>
+                    </div>
+                  ) : null}
+
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between pr-14">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                        {product.category}
+                      </span>
+                    </div>
+                    <h4 className={`font-bold text-xs line-clamp-2 transition-colors ${isOutOfStock ? "text-slate-500" : "text-slate-900 group-hover:text-brand-orange"
+                      }`}>
+                      {product.name}
+                    </h4>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
+                    <span className="font-extrabold text-xs text-slate-900 font-mono">
+                      {formatCurrencyIDR(product.basePrice)}
+                    </span>
+                    <div className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${isOutOfStock
+                        ? "bg-slate-200 text-slate-400"
+                        : "bg-slate-100 group-hover:bg-brand-orange group-hover:text-white text-slate-600"
+                      }`}>
+                      <Plus className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Right Cart & Checkout Panel (Col 5 / 12) */}
@@ -1232,207 +1000,6 @@ export default function POSPage() {
                 Tutup
               </Button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 5. Buka Sesi Kasir Modal */}
-      {isShiftOpenModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-emerald-100 text-emerald-700 rounded-xl">
-                  <Calculator className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900">Buka Sesi Kasir Baru</h3>
-                  <p className="text-[11px] text-slate-500">Pilar B: Sesi Operasional & Saldo Awal</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsShiftOpenModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleOpenShiftSubmit} className="space-y-3.5 text-xs">
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                <span className="text-[10px] font-bold text-slate-500 uppercase">Kasir Bertugas</span>
-                <p className="font-bold text-slate-900 text-sm">{user?.name || "Kasir Utama"}</p>
-                <p className="text-[11px] text-slate-500">Outlet: {activeOutlet?.name || "Singaraja"}</p>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-700">Modal Kas Awal di Laci (Float Cash) *</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 font-bold text-slate-400">Rp</span>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    step={1000}
-                    value={openingCashInput}
-                    onChange={(e) => setOpeningCashInput(Number(e.target.value))}
-                    className="w-full pl-10 pr-3 py-2 border rounded-xl font-mono text-sm font-bold text-slate-900"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-500">
-                  Uang tunai awal di kasir untuk uang kembalian transaksi pelanggan.
-                </p>
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-2 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsShiftOpenModalOpen(false)}
-                >
-                  Batal
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-                >
-                  Konfirmasi & Buka Sesi
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 6. Tutup Sesi Kasir & Rekonsiliasi Fisik Kas Modal */}
-      {isShiftCloseModalOpen && activeShift && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5 border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-amber-100 text-amber-700 rounded-xl">
-                  <DoorOpen className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900">Tutup Sesi & Rekonsiliasi Kas</h3>
-                  <p className="text-[11px] text-slate-500">Pilar B & C: Pencocokan Kas Laci vs Penjualan Sistem</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsShiftCloseModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCloseShiftSubmit} className="space-y-3.5 text-xs">
-              {/* Shift Metrics Breakdown */}
-              <div className="grid grid-cols-2 gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                <div>
-                  <p className="text-[10px] text-slate-500 font-medium">Saldo Modal Awal</p>
-                  <p className="font-mono font-bold text-slate-800">{formatCurrencyIDR(activeShift.openingCash)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-500 font-medium">Penjualan Tunai (Cash)</p>
-                  <p className="font-mono font-bold text-emerald-700">+{formatCurrencyIDR(activeShift.cashSales)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-500 font-medium">Penjualan Non-Tunai (QRIS/EDC)</p>
-                  <p className="font-mono font-bold text-blue-700">{formatCurrencyIDR(activeShift.nonCashSales)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-500 font-medium">Kas Sistem Diharapkan</p>
-                  <p className="font-mono font-black text-slate-900 text-sm">
-                    {formatCurrencyIDR(activeShift.expectedCash)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Physical Cash Count Input */}
-              <div className="space-y-1.5">
-                <label className="font-bold text-slate-800">
-                  Hitungan Fisik Uang Tunai di Laci Kasir (Actual Cash) *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 font-bold text-slate-400">Rp</span>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    step={1000}
-                    value={closingActualCashInput}
-                    onChange={(e) => setClosingActualCashInput(Number(e.target.value))}
-                    className="w-full pl-10 pr-3 py-2 border rounded-xl font-mono text-sm font-bold text-slate-900"
-                  />
-                </div>
-              </div>
-
-              {/* Real-time Variance Calculation */}
-              {(() => {
-                const diff = closingActualCashInput - activeShift.expectedCash;
-                return (
-                  <div
-                    className={`p-3 rounded-xl border flex items-center justify-between ${
-                      diff === 0
-                        ? "bg-emerald-50 border-emerald-300 text-emerald-900"
-                        : diff > 0
-                        ? "bg-blue-50 border-blue-300 text-blue-900"
-                        : "bg-rose-50 border-rose-300 text-rose-900"
-                    }`}
-                  >
-                    <div className="space-y-0.5">
-                      <p className="font-bold text-xs">
-                        {diff === 0
-                          ? "✓ Kas Cocok Sempurna (Balance)"
-                          : diff > 0
-                          ? "▲ Kas Fisik Lebih (Over)"
-                          : "▼ Kas Fisik Kurang (Shortage)"}
-                      </p>
-                      <p className="text-[10px] opacity-80">
-                        {diff === 0
-                          ? "Fisik laci kasir cocok dengan akumulasi pencatatan POS."
-                          : "Perbedaan nilai akan dicatat otomatis pada audit shift."}
-                      </p>
-                    </div>
-                    <span className="font-mono font-black text-sm">
-                      {diff > 0 ? `+${formatCurrencyIDR(diff)}` : formatCurrencyIDR(diff)}
-                    </span>
-                  </div>
-                );
-              })()}
-
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Catatan Penutupan Shift (Opsional)</label>
-                <textarea
-                  rows={2}
-                  value={closingNotesInput}
-                  onChange={(e) => setClosingNotesInput(e.target.value)}
-                  placeholder="Contoh: Fisik kas cocok, struk telah diarsipkan."
-                  className="w-full px-3 py-2 border rounded-xl text-xs"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-2 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsShiftCloseModalOpen(false)}
-                >
-                  Batal
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
-                >
-                  Tutup Sesi & Simpan Rekonsiliasi
-                </Button>
-              </div>
-            </form>
           </div>
         </div>
       )}

@@ -23,12 +23,25 @@ export function hasModuleAccess(
 }
 
 /**
- * Checks if the user has a specific permission code.
+ * Checks if the user has a specific permission code, with optional tenant scoping.
  */
-export function hasPermission(user: AuthenticatedUser | null, permissionCode: PermissionCode): boolean {
+export function hasPermission(
+  user: AuthenticatedUser | null,
+  permissionCode: PermissionCode,
+  targetTenantId?: string
+): boolean {
   if (!user) return false;
-  if (user.role.slug === "SUPER_ADMIN") return true;
-  return user.permissions.includes(permissionCode);
+  if (user.role.slug === "SUPER_ADMIN" || user.scopeLevel === "PLATFORM") return true;
+
+  const hasCode = user.permissions.includes(permissionCode);
+  if (!hasCode) return false;
+
+  // Tenant scoping check
+  if (user.scopeLevel === "TENANT" && targetTenantId) {
+    return user.tenant?.id === targetTenantId;
+  }
+
+  return true;
 }
 
 /**
@@ -189,8 +202,17 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     icon: "Settings",
     module: "CORE",
     allowedRoles: ["SUPER_ADMIN", "OWNER"],
+    minScope: "TENANT",
   },
 ];
+
+const SCOPE_HIERARCHY: Record<ScopeLevel, number> = {
+  PLATFORM: 5,
+  ORGANIZATION: 4,
+  BUSINESS_UNIT: 3,
+  TENANT: 2,
+  OUTLET: 1,
+};
 
 /**
  * Filters dynamic navigation items based on Role + Access Scope + Active Org Modules.
@@ -206,10 +228,15 @@ export function getAuthorizedNavItems(
     // 1. Role must match
     if (!item.allowedRoles.includes(user.role.slug)) return false;
 
-    // 2. Module must be active in the organization
+    // 2. Minimum Scope Level check
+    if (item.minScope && SCOPE_HIERARCHY[user.scopeLevel] < SCOPE_HIERARCHY[item.minScope]) {
+      return false;
+    }
+
+    // 3. Module must be active in the organization
     if (item.module !== "CORE" && !activeOrgModules.includes(item.module)) return false;
 
-    // 3. User's scope must permit this module
+    // 4. User's scope must permit this module
     if (
       item.module !== "CORE" &&
       user.scopeLevel !== "ORGANIZATION" &&
@@ -220,5 +247,10 @@ export function getAuthorizedNavItems(
     }
 
     return true;
+  }).map((item) => {
+    if (item.href === "/settings" && user.scopeLevel === "TENANT") {
+      return { ...item, name: "Pengaturan Mitra" };
+    }
+    return item;
   });
 }

@@ -1,5 +1,5 @@
-// Prisma Schema — Phase 1 Foundation
-// DagoEng F&B Management
+// Prisma Schema — Dago Creative Hub & Coffee Lab
+// Multi-Tenant Hybrid POS, Workspace Reservation, Membership & Dynamic RBAC
 
 generator client {
   provider = "prisma-client-js"
@@ -11,7 +11,7 @@ datasource db {
 }
 
 // -----------------------------------------------------------------------------
-// 1. AUTHENTICATION & ACCESS CONTROL
+// 1. DYNAMIC RBAC & AUTHENTICATION
 // -----------------------------------------------------------------------------
 
 model User {
@@ -28,6 +28,8 @@ model User {
   userRoles    UserRole[]
   sessions     Session[]
   auditLogs    AuditLog[]
+  shifts       CashierShift[]
+  orders       Order[]
   employee     Employee?
   customer     Customer?
 
@@ -35,13 +37,13 @@ model User {
 }
 
 model Role {
-  id          String     @id @default(uuid())
-  name        String     @unique // e.g. "Super Admin", "Owner", "Manager", etc.
-  slug        String     @unique // e.g. "SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER", etc.
+  id          String           @id @default(uuid())
+  name        String           @unique // e.g. "Super Admin", "Tenant Owner", "Cashier FO"
+  slug        String           @unique // e.g. "SUPER_ADMIN", "TENANT_OWNER", "CASHIER"
   description String?
-  isSystem    Boolean    @default(true) @map("is_system")
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
+  isSystem    Boolean          @default(false) @map("is_system")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
 
   // Relationships
   userRoles   UserRole[]
@@ -52,8 +54,8 @@ model Role {
 
 model Permission {
   id          String           @id @default(uuid())
-  code        String           @unique // e.g. "order:create", "inventory:read", "analytics:view"
-  module      String           // e.g. "POS", "INVENTORY", "DASHBOARD", "SETTINGS"
+  code        String           @unique // e.g. "fnb:tenant_product:manage", "pos:shift:open_close"
+  module      String           // "POS", "FNB", "WORKSPACE", "FINANCE", "RBAC", "SETTINGS"
   description String?
   createdAt   DateTime         @default(now()) @map("created_at")
 
@@ -78,12 +80,15 @@ model UserRole {
   id             String        @id @default(uuid())
   userId         String        @map("user_id")
   roleId         String        @map("role_id")
+  scopeLevel     String        @default("OUTLET") @map("scope_level") // "PLATFORM", "ORGANIZATION", "BUSINESS_UNIT", "TENANT", "OUTLET"
+  tenantId       String?       @map("tenant_id") // Diisi bila scopeLevel === "TENANT"
   organizationId String?       @map("organization_id")
   outletId       String?       @map("outlet_id")
   createdAt      DateTime      @default(now()) @map("created_at")
 
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   role           Role          @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  tenant         Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   outlet         Outlet?       @relation(fields: [outletId], references: [id], onDelete: Cascade)
 
@@ -93,7 +98,7 @@ model UserRole {
 
 model Session {
   id               String   @id @default(uuid())
-  sessionTokenHash String   @unique @map("session_token_hash") // SHA-256 hash of raw cookie token
+  sessionTokenHash String   @unique @map("session_token_hash")
   userId           String   @map("user_id")
   expiresAt        DateTime @map("expires_at")
   userAgent        String?  @map("user_agent")
@@ -111,8 +116,8 @@ model AuditLog {
   userId         String?       @map("user_id")
   organizationId String?       @map("organization_id")
   outletId       String?       @map("outlet_id")
-  action         String        // e.g. "LOGIN", "CREATE_PRODUCT", "SWITCH_OUTLET"
-  entity         String        // e.g. "User", "Product", "Session"
+  action         String        // e.g. "LOGIN", "CREATE_PRODUCT", "SHIFT_CLOSE", "CHANGE_SETTING"
+  entity         String        // e.g. "User", "Product", "Order", "SystemSetting"
   entityId       String?       @map("entity_id")
   details        String?       // JSON metadata string
   ipAddress      String?       @map("ip_address")
@@ -128,51 +133,66 @@ model AuditLog {
 }
 
 // -----------------------------------------------------------------------------
-// 2. MULTI-TENANT ORGANIZATIONS & OUTLETS
+// 2. MULTI-TENANT ORGANIZATIONS, OUTLETS & F&B TENANTS
 // -----------------------------------------------------------------------------
 
 model Organization {
   id          String      @id @default(uuid())
-  name        String      // e.g. "Kopi Senja", "Bali Brew Demo"
-  code        String      @unique // e.g. "KOPI-SENJA", "BALI-BREW"
+  name        String      // "Dago Creative Hub", "Bali Brew Demo"
+  code        String      @unique // "DAGO-HUB", "BALI-BREW"
   logoUrl     String?     @map("logo_url")
-  status      String      @default("ACTIVE") // "ACTIVE", "SUSPENDED"
+  status      String      @default("ACTIVE")
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
-  // Relationships
-  outlets        Outlet[]
-  userRoles      UserRole[]
-  employees      Employee[]
-  customers      Customer[]
-  categories     Category[]
-  products       Product[]
-  modifierGroups ModifierGroup[]
-  auditLogs      AuditLog[]
+  outlets     Outlet[]
+  userRoles   UserRole[]
+  employees   Employee[]
+  customers   Customer[]
+  auditLogs   AuditLog[]
 
   @@map("organizations")
 }
 
 model Outlet {
-  id             String       @id @default(uuid())
-  organizationId String       @map("organization_id")
-  name           String       // e.g. "Singaraja", "Denpasar", "Ubud", "Renon"
-  code           String       @unique // e.g. "KS-SGR", "KS-DPS", "KS-UBD", "BB-RNN"
+  id             String         @id @default(uuid())
+  organizationId String         @map("organization_id")
+  name           String         // "Singaraja", "Denpasar", "Renon"
+  code           String         @unique // "KS-SGR", "KS-DPS"
   address        String?
   phone          String?
-  status         String       @default("ACTIVE") // "ACTIVE", "INACTIVE"
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
+  status         String         @default("ACTIVE")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
 
-  // Relationships
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userRoles      UserRole[]
   employees      Employee[]
   tableAreas     TableArea[]
+  shifts         CashierShift[]
+  rooms          Room[]
+  orders         Order[]
   auditLogs      AuditLog[]
 
   @@index([organizationId])
   @@map("outlets")
+}
+
+model Tenant {
+  id          String      @id @default(uuid())
+  name        String      // "Kopi Senja", "Dapur Mama", "Manis Bakery", "Warung Bu Narti"
+  code        String      @unique // "tenant-ks", "tenant-kitchen", "tenant-bakery", "tenant-tea"
+  contactName String?     @map("contact_name")
+  phone       String?
+  commission  Float       @default(15.0) // 15% Platform Sharing DAGO
+  status      String      @default("ACTIVE")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  products    Product[]
+  userRoles   UserRole[]
+
+  @@map("tenants")
 }
 
 model Employee {
@@ -181,8 +201,8 @@ model Employee {
   organizationId String       @map("organization_id")
   outletId       String?      @map("outlet_id")
   employeeNumber String?      @map("employee_number")
-  designation    String?      // e.g. "Head Cashier", "Floor Waiter", "Store Manager"
-  status         String       @default("ACTIVE") // "ACTIVE", "INACTIVE", "ON_LEAVE"
+  designation    String?      // "Store Manager", "Front Office Cashier", "Barista"
+  status         String       @default("ACTIVE")
   createdAt      DateTime     @default(now()) @map("created_at")
   updatedAt      DateTime     @updatedAt @map("updated_at")
 
@@ -194,66 +214,62 @@ model Employee {
   @@map("employees")
 }
 
-// -----------------------------------------------------------------------------
-// 3. CUSTOMER MODEL (DECOUPLED FROM USER)
-// -----------------------------------------------------------------------------
-
 model Customer {
-  id             String       @id @default(uuid())
-  organizationId String       @map("organization_id")
-  userId         String?      @unique @map("user_id") // Optional link to User account
+  id             String        @id @default(uuid())
+  organizationId String        @map("organization_id")
+  userId         String?       @unique @map("user_id")
   name           String
   phone          String?
   email          String?
-  status         String       @default("ACTIVE") // "ACTIVE", "INACTIVE"
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
+  creditBalance  Int           @default(0) @map("credit_balance") // Kuota jam / saldo point
+  status         String        @default("ACTIVE")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  memberships    CustomerMembership[]
 
   @@index([organizationId])
   @@map("customers")
 }
 
 // -----------------------------------------------------------------------------
-// 4. MENU & PRODUCT FOUNDATION
+// 3. F&B PRODUCT & MENU (AUTONOMOUS TENANT CATALOG)
 // -----------------------------------------------------------------------------
 
 model Category {
-  id             String       @id @default(uuid())
-  organizationId String       @map("organization_id")
-  name           String       // e.g. "Signature Coffee", "Main Course", "Pastry & Snacks", "Artisan Tea"
-  sortOrder      Int          @default(0) @map("sort_order")
-  isActive       Boolean      @default(true) @map("is_active")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
+  id          String    @id @default(uuid())
+  name        String    // e.g. "Signature", "Rice Bowl", "Pastry", "Minuman", "Snacks"
+  sortOrder   Int       @default(0) @map("sort_order")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  products       Product[]
+  products    Product[]
 
-  @@index([organizationId])
   @@map("categories")
 }
 
 model Product {
   id             String           @id @default(uuid())
-  organizationId String           @map("organization_id")
+  tenantId       String           @map("tenant_id")
   categoryId     String           @map("category_id")
-  name           String           // e.g. "Kopi Senja Aren", "Signature Beef Rice Bowl"
+  name           String           // e.g. "Kopi Senja Aren", "Nasi Beef Bowl Sambal Matah"
   description    String?
   imageUrl       String?          @map("image_url")
-  basePrice      Int              @map("base_price") // Stored in IDR cents/units to prevent floating point inaccuracies
-  isAvailable    Boolean          @default(true) @map("is_available")
+  basePrice      Int              @map("base_price") // Stored in IDR
+  isAvailable    Boolean          @default(true) @map("is_available") // Toggle Ketersediaan Stok Real-Time (Tersedia / Habis)
   isActive       Boolean          @default(true) @map("is_active")
   createdAt      DateTime         @default(now()) @map("created_at")
   updatedAt      DateTime         @updatedAt @map("updated_at")
 
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  tenant         Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   category       Category         @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   variants       ProductVariant[]
+  orderItems     OrderItem[]
 
-  @@index([organizationId, categoryId])
+  @@index([tenantId, categoryId])
   @@map("products")
 }
 
@@ -261,7 +277,7 @@ model ProductVariant {
   id              String   @id @default(uuid())
   productId       String   @map("product_id")
   name            String   // e.g. "Regular", "Large", "Hot", "Iced"
-  priceAdjustment Int      @default(0) @map("price_adjustment") // + amount in IDR
+  priceAdjustment Int      @default(0) @map("price_adjustment")
   isAvailable     Boolean  @default(true) @map("is_available")
 
   product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -270,26 +286,23 @@ model ProductVariant {
 }
 
 model ModifierGroup {
-  id             String           @id @default(uuid())
-  organizationId String           @map("organization_id")
-  name           String           // e.g. "Sugar Level", "Milk Option", "Extra Toppings"
-  minSelect      Int              @default(0) @map("min_select")
-  maxSelect      Int              @default(1) @map("max_select")
-  isRequired     Boolean          @default(false) @map("is_required")
-  createdAt      DateTime         @default(now()) @map("created_at")
+  id          String           @id @default(uuid())
+  name        String           // e.g. "Sugar Level", "Extra Topping"
+  minSelect   Int              @default(0) @map("min_select")
+  maxSelect   Int              @default(1) @map("max_select")
+  isRequired  Boolean          @default(false) @map("is_required")
+  createdAt   DateTime         @default(now()) @map("created_at")
 
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  options        ModifierOption[]
+  options     ModifierOption[]
 
-  @@index([organizationId])
   @@map("modifier_groups")
 }
 
 model ModifierOption {
   id              String        @id @default(uuid())
   modifierGroupId String        @map("modifier_group_id")
-  name            String        // e.g. "Normal Sugar (100%)", "Less Sugar (50%)", "Oat Milk (+Rp 8.000)"
-  price           Int           @default(0) // Additional price in IDR
+  name            String        // e.g. "Normal Sugar", "Less Sugar (50%)", "Oat Milk"
+  price           Int           @default(0)
 
   modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
 
@@ -297,35 +310,228 @@ model ModifierOption {
 }
 
 // -----------------------------------------------------------------------------
-// 5. TABLE MANAGEMENT FOUNDATION
+// 4. CASHIER SHIFTS & HARDWARE SETTINGS
+// -----------------------------------------------------------------------------
+
+model CashierShift {
+  id           String    @id @default(uuid())
+  outletId     String    @map("outlet_id")
+  userId       String    @map("user_id")
+  shiftNumber  Int       @map("shift_number")
+  openedAt     DateTime  @default(now()) @map("opened_at")
+  closedAt     DateTime? @map("closed_at")
+  startingCash Int       @map("starting_cash") // Modal Awal / Float Cash
+  expectedCash Int?      @map("expected_cash") // Starting cash + Total Transaksi Tunai
+  actualCash   Int?      @map("actual_cash")   // Jumlah Uang Fisik Hasil Hitung Kasir
+  cashDiff     Int?      @map("cash_diff")     // Selisih Kas (+ Lebih / - Kurang)
+  notes        String?
+  status       String    @default("OPEN")      // "OPEN", "CLOSED"
+
+  outlet       Outlet    @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  cashier      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders       Order[]
+
+  @@map("cashier_shifts")
+}
+
+// -----------------------------------------------------------------------------
+// 5. WORKSPACE, ROOMS, RESERVATIONS, MEMBERSHIP & VIRTUAL OFFICE
+// -----------------------------------------------------------------------------
+
+model RoomCategory {
+  id        String   @id @default(uuid())
+  name      String   // "Hot Desk", "Meeting Suite", "Podcast Studio", "Event Space", "Private Office"
+  priceType String   @map("price_type") // "HOURLY", "DAILY", "MONTHLY"
+  rooms     Room[]
+
+  @@map("room_categories")
+}
+
+model Room {
+  id           String         @id @default(uuid())
+  outletId     String         @map("outlet_id")
+  categoryId   String         @map("category_id")
+  name         String         // e.g. "Desk-01", "Meeting Suite Alpha", "Podcast Studio A"
+  capacity     Int            @default(1)
+  hourlyRate   Int            @map("hourly_rate")
+  status       String         @default("AVAILABLE") // "AVAILABLE", "OCCUPIED", "MAINTENANCE"
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  outlet       Outlet         @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  category     RoomCategory   @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  reservations Reservation[]
+
+  @@map("rooms")
+}
+
+model Reservation {
+  id            String    @id @default(uuid())
+  roomId        String    @map("room_id")
+  orderId       String?   @map("order_id")
+  customerName  String    @map("customer_name")
+  customerPhone String?   @map("customer_phone")
+  startTime     DateTime  @map("start_time")
+  endTime       DateTime  @map("end_time")
+  durationHrs   Int       @map("duration_hrs")
+  status        String    @default("ACTIVE") // "ACTIVE", "OVERSTAY", "COMPLETED", "CANCELLED"
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  room          Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  order         Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@map("reservations")
+}
+
+model MembershipPackage {
+  id           String               @id @default(uuid())
+  name         String               // e.g. "Flexi Nomad Pass (50 Jam)", "Resident Dedicated"
+  price        Int
+  creditHours  Int                  @map("credit_hours")
+  discountFnb  Float                @default(10.0) @map("discount_fnb")
+  validityDays Int                  @default(30) @map("validity_days")
+  memberships  CustomerMembership[]
+
+  @@map("membership_packages")
+}
+
+model CustomerMembership {
+  id          String            @id @default(uuid())
+  customerId  String            @map("customerId")
+  packageId   String            @map("package_id")
+  remainingHrs Int              @map("remaining_hrs")
+  startDate   DateTime          @default(now()) @map("start_date")
+  expiresAt   DateTime          @map("expires_at")
+  status      String            @default("ACTIVE") // "ACTIVE", "EXPIRED"
+
+  customer    Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  package     MembershipPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@map("customer_memberships")
+}
+
+model VirtualOfficePackage {
+  id           String   @id @default(uuid())
+  name         String   // e.g. "DAGO Legal Address & Mail Handling"
+  price        Int
+  meetingHours Int      @default(5) @map("meeting_hours")
+  periodMonths Int      @default(12) @map("period_months")
+
+  @@map("virtual_office_packages")
+}
+
+// -----------------------------------------------------------------------------
+// 6. TABLES, ORDERS & KDS ITEMS
 // -----------------------------------------------------------------------------
 
 model TableArea {
   id        String   @id @default(uuid())
   outletId  String   @map("outlet_id")
-  name      String   // e.g. "Indoor Main Hall", "Outdoor Garden", "VIP Lounge", "Bar Area"
+  name      String   // "Indoor Hall", "Outdoor Garden", "Mezzanine"
   sortOrder Int      @default(0) @map("sort_order")
   createdAt DateTime @default(now()) @map("created_at")
 
   outlet    Outlet   @relation(fields: [outletId], references: [id], onDelete: Cascade)
   tables    Table[]
 
-  @@index([outletId])
   @@map("table_areas")
 }
 
 model Table {
   id          String    @id @default(uuid())
   tableAreaId String    @map("table_area_id")
-  number      String    // e.g. "T-01", "T-02", "VIP-1"
+  number      String    // e.g. "T-01", "VIP-1"
   capacity    Int       @default(4)
-  status      String    @default("AVAILABLE") // "AVAILABLE", "OCCUPIED", "RESERVED", "CLEANING", "INACTIVE"
+  status      String    @default("AVAILABLE") // "AVAILABLE", "OCCUPIED"
   isActive    Boolean   @default(true) @map("is_active")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   tableArea   TableArea @relation(fields: [tableAreaId], references: [id], onDelete: Cascade)
 
-  @@index([tableAreaId])
   @@map("tables")
+}
+
+model Order {
+  id             String        @id @default(uuid())
+  outletId       String        @map("outlet_id")
+  shiftId        String?       @map("shift_id")
+  userId         String?       @map("user_id") // Kasir pembuat transaksi
+  orderNumber    String        @unique @map("order_number")
+  customerName   String        @map("customer_name")
+  orderType      String        @default("DINE_IN") @map("order_type") // "DINE_IN", "TAKEAWAY", "COWORKING"
+  tableNumber    String?       @map("table_number")
+  subtotal       Int
+  taxAmount      Int           @map("tax_amount") // Dihitung dari PAJAK_FNB_PERSEN (10%)
+  discountAmount Int           @default(0) @map("discount_amount")
+  totalAmount    Int           @map("total_amount")
+  paymentMethod  String        @map("payment_method") // "CASH", "QRIS", "DEBIT", "CREDIT_BALANCE"
+  paymentStatus  String        @default("PAID") @map("payment_status")
+  orderStatus    String        @default("WAITING") @map("order_status") // "WAITING", "IN_PROGRESS", "READY", "FINISH"
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  outlet         Outlet        @relation(fields: [outletId], references: [id], onDelete: Cascade)
+  shift          CashierShift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  items          OrderItem[]
+  reservations   Reservation[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String   @id @default(uuid())
+  orderId      String   @map("order_id")
+  productId    String   @map("product_id")
+  quantity     Int
+  unitPrice    Int      @map("unit_price")
+  subtotal     Int
+  tenantStatus String   @default("WAITING") @map("tenant_status") // "WAITING", "IN_PROGRESS", "READY"
+
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("order_items")
+}
+
+// -----------------------------------------------------------------------------
+// 7. GLOBAL SETTINGS, COA, COST BULANAN & HUTANG
+// -----------------------------------------------------------------------------
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique // e.g. "PAJAK_FNB_PERSEN", "DEFAULT_WIFI_SSID"
+  value       String   // e.g. "10", "DAGO_LAB_GUEST"
+  description String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+model ChartOfAccount {
+  id       String @id @default(uuid())
+  code     String @unique // e.g. "1001", "2001", "4001"
+  name     String // e.g. "Kas Kasir Singaraja", "Hutang Bagi Hasil Mitra", "Pendapatan CoWorking"
+  category String // "ASSET", "LIABILITY", "EQUITY", "REVENUE", "EXPENSE"
+
+  @@map("chart_of_accounts")
+}
+
+model CostBulanan {
+  id          String   @id @default(uuid())
+  title       String   // e.g. "Tagihan Listrik PLN 33kVA", "Dedicated Fiber Optic 100Mbps"
+  category    String   // "UTILITY", "INTERNET", "RENT", "MAINTENANCE"
+  amount      Int
+  dueDate     DateTime @map("due_date")
+  status      String   @default("UNPAID") // "PAID", "UNPAID"
+
+  @@map("cost_bulanan")
+}
+
+model HutangAdmin {
+  id          String   @id @default(uuid())
+  creditor    String   // Nama Supplier / Vendor
+  description String
+  amount      Int
+  dueDate     DateTime @map("due_date")
+  status      String   @default("PENDING") // "PENDING", "SETTLED"
+
+  @@map("hutang_admin")
 }

@@ -146,7 +146,6 @@ interface EmployeeShiftContextType {
   deleteEmployee: (id: string) => void;
   openShift: (shiftName: string, openingCash: number, cashierName?: string) => ShiftRecord;
   closeShift: (shiftId: string, actualCash: number, closingNotes?: string) => void;
-  recordShiftSale: (amount: number, isCash: boolean) => void;
   resetEmployeeShiftData: () => void;
 }
 
@@ -356,28 +355,6 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     });
   };
 
-  const recordShiftSale = (amount: number, isCash: boolean) => {
-    if (!activeShift) return;
-    setShifts((prev) =>
-      prev.map((s) => {
-        if (s.id === activeShift.id) {
-          const cashInc = isCash ? amount : 0;
-          const nonCashInc = isCash ? 0 : amount;
-          const newCashSales = s.cashSales + cashInc;
-          const newNonCashSales = s.nonCashSales + nonCashInc;
-          const newExpected = s.openingCash + newCashSales - s.refundAmount;
-          return {
-            ...s,
-            cashSales: newCashSales,
-            nonCashSales: newNonCashSales,
-            expectedCash: newExpected,
-          };
-        }
-        return s;
-      })
-    );
-  };
-
   const resetEmployeeShiftData = () => {
     setEmployees(INITIAL_EMPLOYEES);
     setShifts(INITIAL_SHIFTS);
@@ -402,7 +379,6 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
         deleteEmployee,
         openShift,
         closeShift,
-        recordShiftSale,
         resetEmployeeShiftData,
       }}
     >

@@ -11,11 +11,21 @@ import { BookOpen, Plus, Search, Trash2, X, UtensilsCrossed, ArrowRight, Sparkle
 import { Button } from "@/components/ui/button";
 import { formatCurrencyIDR } from "@/lib/utils";
 
+const AVAILABLE_MITRA = [
+  { id: "tenant-ks", name: "Kopi Senja", badge: "Official Mitra Kopi" },
+  { id: "tenant-kitchen", name: "Dapur Mama", badge: "Official Kitchen" },
+  { id: "tenant-bakery", name: "Manis Bakery", badge: "Fresh Baked Daily" },
+  { id: "tenant-tea", name: "Warung Bu Narti", badge: "Mitra Nusantara" },
+];
+
 export default function MenuPage() {
   const { user } = useAuth();
   const { activeOutlet } = useOutlet();
   const { filteredProducts, categories, addProduct, addCategory, toggleProductStatus, deleteProduct } = useProducts();
   const { checkProductStockStatus } = useInventory();
+
+  const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
+  const userTenantId = user?.tenant?.id;
 
   const [selectedCat, setSelectedCat] = useState("Semua");
   const [searchQuery, setSearchQuery] = useState("");
@@ -28,6 +38,7 @@ export default function MenuPage() {
   // Form States
   const [newName, setNewName] = useState("");
   const [newCat, setNewCat] = useState(categories[0] || "Signature Coffee");
+  const [newTenantId, setNewTenantId] = useState<string>(userTenantId || "tenant-ks");
   const [newPrice, setNewPrice] = useState<number>(25000);
   const [newCogs, setNewCogs] = useState<number>(9000);
   const [newDesc, setNewDesc] = useState("");
@@ -76,6 +87,9 @@ export default function MenuPage() {
   const categoryList = ["Semua", ...categories];
 
   const displayedProducts = filteredProducts.filter((p) => {
+    if (isTenantOwner && p.tenantId && p.tenantId !== userTenantId) {
+      return false;
+    }
     const matchCat = selectedCat === "Semua" || p.category === selectedCat;
     const matchSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -87,6 +101,8 @@ export default function MenuPage() {
     e.preventDefault();
     if (!newName.trim()) return;
 
+    const targetTenant = isTenantOwner && userTenantId ? userTenantId : newTenantId;
+
     const newProd = addProduct({
       name: newName.trim(),
       category: newCat,
@@ -97,6 +113,7 @@ export default function MenuPage() {
       outletName: "Semua Outlet",
       isAvailable: true,
       description: newDesc.trim() || undefined,
+      tenantId: targetTenant,
     });
 
     setIsAddProductModalOpen(false);
@@ -196,6 +213,7 @@ export default function MenuPage() {
               <thead className="bg-slate-50 border-b border-slate-100 font-semibold text-slate-600">
                 <tr>
                   <th className="p-3">Nama Produk</th>
+                  <th className="p-3">Mitra / Tenant</th>
                   <th className="p-3">Kategori</th>
                   <th className="p-3">Harga Jual</th>
                   <th className="p-3">COGS Resep</th>
@@ -210,6 +228,11 @@ export default function MenuPage() {
                   const stockCheck = checkProductStockStatus(p.name);
                   const isOutOfStock = stockCheck.status === "OUT_OF_STOCK";
                   const isCriticalStock = stockCheck.status === "CRITICAL";
+                  const currentMitra = AVAILABLE_MITRA.find((m) => m.id === p.tenantId) || {
+                    id: p.tenantId || "tenant-ks",
+                    name: p.tenantId === "tenant-ks" ? "Kopi Senja" : p.tenantId || "Kopi Senja",
+                    badge: "Mitra F&B"
+                  };
 
                   return (
                     <tr key={p.id} className="hover:bg-slate-50">
@@ -218,6 +241,11 @@ export default function MenuPage() {
                         {p.description && (
                           <p className="text-[10px] text-slate-400 font-normal line-clamp-1">{p.description}</p>
                         )}
+                      </td>
+                      <td className="p-3">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-brand-orange border border-orange-200">
+                          {currentMitra.name}
+                        </span>
                       </td>
                       <td className="p-3 text-slate-500">{p.category}</td>
                       <td className="p-3 font-bold font-mono text-slate-900">
@@ -301,6 +329,34 @@ export default function MenuPage() {
                   onChange={(e) => setNewName(e.target.value)}
                   className="w-full px-3 py-2 border rounded-xl"
                 />
+              </div>
+
+              {/* Mitra / Tenant Assignment */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Mitra / Tenant Pemilik</label>
+                {isTenantOwner && user?.tenant ? (
+                  <div className="px-3 py-2 bg-slate-50 border rounded-xl text-slate-700 font-semibold flex items-center justify-between">
+                    <span>{user.tenant.name}</span>
+                    <span className="text-[10px] bg-orange-100 text-brand-orange px-2 py-0.5 rounded-md font-bold">
+                      Tenant Anda
+                    </span>
+                  </div>
+                ) : (
+                  <select
+                    value={newTenantId}
+                    onChange={(e) => setNewTenantId(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl bg-white font-medium text-slate-800"
+                  >
+                    {AVAILABLE_MITRA.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.badge})
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="text-[10px] text-slate-400">
+                  Menu ini akan otomatis muncul pada katalog mitra yang dipilih di Customer Portal.
+                </p>
               </div>
 
               <div className="space-y-1">
