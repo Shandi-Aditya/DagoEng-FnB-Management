@@ -398,6 +398,13 @@ function LoginContent() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => handleQuickLogin("TENANT_OWNER_KS")}
+                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  ☕ Owner Mitra (Kopi Senja)
+                </button>
+                <button
+                  type="button"
                   onClick={() => handleQuickLogin("CASHIER_SGR")}
                   className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
@@ -423,13 +430,6 @@ function LoginContent() {
                   className="p-2 text-left bg-brand-orange/15 hover:bg-brand-orange/25 border border-brand-orange/30 rounded-xl font-bold text-[11px] text-brand-orange hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
                   📱 Pelanggan (Customer)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("SUPER_ADMIN")}
-                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  ⚡ Platform Super Admin
                 </button>
               </div>
             </div>

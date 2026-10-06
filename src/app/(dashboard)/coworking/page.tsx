@@ -25,12 +25,19 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
+  Printer,
+  Edit2,
+  Trash2,
+  Image as ImageIcon,
+  Upload,
+  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyIDR } from "@/lib/utils";
-import { SpaceType } from "@/types/coworking";
+import { SpaceType, CoworkingSpaceItem } from "@/types/coworking";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { CoworkingReportPDFModal } from "@/features/coworking/CoworkingReportPDFModal";
+import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
 
 export default function CoworkingPage() {
   const { user } = useAuth();
@@ -40,6 +47,9 @@ export default function CoworkingPage() {
     bookings,
     members,
     checkLogs,
+    addSpace,
+    updateSpace,
+    deleteSpace,
     bookSpace,
     checkInBooking,
     checkoutSpace,
@@ -49,12 +59,135 @@ export default function CoworkingPage() {
   const [activeTab, setActiveTab] = useState<"SPACES" | "BOOKINGS" | "MEMBERS" | "LOGS">("SPACES");
   const [searchMemberQuery, setSearchMemberQuery] = useState("");
   const [memberStatusFilter, setMemberStatusFilter] = useState<"ALL" | "ACTIVE" | "EXPIRED">("ALL");
-  const [toastMessage, setToastMessage] = useState("");
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
+  const [selectedBookingForReceipt, setSelectedBookingForReceipt] = useState<CoworkingReceiptData | null>(null);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
 
   // Modals
   const [isNewBookingModalOpen, setIsNewBookingModalOpen] = useState(false);
   const [isNewMemberModalOpen, setIsNewMemberModalOpen] = useState(false);
+  const [isAddSpaceModalOpen, setIsAddSpaceModalOpen] = useState(false);
+  const [isEditSpaceModalOpen, setIsEditSpaceModalOpen] = useState(false);
+  const [editingSpace, setEditingSpace] = useState<CoworkingSpaceItem | null>(null);
+
+  // Add Space Form States
+  const [newSpaceName, setNewSpaceName] = useState("");
+  const [newSpaceType, setNewSpaceType] = useState<SpaceType>("HOT_DESK");
+  const [newSpaceArea, setNewSpaceArea] = useState<"Ground Floor Main" | "Mezzanine Quiet Zone" | "VIP Meeting Wing">("Ground Floor Main");
+  const [newSpaceCapacity, setNewSpaceCapacity] = useState<number>(1);
+  const [newSpaceHourlyRate, setNewSpaceHourlyRate] = useState<number>(20000);
+  const [newSpaceDailyRate, setNewSpaceDailyRate] = useState<number>(90000);
+  const [newSpaceMonthlyRate, setNewSpaceMonthlyRate] = useState<number>(0);
+  const [newSpaceAmenities, setNewSpaceAmenities] = useState("High-speed Fiber WiFi, Power Outlet, Free Flow Coffee/Tea");
+  const [newSpaceDesc, setNewSpaceDesc] = useState("");
+  const [newSpaceImageUrl, setNewSpaceImageUrl] = useState("");
+
+  // Edit Space Form States
+  const [editSpaceName, setEditSpaceName] = useState("");
+  const [editSpaceType, setEditSpaceType] = useState<SpaceType>("HOT_DESK");
+  const [editSpaceArea, setEditSpaceArea] = useState<"Ground Floor Main" | "Mezzanine Quiet Zone" | "VIP Meeting Wing">("Ground Floor Main");
+  const [editSpaceCapacity, setEditSpaceCapacity] = useState<number>(1);
+  const [editSpaceHourlyRate, setEditSpaceHourlyRate] = useState<number>(0);
+  const [editSpaceDailyRate, setEditSpaceDailyRate] = useState<number>(0);
+  const [editSpaceMonthlyRate, setEditSpaceMonthlyRate] = useState<number>(0);
+  const [editSpaceAmenities, setEditSpaceAmenities] = useState("");
+  const [editSpaceDesc, setEditSpaceDesc] = useState("");
+  const [editSpaceImageUrl, setEditSpaceImageUrl] = useState("");
+
+  const handleSpaceImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Format file tidak valid. Harap pilih gambar (JPG, PNG, WEBP).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Ukuran foto maksimal 5MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setter(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleOpenEditSpace = (sp: CoworkingSpaceItem) => {
+    setEditingSpace(sp);
+    setEditSpaceName(sp.name);
+    setEditSpaceType(sp.type);
+    setEditSpaceArea(sp.area);
+    setEditSpaceCapacity(sp.capacity);
+    setEditSpaceHourlyRate(sp.hourlyRate);
+    setEditSpaceDailyRate(sp.dailyRate);
+    setEditSpaceMonthlyRate(sp.monthlyRate || 0);
+    setEditSpaceAmenities(sp.amenities.join(", "));
+    setEditSpaceDesc(sp.description || "");
+    setEditSpaceImageUrl(sp.imageUrl || "");
+    setIsEditSpaceModalOpen(true);
+  };
+
+  const handleAddSpaceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newSpaceName.trim()) return;
+
+    const parsedAmenities = newSpaceAmenities
+      .split(",")
+      .map((a) => a.trim())
+      .filter((a) => a.length > 0);
+
+    const created = addSpace({
+      name: newSpaceName.trim(),
+      type: newSpaceType,
+      area: newSpaceArea,
+      capacity: Number(newSpaceCapacity),
+      hourlyRate: Number(newSpaceHourlyRate),
+      dailyRate: Number(newSpaceDailyRate),
+      monthlyRate: newSpaceMonthlyRate ? Number(newSpaceMonthlyRate) : undefined,
+      status: "AVAILABLE",
+      amenities: parsedAmenities.length > 0 ? parsedAmenities : ["WiFi 100Mbps", "Power Outlet"],
+      description: newSpaceDesc.trim() || undefined,
+      imageUrl: newSpaceImageUrl.trim() || undefined,
+    });
+
+    setIsAddSpaceModalOpen(false);
+    setNewSpaceName("");
+    setNewSpaceDesc("");
+    setNewSpaceImageUrl("");
+    showToast(`Workspace "${created.name}" berhasil ditambahkan & otomatis tersedia di POS dan Portal!`);
+  };
+
+  const handleUpdateSpaceSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingSpace || !editSpaceName.trim()) return;
+
+    const parsedAmenities = editSpaceAmenities
+      .split(",")
+      .map((a) => a.trim())
+      .filter((a) => a.length > 0);
+
+    updateSpace(editingSpace.id, {
+      name: editSpaceName.trim(),
+      type: editSpaceType,
+      area: editSpaceArea,
+      capacity: Number(editSpaceCapacity),
+      hourlyRate: Number(editSpaceHourlyRate),
+      dailyRate: Number(editSpaceDailyRate),
+      monthlyRate: editSpaceMonthlyRate ? Number(editSpaceMonthlyRate) : undefined,
+      amenities: parsedAmenities.length > 0 ? parsedAmenities : editingSpace.amenities,
+      description: editSpaceDesc.trim() || undefined,
+      imageUrl: editSpaceImageUrl.trim() || undefined,
+    });
+
+    setIsEditSpaceModalOpen(false);
+    setEditingSpace(null);
+    showToast(`Workspace "${editSpaceName}" berhasil diperbarui!`);
+  };
+
+  const handleDeleteSpace = (id: string) => {
+    deleteSpace(id);
+    showToast("Workspace berhasil diarsipkan dari katalog.");
+  };
 
   const getCoworkingExportData = () => {
     if (activeTab === "MEMBERS") {
@@ -139,7 +272,7 @@ export default function CoworkingPage() {
   const [newMemPackage, setNewMemPackage] = useState("Dedicated Nomad Monthly");
   const [newMemAmount, setNewMemAmount] = useState(1850000);
   const [newMemPaymentMethod, setNewMemPaymentMethod] = useState("QRIS DagoPay");
-
+  const [toastMessage, setToastMessage] = useState("");
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 4000);
@@ -159,8 +292,8 @@ export default function CoworkingPage() {
       bookType === "HOURLY"
         ? selectedSpace.hourlyRate
         : bookType === "DAILY"
-        ? selectedSpace.dailyRate
-        : selectedSpace.monthlyRate || selectedSpace.dailyRate * 20;
+          ? selectedSpace.dailyRate
+          : selectedSpace.monthlyRate || selectedSpace.dailyRate * 20;
 
     const total = rate * bookDuration;
     const nowTime = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA";
@@ -301,6 +434,15 @@ export default function CoworkingPage() {
 
           <Button
             size="sm"
+            onClick={() => setIsAddSpaceModalOpen(true)}
+            className="text-xs font-bold space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
+          >
+            <Plus className="w-4 h-4 text-amber-400" />
+            <span>Tambah Workspace</span>
+          </Button>
+
+          <Button
+            size="sm"
             variant="outline"
             onClick={() => setIsNewMemberModalOpen(true)}
             className="text-xs font-semibold"
@@ -323,11 +465,10 @@ export default function CoworkingPage() {
         <button
           type="button"
           onClick={() => setActiveTab("SPACES")}
-          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${
-            activeTab === "SPACES"
+          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${activeTab === "SPACES"
               ? "bg-slate-900 text-white shadow-sm"
               : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-          }`}
+            }`}
         >
           <Laptop className="w-4 h-4 text-blue-500" />
           <span>Denah Ruang & Meja ({spaces.length})</span>
@@ -336,11 +477,10 @@ export default function CoworkingPage() {
         <button
           type="button"
           onClick={() => setActiveTab("BOOKINGS")}
-          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${
-            activeTab === "BOOKINGS"
+          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${activeTab === "BOOKINGS"
               ? "bg-slate-900 text-white shadow-sm"
               : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-          }`}
+            }`}
         >
           <Calendar className="w-4 h-4 text-brand-orange" />
           <span>Buku Booking & Pembayaran ({bookings.length})</span>
@@ -349,11 +489,10 @@ export default function CoworkingPage() {
         <button
           type="button"
           onClick={() => setActiveTab("MEMBERS")}
-          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${
-            activeTab === "MEMBERS"
+          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${activeTab === "MEMBERS"
               ? "bg-slate-900 text-white shadow-sm"
               : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-          }`}
+            }`}
         >
           <Users className="w-4 h-4 text-emerald-600" />
           <span>Member Co-working ({members.length})</span>
@@ -362,11 +501,10 @@ export default function CoworkingPage() {
         <button
           type="button"
           onClick={() => setActiveTab("LOGS")}
-          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${
-            activeTab === "LOGS"
+          className={`px-4 py-2 text-xs font-bold rounded-xl flex items-center space-x-2 transition-all ${activeTab === "LOGS"
               ? "bg-slate-900 text-white shadow-sm"
               : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-          }`}
+            }`}
         >
           <History className="w-4 h-4 text-purple-600" />
           <span>Check-in / Check-out Log ({checkLogs.length})</span>
@@ -383,56 +521,112 @@ export default function CoworkingPage() {
               return (
                 <Card
                   key={sp.id}
-                  className={`p-4 border transition-all ${
-                    isOccupied
+                  className={`p-4 border transition-all flex flex-col justify-between ${isOccupied
                       ? "bg-blue-50/50 border-blue-300 shadow-xs"
-                      : "bg-white border-slate-200 shadow-xs"
-                  }`}
+                      : "bg-white border-slate-200 shadow-xs hover:border-slate-300"
+                    }`}
                 >
-                  <div className="flex items-start justify-between pb-2 border-b border-slate-100">
-                    <div>
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-                        {sp.type} • {sp.area}
-                      </span>
-                      <h3 className="font-bold text-sm text-slate-900 mt-0.5">{sp.name}</h3>
-                    </div>
-                    <span
-                      className={`text-[10px] font-extrabold px-2 py-0.5 rounded ${
-                        isOccupied ? "bg-blue-600 text-white" : "bg-emerald-100 text-emerald-800"
-                      }`}
-                    >
-                      {sp.status}
-                    </span>
-                  </div>
-
-                  <div className="py-2.5 space-y-1.5 text-xs text-slate-600">
-                    <div className="flex justify-between">
-                      <span>Tarif Sewa:</span>
-                      <span className="font-mono font-bold text-slate-900">
-                        {formatCurrencyIDR(sp.dailyRate)} / hari
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-[11px] text-slate-500">
-                      <span>Kapasitas:</span>
-                      <span>{sp.capacity} Orang</span>
-                    </div>
-
-                    {/* Active Occupancy Details */}
-                    {isOccupied && sp.currentSession && (
-                      <div className="mt-2 p-2.5 bg-white rounded-xl border border-blue-200 space-y-1">
-                        <div className="flex justify-between text-xs font-bold text-slate-900">
-                          <span>👤 {sp.currentSession.guestName}</span>
-                          <span className="text-blue-600 font-mono text-[11px]">{sp.currentSession.checkInTime}</span>
+                  <div className="space-y-3">
+                    {/* Space Photo Cover */}
+                    {sp.imageUrl ? (
+                      <div className="relative w-full h-36 rounded-xl overflow-hidden bg-slate-100 border border-slate-200">
+                        <img
+                          src={sp.imageUrl}
+                          alt={sp.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute top-2 right-2 flex items-center space-x-1">
+                          <button
+                            onClick={() => handleOpenEditSpace(sp)}
+                            className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-blue-600 shadow-xs transition-all"
+                            title="Edit Workspace"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSpace(sp.id)}
+                            className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-rose-600 shadow-xs transition-all"
+                            title="Hapus Workspace"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                        <p className="text-[10px] text-slate-500">
-                          Perusahaan: {sp.currentSession.company} • Kode: {sp.currentSession.bookingCode}
-                        </p>
+                      </div>
+                    ) : (
+                      <div className="relative w-full h-24 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-200 flex items-center justify-center text-slate-400">
+                        <Laptop className="w-8 h-8 opacity-30" />
+                        <div className="absolute top-2 right-2 flex items-center space-x-1">
+                          <button
+                            onClick={() => handleOpenEditSpace(sp)}
+                            className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-blue-600 shadow-xs transition-all"
+                            title="Edit Workspace"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSpace(sp.id)}
+                            className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-rose-600 shadow-xs transition-all"
+                            title="Hapus Workspace"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     )}
+
+                    <div className="flex items-start justify-between pb-2 border-b border-slate-100">
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
+                          {sp.type.replace("_", " ")} • {sp.area}
+                        </span>
+                        <h3 className="font-bold text-sm text-slate-900 mt-0.5">{sp.name}</h3>
+                        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">
+                          {sp.description || "Ruang kerja kondusif dengan fasilitas lengkap."}
+                        </p>
+                      </div>
+                      <span
+                        className={`text-[10px] font-extrabold px-2 py-0.5 rounded flex-shrink-0 ${isOccupied ? "bg-blue-600 text-white" : "bg-emerald-100 text-emerald-800"
+                          }`}
+                      >
+                        {sp.status}
+                      </span>
+                    </div>
+
+                    <div className="py-1 space-y-1.5 text-xs text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Tarif Per Jam:</span>
+                        <span className="font-mono font-bold text-blue-600">
+                          {formatCurrencyIDR(sp.hourlyRate)} / jam
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Tarif Harian:</span>
+                        <span className="font-mono font-bold text-slate-900">
+                          {formatCurrencyIDR(sp.dailyRate)} / hari
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[11px] text-slate-500">
+                        <span>Kapasitas:</span>
+                        <span>{sp.capacity} Orang</span>
+                      </div>
+
+                      {/* Active Occupancy Details */}
+                      {isOccupied && sp.currentSession && (
+                        <div className="mt-2 p-2.5 bg-white rounded-xl border border-blue-200 space-y-1">
+                          <div className="flex justify-between text-xs font-bold text-slate-900">
+                            <span>👤 {sp.currentSession.guestName}</span>
+                            <span className="text-blue-600 font-mono text-[11px]">{sp.currentSession.checkInTime}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500">
+                            Perusahaan: {sp.currentSession.company} • Kode: {sp.currentSession.bookingCode}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-[10px] text-slate-400 truncate max-w-[150px]">
                       {sp.amenities.slice(0, 2).join(" • ")}
                     </span>
                     {isOccupied ? (
@@ -510,37 +704,77 @@ export default function CoworkingPage() {
                       </td>
                       <td className="p-3">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            b.checkInStatus === "CHECKED_IN"
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${b.checkInStatus === "CHECKED_IN"
                               ? "bg-blue-100 text-blue-800 border border-blue-200"
                               : b.checkInStatus === "COMPLETED"
-                              ? "bg-slate-100 text-slate-700 border border-slate-200"
-                              : "bg-amber-100 text-amber-800"
-                          }`}
+                                ? "bg-slate-100 text-slate-700 border border-slate-200"
+                                : "bg-amber-100 text-amber-800"
+                            }`}
                         >
                           {b.checkInStatus === "CHECKED_IN" ? "SEDANG AKTIF" : b.checkInStatus}
                         </span>
                       </td>
                       <td className="p-3 text-right">
-                        {b.checkInStatus === "CHECKED_IN" ? (
+                        <div className="flex items-center justify-end space-x-1.5">
                           <Button
                             size="sm"
-                            onClick={() => handleCheckout(b.spaceId)}
-                            className="text-[10px] h-7 px-2 font-bold bg-slate-900 text-white"
+                            variant="outline"
+                            onClick={() => {
+                              const [startH, startM] = (b.startTime || "09:00").split(":").map(Number);
+                              const endH = (startH + (b.duration || 1)) % 24;
+                              const endTime = `${endH.toString().padStart(2, "0")}:${(startM || 0).toString().padStart(2, "0")}`;
+
+                              setSelectedBookingForReceipt({
+                                bookingCode: b.bookingCode || b.id,
+                                transactionDate: `${b.date}, ${b.startTime || "09:00"} WITA`,
+                                guestName: b.guestName,
+                                guestPhone: b.guestPhone,
+                                guestEmail: b.guestEmail,
+                                company: b.company,
+                                spaceName: b.spaceName,
+                                spaceType: b.spaceType,
+                                outletName: activeOutlet?.name || "Singaraja",
+                                outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
+                                outletPhone: "(0362) 23456",
+                                bookingDate: b.date,
+                                startTime: b.startTime,
+                                endTime,
+                                duration: b.duration,
+                                bookingType: b.bookingType || "HOURLY",
+                                basePrice: b.totalAmount,
+                                totalAmount: b.totalAmount,
+                                paymentMethod: b.paymentMethod || "QRIS",
+                                paymentStatus: b.paymentStatus || "PAID",
+                                notes: b.notes,
+                              });
+                              setIsReceiptModalOpen(true);
+                            }}
+                            className="text-[10px] h-7 px-2 font-bold text-slate-700 hover:bg-slate-100 flex items-center space-x-1"
                           >
-                            Check-out
+                            <Printer className="w-3 h-3 text-slate-500" />
+                            <span>Nota</span>
                           </Button>
-                        ) : b.checkInStatus === "RESERVED" ? (
-                          <Button
-                            size="sm"
-                            onClick={() => checkInBooking(b.id)}
-                            className="text-[10px] h-7 px-2 font-bold bg-blue-600 text-white"
-                          >
-                            Check-in
-                          </Button>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 italic">Selesai</span>
-                        )}
+
+                          {b.checkInStatus === "CHECKED_IN" ? (
+                            <Button
+                              size="sm"
+                              onClick={() => handleCheckout(b.spaceId)}
+                              className="text-[10px] h-7 px-2 font-bold bg-slate-900 text-white"
+                            >
+                              Check-out
+                            </Button>
+                          ) : b.checkInStatus === "RESERVED" ? (
+                            <Button
+                              size="sm"
+                              onClick={() => checkInBooking(b.id)}
+                              className="text-[10px] h-7 px-2 font-bold bg-blue-600 text-white"
+                            >
+                              Check-in
+                            </Button>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic">Selesai</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -571,11 +805,10 @@ export default function CoworkingPage() {
                 <button
                   key={st}
                   onClick={() => setMemberStatusFilter(st)}
-                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
-                    memberStatusFilter === st
+                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${memberStatusFilter === st
                       ? "bg-slate-900 text-white"
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
+                    }`}
                 >
                   {st === "ALL" ? "Semua Status" : st === "ACTIVE" ? "🟢 Member Aktif" : "🔴 Expired"}
                 </button>
@@ -614,11 +847,10 @@ export default function CoworkingPage() {
                         </td>
                         <td className="p-3">
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                              m.status === "ACTIVE"
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${m.status === "ACTIVE"
                                 ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
                                 : "bg-rose-100 text-rose-800 border border-rose-200"
-                            }`}
+                              }`}
                           >
                             {m.status === "ACTIVE" ? "AKTIF" : "EXPIRED"}
                           </span>
@@ -682,11 +914,10 @@ export default function CoworkingPage() {
                     <td className="p-3 font-mono font-medium text-slate-800">{log.durationFormatted}</td>
                     <td className="p-3 text-center">
                       <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          log.status === "ACTIVE_IN"
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${log.status === "ACTIVE_IN"
                             ? "bg-blue-100 text-blue-800"
                             : "bg-emerald-100 text-emerald-800"
-                        }`}
+                          }`}
                       >
                         {log.status === "ACTIVE_IN" ? "AKTIF DI LOKASI" : "SELESAI"}
                       </span>
@@ -912,6 +1143,378 @@ export default function CoworkingPage() {
         </div>
       )}
 
+      {/* Modal Tambah Workspace */}
+      {isAddSpaceModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+                <Laptop className="w-4 h-4 text-brand-orange" />
+                <span>Tambah Master Workspace Baru</span>
+              </h3>
+              <button
+                onClick={() => setIsAddSpaceModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddSpaceSubmit} className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Nama Workspace / Ruangan</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Contoh: Focus Studio Pod B-02"
+                  value={newSpaceName}
+                  onChange={(e) => setNewSpaceName(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Tipe Ruangan</label>
+                  <select
+                    value={newSpaceType}
+                    onChange={(e) => setNewSpaceType(e.target.value as SpaceType)}
+                    className="w-full px-3 py-2 border rounded-xl bg-white font-medium"
+                  >
+                    <option value="HOT_DESK">Hot Desk</option>
+                    <option value="DEDICATED_DESK">Dedicated Desk</option>
+                    <option value="MEETING_ROOM">Meeting Room</option>
+                    <option value="PRIVATE_POD">Private Pod</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Area Lokasi</label>
+                  <select
+                    value={newSpaceArea}
+                    onChange={(e) => setNewSpaceArea(e.target.value as any)}
+                    className="w-full px-3 py-2 border rounded-xl bg-white font-medium"
+                  >
+                    <option value="Ground Floor Main">Ground Floor Main</option>
+                    <option value="Mezzanine Quiet Zone">Mezzanine Quiet Zone</option>
+                    <option value="VIP Meeting Wing">VIP Meeting Wing</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Kapasitas (Pax)</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={newSpaceCapacity}
+                    onChange={(e) => setNewSpaceCapacity(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-bold font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Tarif / Jam (Rp)</label>
+                  <input
+                    type="number"
+                    required
+                    min={5000}
+                    step={1000}
+                    value={newSpaceHourlyRate}
+                    onChange={(e) => setNewSpaceHourlyRate(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-bold font-mono text-blue-600"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Tarif / Hari (Rp)</label>
+                  <input
+                    type="number"
+                    required
+                    min={10000}
+                    step={5000}
+                    value={newSpaceDailyRate}
+                    onChange={(e) => setNewSpaceDailyRate(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-bold font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Keterangan / Deskripsi Ruangan</label>
+                <textarea
+                  rows={2}
+                  placeholder="Jelaskan suasana, fasilitas presentasi, atau kenyamanan ruang kerja..."
+                  value={newSpaceDesc}
+                  onChange={(e) => setNewSpaceDesc(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl resize-none text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Fasilitas Termasuk (Pisahkan Koma)</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: WiFi 100Mbps, Smart TV 4K, Whiteboard, Free Coffee"
+                  value={newSpaceAmenities}
+                  onChange={(e) => setNewSpaceAmenities(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl"
+                />
+              </div>
+
+              {/* Photo Upload & Preview */}
+              <div className="space-y-1.5 pt-1">
+                <label className="font-bold text-slate-700 flex items-center justify-between">
+                  <span className="flex items-center space-x-1">
+                    <ImageIcon className="w-3.5 h-3.5 text-brand-orange" />
+                    <span>Foto Workspace</span>
+                  </span>
+                  {newSpaceImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setNewSpaceImageUrl("")}
+                      className="text-[10px] text-rose-500 font-bold hover:underline"
+                    >
+                      Hapus Foto
+                    </button>
+                  )}
+                </label>
+
+                {newSpaceImageUrl ? (
+                  <div className="relative w-full h-32 rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                    <img
+                      src={newSpaceImageUrl}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <label className="w-full h-24 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-brand-orange/60 hover:bg-orange-50/20 transition-all text-slate-500">
+                    <Upload className="w-5 h-5 mb-1 text-slate-400" />
+                    <span className="text-[11px] font-semibold text-slate-600">Pilih / Upload Foto Ruangan</span>
+                    <span className="text-[9px] text-slate-400">JPG, PNG, atau WEBP (maks 5MB)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleSpaceImageUpload(e, setNewSpaceImageUrl)}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAddSpaceModalOpen(false)}
+                >
+                  Batal
+                </Button>
+                <Button type="submit" size="sm" className="bg-slate-900 hover:bg-slate-800 text-white font-bold">
+                  Simpan & Aktifkan Ruang
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Workspace */}
+      {isEditSpaceModalOpen && editingSpace && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+                <Edit2 className="w-4 h-4 text-blue-600" />
+                <span>Edit Workspace: {editingSpace.name}</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setIsEditSpaceModalOpen(false);
+                  setEditingSpace(null);
+                }}
+                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateSpaceSubmit} className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Nama Workspace / Ruangan</label>
+                <input
+                  type="text"
+                  required
+                  value={editSpaceName}
+                  onChange={(e) => setEditSpaceName(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Tipe Ruangan</label>
+                  <select
+                    value={editSpaceType}
+                    onChange={(e) => setEditSpaceType(e.target.value as SpaceType)}
+                    className="w-full px-3 py-2 border rounded-xl bg-white font-medium"
+                  >
+                    <option value="HOT_DESK">Hot Desk</option>
+                    <option value="DEDICATED_DESK">Dedicated Desk</option>
+                    <option value="MEETING_ROOM">Meeting Room</option>
+                    <option value="PRIVATE_POD">Private Pod</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Area Lokasi</label>
+                  <select
+                    value={editSpaceArea}
+                    onChange={(e) => setEditSpaceArea(e.target.value as any)}
+                    className="w-full px-3 py-2 border rounded-xl bg-white font-medium"
+                  >
+                    <option value="Ground Floor Main">Ground Floor Main</option>
+                    <option value="Mezzanine Quiet Zone">Mezzanine Quiet Zone</option>
+                    <option value="VIP Meeting Wing">VIP Meeting Wing</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Kapasitas (Pax)</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={editSpaceCapacity}
+                    onChange={(e) => setEditSpaceCapacity(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-bold font-mono"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Tarif / Jam (Rp)</label>
+                  <input
+                    type="number"
+                    required
+                    min={5000}
+                    step={1000}
+                    value={editSpaceHourlyRate}
+                    onChange={(e) => setEditSpaceHourlyRate(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-bold font-mono text-blue-600"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Tarif / Hari (Rp)</label>
+                  <input
+                    type="number"
+                    required
+                    min={10000}
+                    step={5000}
+                    value={editSpaceDailyRate}
+                    onChange={(e) => setEditSpaceDailyRate(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-bold font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Keterangan / Deskripsi Ruangan</label>
+                <textarea
+                  rows={2}
+                  placeholder="Jelaskan suasana, fasilitas presentasi, atau kenyamanan ruang kerja..."
+                  value={editSpaceDesc}
+                  onChange={(e) => setEditSpaceDesc(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl resize-none text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Fasilitas Termasuk (Pisahkan Koma)</label>
+                <input
+                  type="text"
+                  value={editSpaceAmenities}
+                  onChange={(e) => setEditSpaceAmenities(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl"
+                />
+              </div>
+
+              {/* Photo Upload, Replace & Preview */}
+              <div className="space-y-1.5 pt-1">
+                <label className="font-bold text-slate-700 flex items-center justify-between">
+                  <span className="flex items-center space-x-1">
+                    <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Foto Workspace</span>
+                  </span>
+                  {editSpaceImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setEditSpaceImageUrl("")}
+                      className="text-[10px] text-rose-500 font-bold hover:underline"
+                    >
+                      Hapus Foto
+                    </button>
+                  )}
+                </label>
+
+                {editSpaceImageUrl ? (
+                  <div className="space-y-2">
+                    <div className="relative w-full h-32 rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                      <img
+                        src={editSpaceImageUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <label className="inline-flex items-center space-x-1.5 text-xs font-bold text-blue-600 cursor-pointer hover:underline">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Ganti Foto Ruangan</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleSpaceImageUpload(e, setEditSpaceImageUrl)}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <label className="w-full h-24 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-500/60 hover:bg-blue-50/20 transition-all text-slate-500">
+                    <Upload className="w-5 h-5 mb-1 text-slate-400" />
+                    <span className="text-[11px] font-semibold text-slate-600">Pilih / Upload Foto Baru</span>
+                    <span className="text-[9px] text-slate-400">JPG, PNG, atau WEBP (maks 5MB)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleSpaceImageUpload(e, setEditSpaceImageUrl)}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setIsEditSpaceModalOpen(false);
+                    setEditingSpace(null);
+                  }}
+                >
+                  Batal
+                </Button>
+                <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                  Simpan Perubahan
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* PDF Official Coworking Report Modal */}
       <CoworkingReportPDFModal
         isOpen={isPDFModalOpen}
@@ -920,6 +1523,13 @@ export default function CoworkingPage() {
         bookings={bookings}
         members={members}
         outletName={activeOutlet?.name || "Semua Outlet"}
+      />
+
+      {/* Coworking Thermal Receipt Modal */}
+      <CoworkingReceiptModal
+        isOpen={isReceiptModalOpen}
+        receiptData={selectedBookingForReceipt}
+        onClose={() => setIsReceiptModalOpen(false)}
       />
     </div>
   );

@@ -54,6 +54,8 @@ export const INITIAL_SPACES: CoworkingSpaceItem[] = [
     dailyRate: 65000,
     status: "AVAILABLE",
     amenities: ["High-speed Fiber WiFi", "Power Outlet", "Free Flow Infused Water"],
+    description: "Meja kerja komunal yang nyaman dengan akses power outlet individual, koneksi fiber internet 100 Mbps, dan free-flow infused water.",
+    imageUrl: "https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=600&auto=format&fit=crop",
   },
   {
     id: "sp-ded-1",
@@ -66,6 +68,8 @@ export const INITIAL_SPACES: CoworkingSpaceItem[] = [
     monthlyRate: 1850000,
     status: "AVAILABLE",
     amenities: ["Ergonomic Herman Miller Chair", "Dual Monitor 27-inch", "Locker Pribadi", "Free 2 Jam Meeting Room"],
+    description: "Meja kerja pribadi khusus dengan kursi ergonomis Herman Miller, dual-monitor 27 inch 4K, dan locker penyimpanan personal.",
+    imageUrl: "https://images.unsplash.com/photo-1527192491265-7e15c55b1ed2?q=80&w=600&auto=format&fit=crop",
   },
   {
     id: "sp-ded-2",
@@ -76,15 +80,10 @@ export const INITIAL_SPACES: CoworkingSpaceItem[] = [
     hourlyRate: 25000,
     dailyRate: 120000,
     monthlyRate: 1850000,
-    status: "OCCUPIED",
+    status: "AVAILABLE",
     amenities: ["Ergonomic Chair", "Locker", "Free Coffee 1 Cup/Day"],
-    currentSession: {
-      guestName: "Sarah Jenkins",
-      company: "Remote Nomad Tech",
-      checkInTime: "10:02 WITA",
-      endTime: "18:00 WITA",
-      bookingCode: "BK-CWK-00192",
-    },
+    description: "Meja kerja tetap di Mezzanine Quiet Zone untuk kenyamanan konsentrasi penuh dengan free coffee 1 cup/hari.",
+    imageUrl: "https://images.unsplash.com/photo-1497215728101-856f4ea42174?q=80&w=600&auto=format&fit=crop",
   },
   {
     id: "sp-meet-1",
@@ -96,6 +95,8 @@ export const INITIAL_SPACES: CoworkingSpaceItem[] = [
     dailyRate: 900000,
     status: "AVAILABLE",
     amenities: ["4K Smart TV Screen Share", "Whiteboard", "Jabra Conference Mic", "Soundproof Acoustic Walls"],
+    description: "Ruang meeting premium berkapasitas 10 orang dengan Smart TV 4K, conference mic Jabra, dan dinding peredam suara akustik.",
+    imageUrl: "https://images.unsplash.com/photo-1517502884422-41eaead166d4?q=80&w=600&auto=format&fit=crop",
   },
   {
     id: "sp-pod-1",
@@ -107,6 +108,8 @@ export const INITIAL_SPACES: CoworkingSpaceItem[] = [
     dailyRate: 180000,
     status: "AVAILABLE",
     amenities: ["Soundproof 35dB", "Ring Light Zoom Video", "Ventilation Fan"],
+    description: "Pod kedap suara individual untuk panggilan video, podcast, dan interview online tanpa gangguan kebisingan.",
+    imageUrl: "https://images.unsplash.com/photo-1573164713988-8665fc963095?q=80&w=600&auto=format&fit=crop",
   },
 ];
 
@@ -121,17 +124,8 @@ export const INITIAL_MEMBERSHIPS: CoworkingMemberProfile[] = [
     startDate: "01 Sep 2026",
     expiryDate: "30 Sep 2026",
     status: "ACTIVE",
-    totalSpent: 1850000,
-    paymentHistory: [
-      {
-        id: "cwp-1",
-        date: "01 Sep 2026",
-        amount: 1850000,
-        plan: "Dedicated Nomad Monthly",
-        paymentMethod: "Credit Card (Stripe)",
-        status: "PAID",
-      },
-    ],
+    totalSpent: 0,
+    paymentHistory: [],
   },
   {
     id: "cwm-2",
@@ -142,18 +136,9 @@ export const INITIAL_MEMBERSHIPS: CoworkingMemberProfile[] = [
     packageName: "Flex 10 Days Pass",
     startDate: "10 Agu 2026",
     expiryDate: "10 Sep 2026",
-    status: "EXPIRED",
-    totalSpent: 550000,
-    paymentHistory: [
-      {
-        id: "cwp-2",
-        date: "10 Agu 2026",
-        amount: 550000,
-        plan: "Flex 10 Days Pass",
-        paymentMethod: "QRIS DagoPay",
-        status: "PAID",
-      },
-    ],
+    status: "ACTIVE",
+    totalSpent: 0,
+    paymentHistory: [],
   },
   {
     id: "cwm-3",
@@ -165,17 +150,8 @@ export const INITIAL_MEMBERSHIPS: CoworkingMemberProfile[] = [
     startDate: "15 Agu 2026",
     expiryDate: "15 Okt 2026",
     status: "ACTIVE",
-    totalSpent: 3500000,
-    paymentHistory: [
-      {
-        id: "cwp-3",
-        date: "15 Agu 2026",
-        amount: 3500000,
-        plan: "Executive Team Pass",
-        paymentMethod: "Bank Mandiri",
-        status: "PAID",
-      },
-    ],
+    totalSpent: 0,
+    paymentHistory: [],
   },
 ];
 
@@ -191,98 +167,18 @@ export const INITIAL_BOOKINGS: (CoworkingBooking & {
   checkedOutAt?: string;
   checkedInBy?: string;
   checkedOutBy?: string;
-})[] = [
-  {
-    id: "bk-101",
-    bookingCode: "BK-CWK-00192",
-    guestName: "Sarah Jenkins",
-    guestPhone: "+62 819-5566-7788",
-    guestEmail: "sarah.j@nomadtech.io",
-    company: "Remote Nomad Tech",
-    spaceId: "sp-ded-2",
-    spaceName: "Dedicated Desk D-02",
-    spaceType: "DEDICATED_DESK",
-    bookingType: "DAILY",
-    date: "17 Sep 2026",
-    startTime: "10:02 WITA",
-    duration: 1,
-    price: 120000,
-    discount: 0,
-    totalAmount: 120000,
-    paidAmount: 120000,
-    remainingAmount: 0,
-    paymentStatus: "PAID",
-    paymentMethod: "QRIS DagoPay",
-    paymentRef: "QRIS-DAGO-99120",
-    paymentTimestamp: "17 Sep 2026 10:02 WITA",
-    checkInStatus: "CHECKED_IN",
-    checkedInAt: "17 Sep 2026 10:02 WITA",
-    checkedInBy: "Rian Hidayat (Manager Coworking)",
-  },
-  {
-    id: "bk-102",
-    bookingCode: "BK-CWK-00188",
-    guestName: "Bpk. Hendra Wijaya",
-    guestPhone: "+62 811-2233-4455",
-    guestEmail: "hendra.w@dagoeng.com",
-    company: "Dago Creative Hub",
-    spaceId: "sp-meet-1",
-    spaceName: "Executive Glass Meeting Room",
-    spaceType: "MEETING_ROOM",
-    bookingType: "HOURLY",
-    date: "16 Sep 2026",
-    startTime: "14:00 WITA",
-    duration: 3,
-    price: 450000,
-    discount: 0,
-    totalAmount: 450000,
-    paidAmount: 450000,
-    remainingAmount: 0,
-    paymentStatus: "PAID",
-    paymentMethod: "CASH",
-    paymentRef: "CASH-REC-4410",
-    paymentTimestamp: "16 Sep 2026 14:00 WITA",
-    checkInStatus: "COMPLETED",
-    checkedInAt: "16 Sep 2026 14:00 WITA",
-    checkedOutAt: "16 Sep 2026 17:00 WITA",
-    checkedInBy: "Rian Hidayat",
-    checkedOutBy: "Rian Hidayat",
-  },
-];
+})[] = [];
 
-export const INITIAL_CHECK_LOGS: CheckInOutLog[] = [
-  {
-    id: "chk-1",
-    bookingCode: "BK-CWK-00192",
-    guestName: "Sarah Jenkins",
-    spaceName: "Dedicated Desk D-02",
-    checkInDate: "17 Sep 2026",
-    checkInTime: "10:02 WITA",
-    checkInBy: "Rian Hidayat (Manager Coworking)",
-    durationFormatted: "Sedang Aktif (3j 45m)",
-    status: "ACTIVE_IN",
-  },
-  {
-    id: "chk-2",
-    bookingCode: "BK-CWK-00188",
-    guestName: "Bpk. Hendra Wijaya",
-    spaceName: "Executive Glass Meeting Room",
-    checkInDate: "16 Sep 2026",
-    checkInTime: "14:00 WITA",
-    checkInBy: "Rian Hidayat",
-    checkoutDate: "16 Sep 2026",
-    checkoutTime: "17:00 WITA",
-    checkoutBy: "Rian Hidayat",
-    durationFormatted: "3 Jam 00 Menit",
-    status: "COMPLETED",
-  },
-];
+export const INITIAL_CHECK_LOGS: CheckInOutLog[] = [];
 
 interface CoworkingContextType {
   spaces: CoworkingSpaceItem[];
   bookings: typeof INITIAL_BOOKINGS;
   members: CoworkingMemberProfile[];
   checkLogs: CheckInOutLog[];
+  addSpace: (space: Omit<CoworkingSpaceItem, "id">) => CoworkingSpaceItem;
+  updateSpace: (id: string, updates: Partial<CoworkingSpaceItem>) => void;
+  deleteSpace: (id: string) => void;
   bookSpace: (
     booking: Omit<typeof INITIAL_BOOKINGS[0], "id" | "bookingCode" | "checkInStatus" | "checkedInAt" | "checkedInBy">
   ) => typeof INITIAL_BOOKINGS[0];
@@ -296,10 +192,10 @@ interface CoworkingContextType {
 
 const CoworkingContext = createContext<CoworkingContextType | undefined>(undefined);
 
-const STORAGE_KEY_SPACES = "dagoeng_cwk_spaces_v2";
-const STORAGE_KEY_BOOKINGS = "dagoeng_cwk_bookings_v2";
-const STORAGE_KEY_MEMBERS = "dagoeng_cwk_members_v2";
-const STORAGE_KEY_LOGS = "dagoeng_cwk_logs_v2";
+const STORAGE_KEY_SPACES = "dagoeng_cwk_spaces_v3";
+const STORAGE_KEY_BOOKINGS = "dagoeng_cwk_bookings_v3";
+const STORAGE_KEY_MEMBERS = "dagoeng_cwk_members_v3";
+const STORAGE_KEY_LOGS = "dagoeng_cwk_logs_v3";
 
 export function CoworkingProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -320,7 +216,24 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       const sMembers = localStorage.getItem(STORAGE_KEY_MEMBERS);
       const sLogs = localStorage.getItem(STORAGE_KEY_LOGS);
 
-      if (sSpaces) setSpaces(JSON.parse(sSpaces));
+      if (sSpaces) {
+        const parsedSpaces = JSON.parse(sSpaces);
+        if (Array.isArray(parsedSpaces) && parsedSpaces.length > 0) {
+          const initialMap = new Map(INITIAL_SPACES.map((s) => [s.id, s]));
+          const customSpaces = parsedSpaces.filter((s: CoworkingSpaceItem) => !initialMap.has(s.id));
+          const updatedInitialSpaces = INITIAL_SPACES.map((initSpace) => {
+            const userVersion = parsedSpaces.find((s: CoworkingSpaceItem) => s.id === initSpace.id);
+            if (userVersion) {
+              return {
+                ...initSpace,
+                ...userVersion,
+              };
+            }
+            return initSpace;
+          });
+          setSpaces([...updatedInitialSpaces, ...customSpaces]);
+        }
+      }
       if (sBookings) setBookings(JSON.parse(sBookings));
       if (sMembers) setMembers(JSON.parse(sMembers));
       if (sLogs) setCheckLogs(JSON.parse(sLogs));
@@ -342,6 +255,74 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to save coworking state", e);
     }
   }, [spaces, bookings, members, checkLogs, isInitialized]);
+
+  const addSpace = (
+    spaceData: Omit<CoworkingSpaceItem, "id">
+  ): CoworkingSpaceItem => {
+    const newSpace: CoworkingSpaceItem = {
+      ...spaceData,
+      id: `sp-custom-${Date.now()}`,
+      status: spaceData.status || "AVAILABLE",
+    };
+
+    setSpaces((prev) => [newSpace, ...prev]);
+
+    logActivity({
+      module: "COWORKING",
+      action: "CREATE_SPACE",
+      recordId: newSpace.id,
+      newValue: `${newSpace.name} (${newSpace.type} - Kapasitas: ${newSpace.capacity} orang)`,
+      description: `Penambahan master workspace baru: "${newSpace.name}"`,
+      reason: "Master workspace baru siap digunakan",
+      status: "SUCCESS",
+    });
+
+    return newSpace;
+  };
+
+  const updateSpace = (id: string, updates: Partial<CoworkingSpaceItem>) => {
+    const existing = spaces.find((s) => s.id === id);
+    if (!existing) return;
+
+    setSpaces((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? {
+              ...s,
+              ...updates,
+            }
+          : s
+      )
+    );
+
+    logActivity({
+      module: "COWORKING",
+      action: "UPDATE_SPACE",
+      recordId: id,
+      previousValue: `Nama: ${existing.name}, Rate: Rp ${existing.hourlyRate.toLocaleString()}`,
+      newValue: `Nama: ${updates.name || existing.name}, Rate: Rp ${(updates.hourlyRate ?? existing.hourlyRate).toLocaleString()}`,
+      description: `Perubahan master workspace: "${updates.name || existing.name}"`,
+      reason: "Update data workspace oleh Owner/Admin",
+      status: "SUCCESS",
+    });
+  };
+
+  const deleteSpace = (id: string) => {
+    const existing = spaces.find((s) => s.id === id);
+    if (!existing) return;
+
+    setSpaces((prev) => prev.filter((s) => s.id !== id));
+
+    logActivity({
+      module: "COWORKING",
+      action: "DELETE_SPACE",
+      recordId: id,
+      previousValue: existing.name,
+      description: `Penghapusan master workspace: "${existing.name}"`,
+      reason: "Workspace diarsipkan dari sistem",
+      status: "SUCCESS",
+    });
+  };
 
   const bookSpace = (
     bookingData: Omit<typeof INITIAL_BOOKINGS[0], "id" | "bookingCode" | "checkInStatus" | "checkedInAt" | "checkedInBy">
@@ -686,6 +667,9 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
         bookings,
         members,
         checkLogs,
+        addSpace,
+        updateSpace,
+        deleteSpace,
         bookSpace,
         confirmBookingPayment,
         cancelBooking,

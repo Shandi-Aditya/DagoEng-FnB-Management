@@ -10,7 +10,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-101",
     name: "Kopi Senja Aren",
-    category: "Signature Coffee",
+    category: "Minuman",
     basePrice: 24000,
     cogsEstimate: 8640,
     grossMarginPercent: "64.0%",
@@ -26,6 +26,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     modifierGroupNames: ["Sugar Level", "Milk Alternative"],
     recipeMenuId: "m-1",
     description: "Perpaduan espresso, susu segar, dan manis gula aren organik.",
+    imageUrl: "https://images.unsplash.com/photo-1541167760496-1628856ab772?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-ks",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -33,7 +34,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-105",
     name: "Classic Americano",
-    category: "Coffee",
+    category: "Minuman",
     basePrice: 22000,
     cogsEstimate: 5500,
     grossMarginPercent: "75.0%",
@@ -47,6 +48,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     ],
     recipeMenuId: "m-5",
     description: "Double shot espresso blend diekstraksi segar dengan air mineral pegunungan.",
+    imageUrl: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-ks",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -54,7 +56,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-107",
     name: "Matcha Latte",
-    category: "Non-Coffee",
+    category: "Minuman",
     basePrice: 26000,
     cogsEstimate: 9000,
     grossMarginPercent: "65.4%",
@@ -67,6 +69,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
       { name: "Hot (+2k)", priceAdjustment: 2000 },
     ],
     description: "Seduhan bubuk matcha murni berpadu dengan susu segar lembut.",
+    imageUrl: "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-ks",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -74,7 +77,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-108",
     name: "French Fries Gurih",
-    category: "Snacks",
+    category: "Camilan",
     basePrice: 20000,
     cogsEstimate: 7000,
     grossMarginPercent: "65.0%",
@@ -83,6 +86,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     outletName: "Semua Outlet",
     isAvailable: true,
     description: "Kentang goreng renyah bumbu rempah gurih untuk teman kopi.",
+    imageUrl: "https://images.unsplash.com/photo-1576107232684-1279f3908594?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-ks",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -92,7 +96,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-103",
     name: "Nasi Beef Bowl Sambal Matah",
-    category: "Rice Bowl",
+    category: "Makanan",
     basePrice: 45000,
     cogsEstimate: 22000,
     grossMarginPercent: "51.1%",
@@ -107,6 +111,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     modifierGroupNames: ["Egg Doneness", "Spiciness Level"],
     recipeMenuId: "m-3",
     description: "Nasi hangat dengan irisan daging sapi empuk, sambal matah segar, dan telur onsen.",
+    imageUrl: "https://images.unsplash.com/photo-1543339308-43e59d6b73a6?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-kitchen",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -114,7 +119,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-109",
     name: "Nasi Ayam Sambal Matah",
-    category: "Menu Utama",
+    category: "Makanan",
     basePrice: 32000,
     cogsEstimate: 14000,
     grossMarginPercent: "56.3%",
@@ -123,6 +128,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     outletName: "Semua Outlet",
     isAvailable: true,
     description: "Nasi hangat dengan ayam suwir berbumbu gurih dan sambal matah segar.",
+    imageUrl: "https://images.unsplash.com/photo-1562967914-608f82629710?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-kitchen",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -130,7 +136,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-110",
     name: "Mie Goreng Jawa",
-    category: "Menu Utama",
+    category: "Makanan",
     basePrice: 28000,
     cogsEstimate: 11000,
     grossMarginPercent: "60.7%",
@@ -139,6 +145,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     outletName: "Semua Outlet",
     isAvailable: true,
     description: "Mie telur tumis bumbu tradisional Jawa dengan suwiran ayam dan sayuran segar.",
+    imageUrl: "https://images.unsplash.com/photo-1612927601601-6638404737ce?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-kitchen",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -155,6 +162,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     outletName: "Semua Outlet",
     isAvailable: true,
     description: "Perasan jeruk segar asli dengan gula pasir cair dan es batu dingin.",
+    imageUrl: "https://images.unsplash.com/photo-1613478223719-2ab802602423?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-kitchen",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -164,7 +172,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-104",
     name: "Butter Croissant",
-    category: "Pastry",
+    category: "Camilan",
     basePrice: 20000,
     cogsEstimate: 8400,
     grossMarginPercent: "58.0%",
@@ -179,6 +187,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     ],
     recipeMenuId: "m-4",
     description: "Croissant renyah dengan aroma butter yang harum, cocok untuk teman ngopi.",
+    imageUrl: "https://images.unsplash.com/photo-1555507036-ab1f4038808a?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-bakery",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -186,7 +195,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-106",
     name: "Truffle Parmesan Fries",
-    category: "Snacks",
+    category: "Camilan",
     basePrice: 32000,
     cogsEstimate: 11200,
     grossMarginPercent: "65.0%",
@@ -195,6 +204,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     outletName: "Semua Outlet",
     isAvailable: true,
     description: "Kentang goreng renyah dengan taburan keju parmesan asli dan minyak truffle.",
+    imageUrl: "https://images.unsplash.com/photo-1585109649139-366815a0d713?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-bakery",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -202,7 +212,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-112",
     name: "Chocolate Croissant",
-    category: "Pastry",
+    category: "Camilan",
     basePrice: 24000,
     cogsEstimate: 9500,
     grossMarginPercent: "60.4%",
@@ -211,6 +221,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     outletName: "Semua Outlet",
     isAvailable: true,
     description: "Pastry renyah berlapis dengan isian cokelat Belgia lumer di dalam.",
+    imageUrl: "https://images.unsplash.com/photo-1608198093002-ad4e005484ec?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-bakery",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -218,7 +229,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-113",
     name: "Banana Bread Slice",
-    category: "Cake & Dessert",
+    category: "Hidangan Penutup",
     basePrice: 18000,
     cogsEstimate: 6500,
     grossMarginPercent: "63.9%",
@@ -227,6 +238,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     outletName: "Semua Outlet",
     isAvailable: true,
     description: "Bolu pisang lembut panggang dengan aroma kayu manis dan kacang kenari.",
+    imageUrl: "https://images.unsplash.com/photo-1596223575323-9ed5a4f664a7?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-bakery",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -250,6 +262,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     ],
     recipeMenuId: "m-2",
     description: "Seduhan teh segar dingin dengan ekstrak buah peach manis alami.",
+    imageUrl: "https://images.unsplash.com/photo-1556679343-c7306c1976bc?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-tea",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -266,6 +279,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     outletName: "Semua Outlet",
     isAvailable: true,
     description: "Nasi hangat dengan ayam goreng bumbu kuning dan kremesan renyah gurih.",
+    imageUrl: "https://images.unsplash.com/photo-1598515214211-89d3c73ae83b?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-tea",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -273,7 +287,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
   {
     id: "prod-115",
     name: "Tempe Mendoan (3 pcs)",
-    category: "Gorengan",
+    category: "Camilan",
     basePrice: 12000,
     cogsEstimate: 4500,
     grossMarginPercent: "62.5%",
@@ -282,6 +296,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     outletName: "Semua Outlet",
     isAvailable: true,
     description: "Tempe mendoan lembut hangat disajikan dengan sambal kecap rawit.",
+    imageUrl: "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-tea",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -298,6 +313,7 @@ export const INITIAL_PRODUCTS: MasterProduct[] = [
     outletName: "Semua Outlet",
     isAvailable: true,
     description: "Seduhan teh wangi melati segar dengan gula pasir asli dan es batu.",
+    imageUrl: "https://images.unsplash.com/photo-1556679343-c7306c1976bc?q=80&w=600&auto=format&fit=crop",
     tenantId: "tenant-tea",
     createdAt: "2026-09-01T00:00:00Z",
     updatedAt: "2026-09-17T00:00:00Z",
@@ -334,7 +350,6 @@ export function ProductProvider({ children }: { children: React.ReactNode }) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // Merge: update initial products with latest schema/names, while keeping any user-created custom products
           const initialMap = new Map(INITIAL_PRODUCTS.map((p) => [p.id, p]));
           const customProducts = parsed.filter((p) => !initialMap.has(p.id));
           const updatedInitialProducts = INITIAL_PRODUCTS.map((initProd) => {
@@ -342,9 +357,7 @@ export function ProductProvider({ children }: { children: React.ReactNode }) {
             if (userVersion) {
               return {
                 ...initProd,
-                status: userVersion.status,
-                isAvailable: userVersion.isAvailable,
-                basePrice: userVersion.basePrice || initProd.basePrice,
+                ...userVersion,
               };
             }
             return initProd;

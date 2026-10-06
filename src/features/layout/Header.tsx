@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
@@ -29,6 +29,11 @@ export function Header() {
 
   const [isOutletDropdownOpen, setIsOutletDropdownOpen] = useState(false);
   const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const isDagoOwner = user?.scopeLevel === "ORGANIZATION";
   const isTenantOwner = user?.scopeLevel === "TENANT" && user?.role.slug === "OWNER";
@@ -151,7 +156,7 @@ export function Header() {
             title="Pusat Notifikasi"
           >
             <Bell className="w-4 h-4" />
-            {unreadCount > 0 && (
+            {isMounted && unreadCount > 0 && (
               <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-brand-orange text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-pulse">
                 {unreadCount}
               </span>
@@ -165,13 +170,13 @@ export function Header() {
                 <div className="px-4 py-2 border-b border-slate-100 flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <span className="font-bold text-xs text-slate-900">Pusat Notifikasi</span>
-                    {unreadCount > 0 && (
+                    {isMounted && unreadCount > 0 && (
                       <span className="text-[10px] bg-orange-100 text-brand-orange px-1.5 py-0.2 rounded font-bold">
                         {unreadCount} Baru
                       </span>
                     )}
                   </div>
-                  {unreadCount > 0 && (
+                  {isMounted && unreadCount > 0 && (
                     <button
                       onClick={markAllAsRead}
                       className="text-[10px] text-brand-orange hover:underline font-bold flex items-center space-x-1"

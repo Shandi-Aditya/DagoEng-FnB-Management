@@ -52,11 +52,11 @@ export const INITIAL_AREAS: AreaItem[] = [
     outletId: "outlet-sgr",
     outletName: "Singaraja",
     tables: [
-      { id: "T-01", number: "T-01", cap: 2, status: "OCCUPIED", outletId: "outlet-sgr", outletName: "Singaraja", customer: "Budi Santoso", total: "Rp 165.000", time: "25 mnt", itemsCount: 3, paymentStatus: "PAID" },
+      { id: "T-01", number: "T-01", cap: 2, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
       { id: "T-02", number: "T-02", cap: 4, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
-      { id: "T-03", number: "T-03", cap: 4, status: "OCCUPIED", outletId: "outlet-sgr", outletName: "Singaraja", customer: "Ketut Dian", total: "Rp 83.600", time: "10 mnt", itemsCount: 3, paymentStatus: "PAID" },
+      { id: "T-03", number: "T-03", cap: 4, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
       { id: "T-04", number: "T-04", cap: 6, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
-      { id: "VIP-01", number: "VIP-01", cap: 8, status: "RESERVED", outletId: "outlet-sgr", outletName: "Singaraja", customer: "Bpk. Hendra (Meeting)", time: "18:30 WITA" },
+      { id: "VIP-01", number: "VIP-01", cap: 8, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
     ],
   },
   {
@@ -66,8 +66,8 @@ export const INITIAL_AREAS: AreaItem[] = [
     outletName: "Singaraja",
     tables: [
       { id: "OUT-01", number: "OUT-01", cap: 4, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
-      { id: "OUT-02", number: "OUT-02", cap: 6, status: "OCCUPIED", outletId: "outlet-sgr", outletName: "Singaraja", customer: "Siti Rahma", total: "Rp 61.600", time: "14 mnt", itemsCount: 2, paymentStatus: "PAID" },
-      { id: "OUT-03", number: "OUT-03", cap: 2, status: "CLEANING", outletId: "outlet-sgr", outletName: "Singaraja" },
+      { id: "OUT-02", number: "OUT-02", cap: 6, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
+      { id: "OUT-03", number: "OUT-03", cap: 2, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
     ],
   },
 
@@ -79,7 +79,7 @@ export const INITIAL_AREAS: AreaItem[] = [
     outletName: "Denpasar",
     tables: [
       { id: "DPS-01", number: "DPS-01", cap: 4, status: "AVAILABLE", outletId: "outlet-dps", outletName: "Denpasar" },
-      { id: "DPS-02", number: "DPS-02", cap: 6, status: "OCCUPIED", outletId: "outlet-dps", outletName: "Denpasar", customer: "Dewi Lestari", total: "Rp 214.500", time: "30 mnt", itemsCount: 3, paymentStatus: "PAID" },
+      { id: "DPS-02", number: "DPS-02", cap: 6, status: "AVAILABLE", outletId: "outlet-dps", outletName: "Denpasar" },
     ],
   },
 
@@ -96,50 +96,7 @@ export const INITIAL_AREAS: AreaItem[] = [
   },
 ];
 
-export const INITIAL_RESERVATIONS: ScheduledReservation[] = [
-  {
-    id: "res-101",
-    customerName: "Bpk. Hendra Wijaya",
-    phone: "+62 811-2233-4455",
-    tableId: "VIP-01",
-    areaName: "Indoor AC Main Hall",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    dateTime: "Hari Ini, 18:30 WITA",
-    pax: 8,
-    downPayment: 200000,
-    notes: "Family Dinner & Business Meeting. Siapkan baby high chair.",
-    status: "CONFIRMED",
-  },
-  {
-    id: "res-102",
-    customerName: "Ibu Maya Santika",
-    phone: "+62 815-6677-8899",
-    tableId: "OUT-01",
-    areaName: "Outdoor Tropical Garden",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    dateTime: "Hari Ini, 19:15 WITA",
-    pax: 4,
-    downPayment: 100000,
-    notes: "Ulang Tahun. Meja dihias bunga meja.",
-    status: "CONFIRMED",
-  },
-  {
-    id: "res-103",
-    customerName: "Gede Arya",
-    phone: "+62 819-3344-5566",
-    tableId: "T-04",
-    areaName: "Indoor AC Main Hall",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    dateTime: "Besok, 12:30 WITA",
-    pax: 6,
-    downPayment: 150000,
-    notes: "Lunch meeting kantor arsitektur.",
-    status: "CONFIRMED",
-  },
-];
+export const INITIAL_RESERVATIONS: ScheduledReservation[] = [];
 
 interface TableContextType {
   areas: AreaItem[];
@@ -159,8 +116,8 @@ interface TableContextType {
 }
 
 const TableContext = createContext<TableContextType | undefined>(undefined);
-const STORAGE_KEY_AREAS = "dagoeng_tables_areas_v2";
-const STORAGE_KEY_RESERVATIONS = "dagoeng_tables_reservations_v2";
+const STORAGE_KEY_AREAS = "dagoeng_tables_areas_v3";
+const STORAGE_KEY_RESERVATIONS = "dagoeng_tables_reservations_v3";
 
 export function TableProvider({ children }: { children: React.ReactNode }) {
   const { activeOutletId, activeOutlet, isAllOutlets } = useOutlet();

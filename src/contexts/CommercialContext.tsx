@@ -26,30 +26,7 @@ export const INITIAL_LEASES: CommercialLease[] = [
     notes: "Tenant retail kerajinan kulit lokal. Tagihan sewa diterbitkan setiap tanggal 1.",
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-09-01T00:00:00Z",
-    paymentHistory: [
-      {
-        id: "lp-1",
-        leaseId: "lse-001",
-        periodLabel: "September 2026",
-        amount: 8500000,
-        dueDate: "05 Sep 2026",
-        paidDate: "03 Sep 2026",
-        paymentMethod: "Bank Transfer BCA",
-        status: "PAID",
-        referenceNo: "TRF-BCA-99210",
-      },
-      {
-        id: "lp-2",
-        leaseId: "lse-001",
-        periodLabel: "Agustus 2026",
-        amount: 8500000,
-        dueDate: "05 Agu 2026",
-        paidDate: "04 Agu 2026",
-        paymentMethod: "Bank Transfer BCA",
-        status: "PAID",
-        referenceNo: "TRF-BCA-88120",
-      },
-    ],
+    paymentHistory: [],
   },
   {
     id: "lse-002",
@@ -71,19 +48,7 @@ export const INITIAL_LEASES: CommercialLease[] = [
     notes: "Tenant perawatan kulit organik. Wajib mematuhi standar kebersihan komersial.",
     createdAt: "2026-02-01T00:00:00Z",
     updatedAt: "2026-09-01T00:00:00Z",
-    paymentHistory: [
-      {
-        id: "lp-3",
-        leaseId: "lse-002",
-        periodLabel: "September 2026",
-        amount: 6800000,
-        dueDate: "05 Sep 2026",
-        paidDate: "05 Sep 2026",
-        paymentMethod: "Bank Mandiri",
-        status: "PAID",
-        referenceNo: "TRF-MDR-77192",
-      },
-    ],
+    paymentHistory: [],
   },
   {
     id: "lse-003",
@@ -105,19 +70,7 @@ export const INITIAL_LEASES: CommercialLease[] = [
     notes: "Ruang podcast kedap suara untuk konten kreator.",
     createdAt: "2026-07-01T00:00:00Z",
     updatedAt: "2026-09-01T00:00:00Z",
-    paymentHistory: [
-      {
-        id: "lp-4",
-        leaseId: "lse-003",
-        periodLabel: "September 2026",
-        amount: 4200000,
-        dueDate: "05 Sep 2026",
-        paidDate: "02 Sep 2026",
-        paymentMethod: "QRIS DagoPay",
-        status: "PAID",
-        referenceNo: "QRIS-DAGO-3391",
-      },
-    ],
+    paymentHistory: [],
   },
 ];
 
@@ -131,7 +84,7 @@ interface CommercialContextType {
 }
 
 const CommercialContext = createContext<CommercialContextType | undefined>(undefined);
-const STORAGE_KEY_COMMERCIAL = "dagoeng_commercial_leases_v1";
+const STORAGE_KEY_COMMERCIAL = "dagoeng_commercial_leases_v3";
 
 export function CommercialProvider({ children }: { children: React.ReactNode }) {
   const { activeOutletId, isAllOutlets, activeOutlet } = useOutlet();

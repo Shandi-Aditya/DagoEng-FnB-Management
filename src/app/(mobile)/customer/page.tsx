@@ -15,7 +15,7 @@ import { useInventory } from "@/contexts/InventoryContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { DEMO_PERSONAS } from "@/contexts/AuthContext";
-import { calculateOrderPricing, checkPromoValidity, isPromoEligibleForItem } from "@/lib/promo";
+import { calculateOrderPricing, checkPromoValidity, isPromoEligibleForItem, PromoConfig, validateVoucherCode, calculateCoworkingPricing } from "@/lib/promo";
 import { LOYALTY_VOUCHERS } from "@/features/pos/mock-data";
 import { MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
 import { PaymentWaitingModal } from "@/features/payment/PaymentWaitingModal";
@@ -24,6 +24,7 @@ import { OrderRecord } from "@/types/order";
 import { LoyaltyTier } from "@/types/loyalty";
 import { CoworkingSpaceItem, CoworkingMembershipPlan } from "@/types/coworking";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
+import { isTenantActive, getTenantStatus } from "@/lib/tenant";
 import {
   Home,
   UtensilsCrossed,
@@ -40,6 +41,7 @@ import {
   Users,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   LogIn,
   ShieldCheck,
   Tag,
@@ -60,11 +62,15 @@ import {
   X,
   Crown,
   LogOut,
+  Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ReceiptModal } from "@/features/pos/ReceiptModal";
+import { POSReceiptData } from "@/features/pos/types";
+import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
 
 interface FnbPartner {
   id: string;
@@ -80,9 +86,9 @@ const FNB_PARTNERS: FnbPartner[] = [
   {
     id: "tenant-ks",
     name: "Kopi Senja",
-    tagline: "Specialty Coffee & Beverages",
+    tagline: "Kopi Spesialti & Aneka Minuman",
     desc: "Sajian kopi pilihan dan aneka minuman segar untuk menemani aktivitas Anda.",
-    category: "Signature Coffee",
+    category: "Minuman",
     icon: "☕",
     badge: "Official Mitra Kopi",
   },
@@ -91,7 +97,7 @@ const FNB_PARTNERS: FnbPartner[] = [
     name: "Dapur Mama",
     tagline: "Masakan Rumahan & Hidangan Utama",
     desc: "Hidangan utama hangat, aneka olahan nasi, dan lauk lezat khas masakan rumah.",
-    category: "Main Course",
+    category: "Makanan",
     icon: "🍽️",
     badge: "Official Kitchen",
   },
@@ -100,7 +106,7 @@ const FNB_PARTNERS: FnbPartner[] = [
     name: "Manis Bakery",
     tagline: "Roti, Kue & Pastry Segar",
     desc: "Roti segar, pastry mentega lembut, dan camilan lezat yang dipanggang setiap hari.",
-    category: "Pastry & Snacks",
+    category: "Camilan",
     icon: "🥐",
     badge: "Fresh Baked Daily",
   },
@@ -109,13 +115,44 @@ const FNB_PARTNERS: FnbPartner[] = [
     name: "Warung Bu Narti",
     tagline: "Kuliner Tradisional & Minuman Nusantara",
     desc: "Aneka seduhan teh segar, minuman rempah tradisional, dan sajian khas nusantara.",
-    category: "Artisan Tea & Refreshers",
+    category: "Minuman",
     icon: "🍃",
     badge: "Mitra Nusantara",
   },
 ];
 
 type CustomerTab = "HOME" | "MENU" | "COWORKING" | "ORDERS" | "LOYALTY" | "PROFILE";
+
+const COWORKING_TIME_SLOTS = [
+  "08:00",
+  "09:00",
+  "10:00",
+  "11:00",
+  "12:00",
+  "13:00",
+  "14:00",
+  "15:00",
+  "16:00",
+  "17:00",
+  "18:00",
+  "19:00",
+  "20:00",
+];
+
+function parseHour(timeStr: string): number {
+  if (!timeStr) return 9;
+  const match = timeStr.match(/(\d{1,2}):(\d{2})/);
+  if (match) return parseInt(match[1], 10);
+  const matchNum = timeStr.match(/(\d{1,2})/);
+  if (matchNum) return parseInt(matchNum[1], 10);
+  return 9;
+}
+
+function calculateEndTime(startTime: string, durationHours: number): string {
+  const startHour = parseHour(startTime);
+  const endHour = startHour + durationHours;
+  return `${endHour.toString().padStart(2, "0")}:00`;
+}
 
 interface CartItem {
   product: MasterProduct;
@@ -138,10 +175,30 @@ function CustomerPortalContent() {
   const { filteredProducts } = useProducts();
   const { members, getOrCreateMember, redeemPoints, reverseTransactionPoints, addPoints } = useLoyalty();
   const { orders, createOrder, advanceOrderStatus } = useOrders();
-  const { releaseTableToAvailable, occupyTableWithOrder } = useTables();
+  const { areas, filteredAreas, getAvailableTables, releaseTableToAvailable, occupyTableWithOrder } = useTables();
   const { simulateBOMDeduction } = useInventory();
   const { spaces, bookings, bookSpace, confirmBookingPayment, cancelBooking } = useCoworking();
   const { settings } = useSettings();
+
+  const [isMounted, setIsMounted] = useState(false);
+  const [tenantSettingsVersion, setTenantSettingsVersion] = useState(0);
+
+  useEffect(() => {
+    setIsMounted(true);
+    const handleUpdate = () => setTenantSettingsVersion((v) => v + 1);
+    window.addEventListener("tenant_settings_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener("tenant_settings_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
+  // Filter only ACTIVE tenants for customer portal visibility (prevent SSR hydration mismatch)
+  const activeFnbPartners = useMemo(() => {
+    if (!isMounted) return FNB_PARTNERS;
+    return FNB_PARTNERS.filter((partner) => isTenantActive(partner.id));
+  }, [tenantSettingsVersion, isMounted]);
 
   const urlPartner = searchParams.get("partner");
   const initialPartnerId =
@@ -154,7 +211,13 @@ function CustomerPortalContent() {
 
   // Active F&B Partner State (Segmented Mitra Navigation)
   const [activePartnerId, setActivePartnerId] = useState<string>(initialPartnerId);
-  const [partnerSwitchModal, setPartnerSwitchModal] = useState<{ isOpen: boolean; targetPartnerId: string } | null>(null);
+
+  // Fallback if active partner becomes inactive
+  useEffect(() => {
+    if (activeFnbPartners.length > 0 && !activeFnbPartners.some((p) => p.id === activePartnerId)) {
+      setActivePartnerId(activeFnbPartners[0].id);
+    }
+  }, [activeFnbPartners, activePartnerId]);
 
   // Order Cancellation State
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
@@ -175,22 +238,46 @@ function CustomerPortalContent() {
   const [waitingPaymentBooking, setWaitingPaymentBooking] = useState<any | null>(null);
   const [isWaitingPaymentOpen, setIsWaitingPaymentOpen] = useState<boolean>(false);
   const [orderType, setOrderType] = useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
-  const [tableNumber, setTableNumber] = useState<string>("T-03");
+  const [tableNumber, setTableNumber] = useState<string>("");
   const [orderNotes, setOrderNotes] = useState<string>("");
   const [toastMessage, setToastMessage] = useState<string>("");
+
+  // Real-time available tables for the active outlet
+  const availableCustomerTables = useMemo(() => {
+    return getAvailableTables(activeOutletId);
+  }, [getAvailableTables, activeOutletId, areas]);
+
+  // Synchronize default tableNumber with real available tables
+  useEffect(() => {
+    if (availableCustomerTables.length > 0) {
+      if (!tableNumber || !availableCustomerTables.some((t) => t.id === tableNumber || t.number === tableNumber)) {
+        setTableNumber(availableCustomerTables[0].number || availableCustomerTables[0].id);
+      }
+    } else {
+      setTableNumber("");
+    }
+  }, [availableCustomerTables, tableNumber]);
 
   // Co-working Booking Modal State
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [selectedSpaceForBooking, setSelectedSpaceForBooking] = useState<CoworkingSpaceItem | null>(null);
   const [bookingDate, setBookingDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [bookingStartTime, setBookingStartTime] = useState<string>("09:00");
   const [bookingDuration, setBookingDuration] = useState<number>(2); // hours
   const [bookingGuests, setBookingGuests] = useState<number>(1);
-  const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"QRIS" | "CASH">("QRIS");
+  const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"QRIS" | "CASH" | "EDC">("QRIS");
+  const [bookingNotes, setBookingNotes] = useState<string>("");
 
   // Guest Authentication & Interceptor State
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalMode, setAuthModalMode] = useState<"LOGIN" | "REGISTER">("REGISTER");
   const [pendingActionAfterAuth, setPendingActionAfterAuth] = useState<"CHECKOUT_FNB" | "BOOKING_COWORK" | null>(null);
+
+  // Receipt Modal States for Customer Portal
+  const [receiptModalFnb, setReceiptModalFnb] = useState<POSReceiptData | null>(null);
+  const [isReceiptModalFnbOpen, setIsReceiptModalFnbOpen] = useState<boolean>(false);
+  const [receiptModalCowork, setReceiptModalCowork] = useState<CoworkingReceiptData | null>(null);
+  const [isReceiptModalCoworkOpen, setIsReceiptModalCoworkOpen] = useState<boolean>(false);
 
   // React to URL search param changes
   useEffect(() => {
@@ -200,7 +287,7 @@ function CustomerPortalContent() {
   }, [urlTab]);
 
   useEffect(() => {
-    if (urlPartner && FNB_PARTNERS.some((p) => p.id === urlPartner)) {
+    if (urlPartner && FNB_PARTNERS.some((p) => p.id === urlPartner) && isTenantActive(urlPartner)) {
       setActivePartnerId(urlPartner);
     }
   }, [urlPartner]);
@@ -235,10 +322,29 @@ function CustomerPortalContent() {
           m.name.toLowerCase() === user.name.toLowerCase()
       );
       if (match) return match;
-      return members[0];
+
+      // Safe fallback synthesized directly from the active user object (NEVER fallback to members[0])
+      return {
+        id: user.id || `mem-${user.name.toLowerCase().replace(/\s+/g, "-")}`,
+        name: user.name,
+        phone: user.phone || "",
+        email: user.email || "",
+        tier: "Bronze" as const,
+        points: 0,
+        totalSpend: 0,
+        totalVisits: 1,
+        favoriteItem: "-",
+        lastVisit: "-",
+        registeredOutletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
+        registeredOutletName: activeOutlet?.name || "Singaraja",
+        status: "ACTIVE" as const,
+        joinedDate: new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }),
+        pointHistory: [],
+        tierHistory: [],
+      };
     }
     return null;
-  }, [user, isCustomerLoggedIn, members]);
+  }, [user, isCustomerLoggedIn, members, activeOutletId, activeOutlet]);
 
   // Automatically sync outlet scope to customer's registered branch
   useEffect(() => {
@@ -249,11 +355,12 @@ function CustomerPortalContent() {
 
   // Customer Orders (Filtered strictly to logged in customer, empty if Guest)
   const customerOrders = useMemo(() => {
-    if (!isCustomerLoggedIn) return [];
-    const custName = currentMember?.name || user?.name;
+    if (!isCustomerLoggedIn || !user) return [];
+    const custName = currentMember?.name?.trim() || user?.name?.trim();
     if (!custName) return [];
+    const targetLower = custName.toLowerCase();
     return orders.filter(
-      (o) => o.customerName.toLowerCase() === custName.toLowerCase()
+      (o) => o.customerName && o.customerName.trim().toLowerCase() === targetLower
     );
   }, [orders, currentMember, user, isCustomerLoggedIn]);
 
@@ -273,56 +380,42 @@ function CustomerPortalContent() {
 
   // Customer Coworking Bookings (Filtered strictly to logged in customer, empty if Guest)
   const customerBookings = useMemo(() => {
-    if (!isCustomerLoggedIn) return [];
-    const custName = currentMember?.name || user?.name;
+    if (!isCustomerLoggedIn || !user) return [];
+    const custName = currentMember?.name?.trim() || user?.name?.trim();
     if (!custName) return [];
+    const targetLower = custName.toLowerCase();
     return bookings.filter(
-      (b) => b.guestName.toLowerCase().includes(custName.toLowerCase())
+      (b) => b.guestName && b.guestName.trim().toLowerCase().includes(targetLower)
     );
   }, [bookings, currentMember, user, isCustomerLoggedIn]);
 
   // Active Partner Object Memo
   const activePartner = useMemo(() => {
-    return FNB_PARTNERS.find((p) => p.id === activePartnerId) || FNB_PARTNERS[0];
-  }, [activePartnerId]);
+    return (
+      activeFnbPartners.find((p) => p.id === activePartnerId) ||
+      activeFnbPartners[0] ||
+      FNB_PARTNERS[0]
+    );
+  }, [activeFnbPartners, activePartnerId]);
 
   const handleSelectPartner = (targetPartnerId: string) => {
-    if (targetPartnerId === activePartnerId) return;
-
-    // Check if cart has items from another partner
-    const hasItemsFromOtherPartner = cart.some(
-      (item) => item.product.tenantId && item.product.tenantId !== targetPartnerId
-    );
-
-    if (hasItemsFromOtherPartner && cart.length > 0) {
-      setPartnerSwitchModal({ isOpen: true, targetPartnerId });
-    } else {
-      setActivePartnerId(targetPartnerId);
-      setMenuCatFilter("ALL");
-    }
-  };
-
-  const confirmPartnerSwitch = () => {
-    if (partnerSwitchModal) {
-      setCart([]);
-      setActivePartnerId(partnerSwitchModal.targetPartnerId);
-      setMenuCatFilter("ALL");
-      setPartnerSwitchModal(null);
-      showToast("Keranjang dikosongkan untuk beralih ke mitra baru.");
-    }
+    setActivePartnerId(targetPartnerId);
+    setMenuCatFilter("ALL");
   };
 
   // Menu Categories scoped to active partner
   const menuCategories = useMemo(() => {
+    if (isMounted && !isTenantActive(activePartnerId)) return ["ALL"];
     const partnerProducts = filteredProducts.filter(
       (p) => (p.tenantId || "tenant-ks") === activePartnerId && p.status === "ACTIVE"
     );
     const cats = Array.from(new Set(partnerProducts.map((p) => p.category)));
     return ["ALL", ...cats];
-  }, [filteredProducts, activePartnerId]);
+  }, [filteredProducts, activePartnerId, tenantSettingsVersion, isMounted]);
 
   // Filtered Menu Items scoped to active partner (No mixing of products)
   const filteredMenuItems = useMemo(() => {
+    if (isMounted && !isTenantActive(activePartnerId)) return [];
     return filteredProducts.filter((item) => {
       const matchPartner = (item.tenantId || "tenant-ks") === activePartnerId;
       const matchStatus = item.status === "ACTIVE";
@@ -332,7 +425,7 @@ function CustomerPortalContent() {
         item.category.toLowerCase().includes(searchQuery.toLowerCase());
       return matchPartner && matchStatus && matchCat && matchSearch;
     });
-  }, [filteredProducts, activePartnerId, menuCatFilter, searchQuery]);
+  }, [filteredProducts, activePartnerId, menuCatFilter, searchQuery, tenantSettingsVersion, isMounted]);
 
   // Filtered Coworking Spaces
   const filteredSpaces = useMemo(() => {
@@ -350,8 +443,8 @@ function CustomerPortalContent() {
   const tenantMap = useMemo(() => {
     const map = new Map<string, { name: string; logoUrl?: string }>();
     FNB_PARTNERS.forEach((partner) => {
-      map.set(partner.id, { 
-        name: partner.name, 
+      map.set(partner.id, {
+        name: partner.name,
       });
     });
     return map;
@@ -363,72 +456,167 @@ function CustomerPortalContent() {
   ]);
   const [selectedVoucherId, setSelectedVoucherId] = useState<string>("");
 
+  // Promo Lifecycle & Voucher Codes (AVAILABLE -> CLAIMED -> USED)
+  const [claimedPromoIds, setClaimedPromoIds] = useState<string[]>(["promo-dago20"]);
+  const [usedPromoIds, setUsedPromoIds] = useState<string[]>([]);
+  const [voucherInputCode, setVoucherInputCode] = useState<string>("");
+  const [appliedVoucherPromo, setAppliedVoucherPromo] = useState<PromoConfig | null>(null);
+  const [voucherValidationMsg, setVoucherValidationMsg] = useState<{ type: "SUCCESS" | "ERROR"; text: string } | null>(null);
+
+  // Co-Working Voucher States
+  const [coworkVoucherCode, setCoworkVoucherCode] = useState<string>("");
+  const [appliedCoworkPromo, setAppliedCoworkPromo] = useState<PromoConfig | null>(null);
+  const [coworkVoucherValidationMsg, setCoworkVoucherValidationMsg] = useState<{ type: "SUCCESS" | "ERROR"; text: string } | null>(null);
+
   // Cart Calculations
   const cartTotalItems = useMemo(() => {
     return cart.reduce((sum, item) => sum + item.quantity, 0);
   }, [cart]);
 
-  const activePromo = useMemo(() => {
-    if (!settings.promos) return undefined;
-    const currentSubtotal = cart.reduce((sum, item) => sum + item.product.basePrice * item.quantity, 0);
+  const rawCartSubtotal = useMemo(() => {
+    return cart.reduce(
+      (sum, item) => sum + (Number(item.product.basePrice) || (item.product as any).price || 0) * item.quantity,
+      0
+    );
+  }, [cart]);
 
+  const autoDetectedPromo = useMemo(() => {
+    if (!settings?.promos) return undefined;
     for (const promo of settings.promos) {
-      if (checkPromoValidity(promo, currentSubtotal)) {
-        const hasEligible = cart.some(ci => 
-          isPromoEligibleForItem({
-            productId: ci.product.id,
-            category: ci.product.category,
-            tenantId: ci.product.tenantId,
-            quantity: ci.quantity,
-            unitPrice: ci.product.basePrice
-          }, promo)
+      if (promo.scope === "COWORKING") continue;
+      if (checkPromoValidity(promo, rawCartSubtotal, { scope: "FNB", tenantId: activePartnerId }).isValid) {
+        const hasEligible = cart.some((ci) =>
+          isPromoEligibleForItem(
+            {
+              productId: ci.product.id,
+              category: ci.product.category,
+              tenantId: ci.product.tenantId,
+              quantity: ci.quantity,
+              unitPrice: Number(ci.product.basePrice) || (ci.product as any).price || 0,
+            },
+            promo
+          )
         );
         if (hasEligible) return promo;
       }
     }
     return undefined;
-  }, [settings.promos, cart]);
+  }, [settings?.promos, rawCartSubtotal, cart, activePartnerId]);
+
+  const effectiveFnbPromo = useMemo(() => {
+    if (appliedVoucherPromo) return appliedVoucherPromo;
+    return autoDetectedPromo;
+  }, [appliedVoucherPromo, autoDetectedPromo]);
 
   const selectedVoucher = useMemo(() => {
     return myVouchers.find((v) => v.id === selectedVoucherId);
   }, [myVouchers, selectedVoucherId]);
 
   const cartPricing = useMemo(() => {
-    const items = cart.map((c) => ({ 
+    const items = cart.map((c) => ({
       productId: c.product.id,
       category: c.product.category,
       tenantId: c.product.tenantId,
-      quantity: c.quantity, 
-      unitPrice: c.product.basePrice 
+      quantity: c.quantity,
+      unitPrice: Number(c.product.basePrice) || (c.product as any).price || 0,
     }));
-    const basePricing = calculateOrderPricing(items, activePromo, settings.taxRatePercent / 100);
-    
+    const taxRate = (settings?.taxRatePercent !== undefined ? settings.taxRatePercent : 10) / 100;
+    const basePricing = calculateOrderPricing(items, effectiveFnbPromo, taxRate);
+
     // Apply custom voucher if selected
     if (selectedVoucher) {
       let voucherDisc = 0;
       if (selectedVoucher.discountType === "FIXED") {
         voucherDisc = Math.min(basePricing.originalSubtotal, selectedVoucher.discountValue);
       } else {
-        voucherDisc = Math.round((basePricing.originalSubtotal * selectedVoucher.discountValue) / 100);
+        voucherDisc = Math.round((basePricing.originalSubtotal * (selectedVoucher.discountValue || 0)) / 100);
       }
-      const newDisc = Math.max(basePricing.discountAmount, voucherDisc);
+      const newDisc = Math.min(basePricing.originalSubtotal, Math.max(basePricing.discountAmount, voucherDisc));
       const taxable = Math.max(0, basePricing.originalSubtotal - newDisc);
-      const tax = Math.round(taxable * (settings.taxRatePercent / 100));
+      const tax = Math.round(taxable * taxRate);
       return {
         ...basePricing,
         discountAmount: newDisc,
+        subtotalAfterDiscount: taxable,
         tax,
         total: taxable + tax,
       };
     }
 
     return basePricing;
-  }, [cart, activePromo, selectedVoucher, settings.taxRatePercent]);
+  }, [cart, effectiveFnbPromo, selectedVoucher, settings?.taxRatePercent]);
 
   const cartSubtotal = cartPricing.originalSubtotal;
   const cartDiscountAmount = cartPricing.discountAmount;
   const cartTax = cartPricing.tax;
   const cartGrandTotal = cartPricing.total;
+
+  // Voucher validation handlers
+  const handleApplyVoucherCode = (codeToApply?: string) => {
+    const code = (codeToApply !== undefined ? codeToApply : voucherInputCode).trim();
+    if (!code) {
+      setAppliedVoucherPromo(null);
+      setVoucherValidationMsg(null);
+      return;
+    }
+    const res = validateVoucherCode(code, settings.promos || [], cartSubtotal, {
+      customerId: currentMember?.id || user?.id,
+      scope: "FNB",
+      tenantId: activePartnerId,
+    });
+    if (res.isValid && res.promo) {
+      setAppliedVoucherPromo(res.promo);
+      setVoucherValidationMsg({
+        type: "SUCCESS",
+        text: `Voucher "${res.promo.code || res.promo.name}" aktif! Hemat Rp ${res.discountAmount.toLocaleString("id-ID")}`,
+      });
+      showToast(`Voucher ${res.promo.code || res.promo.name} berhasil diterapkan!`);
+    } else {
+      setAppliedVoucherPromo(null);
+      setVoucherValidationMsg({
+        type: "ERROR",
+        text: res.reason || "Voucher tidak valid.",
+      });
+    }
+  };
+
+  const handleApplyCoworkVoucher = (codeToApply?: string) => {
+    const code = (codeToApply !== undefined ? codeToApply : coworkVoucherCode).trim();
+    if (!code) {
+      setAppliedCoworkPromo(null);
+      setCoworkVoucherValidationMsg(null);
+      return;
+    }
+    const rate = selectedSpaceForBooking?.hourlyRate || 15000;
+    const baseAmount = rate * bookingDuration;
+    const res = validateVoucherCode(code, settings.promos || [], baseAmount, {
+      customerId: currentMember?.id || user?.id,
+      scope: "COWORKING",
+    });
+    if (res.isValid && res.promo) {
+      setAppliedCoworkPromo(res.promo);
+      setCoworkVoucherValidationMsg({
+        type: "SUCCESS",
+        text: `Voucher "${res.promo.code || res.promo.name}" aktif! Hemat Rp ${res.discountAmount.toLocaleString("id-ID")}`,
+      });
+      showToast(`Voucher ${res.promo.code || res.promo.name} berhasil diterapkan!`);
+    } else {
+      setAppliedCoworkPromo(null);
+      setCoworkVoucherValidationMsg({
+        type: "ERROR",
+        text: res.reason || "Voucher tidak valid untuk Co-Working.",
+      });
+    }
+  };
+
+  const handleClaimPromo = (promo: PromoConfig) => {
+    if (claimedPromoIds.includes(promo.id)) {
+      showToast(`Voucher "${promo.code || promo.name}" sudah Anda klaim.`);
+      return;
+    }
+    setClaimedPromoIds((prev) => [...prev, promo.id]);
+    showToast(`Berhasil klaim voucher "${promo.code || promo.name}"!`);
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -438,16 +626,6 @@ function CustomerPortalContent() {
   // Cart Operations
   const addToCart = (product: MasterProduct) => {
     if (!product.isAvailable) return;
-
-    // Check if cart already has items from another partner
-    const hasItemsFromOtherPartner = cart.some(
-      (item) => item.product.tenantId && item.product.tenantId !== product.tenantId
-    );
-
-    if (hasItemsFromOtherPartner && product.tenantId) {
-      setPartnerSwitchModal({ isOpen: true, targetPartnerId: product.tenantId });
-      return;
-    }
 
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
@@ -477,8 +655,19 @@ function CustomerPortalContent() {
     );
   };
 
-  const executeFnbOrder = () => {
+  const executeFnbOrder = (explicitCustomer?: { name: string; phone?: string; email?: string }) => {
     if (cart.length === 0) return;
+
+    // Explicit identity resolution: explicit argument > currentMember > user
+    const resolvedName = explicitCustomer?.name?.trim() || currentMember?.name?.trim() || user?.name?.trim();
+
+    if (!resolvedName) {
+      showToast("Gagal memproses pesanan: Silakan masuk atau daftar akun terlebih dahulu.");
+      setPendingActionAfterAuth("CHECKOUT_FNB");
+      setAuthModalMode("REGISTER");
+      setIsAuthModalOpen(true);
+      return;
+    }
 
     const newOrderItems = cart.map((ci, idx) => ({
       id: `it-${Date.now()}-${idx}`,
@@ -486,23 +675,27 @@ function CustomerPortalContent() {
       tenantId: ci.product.tenantId,
       productName: ci.product.name,
       quantity: ci.quantity,
-      unitPrice: ci.product.basePrice,
+      unitPrice: Number(ci.product.basePrice) || (ci.product as any).price || 0,
       modifiers: ci.notes ? [ci.notes] : undefined,
     }));
-
-    const customerName = currentMember?.name || user?.name || "Pelanggan Member";
 
     // 1. Create order with NEW status & PENDING payment status
     const newOrder = createOrder({
       tableNumber: orderType === "DINE_IN" ? tableNumber : "TAKEAWAY",
-      customerName,
+      customerName: resolvedName,
       orderType,
       items: newOrderItems,
       subtotal: cartSubtotal,
       tax: cartTax,
       total: cartGrandTotal,
       discount: cartDiscountAmount > 0 ? cartDiscountAmount : undefined,
-      promoId: selectedVoucher ? selectedVoucher.title : (activePromo ? activePromo.name : undefined),
+      promoId: selectedVoucher
+        ? selectedVoucher.title
+        : effectiveFnbPromo
+        ? effectiveFnbPromo.code
+          ? `[${effectiveFnbPromo.code}] ${effectiveFnbPromo.name}`
+          : effectiveFnbPromo.name
+        : undefined,
       outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
       outletName: activeOutlet?.name || "Singaraja",
       status: "NEW",
@@ -511,9 +704,16 @@ function CustomerPortalContent() {
       notes: orderNotes || undefined,
     });
 
+    if (effectiveFnbPromo) {
+      setUsedPromoIds((prev) => [...prev, effectiveFnbPromo.id]);
+    }
+
     // 2. Clear cart & close drawer
     setCart([]);
     setOrderNotes("");
+    setVoucherInputCode("");
+    setAppliedVoucherPromo(null);
+    setVoucherValidationMsg(null);
     setIsCheckoutOpen(false);
 
     // 3. Open Waiting for Payment modal
@@ -531,6 +731,12 @@ function CustomerPortalContent() {
       setPendingActionAfterAuth("CHECKOUT_FNB");
       setAuthModalMode("REGISTER");
       setIsAuthModalOpen(true);
+      return;
+    }
+
+    // Dine-In Table Availability Guard
+    if (orderType === "DINE_IN" && (!tableNumber || availableCustomerTables.length === 0)) {
+      showToast("Semua meja di outlet ini sedang penuh. Silakan pilih opsi Bawa Pulang (Takeaway).");
       return;
     }
 
@@ -605,43 +811,131 @@ function CustomerPortalContent() {
     showToast(`Pesanan #${targetOrder.orderNumber} telah dibatalkan.`);
   };
 
+  // Check availability considering space + date + time range overlap
+  const checkSlotAvailability = (
+    spaceId: string,
+    targetDate: string,
+    startHour: number,
+    durationHours: number
+  ): { isAvailable: boolean; reason?: string; conflictingBooking?: any } => {
+    const space = spaces.find((s) => s.id === spaceId);
+    const maxCapacity = space?.type === "HOT_DESK" ? (space.capacity || 8) : 1;
+    const targetEndHour = startHour + durationHours;
+
+    const activeBookings = bookings.filter(
+      (b) =>
+        b.spaceId === spaceId &&
+        b.date === targetDate &&
+        b.checkInStatus !== "CANCELLED"
+    );
+
+    for (let h = startHour; h < targetEndHour; h++) {
+      const overlapping = activeBookings.filter((b) => {
+        const bStart = parseHour(b.startTime);
+        const bEnd = bStart + (b.duration || 1);
+        return h >= bStart && h < bEnd;
+      });
+
+      if (overlapping.length >= maxCapacity) {
+        return {
+          isAvailable: false,
+          reason: "Sudah dibooking",
+          conflictingBooking: overlapping[0],
+        };
+      }
+    }
+
+    return { isAvailable: true };
+  };
+
   // Coworking Booking Submission
   const handleOpenBookingModal = (space: CoworkingSpaceItem) => {
     setSelectedSpaceForBooking(space);
+    const today = new Date().toISOString().split("T")[0];
+    setBookingDate(today);
+    setBookingDuration(2);
+    setBookingGuests(1);
+    setBookingPaymentMethod("QRIS");
+    setBookingNotes("");
+
+    // Auto pick first available slot for today
+    const firstAvail = COWORKING_TIME_SLOTS.find((slot) => {
+      const h = parseHour(slot);
+      return checkSlotAvailability(space.id, today, h, 2).isAvailable;
+    }) || "09:00";
+    setBookingStartTime(firstAvail);
+
     setIsBookingModalOpen(true);
   };
 
-  const executeCoworkingBooking = () => {
+  const executeCoworkingBooking = (explicitCustomer?: { name: string; phone?: string; email?: string }) => {
     if (!selectedSpaceForBooking) return;
 
+    const resolvedName = explicitCustomer?.name?.trim() || currentMember?.name?.trim() || user?.name?.trim();
+    const resolvedPhone = explicitCustomer?.phone?.trim() || currentMember?.phone?.trim() || user?.phone?.trim() || "+62 819-1122-3344";
+    const resolvedEmail = explicitCustomer?.email?.trim() || currentMember?.email?.trim() || user?.email?.trim() || "customer@dagoeng.com";
+
+    if (!resolvedName) {
+      showToast("Gagal memproses booking: Silakan masuk atau daftar akun terlebih dahulu.");
+      setPendingActionAfterAuth("BOOKING_COWORK");
+      setAuthModalMode("REGISTER");
+      setIsAuthModalOpen(true);
+      return;
+    }
+
+    // Availability validation guard before confirming booking
+    const startH = parseHour(bookingStartTime);
+    const availability = checkSlotAvailability(
+      selectedSpaceForBooking.id,
+      bookingDate,
+      startH,
+      bookingDuration
+    );
+
+    if (!availability.isAvailable) {
+      showToast(`Slot waktu ${bookingStartTime} pada ${bookingDate} sudah terisi. Silakan pilih jam lain.`);
+      return;
+    }
+
     const rate = selectedSpaceForBooking.hourlyRate || 15000;
-    const totalAmount = rate * bookingDuration;
-    const customerName = currentMember?.name || user?.name || "Pelanggan Member";
+    const subtotal = rate * bookingDuration;
+    const taxRate = (settings?.taxRatePercent !== undefined ? settings.taxRatePercent : 10) / 100;
+    const calc = calculateCoworkingPricing(subtotal, appliedCoworkPromo || undefined, taxRate);
 
     // 1. Create booking with PENDING payment status (requires payment before use)
     const newBooking = bookSpace({
       spaceId: selectedSpaceForBooking.id,
       spaceName: selectedSpaceForBooking.name,
       spaceType: selectedSpaceForBooking.type,
-      guestName: customerName,
-      guestPhone: currentMember?.phone || user?.phone || "+62 819-1122-3344",
-      guestEmail: currentMember?.email || user?.email || "customer@dagoeng.com",
+      guestName: resolvedName,
+      guestPhone: resolvedPhone,
+      guestEmail: resolvedEmail,
       company: "Member Dago",
       bookingType: "HOURLY",
       date: bookingDate,
-      startTime: "09:00 WITA",
+      startTime: `${bookingStartTime} WITA`,
       duration: bookingDuration,
-      price: totalAmount,
-      discount: 0,
-      totalAmount,
+      price: subtotal,
+      discount: calc.discountAmount,
+      totalAmount: calc.total,
       paidAmount: 0,
-      remainingAmount: totalAmount,
+      remainingAmount: calc.total,
       paymentMethod: bookingPaymentMethod,
       paymentStatus: "PENDING",
-      notes: `Booking via Customer Portal (${bookingGuests} orang)`,
+      notes: bookingNotes
+        ? `${bookingNotes} (${bookingGuests} orang)${appliedCoworkPromo ? ` [Promo: ${appliedCoworkPromo.code || appliedCoworkPromo.name}]` : ""}`
+        : `Booking via Customer Portal (${bookingGuests} orang)${appliedCoworkPromo ? ` [Promo: ${appliedCoworkPromo.code || appliedCoworkPromo.name}]` : ""}`,
     });
 
+    if (appliedCoworkPromo) {
+      setUsedPromoIds((prev) => [...prev, appliedCoworkPromo.id]);
+    }
+
     setIsBookingModalOpen(false);
+    setBookingNotes("");
+    setCoworkVoucherCode("");
+    setAppliedCoworkPromo(null);
+    setCoworkVoucherValidationMsg(null);
     setWaitingPaymentOrder(null);
     setWaitingPaymentBooking(newBooking);
     setIsWaitingPaymentOpen(true);
@@ -663,14 +957,14 @@ function CustomerPortalContent() {
     executeCoworkingBooking();
   };
 
-  const handleAuthSuccess = () => {
+  const handleAuthSuccess = (customerData?: { name: string; phone?: string; email?: string }) => {
     setIsAuthModalOpen(false);
     if (pendingActionAfterAuth === "CHECKOUT_FNB") {
       setPendingActionAfterAuth(null);
-      executeFnbOrder();
+      executeFnbOrder(customerData);
     } else if (pendingActionAfterAuth === "BOOKING_COWORK") {
       setPendingActionAfterAuth(null);
-      executeCoworkingBooking();
+      executeCoworkingBooking(customerData);
     }
   };
 
@@ -854,7 +1148,7 @@ function CustomerPortalContent() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col justify-between font-sans pb-24 sm:pb-8 selection:bg-brand-orange selection:text-white">
-      
+
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl shadow-xl border border-slate-700 text-xs font-semibold flex items-center space-x-2 animate-in fade-in slide-in-from-top-3 duration-300">
@@ -863,39 +1157,17 @@ function CustomerPortalContent() {
         </div>
       )}
 
-      {/* 1. CLEAN HEADER (Branch indicator in top header, no clutter) */}
+      {/* 1. CLEAN & NEUTRAL HEADER (No DAGO/Mitra branding logos, focused on neutral navigation & branch) */}
       <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-30 shadow-xs transition-all">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          
-          <div className="flex items-center space-x-3">
-            <Link href="/" className="w-8 h-10 relative flex-shrink-0 group">
-              <Image
-                src="/logo-dago.png"
-                alt="DagoEng Logo"
-                width={32}
-                height={40}
-                priority
-                className="object-contain transition-transform duration-300 group-hover:scale-105"
-              />
-            </Link>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h1 className="font-black text-sm sm:text-base tracking-tight text-slate-900 leading-none">
-                  DagoEng <span className="text-brand-orange">Customer Portal</span>
-                </h1>
-                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 font-bold">
-                  ● Live
-                </Badge>
-              </div>
 
-              {/* Clean Branch Location Indicator (Auto Scoped) */}
-              <div className="text-[11px] text-slate-500 font-medium flex items-center space-x-1.5 mt-0.5">
-                <Store className="w-3.5 h-3.5 text-brand-orange" />
-                <span className="text-slate-400">Cabang:</span>
-                <span className="font-black text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80 text-[10px]">
-                  {currentMember?.registeredOutletName || activeOutlet?.name || "Singaraja (Outlet Utama)"}
-                </span>
-              </div>
+          <div className="flex items-center space-x-2.5">
+            <div className="flex items-center space-x-1.5 bg-slate-100/90 border border-slate-200/80 px-2.5 py-1.5 rounded-xl text-xs">
+              <MapPin className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-slate-400 text-[11px]">Cabang:</span>
+              <span className="font-bold text-slate-800 text-[11px]">
+                {currentMember?.registeredOutletName || activeOutlet?.name || "Singaraja (Outlet Utama)"}
+              </span>
             </div>
           </div>
 
@@ -981,11 +1253,10 @@ function CustomerPortalContent() {
             <button
               key={t.key}
               onClick={() => handleTabChange(t.key as CustomerTab)}
-              className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 ${
-                activeTab === t.key
-                  ? "bg-slate-900 text-white shadow-xs scale-100"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-              }`}
+              className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 ${activeTab === t.key
+                ? "bg-slate-900 text-white shadow-xs scale-100"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
             >
               {t.icon}
               <span>{t.label}</span>
@@ -1019,7 +1290,7 @@ function CustomerPortalContent() {
             {/* ---------------------------------------------------- */}
             {activeTab === "HOME" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                
+
                 {/* Greeting & Summary Banner (Guest vs Logged In Member) */}
                 {!isCustomerLoggedIn ? (
                   <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 space-y-6 relative overflow-hidden">
@@ -1030,14 +1301,14 @@ function CustomerPortalContent() {
                       <div className="space-y-2 max-w-xl">
                         <div className="flex items-center space-x-2">
                           <span className="px-3 py-0.5 rounded-full bg-brand-orange/20 text-brand-orange text-[10px] font-bold tracking-wide uppercase border border-brand-orange/30">
-                            Dago Creative Hub • Customer Portal
+                            Pemesanan Mandiri & Layanan Mitra
                           </span>
                         </div>
                         <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white">
-                          Nikmati Kuliner Artisan & Coworking Nyaman ✨
+                          Nikmati Sajian Kuliner Mitra & Layanan Terbaik ✨
                         </h2>
                         <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                          Pesan makanan & minuman artisan atau booking ruang kerja modern tanpa ribet. Kumpulkan poin loyalty untuk setiap transaksi.
+                          Pesan makanan & minuman lezat dari mitra favorit Anda atau booking ruang kerja modern. Kumpulkan poin loyalty untuk setiap transaksi.
                         </p>
                       </div>
 
@@ -1237,6 +1508,122 @@ function CustomerPortalContent() {
                   </Card>
                 )}
 
+                {/* Promo & Voucher Showcase Section */}
+                {settings.promos && settings.promos.filter((p: PromoConfig) => p.isActive).length > 0 && (
+                  <div className="space-y-3.5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-black text-base text-slate-900 flex items-center space-x-2">
+                          <Tag className="w-4 h-4 text-emerald-600" />
+                          <span>Promo & Kupon Spesial Hari Ini</span>
+                        </h3>
+                        <p className="text-xs text-slate-500">Klaim voucher dan gunakan kodenya saat checkout untuk hemat lebih banyak</p>
+                      </div>
+                      <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 text-[10px] font-bold">
+                        {settings.promos.filter((p: PromoConfig) => p.isActive).length} Promo Aktif
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {settings.promos
+                        .filter((p: PromoConfig) => p.isActive)
+                        .map((promo: PromoConfig) => {
+                          const isUsed = usedPromoIds.includes(promo.id);
+                          const isClaimed = claimedPromoIds.includes(promo.id);
+                          const isCowork = promo.scope === "COWORKING";
+
+                          return (
+                            <Card
+                              key={promo.id}
+                              className="p-4 rounded-3xl border border-slate-200/90 bg-white shadow-xs hover:border-emerald-300 hover:shadow-md transition-all flex flex-col justify-between space-y-3 relative overflow-hidden group"
+                            >
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-1.5">
+                                    <span className="px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 font-mono text-[11px] font-black tracking-wider border border-emerald-200">
+                                      {promo.code || promo.name}
+                                    </span>
+                                    <Badge
+                                      variant="outline"
+                                      className={`text-[9px] font-bold ${
+                                        isCowork ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-orange-50 text-orange-700 border-orange-200"
+                                      }`}
+                                    >
+                                      {promo.scope === "COWORKING" ? "Co-Working" : promo.scope === "FNB" ? "Kuliner F&B" : "Semua Layanan"}
+                                    </Badge>
+                                  </div>
+
+                                  <span className="text-xs font-black text-emerald-600">
+                                    {promo.discountType === "PERCENTAGE"
+                                      ? `Diskon ${promo.discountValue}%`
+                                      : `-${formatCurrencyIDR(promo.discountValue)}`}
+                                  </span>
+                                </div>
+
+                                <h4 className="font-bold text-xs text-slate-900 line-clamp-1">{promo.name}</h4>
+                                <p className="text-[11px] text-slate-500 leading-relaxed line-clamp-2">
+                                  {promo.description || (promo.discountType === "PERCENTAGE" ? `Potongan ${promo.discountValue}% transaksi` : `Potongan langsung ${formatCurrencyIDR(promo.discountValue)}`)}
+                                </p>
+                              </div>
+
+                              <div className="space-y-2 pt-2 border-t border-slate-100">
+                                <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                                  <span>
+                                    {promo.minimumAmount ? `Min. Belanja ${formatCurrencyIDR(promo.minimumAmount)}` : "Tanpa Min. Belanja"}
+                                  </span>
+                                  <span>
+                                    {promo.validUntil ? `s.d. ${new Date(promo.validUntil).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}` : "Berlaku Selamanya"}
+                                  </span>
+                                </div>
+
+                                {isUsed ? (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled
+                                    className="w-full h-8 text-xs font-bold bg-slate-100 text-slate-400 border border-slate-200 rounded-xl cursor-not-allowed"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                    <span>Sudah Digunakan</span>
+                                  </Button>
+                                ) : isClaimed ? (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (isCowork) {
+                                        handleTabChange("COWORKING");
+                                        setCoworkVoucherCode(promo.code || promo.name);
+                                      } else {
+                                        handleTabChange("MENU");
+                                        setVoucherInputCode(promo.code || promo.name);
+                                      }
+                                      showToast(`Kode ${promo.code || promo.name} siap digunakan di checkout!`);
+                                    }}
+                                    className="w-full h-8 text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-xl"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                                    <span>Tersimpan &bull; Pakai Sekarang</span>
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => handleClaimPromo(promo)}
+                                    className="w-full h-8 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-xl shadow-xs"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 mr-1 text-amber-400" />
+                                    <span>Klaim Voucher</span>
+                                  </Button>
+                                )}
+                              </div>
+                            </Card>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Explore Mitra Kuliner (F&B Partners Grid) */}
                 <div className="space-y-3.5">
                   <div className="flex items-center justify-between">
@@ -1260,51 +1647,59 @@ function CustomerPortalContent() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {FNB_PARTNERS.map((partner) => {
-                      const partnerProductCount = filteredProducts.filter(
-                        (p) => (p.tenantId || "tenant-ks") === partner.id && p.status === "ACTIVE"
-                      ).length;
-                      return (
-                        <div
-                          key={partner.id}
-                          onClick={() => {
-                            handleSelectPartner(partner.id);
-                            handleTabChange("MENU");
-                          }}
-                          className="bg-white border border-slate-200/90 hover:border-brand-orange/50 hover:shadow-lg rounded-3xl p-4 sm:p-5 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:-translate-y-1 group"
-                        >
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between">
-                              <div className="w-12 h-12 rounded-2xl bg-orange-50 text-brand-orange border border-orange-200 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                                {partner.icon}
+                    {activeFnbPartners.length === 0 ? (
+                      <div className="col-span-full p-8 text-center bg-white rounded-3xl border border-slate-200 text-slate-500 text-xs">
+                        <UtensilsCrossed className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                        <p className="font-bold text-slate-700">Semua mitra F&B sedang tutup sementara.</p>
+                        <p className="mt-1 text-slate-400">Silakan periksa kembali nanti atau hubungi staf operasional.</p>
+                      </div>
+                    ) : (
+                      activeFnbPartners.map((partner) => {
+                        const partnerProductCount = filteredProducts.filter(
+                          (p) => (p.tenantId || "tenant-ks") === partner.id && p.status === "ACTIVE"
+                        ).length;
+                        return (
+                          <div
+                            key={partner.id}
+                            onClick={() => {
+                              handleSelectPartner(partner.id);
+                              handleTabChange("MENU");
+                            }}
+                            className="bg-white border border-slate-200/90 hover:border-brand-orange/50 hover:shadow-lg rounded-3xl p-4 sm:p-5 flex flex-col justify-between cursor-pointer transition-all duration-300 hover:-translate-y-1 group"
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="w-12 h-12 rounded-2xl bg-orange-50 text-brand-orange border border-orange-200 flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
+                                  {partner.icon}
+                                </div>
+                                <Badge className="bg-slate-100 text-slate-700 text-[10px] font-bold">
+                                  {partner.badge}
+                                </Badge>
                               </div>
-                              <Badge className="bg-slate-100 text-slate-700 text-[10px] font-bold">
-                                {partner.badge}
-                              </Badge>
+                              <div>
+                                <h4 className="font-bold text-sm text-slate-900 group-hover:text-brand-orange transition-colors">
+                                  {partner.name}
+                                </h4>
+                                <p className="text-[11px] text-slate-400 font-medium">{partner.category}</p>
+                                <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">
+                                  {partner.desc}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <h4 className="font-bold text-sm text-slate-900 group-hover:text-brand-orange transition-colors">
-                                {partner.name}
-                              </h4>
-                              <p className="text-[11px] text-slate-400 font-medium">{partner.category}</p>
-                              <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">
-                                {partner.desc}
-                              </p>
-                            </div>
-                          </div>
 
-                          <div className="pt-3.5 mt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span className="text-[11px] font-semibold text-slate-500">
-                              {partnerProductCount} Menu Tersedia
-                            </span>
-                            <span className="text-brand-orange font-bold flex items-center group-hover:translate-x-1 transition-transform">
-                              <span>Pesan</span>
-                              <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
-                            </span>
+                            <div className="pt-3.5 mt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                              <span className="text-[11px] font-semibold text-slate-500">
+                                {partnerProductCount} Menu Tersedia
+                              </span>
+                              <span className="text-brand-orange font-bold flex items-center group-hover:translate-x-1 transition-transform">
+                                <span>Pesan</span>
+                                <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
@@ -1364,7 +1759,7 @@ function CustomerPortalContent() {
             {/* ---------------------------------------------------- */}
             {activeTab === "MENU" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                
+
                 {/* 1. Active Mitra Header Banner (Primary: Mitra, Secondary: Powered by DAGO) */}
                 <div className="p-5 sm:p-6 rounded-3xl bg-white border border-slate-200/90 shadow-xs space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1383,31 +1778,33 @@ function CustomerPortalContent() {
                         <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">{activePartner.desc}</p>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-1.5 self-start sm:self-center px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-500">
-                      <span>Powered by</span>
-                      <span className="font-black text-slate-800">DAGO</span>
-                    </div>
+
                   </div>
 
                   {/* Horizontal Segmented Partner Navigation Tabs */}
                   <div className="pt-3 border-t border-slate-100 flex items-center space-x-2 overflow-x-auto scrollbar-none pb-1">
-                    {FNB_PARTNERS.map((partner) => {
-                      const isSelected = activePartnerId === partner.id;
-                      return (
-                        <button
-                          key={partner.id}
-                          onClick={() => handleSelectPartner(partner.id)}
-                          className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all duration-200 flex items-center space-x-2 ${
-                            isSelected
+                    {activeFnbPartners.length === 0 ? (
+                      <span className="text-xs text-slate-500 font-medium py-1">
+                        Tidak ada mitra F&B yang aktif saat ini.
+                      </span>
+                    ) : (
+                      activeFnbPartners.map((partner) => {
+                        const isSelected = activePartnerId === partner.id;
+                        return (
+                          <button
+                            key={partner.id}
+                            onClick={() => handleSelectPartner(partner.id)}
+                            className={`px-4 py-2.5 rounded-2xl text-xs font-bold whitespace-nowrap transition-all duration-200 flex items-center space-x-2 ${isSelected
                               ? "bg-slate-900 text-white shadow-md shadow-slate-900/20 scale-[1.02]"
                               : "bg-slate-100/90 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
-                          }`}
-                        >
-                          <span className="text-sm">{partner.icon}</span>
-                          <span>{partner.name}</span>
-                        </button>
-                      );
-                    })}
+                              }`}
+                          >
+                            <span className="text-sm">{partner.icon}</span>
+                            <span>{partner.name}</span>
+                          </button>
+                        );
+                      })
+                    )}
                   </div>
                 </div>
 
@@ -1429,11 +1826,10 @@ function CustomerPortalContent() {
                       <button
                         key={cat}
                         onClick={() => setMenuCatFilter(cat)}
-                        className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 ${
-                          menuCatFilter === cat
-                            ? "bg-slate-900 text-white shadow-xs"
-                            : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
-                        }`}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all duration-200 ${menuCatFilter === cat
+                          ? "bg-slate-900 text-white shadow-xs"
+                          : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                          }`}
                       >
                         {cat === "ALL" ? "Semua Kategori" : cat}
                       </button>
@@ -1470,129 +1866,121 @@ function CustomerPortalContent() {
                     </div>
                   ) : (
                     filteredMenuItems.map((item) => {
-                    const isAvailable = item.isAvailable;
-                    const inCart = cart.find((ci) => ci.product.id === item.id);
+                      const isAvailable = item.isAvailable;
+                      const inCart = cart.find((ci) => ci.product.id === item.id);
 
-                    return (
-                      <div
-                        key={item.id}
-                        className={`bg-white border rounded-3xl p-5 shadow-xs flex flex-col justify-between gap-4 transition-all duration-300 ${
-                          !isAvailable
+                      return (
+                        <div
+                          key={item.id}
+                          className={`bg-white border rounded-3xl p-5 shadow-xs flex flex-col justify-between gap-4 transition-all duration-300 group ${!isAvailable
                             ? "opacity-60 bg-slate-50/80 border-slate-200"
                             : "border-slate-200/90 hover:border-brand-orange/40 hover:shadow-xl hover:-translate-y-1"
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-black text-brand-orange uppercase tracking-wider block">
-                              {(() => {
-                                const tenantInfo = item.tenantId ? tenantMap.get(item.tenantId) : null;
-                                const tName = tenantInfo?.name || activePartner.name || "Mitra F&B";
-                                return (
-                                  <span className="flex items-center space-x-1.5">
-                                    <span>{tName} • {item.category}</span>
-                                  </span>
-                                );
-                              })()}
-                            </span>
-                            {!isAvailable && (
-                              <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] font-bold">
-                                Habis
-                              </Badge>
-                            )}
-                          </div>
-
-                          <h3 className="font-bold text-base text-slate-900">{item.name}</h3>
-                          <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
-                            {item.description || "Menu pilihan dibuat dengan bahan berkualitas dan higienis."}
-                          </p>
-                        </div>
-
-                        <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                          <div className="space-y-0.5">
-                            <span className="font-black text-base text-slate-900 block">
-                              {formatCurrencyIDR(item.basePrice)}
-                            </span>
-                            {item.variants && item.variants.length > 0 && (
-                              <span className="text-[10px] text-slate-400 font-medium">
-                                {item.variants.length} Opsi Varian
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Add to Cart Actions */}
-                          {isAvailable ? (
-                            inCart ? (
-                              <div className="flex items-center space-x-2 bg-slate-100/90 p-1 rounded-2xl border border-slate-200">
-                                <button
-                                  onClick={() => updateCartQty(item.id, -1)}
-                                  className="w-7 h-7 rounded-xl bg-white text-slate-800 hover:bg-slate-200 flex items-center justify-center font-black text-xs shadow-2xs transition-all active:scale-90"
-                                >
-                                  <Minus className="w-3.5 h-3.5" />
-                                </button>
-                                <span className="font-black text-xs px-1.5 text-slate-900">
-                                  {inCart.quantity}
-                                </span>
-                                <button
-                                  onClick={() => updateCartQty(item.id, 1)}
-                                  className="w-7 h-7 rounded-xl bg-slate-900 text-white hover:bg-slate-800 flex items-center justify-center font-black text-xs shadow-2xs transition-all active:scale-90"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                </button>
+                            }`}
+                        >
+                          <div className="space-y-3">
+                            {/* Menu Photo Card Banner */}
+                            {item.imageUrl ? (
+                              <div className="relative w-full h-36 rounded-2xl overflow-hidden bg-slate-100 border border-slate-100">
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.name}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
                               </div>
                             ) : (
-                              <Button
-                                onClick={() => addToCart(item)}
-                                size="sm"
-                                className="bg-brand-orange text-white hover:bg-orange-600 font-bold text-xs h-9 px-4 rounded-xl shadow-xs shadow-orange-500/20 transition-all hover:scale-105 active:scale-95"
-                              >
-                                <Plus className="w-3.5 h-3.5 mr-1" />
-                                <span>Pesan</span>
+                              <div className="w-full h-24 rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50/50 border border-orange-100/50 flex items-center justify-center text-brand-orange/40">
+                                <UtensilsCrossed className="w-8 h-8 opacity-40" />
+                              </div>
+                            )}
+
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black text-brand-orange uppercase tracking-wider block">
+                                  {(() => {
+                                    const tenantInfo = item.tenantId ? tenantMap.get(item.tenantId) : null;
+                                    const tName = tenantInfo?.name || activePartner.name || "Mitra F&B";
+                                    return (
+                                      <span className="flex items-center space-x-1.5">
+                                        <span>{tName} • {item.category}</span>
+                                      </span>
+                                    );
+                                  })()}
+                                </span>
+                                {!isAvailable && (
+                                  <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] font-bold">
+                                    Habis
+                                  </Badge>
+                                )}
+                              </div>
+
+                              <h3 className="font-bold text-base text-slate-900 group-hover:text-brand-orange transition-colors">{item.name}</h3>
+                              <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed">
+                                {item.description || "Menu pilihan dibuat dengan bahan berkualitas dan higienis."}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                            <div className="space-y-0.5">
+                              <span className="font-black text-base text-slate-900 block">
+                                {formatCurrencyIDR(item.basePrice)}
+                              </span>
+                              {item.variants && item.variants.length > 0 && (
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  {item.variants.length} Opsi Varian
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Add to Cart Actions */}
+                            {isAvailable ? (
+                              inCart ? (
+                                <div className="flex items-center space-x-2 bg-slate-100/90 p-1 rounded-2xl border border-slate-200">
+                                  <button
+                                    onClick={() => updateCartQty(item.id, -1)}
+                                    className="w-7 h-7 rounded-xl bg-white text-slate-800 hover:bg-slate-200 flex items-center justify-center font-black text-xs shadow-2xs transition-all active:scale-90"
+                                  >
+                                    <Minus className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span className="font-black text-xs px-1.5 text-slate-900">
+                                    {inCart.quantity}
+                                  </span>
+                                  <button
+                                    onClick={() => updateCartQty(item.id, 1)}
+                                    className="w-7 h-7 rounded-xl bg-slate-900 text-white hover:bg-slate-800 flex items-center justify-center font-black text-xs shadow-2xs transition-all active:scale-90"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <Button
+                                  onClick={() => addToCart(item)}
+                                  size="sm"
+                                  className="bg-brand-orange text-white hover:bg-orange-600 font-bold text-xs h-9 px-4 rounded-xl shadow-xs shadow-orange-500/20 transition-all hover:scale-105 active:scale-95"
+                                >
+                                  <Plus className="w-3.5 h-3.5 mr-1" />
+                                  <span>Pesan</span>
+                                </Button>
+                              )
+                            ) : (
+                              <Button size="sm" disabled className="text-xs h-9 px-4 rounded-xl">
+                                Habis
                               </Button>
-                            )
-                          ) : (
-                            <Button size="sm" disabled className="text-xs h-9 px-4 rounded-xl">
-                              Habis
-                            </Button>
-                          )}
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })
-                )}
+                      );
+                    })
+                  )}
                 </div>
 
-                {/* Floating Bottom Cart Bar */}
-                {cart.length > 0 && (
-                  <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:w-96 z-40 bg-slate-950/90 backdrop-blur-xl text-white p-4 rounded-3xl shadow-2xl border border-slate-800 flex items-center justify-between animate-in slide-in-from-bottom-4 duration-300">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center space-x-2">
-                        <span className="bg-brand-orange text-white text-[10px] font-black px-2 py-0.5 rounded-full">
-                          {cartTotalItems} Item
-                        </span>
-                        <span className="text-xs text-slate-300 font-bold">Total Belanja</span>
-                      </div>
-                      <div className="text-base font-black text-white">
-                        {formatCurrencyIDR(cartGrandTotal)}{" "}
-                        <span className="text-[10px] text-slate-400 font-normal">(Termasuk PB1)</span>
-                      </div>
-                    </div>
 
-                    <Button
-                      onClick={() => setIsCheckoutOpen(true)}
-                      className="bg-brand-orange hover:bg-orange-600 text-white font-bold text-xs h-10 px-5 rounded-2xl shadow-md shadow-orange-500/30 transition-all hover:scale-105 active:scale-95"
-                    >
-                      <span>Checkout</span>
-                      <ArrowRight className="w-4 h-4 ml-1.5" />
-                    </Button>
-                  </div>
-                )}
 
                 {/* Checkout Modal */}
                 {isCheckoutOpen && (
                   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-                      
+
                       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                         <div className="flex items-center space-x-2.5">
                           <div className="w-8 h-8 rounded-xl bg-orange-100 text-brand-orange flex items-center justify-center font-bold">
@@ -1608,38 +1996,80 @@ function CustomerPortalContent() {
                         </button>
                       </div>
 
-                      {/* Cart Items List */}
-                      <div className="space-y-2.5 divide-y divide-slate-100 max-h-48 overflow-y-auto pr-1">
-                        {cart.map((ci) => (
-                          <div key={ci.product.id} className="pt-2 flex items-center justify-between text-xs">
-                            <div className="space-y-0.5">
-                              <span className="font-bold text-slate-900">{ci.product.name}</span>
-                              <p className="text-[11px] text-slate-400">
-                                {ci.quantity} x {formatCurrencyIDR(ci.product.basePrice)}
-                              </p>
-                            </div>
-                            <div className="flex items-center space-x-2.5">
-                              <span className="font-black text-slate-900">
-                                {formatCurrencyIDR(ci.product.basePrice * ci.quantity)}
-                              </span>
-                              <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg">
-                                <button
-                                  onClick={() => updateCartQty(ci.product.id, -1)}
-                                  className="w-5 h-5 bg-white text-slate-700 rounded flex items-center justify-center text-[10px] font-bold shadow-2xs"
-                                >
-                                  -
-                                </button>
-                                <span className="text-[11px] font-bold px-1.5">{ci.quantity}</span>
-                                <button
-                                  onClick={() => updateCartQty(ci.product.id, 1)}
-                                  className="w-5 h-5 bg-slate-900 text-white rounded flex items-center justify-center text-[10px] font-bold shadow-2xs"
-                                >
-                                  +
-                                </button>
+                      {/* Cart Items List Grouped by Mitra / Tenant */}
+                      <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                        {(() => {
+                          const tenantGroups = new Map<string, typeof cart>();
+                          cart.forEach((ci) => {
+                            const tId = ci.product.tenantId || "tenant-ks";
+                            if (!tenantGroups.has(tId)) {
+                              tenantGroups.set(tId, []);
+                            }
+                            tenantGroups.get(tId)!.push(ci);
+                          });
+
+                          return Array.from(tenantGroups.entries()).map(([tenantId, items]) => {
+                            const partner = FNB_PARTNERS.find((p) => p.id === tenantId);
+                            const groupSubtotal = items.reduce(
+                              (sum, ci) => sum + (Number(ci.product.basePrice) || (ci.product as any).price || 0) * ci.quantity,
+                              0
+                            );
+
+                            return (
+                              <div key={tenantId} className="p-3 bg-slate-50/90 rounded-2xl border border-slate-200/80 space-y-2">
+                                <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/60">
+                                  <div className="flex items-center space-x-1.5">
+                                    <span className="text-sm">{partner?.icon || "🍽️"}</span>
+                                    <span className="font-black text-xs text-slate-800">
+                                      {partner?.name || "Mitra Kuliner"}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-bold text-slate-500">
+                                    Subtotal: {formatCurrencyIDR(groupSubtotal)}
+                                  </span>
+                                </div>
+
+                                <div className="space-y-2 divide-y divide-slate-100/80">
+                                  {items.map((ci) => {
+                                    const itemPrice = Number(ci.product.basePrice) || (ci.product as any).price || 0;
+                                    return (
+                                      <div key={ci.product.id} className="pt-1.5 first:pt-0 flex items-center justify-between text-xs">
+                                        <div className="space-y-0.5">
+                                          <span className="font-bold text-slate-900">{ci.product.name}</span>
+                                          <p className="text-[11px] text-slate-400">
+                                            {ci.quantity} x {formatCurrencyIDR(itemPrice)}
+                                          </p>
+                                        </div>
+                                        <div className="flex items-center space-x-2.5">
+                                          <span className="font-black text-slate-900">
+                                            {formatCurrencyIDR(itemPrice * ci.quantity)}
+                                          </span>
+                                          <div className="flex items-center space-x-1 bg-white p-0.5 rounded-lg border border-slate-200">
+                                            <button
+                                              type="button"
+                                              onClick={() => updateCartQty(ci.product.id, -1)}
+                                              className="w-5 h-5 bg-slate-100 text-slate-700 rounded flex items-center justify-center text-[10px] font-bold shadow-2xs hover:bg-slate-200"
+                                            >
+                                              -
+                                            </button>
+                                            <span className="text-[11px] font-bold px-1.5">{ci.quantity}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => updateCartQty(ci.product.id, 1)}
+                                              className="w-5 h-5 bg-slate-900 text-white rounded flex items-center justify-center text-[10px] font-bold shadow-2xs hover:bg-slate-800"
+                                            >
+                                              +
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            </div>
-                          </div>
-                        ))}
+                            );
+                          });
+                        })()}
                       </div>
 
                       {/* Order Options Form */}
@@ -1648,22 +2078,20 @@ function CustomerPortalContent() {
                           <button
                             type="button"
                             onClick={() => setOrderType("DINE_IN")}
-                            className={`py-2.5 rounded-xl border text-center transition-all ${
-                              orderType === "DINE_IN"
-                                ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                                : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                            }`}
+                            className={`py-2.5 rounded-xl border text-center transition-all ${orderType === "DINE_IN"
+                              ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                              : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                              }`}
                           >
                             Makan di Tempat (Dine-In)
                           </button>
                           <button
                             type="button"
                             onClick={() => setOrderType("TAKEAWAY")}
-                            className={`py-2.5 rounded-xl border text-center transition-all ${
-                              orderType === "TAKEAWAY"
-                                ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                                : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                            }`}
+                            className={`py-2.5 rounded-xl border text-center transition-all ${orderType === "TAKEAWAY"
+                              ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                              : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                              }`}
                           >
                             Bawa Pulang (Takeaway)
                           </button>
@@ -1671,18 +2099,37 @@ function CustomerPortalContent() {
 
                         {orderType === "DINE_IN" && (
                           <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-700">Pilih Nomor Meja</label>
-                            <select
-                              value={tableNumber}
-                              onChange={(e) => setTableNumber(e.target.value)}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-orange/20"
-                            >
-                              <option value="T-01">Meja T-01 (Lantai 1)</option>
-                              <option value="T-02">Meja T-02 (Lantai 1)</option>
-                              <option value="T-03">Meja T-03 (Lantai 1 - Window)</option>
-                              <option value="T-04">Meja T-04 (Lantai 2 Mezzanine)</option>
-                              <option value="T-05">Meja T-05 (Outdoor Terrace)</option>
-                            </select>
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-bold text-slate-700">Pilih Nomor Meja</label>
+                              <span className="text-[10px] text-emerald-600 font-bold font-mono">
+                                {availableCustomerTables.length} Meja Siap
+                              </span>
+                            </div>
+                            {availableCustomerTables.length === 0 ? (
+                              <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700">
+                                ⚠️ Semua meja di {activeOutlet?.name || "outlet ini"} sedang terisi/penuh. Silakan pilih opsi Bawa Pulang (Takeaway) atau hubungi kasir/waiter.
+                              </div>
+                            ) : (
+                              <select
+                                value={tableNumber}
+                                onChange={(e) => setTableNumber(e.target.value)}
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-orange/20"
+                              >
+                                {filteredAreas.map((area) => {
+                                  const areaAvailableTables = area.tables.filter((t) => t.status === "AVAILABLE");
+                                  if (areaAvailableTables.length === 0) return null;
+                                  return (
+                                    <optgroup key={area.id} label={`${area.name} (${area.outletName})`}>
+                                      {areaAvailableTables.map((t) => (
+                                        <option key={t.id} value={t.number || t.id}>
+                                          Meja {t.number || t.id} — Kapasitas {t.cap} Orang
+                                        </option>
+                                      ))}
+                                    </optgroup>
+                                  );
+                                })}
+                              </select>
+                            )}
                           </div>
                         )}
 
@@ -1709,11 +2156,10 @@ function CustomerPortalContent() {
                                 key={pm.id}
                                 type="button"
                                 onClick={() => setCheckoutPaymentMethod(pm.id as "QRIS" | "CASH" | "EDC")}
-                                className={`p-2.5 rounded-xl border text-center transition-all ${
-                                  checkoutPaymentMethod === pm.id
-                                    ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                                }`}
+                                className={`p-2.5 rounded-xl border text-center transition-all ${checkoutPaymentMethod === pm.id
+                                  ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                                  : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                                  }`}
                               >
                                 <span className="text-xs font-black block">{pm.label}</span>
                                 <span className={`text-[9px] block ${checkoutPaymentMethod === pm.id ? "text-slate-300" : "text-slate-400"}`}>
@@ -1724,26 +2170,91 @@ function CustomerPortalContent() {
                           </div>
                         </div>
 
-                        {/* Voucher & Loyalty Coupon Selection */}
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                            <span>Voucher & Poin Loyalty</span>
-                            {selectedVoucher && (
-                              <span className="text-[10px] text-emerald-600 font-bold">✓ Kupon Terpasang</span>
+                        {/* Voucher Code Input & Selection */}
+                        <div className="space-y-2 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                          <div className="flex items-center justify-between text-xs">
+                            <label className="font-bold text-slate-800 flex items-center gap-1.5">
+                              <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Kode Kupon / Voucher Promo</span>
+                            </label>
+                            {appliedVoucherPromo && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAppliedVoucherPromo(null);
+                                  setVoucherInputCode("");
+                                  setVoucherValidationMsg(null);
+                                }}
+                                className="text-[10px] text-rose-600 font-bold hover:underline"
+                              >
+                                Hapus
+                              </button>
                             )}
-                          </label>
-                          <select
-                            value={selectedVoucherId}
-                            onChange={(e) => setSelectedVoucherId(e.target.value)}
-                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none"
-                          >
-                            <option value="">-- Tanpa Voucher Khusus (Promo Otomatis) --</option>
-                            {myVouchers.map((v) => (
-                              <option key={v.id} value={v.id}>
-                                🎟️ {v.title} ({v.discountType === "FIXED" ? formatCurrencyIDR(v.discountValue) : `Diskon ${v.discountValue}%`})
-                              </option>
-                            ))}
-                          </select>
+                          </div>
+
+                          {/* Code input form */}
+                          <div className="flex space-x-1.5">
+                            <input
+                              type="text"
+                              placeholder="Masukkan kode: DAGO20"
+                              value={voucherInputCode}
+                              onChange={(e) => setVoucherInputCode(e.target.value.toUpperCase())}
+                              className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold uppercase text-slate-900 placeholder:normal-case placeholder:font-normal placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                            />
+                            <Button
+                              type="button"
+                              onClick={() => handleApplyVoucherCode()}
+                              className="h-9 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-xs"
+                            >
+                              Terapkan
+                            </Button>
+                          </div>
+
+                          {/* Validation feedback message */}
+                          {voucherValidationMsg && (
+                            <div className={`p-2.5 rounded-xl text-xs font-medium flex items-center space-x-1.5 ${
+                              voucherValidationMsg.type === "SUCCESS"
+                                ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                                : "bg-rose-50 border border-rose-200 text-rose-800"
+                            }`}>
+                              {voucherValidationMsg.type === "SUCCESS" ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              ) : (
+                                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                              )}
+                              <span className="text-[11px] leading-tight">{voucherValidationMsg.text}</span>
+                            </div>
+                          )}
+
+                          {/* Available / Claimed Promos Dropdown */}
+                          <div className="pt-1">
+                            <select
+                              value={appliedVoucherPromo?.id || ""}
+                              onChange={(e) => {
+                                const selectedId = e.target.value;
+                                if (!selectedId) {
+                                  setAppliedVoucherPromo(null);
+                                  setVoucherValidationMsg(null);
+                                  return;
+                                }
+                                const p = settings.promos?.find((promo) => promo.id === selectedId);
+                                if (p) {
+                                  setVoucherInputCode(p.code || "");
+                                  handleApplyVoucherCode(p.code || p.name);
+                                }
+                              }}
+                              className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-700 outline-none"
+                            >
+                              <option value="">-- Pilih dari Voucher Tersedia --</option>
+                              {settings.promos
+                                ?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "FNB"))
+                                .map((p: PromoConfig) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.code ? `[${p.code}] ` : ""}🎟️ {p.name} ({p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : formatCurrencyIDR(p.discountValue)})
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
                         </div>
 
                         {/* Price Breakdown */}
@@ -1754,7 +2265,7 @@ function CustomerPortalContent() {
                           </div>
                           {cartDiscountAmount > 0 && (
                             <div className="flex justify-between text-emerald-600 font-bold">
-                              <span>Diskon ({activePromo?.name})</span>
+                              <span>Diskon Promo {effectiveFnbPromo ? `(${effectiveFnbPromo.code || effectiveFnbPromo.name})` : ""}</span>
                               <span>-{formatCurrencyIDR(cartDiscountAmount)}</span>
                             </div>
                           )}
@@ -1793,7 +2304,7 @@ function CustomerPortalContent() {
             {/* ---------------------------------------------------- */}
             {activeTab === "COWORKING" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                
+
                 {/* Header Title & Filter */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
@@ -1814,11 +2325,10 @@ function CustomerPortalContent() {
                       <button
                         key={f.key}
                         onClick={() => setSpaceTypeFilter(f.key)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
-                          spaceTypeFilter === f.key
-                            ? "bg-slate-900 text-white"
-                            : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
-                        }`}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${spaceTypeFilter === f.key
+                          ? "bg-slate-900 text-white"
+                          : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                          }`}
                       >
                         {f.label}
                       </button>
@@ -1837,6 +2347,21 @@ function CustomerPortalContent() {
                         className="border-slate-200/90 bg-white shadow-xs hover:shadow-xl hover:-translate-y-1 hover:border-brand-orange/40 transition-all duration-300 rounded-3xl p-6 flex flex-col justify-between space-y-4 group"
                       >
                         <div className="space-y-3">
+                          {/* Workspace Photo Banner */}
+                          {space.imageUrl ? (
+                            <div className="relative w-full h-40 rounded-2xl overflow-hidden bg-slate-100 border border-slate-100">
+                              <img
+                                src={space.imageUrl}
+                                alt={space.name}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-full h-28 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 flex items-center justify-center text-blue-400">
+                              <Laptop className="w-8 h-8 opacity-40" />
+                            </div>
+                          )}
+
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <Badge variant="outline" className="text-[10px] font-bold uppercase mb-1 bg-slate-50 text-slate-600 border-slate-200">
@@ -1852,15 +2377,18 @@ function CustomerPortalContent() {
                             </div>
 
                             <Badge
-                              className={`text-[10px] px-2.5 py-0.5 font-bold ${
-                                isAvailable
-                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                  : "bg-amber-50 text-amber-700 border border-amber-200"
-                              }`}
+                              className={`text-[10px] px-2.5 py-0.5 font-bold ${isAvailable
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-200"
+                                }`}
                             >
                               {isAvailable ? "Tersedia" : "Terisi"}
                             </Badge>
                           </div>
+
+                          <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                            {space.description || "Ruang kerja kondusif dengan fasilitas lengkap."}
+                          </p>
 
                           {/* Rates & Capacity */}
                           <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between text-xs">
@@ -1925,9 +2453,8 @@ function CustomerPortalContent() {
                     {MEMBERSHIP_PLANS.map((plan: CoworkingMembershipPlan) => (
                       <Card
                         key={plan.id}
-                        className={`p-6 rounded-3xl border bg-white shadow-xs flex flex-col justify-between space-y-4 ${
-                          plan.popular ? "border-brand-orange ring-2 ring-brand-orange/20" : "border-slate-200"
-                        }`}
+                        className={`p-6 rounded-3xl border bg-white shadow-xs flex flex-col justify-between space-y-4 ${plan.popular ? "border-brand-orange ring-2 ring-brand-orange/20" : "border-slate-200"
+                          }`}
                       >
                         <div className="space-y-2">
                           <div className="flex justify-between items-center">
@@ -1969,48 +2496,95 @@ function CustomerPortalContent() {
                   </div>
                 </div>
 
-                {/* Booking Modal */}
+                {/* Booking & Checkout Modal for Coworking (Harmonized with F&B Checkout) */}
                 {isBookingModalOpen && selectedSpaceForBooking && (
                   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-                      
+                    <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-4 max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+
+                      {/* Header matching F&B */}
                       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                         <div className="flex items-center space-x-2.5">
                           <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
                             <Laptop className="w-4 h-4" />
                           </div>
                           <div>
-                            <h3 className="font-black text-lg text-slate-900">Booking Ruang Kerja</h3>
-                            <p className="text-[11px] text-slate-500">{selectedSpaceForBooking.name}</p>
+                            <h3 className="font-black text-lg text-slate-900">Konfirmasi Booking Co-working</h3>
+                            <p className="text-[11px] text-slate-500">{selectedSpaceForBooking.name} &bull; {selectedSpaceForBooking.area}</p>
                           </div>
                         </div>
                         <button
                           onClick={() => setIsBookingModalOpen(false)}
-                          className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center font-bold"
+                          className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center font-bold transition-all"
                         >
                           ✕
                         </button>
                       </div>
 
-                      <form onSubmit={handleCoworkingBookingSubmit} className="space-y-3.5">
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-700">Tanggal Penggunaan</label>
-                          <input
-                            type="date"
-                            value={bookingDate}
-                            onChange={(e) => setBookingDate(e.target.value)}
-                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
-                            required
-                          />
+                      {/* Workspace Summary Card */}
+                      <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3 text-xs">
+                        {selectedSpaceForBooking.imageUrl && (
+                          <div className="relative w-full h-28 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
+                            <img
+                              src={selectedSpaceForBooking.imageUrl}
+                              alt={selectedSpaceForBooking.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <Badge variant="outline" className="text-[9px] font-bold uppercase mb-1 bg-white text-slate-700 border-slate-200">
+                              {selectedSpaceForBooking.type.replace("_", " ")}
+                            </Badge>
+                            <h4 className="font-black text-sm text-slate-900">{selectedSpaceForBooking.name}</h4>
+                            <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                              <MapPin className="w-3 h-3 text-slate-400" />
+                              <span>{selectedSpaceForBooking.area} &bull; Kapasitas: {selectedSpaceForBooking.capacity} Orang</span>
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[10px] text-slate-400 font-bold block">Tarif Sewa</span>
+                            <span className="font-black text-sm text-blue-600">
+                              {formatCurrencyIDR(selectedSpaceForBooking.hourlyRate)} <span className="text-[10px] font-normal text-slate-500">/ jam</span>
+                            </span>
+                          </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
+                        {selectedSpaceForBooking.description && (
+                          <p className="text-[11px] text-slate-600 leading-relaxed bg-white p-2 rounded-xl border border-slate-200/80">
+                            {selectedSpaceForBooking.description}
+                          </p>
+                        )}
+                      </div>
+
+                      <form onSubmit={handleCoworkingBookingSubmit} className="space-y-3.5 pt-1 border-t border-slate-100">
+                        {/* Tanggal & Durasi */}
+                        <div className="grid grid-cols-2 gap-2.5">
                           <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-700">Durasi (Jam)</label>
+                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Pilih Tanggal</span>
+                            </label>
+                            <input
+                              type="date"
+                              min={new Date().toISOString().split("T")[0]}
+                              value={bookingDate}
+                              onChange={(e) => setBookingDate(e.target.value)}
+                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                              required
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Durasi Booking</span>
+                            </label>
                             <select
                               value={bookingDuration}
                               onChange={(e) => setBookingDuration(Number(e.target.value))}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
                             >
                               <option value={1}>1 Jam</option>
                               <option value={2}>2 Jam</option>
@@ -2019,52 +2593,243 @@ function CustomerPortalContent() {
                               <option value={8}>8 Jam (Seharian Penuh)</option>
                             </select>
                           </div>
+                        </div>
 
+                        {/* Interactive Time Slot Availability Grid */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Pilih Jam Mulai (Ketersediaan Slot)</span>
+                            </label>
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              Sewa: <strong>{bookingStartTime} &ndash; {calculateEndTime(bookingStartTime, bookingDuration)} WITA</strong>
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                            {COWORKING_TIME_SLOTS.map((slot) => {
+                              const startH = parseHour(slot);
+                              const avail = checkSlotAvailability(
+                                selectedSpaceForBooking.id,
+                                bookingDate,
+                                startH,
+                                bookingDuration
+                              );
+                              const isSelected = bookingStartTime === slot;
+
+                              return (
+                                <button
+                                  key={slot}
+                                  type="button"
+                                  disabled={!avail.isAvailable}
+                                  onClick={() => setBookingStartTime(slot)}
+                                  className={`py-2 px-1 rounded-xl text-center transition-all flex flex-col items-center justify-center ${
+                                    !avail.isAvailable
+                                      ? "bg-rose-50/70 border border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
+                                      : isSelected
+                                      ? "bg-slate-900 text-white shadow-xs font-black ring-2 ring-slate-900/20 scale-[1.02]"
+                                      : "bg-white border border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-300 font-bold"
+                                  }`}
+                                >
+                                  <span className="text-xs font-mono">{slot}</span>
+                                  <span className={`text-[8px] font-bold mt-0.5 ${
+                                    !avail.isAvailable
+                                      ? "text-rose-600 font-black"
+                                      : isSelected
+                                      ? "text-blue-200"
+                                      : "text-emerald-600"
+                                  }`}>
+                                    {avail.isAvailable ? "Tersedia" : "Sudah Dibooking"}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Jumlah Tamu & Catatan */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-700">Jumlah Tamu</label>
+                            <label className="text-xs font-bold text-slate-700">Jumlah Tamu / Orang</label>
                             <input
                               type="number"
                               min={1}
                               max={selectedSpaceForBooking.capacity}
                               value={bookingGuests}
                               onChange={(e) => setBookingGuests(Number(e.target.value))}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
                               required
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700">Catatan Booking (Opsional)</label>
+                            <input
+                              type="text"
+                              placeholder="Contoh: Butuh proyektor..."
+                              value={bookingNotes}
+                              onChange={(e) => setBookingNotes(e.target.value)}
+                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500/20"
                             />
                           </div>
                         </div>
 
-                        <div className="space-y-1">
-                          <label className="text-xs font-bold text-slate-700">Metode Pembayaran</label>
-                          <select
-                            value={bookingPaymentMethod}
-                            onChange={(e) => setBookingPaymentMethod(e.target.value as "QRIS" | "CASH")}
-                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
-                          >
-                            <option value="QRIS">QRIS Instan (BCA / Mandiri / GoPay / OVO)</option>
-                            <option value="CASH">Bayar Tunai di Resepsionis</option>
-                          </select>
+                        {/* Payment Method Selector (Harmonized with F&B) */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-700">Pilih Metode Pembayaran</label>
+                          <div className="grid grid-cols-3 gap-2">
+                            {[
+                              { id: "QRIS", label: "QRIS", desc: "e-Wallet / BCA" },
+                              { id: "CASH", label: "Kasir", desc: "Bayar Tunai" },
+                              { id: "EDC", label: "Debit/EDC", desc: "Kartu Bank" },
+                            ].map((pm) => (
+                              <button
+                                key={pm.id}
+                                type="button"
+                                onClick={() => setBookingPaymentMethod(pm.id as "QRIS" | "CASH" | "EDC")}
+                                className={`p-2.5 rounded-xl border text-center transition-all ${
+                                  bookingPaymentMethod === pm.id
+                                    ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                                }`}
+                              >
+                                <span className="text-xs font-black block">{pm.label}</span>
+                                <span className={`text-[9px] block ${bookingPaymentMethod === pm.id ? "text-slate-300" : "text-slate-400"}`}>
+                                  {pm.desc}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
 
-                        {/* Total Cost Box */}
-                        <div className="p-3.5 bg-blue-50/70 rounded-2xl border border-blue-100 space-y-1 text-xs">
-                          <div className="flex justify-between text-slate-600">
-                            <span>Tarif {selectedSpaceForBooking.name}</span>
-                            <span>{formatCurrencyIDR(selectedSpaceForBooking.hourlyRate)} / jam</span>
+                        {/* Voucher / Promo Code for Co-Working */}
+                        <div className="space-y-2 p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
+                          <div className="flex items-center justify-between text-xs">
+                            <label className="font-bold text-slate-800 flex items-center gap-1.5">
+                              <Tag className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Voucher Promo Co-Working</span>
+                            </label>
+                            {appliedCoworkPromo && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAppliedCoworkPromo(null);
+                                  setCoworkVoucherCode("");
+                                  setCoworkVoucherValidationMsg(null);
+                                }}
+                                className="text-[10px] text-rose-600 font-bold hover:underline"
+                              >
+                                Hapus
+                              </button>
+                            )}
                           </div>
-                          <div className="flex justify-between font-black text-slate-900 pt-1.5 border-t border-blue-200 text-sm">
-                            <span>Total Biaya Booking</span>
-                            <span className="text-blue-700 font-black">
-                              {formatCurrencyIDR(selectedSpaceForBooking.hourlyRate * bookingDuration)}
-                            </span>
+
+                          <div className="flex space-x-1.5">
+                            <input
+                              type="text"
+                              placeholder="Contoh: COWORK50 / DAGO20"
+                              value={coworkVoucherCode}
+                              onChange={(e) => setCoworkVoucherCode(e.target.value.toUpperCase())}
+                              className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold uppercase text-slate-900 placeholder:normal-case placeholder:font-normal placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500/20"
+                            />
+                            <Button
+                              type="button"
+                              onClick={() => handleApplyCoworkVoucher()}
+                              className="h-9 px-3 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs"
+                            >
+                              Terapkan
+                            </Button>
+                          </div>
+
+                          {coworkVoucherValidationMsg && (
+                            <div className={`p-2.5 rounded-xl text-xs font-medium flex items-center space-x-1.5 ${
+                              coworkVoucherValidationMsg.type === "SUCCESS"
+                                ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                                : "bg-rose-50 border border-rose-200 text-rose-800"
+                            }`}>
+                              {coworkVoucherValidationMsg.type === "SUCCESS" ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              ) : (
+                                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                              )}
+                              <span className="text-[11px] leading-tight">{coworkVoucherValidationMsg.text}</span>
+                            </div>
+                          )}
+
+                          <div className="pt-1">
+                            <select
+                              value={appliedCoworkPromo?.id || ""}
+                              onChange={(e) => {
+                                const selectedId = e.target.value;
+                                if (!selectedId) {
+                                  setAppliedCoworkPromo(null);
+                                  setCoworkVoucherValidationMsg(null);
+                                  return;
+                                }
+                                const p = settings.promos?.find((promo) => promo.id === selectedId);
+                                if (p) {
+                                  setCoworkVoucherCode(p.code || "");
+                                  handleApplyCoworkVoucher(p.code || p.name);
+                                }
+                              }}
+                              className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-700 outline-none"
+                            >
+                              <option value="">-- Pilih Promo Co-Working Tersedia --</option>
+                              {settings.promos
+                                ?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "COWORKING"))
+                                .map((p: PromoConfig) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.code ? `[${p.code}] ` : ""}🎟️ {p.name} ({p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : formatCurrencyIDR(p.discountValue)})
+                                  </option>
+                                ))}
+                            </select>
                           </div>
                         </div>
 
+                        {/* Price Breakdown Card (Harmonized with F&B) */}
+                        {(() => {
+                          const baseRate = (selectedSpaceForBooking?.hourlyRate || 15000) * bookingDuration;
+                          const taxRate = (settings?.taxRatePercent !== undefined ? settings.taxRatePercent : 10) / 100;
+                          const calc = calculateCoworkingPricing(baseRate, appliedCoworkPromo || undefined, taxRate);
+                          return (
+                            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1.5 text-xs">
+                              <div className="flex justify-between text-slate-600">
+                                <span>Sewa {selectedSpaceForBooking.name} ({bookingDuration} Jam)</span>
+                                <span>{formatCurrencyIDR(calc.originalSubtotal)}</span>
+                              </div>
+                              {calc.discountAmount > 0 && (
+                                <div className="flex justify-between text-emerald-600 font-bold">
+                                  <span>Diskon Promo {appliedCoworkPromo ? `(${appliedCoworkPromo.code || appliedCoworkPromo.name})` : ""}</span>
+                                  <span>-{formatCurrencyIDR(calc.discountAmount)}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between text-slate-600">
+                                <span>Pajak Layanan PB1 ({settings.taxRatePercent}%)</span>
+                                <span>{formatCurrencyIDR(calc.tax)}</span>
+                              </div>
+                              <div className="flex justify-between font-black text-slate-900 pt-2 border-t border-slate-200 text-sm">
+                                <span>Total Biaya Booking</span>
+                                <span className="text-blue-600 font-black">
+                                  {formatCurrencyIDR(calc.total)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Security Notice (Harmonized with F&B) */}
+                        <div className="p-3 bg-blue-50/80 rounded-xl border border-blue-200/80 text-[11px] text-blue-900 flex items-start space-x-2">
+                          <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                          <span>Booking akan dibuat dengan status reservasi dan ruangan siap digunakan setelah pembayaran terverifikasi.</span>
+                        </div>
+
+                        {/* Action Button (Harmonized with F&B) */}
                         <Button
                           type="submit"
                           className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs rounded-2xl shadow-md"
                         >
-                          <span>Konfirmasi Booking Ruang</span>
+                          <span>Buat Booking & Lanjut Bayar</span>
                           <ArrowRight className="w-4 h-4 ml-1.5" />
                         </Button>
                       </form>
@@ -2080,7 +2845,7 @@ function CustomerPortalContent() {
             {/* ---------------------------------------------------- */}
             {activeTab === "ORDERS" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                
+
                 {/* Header Title */}
                 <div className="flex items-center justify-between">
                   <div>
@@ -2130,11 +2895,10 @@ function CustomerPortalContent() {
                                 <p className="text-xs text-slate-500">{bk.date} &bull; {bk.startTime}</p>
                               </div>
                               <Badge
-                                className={`text-[10px] font-bold ${
-                                  isPending
-                                    ? "bg-amber-100 text-amber-800 border-amber-300 animate-pulse"
-                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                }`}
+                                className={`text-[10px] font-bold ${isPending
+                                  ? "bg-amber-100 text-amber-800 border-amber-300 animate-pulse"
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  }`}
                               >
                                 {isPending ? "Menunggu Pembayaran" : bk.checkInStatus}
                               </Badge>
@@ -2179,7 +2943,47 @@ function CustomerPortalContent() {
 
                             <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                               <span className="text-slate-500">Durasi: <strong>{bk.duration} Jam</strong></span>
-                              <span className="font-black text-slate-900">{formatCurrencyIDR(bk.totalAmount)}</span>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-black text-slate-900">{formatCurrencyIDR(bk.totalAmount)}</span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const [startH, startM] = (bk.startTime || "09:00").split(":").map(Number);
+                                    const endH = (startH + (bk.duration || 1)) % 24;
+                                    const endTime = `${endH.toString().padStart(2, "0")}:${(startM || 0).toString().padStart(2, "0")}`;
+                                    setReceiptModalCowork({
+                                      bookingCode: bk.bookingCode || bk.id,
+                                      transactionDate: `${bk.date}, ${bk.startTime || "09:00"} WITA`,
+                                      guestName: bk.guestName,
+                                      guestPhone: bk.guestPhone,
+                                      guestEmail: bk.guestEmail,
+                                      company: bk.company,
+                                      spaceName: bk.spaceName,
+                                      spaceType: bk.spaceType,
+                                      outletName: (bk as any).outletName || activeOutlet?.name || "Singaraja",
+                                      outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
+                                      outletPhone: "(0362) 23456",
+                                      bookingDate: bk.date,
+                                      startTime: bk.startTime,
+                                      endTime,
+                                      duration: bk.duration,
+                                      bookingType: bk.bookingType || "HOURLY",
+                                      basePrice: bk.totalAmount,
+                                      totalAmount: bk.totalAmount,
+                                      paymentMethod: bk.paymentMethod || "QRIS",
+                                      paymentStatus: bk.paymentStatus || "PAID",
+                                      notes: bk.notes,
+                                    });
+                                    setIsReceiptModalCoworkOpen(true);
+                                  }}
+                                  className="h-7 text-[10px] font-bold text-slate-700 hover:bg-slate-100 flex items-center space-x-1"
+                                >
+                                  <Receipt className="w-3 h-3 text-slate-500" />
+                                  <span>Bukti Nota</span>
+                                </Button>
+                              </div>
                             </div>
                           </Card>
                         );
@@ -2274,21 +3078,20 @@ function CustomerPortalContent() {
                                   return (
                                     <div key={idx} className="space-y-1.5">
                                       <div
-                                        className={`h-2 rounded-full transition-all duration-500 ${
-                                          isCurrent
-                                            ? "bg-brand-orange animate-pulse shadow-xs shadow-orange-500/50"
-                                            : isPassed
+                                        className={`h-2 rounded-full transition-all duration-500 ${isCurrent
+                                          ? "bg-brand-orange animate-pulse shadow-xs shadow-orange-500/50"
+                                          : isPassed
                                             ? "bg-emerald-500"
                                             : "bg-slate-200"
-                                        }`}
+                                          }`}
                                       />
                                       <span
                                         className={
                                           isCurrent
                                             ? "text-brand-orange font-black"
                                             : isPassed
-                                            ? "text-emerald-700"
-                                            : "text-slate-400"
+                                              ? "text-emerald-700"
+                                              : "text-slate-400"
                                         }
                                       >
                                         {stepItem.label}
@@ -2313,7 +3116,58 @@ function CustomerPortalContent() {
                               ))}
                             </div>
 
-                            {/* Customer Cancellation Action */}
+                            {/* Receipt & Cancellation Actions */}
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setReceiptModalFnb({
+                                    orderNumber: ord.orderNumber,
+                                    date: new Date(ord.createdAt).toLocaleDateString("id-ID", {
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    }),
+                                    cashierName: "Kasir / Self-Order Online",
+                                    outletName: ord.outletName ? `Kopi Senja — ${ord.outletName}` : "Dago Creative Hub",
+                                    outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
+                                    outletPhone: "(0362) 23456",
+                                    tableNumber: ord.tableNumber,
+                                    customerName: ord.customerName,
+                                    orderType: (ord.orderType as any) || "DINE_IN",
+                                    items: ord.items.map((i) => ({
+                                      name: i.productName,
+                                      quantity: i.quantity,
+                                      unitPrice: i.unitPrice,
+                                      subtotal: i.quantity * i.unitPrice,
+                                      modifiers: i.modifiers,
+                                      notes: i.notes,
+                                      tenantId: i.tenantId,
+                                      tenantName: i.tenantId ? FNB_PARTNERS.find((p) => p.id === i.tenantId)?.name : undefined,
+                                    })),
+                                    subtotal: ord.subtotal,
+                                    tax: ord.tax || 0,
+                                    serviceCharge: 0,
+                                    promoName: ord.promoId,
+                                    discount: ord.discount || 0,
+                                    grandTotal: ord.total,
+                                    paymentMethod: (ord.paymentMethod as any) || "QRIS",
+                                    amountPaid: ord.total,
+                                    changeDue: 0,
+                                  });
+                                  setIsReceiptModalFnbOpen(true);
+                                }}
+                                className="h-7 text-[10px] font-bold text-slate-700 hover:bg-slate-100 flex items-center space-x-1"
+                              >
+                                <Receipt className="w-3 h-3 text-slate-500" />
+                                <span>Lihat Nota Struk</span>
+                              </Button>
+                            </div>
+
                             {(ord.status === "NEW" || ord.status === "CONFIRMED" || ord.status === "KITCHEN_RECEIVED") && (
                               <div className="pt-2 border-t border-slate-100">
                                 {cancellingOrderId === ord.id ? (
@@ -2398,21 +3252,71 @@ function CustomerPortalContent() {
                             </p>
                           </div>
 
-                          <div className="flex items-center justify-between sm:justify-end sm:space-x-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+                          <div className="flex items-center justify-between sm:justify-end sm:space-x-3 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
                             <span className="font-black text-slate-900 text-sm sm:text-base">
                               {formatCurrencyIDR(ord.total)}
                             </span>
-                            <Button
-                              onClick={() => {
-                                handleTabChange("MENU");
-                                showToast("Silakan pilih menu untuk memesan ulang");
-                              }}
-                              size="sm"
-                              variant="outline"
-                              className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50 rounded-xl"
-                            >
-                              Pesan Lagi
-                            </Button>
+                            <div className="flex items-center space-x-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setReceiptModalFnb({
+                                    orderNumber: ord.orderNumber,
+                                    date: new Date(ord.createdAt).toLocaleDateString("id-ID", {
+                                      day: "numeric",
+                                      month: "short",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    }),
+                                    cashierName: "Kasir / Self-Order Online",
+                                    outletName: ord.outletName ? `Kopi Senja — ${ord.outletName}` : "Dago Creative Hub",
+                                    outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
+                                    outletPhone: "(0362) 23456",
+                                    tableNumber: ord.tableNumber,
+                                    customerName: ord.customerName,
+                                    orderType: (ord.orderType as any) || "DINE_IN",
+                                    items: ord.items.map((i) => ({
+                                      name: i.productName,
+                                      quantity: i.quantity,
+                                      unitPrice: i.unitPrice,
+                                      subtotal: i.quantity * i.unitPrice,
+                                      modifiers: i.modifiers,
+                                      notes: i.notes,
+                                      tenantId: i.tenantId,
+                                      tenantName: i.tenantId ? FNB_PARTNERS.find((p) => p.id === i.tenantId)?.name : undefined,
+                                    })),
+                                    subtotal: ord.subtotal,
+                                    tax: ord.tax || 0,
+                                    serviceCharge: 0,
+                                    promoName: ord.promoId,
+                                    discount: ord.discount || 0,
+                                    grandTotal: ord.total,
+                                    paymentMethod: (ord.paymentMethod as any) || "QRIS",
+                                    amountPaid: ord.total,
+                                    changeDue: 0,
+                                  });
+                                  setIsReceiptModalFnbOpen(true);
+                                }}
+                                className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50 rounded-xl flex items-center space-x-1"
+                              >
+                                <Receipt className="w-3.5 h-3.5 text-slate-500" />
+                                <span>Nota</span>
+                              </Button>
+                              <Button
+                                onClick={() => {
+                                  handleTabChange("MENU");
+                                  showToast("Silakan pilih menu untuk memesan ulang");
+                                }}
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50 rounded-xl"
+                              >
+                                Pesan Lagi
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -2432,7 +3336,7 @@ function CustomerPortalContent() {
             {/* ---------------------------------------------------- */}
             {activeTab === "LOYALTY" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                
+
                 {/* Loyalty Card Header (Guest vs Member) */}
                 {!isCustomerLoggedIn ? (
                   <div className="rounded-3xl p-6 sm:p-8 shadow-xl border bg-gradient-to-br from-amber-600 via-orange-600 to-amber-700 text-white space-y-4 relative overflow-hidden">
@@ -2547,11 +3451,10 @@ function CustomerPortalContent() {
                               onClick={() => handleRedeemVoucher(vouch)}
                               disabled={!canRedeem && vouch.pointsCost > 0}
                               size="sm"
-                              className={`text-xs font-bold h-8 px-4 rounded-xl transition-all ${
-                                canRedeem || vouch.pointsCost === 0
-                                  ? "bg-brand-orange hover:bg-orange-600 text-white shadow-xs"
-                                  : "bg-slate-100 text-slate-400 cursor-not-allowed"
-                              }`}
+                              className={`text-xs font-bold h-8 px-4 rounded-xl transition-all ${canRedeem || vouch.pointsCost === 0
+                                ? "bg-brand-orange hover:bg-orange-600 text-white shadow-xs"
+                                : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                                }`}
                             >
                               {canRedeem || vouch.pointsCost === 0 ? "Tukar Poin" : "Poin Kurang"}
                             </Button>
@@ -2584,9 +3487,8 @@ function CustomerPortalContent() {
                           </div>
 
                           <span
-                            className={`font-black text-xs ${
-                              ptx.type === "EARN" ? "text-emerald-600" : "text-rose-600"
-                            }`}
+                            className={`font-black text-xs ${ptx.type === "EARN" ? "text-emerald-600" : "text-rose-600"
+                              }`}
                           >
                             {ptx.type === "EARN" ? `+${ptx.points}` : ptx.points} Pts
                           </span>
@@ -2608,9 +3510,9 @@ function CustomerPortalContent() {
             {/* ---------------------------------------------------- */}
             {activeTab === "PROFILE" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  
+
                   {/* Member Card Digital QR */}
                   <Card className="md:col-span-1 border-slate-200/90 bg-white shadow-xs p-6 flex flex-col items-center text-center space-y-4 rounded-3xl">
                     <div className="w-16 h-16 rounded-2xl bg-orange-100 text-brand-orange flex items-center justify-center font-black text-xl shadow-xs">
@@ -2750,11 +3652,10 @@ function CustomerPortalContent() {
           <button
             key={t.key}
             onClick={() => handleTabChange(t.key as CustomerTab)}
-            className={`flex flex-col items-center py-1 px-2 text-[10px] font-bold transition-all relative ${
-              activeTab === t.key
-                ? "text-brand-orange scale-105"
-                : "text-slate-500 hover:text-slate-800"
-            }`}
+            className={`flex flex-col items-center py-1 px-2 text-[10px] font-bold transition-all relative ${activeTab === t.key
+              ? "text-brand-orange scale-105"
+              : "text-slate-500 hover:text-slate-800"
+              }`}
           >
             {t.icon}
             <span className="mt-0.5">{t.label}</span>
@@ -2798,8 +3699,8 @@ function CustomerPortalContent() {
                     {pendingActionAfterAuth === "CHECKOUT_FNB"
                       ? "Simpan pesanan & klaim poin loyalty"
                       : pendingActionAfterAuth === "BOOKING_COWORK"
-                      ? "Konfirmasi reservasi working space"
-                      : "Akses benefit loyalty & riwayat pesanan"}
+                        ? "Konfirmasi reservasi working space"
+                        : "Akses benefit loyalty & riwayat pesanan"}
                   </p>
                 </div>
               </div>
@@ -2820,9 +3721,8 @@ function CustomerPortalContent() {
                 <button
                   type="button"
                   onClick={() => setAuthModalMode("REGISTER")}
-                  className={`py-2 rounded-lg transition-all flex items-center justify-center space-x-1 ${
-                    authModalMode === "REGISTER" ? "bg-brand-orange text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
-                  }`}
+                  className={`py-2 rounded-lg transition-all flex items-center justify-center space-x-1 ${authModalMode === "REGISTER" ? "bg-brand-orange text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                    }`}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>Daftar (+50 Poin)</span>
@@ -2830,9 +3730,8 @@ function CustomerPortalContent() {
                 <button
                   type="button"
                   onClick={() => setAuthModalMode("LOGIN")}
-                  className={`py-2 rounded-lg transition-all ${
-                    authModalMode === "LOGIN" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
-                  }`}
+                  className={`py-2 rounded-lg transition-all ${authModalMode === "LOGIN" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                    }`}
                 >
                   Masuk Akun
                 </button>
@@ -2864,7 +3763,11 @@ function CustomerPortalContent() {
                     });
 
                     showToast(`Selamat datang ${member.name}! +50 Poin Bonus Member.`);
-                    handleAuthSuccess();
+                    handleAuthSuccess({
+                      name: member.name,
+                      phone: member.phone,
+                      email: member.email,
+                    });
                   }}
                   className="space-y-3"
                 >
@@ -2896,8 +3799,13 @@ function CustomerPortalContent() {
                       type="button"
                       onClick={async () => {
                         await login("CUSTOMER_DEMO");
+                        const demoCustomer = DEMO_PERSONAS.CUSTOMER_DEMO;
                         showToast("Masuk sebagai Ketut Dian (Silver Member).");
-                        handleAuthSuccess();
+                        handleAuthSuccess({
+                          name: demoCustomer.name,
+                          phone: demoCustomer.phone || undefined,
+                          email: demoCustomer.email || undefined,
+                        });
                       }}
                       className="w-full p-3 rounded-2xl border border-slate-200 hover:border-brand-orange hover:bg-orange-50/50 flex items-center justify-between text-left transition-all group"
                     >
@@ -2930,38 +3838,40 @@ function CustomerPortalContent() {
         </div>
       )}
 
-      {/* 11. PARTNER SWITCH WARNING MODAL (Requirement: Clear cart on partner switch) */}
-      {partnerSwitchModal?.isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in zoom-in-95 duration-200 text-center">
-            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 mx-auto flex items-center justify-center font-bold">
-              <AlertCircle className="w-6 h-6" />
-            </div>
-            <div className="space-y-1.5">
-              <h3 className="font-black text-base text-slate-900">Ganti Mitra Kuliner?</h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Keranjang kamu saat ini berisi produk dari <strong className="text-slate-800">{activePartner.name}</strong>. Mengganti mitra akan mengosongkan keranjang. Apakah kamu ingin melanjutkan?
-              </p>
-            </div>
-            <div className="flex items-center space-x-2.5 pt-2">
-              <Button
-                type="button"
-                onClick={() => setPartnerSwitchModal(null)}
-                variant="outline"
-                className="w-1/2 h-10 text-xs font-bold rounded-xl border-slate-300 hover:bg-slate-50"
-              >
-                Batal
-              </Button>
-              <Button
-                type="button"
-                onClick={confirmPartnerSwitch}
-                className="w-1/2 h-10 text-xs font-bold bg-brand-orange hover:bg-orange-600 text-white rounded-xl shadow-xs"
-              >
-                Ganti Mitra
-              </Button>
-            </div>
-          </div>
-        </div>
+
+
+      {/* 12. SUBTLE FOOTER (Powered by DAGO) */}
+      <footer className="w-full py-6 mt-12 border-t border-slate-200/70 text-center text-xs text-slate-400 flex items-center justify-center space-x-2">
+        <span>Powered by</span>
+        <Image
+          src="/logo-dago.png"
+          alt="DAGO"
+          width={14}
+          height={18}
+          className="inline-block object-contain opacity-75"
+        />
+        <span className="font-bold text-slate-700"></span>
+      </footer>
+
+      {/* 13. RECEIPT MODALS (F&B and Co-Working) */}
+      {isReceiptModalFnbOpen && receiptModalFnb && (
+        <ReceiptModal
+          order={receiptModalFnb}
+          onClose={() => {
+            setIsReceiptModalFnbOpen(false);
+            setReceiptModalFnb(null);
+          }}
+        />
+      )}
+
+      {isReceiptModalCoworkOpen && receiptModalCowork && (
+        <CoworkingReceiptModal
+          booking={receiptModalCowork}
+          onClose={() => {
+            setIsReceiptModalCoworkOpen(false);
+            setReceiptModalCowork(null);
+          }}
+        />
       )}
 
     </div>

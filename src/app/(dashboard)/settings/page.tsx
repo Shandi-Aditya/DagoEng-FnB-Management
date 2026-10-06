@@ -27,8 +27,12 @@ import {
   Plus,
   Trash2,
   CreditCard,
+  Power,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getTenantStatus, setTenantStatus, DEFAULT_FNB_TENANTS } from "@/lib/tenant";
 
 export default function SettingsPage() {
   const { user, activeOrgModules, toggleOrgModule } = useAuth();
@@ -69,12 +73,28 @@ export default function SettingsPage() {
   const [tenantReceiptHeader, setTenantReceiptHeader] = useState("Kopi Senja — Specialty Coffee & Beverages");
   const [tenantReceiptFooter, setTenantReceiptFooter] = useState("Terima kasih telah berkunjung ke Kopi Senja!");
   const [tenantLowStock, setTenantLowStock] = useState(35);
+  const [tenantStatus, setTenantStatusState] = useState<"ACTIVE" | "INACTIVE">("ACTIVE");
+
+  // State for all tenants status in Master Data view
+  const [allTenantStatuses, setAllTenantStatuses] = useState<Record<string, "ACTIVE" | "INACTIVE">>({});
 
   // Rekening Pencairan Dana & Pembayaran Mitra
   const [bankName, setBankName] = useState<string>("BCA");
   const [bankAccountNumber, setBankAccountNumber] = useState<string>("");
   const [bankAccountHolder, setBankAccountHolder] = useState<string>("");
   const [bankFormError, setBankFormError] = useState<string>("");
+
+  const refreshAllTenantStatuses = () => {
+    const statuses: Record<string, "ACTIVE" | "INACTIVE"> = {};
+    DEFAULT_FNB_TENANTS.forEach((t) => {
+      statuses[t.id] = getTenantStatus(t.id);
+    });
+    setAllTenantStatuses(statuses);
+  };
+
+  useEffect(() => {
+    refreshAllTenantStatuses();
+  }, []);
 
   useEffect(() => {
     if (!isTenantOwner) return;
@@ -84,9 +104,9 @@ export default function SettingsPage() {
        * specifically scoped per tenantId without requiring destructive Prisma database migrations.
        */
       const saved = localStorage.getItem("dagoeng_tenant_settings_v1");
+      const currentTenantId = user?.tenant?.id || "tenant-ks";
       if (saved) {
         const parsed = JSON.parse(saved);
-        const currentTenantId = user?.tenant?.id || "tenant-ks";
         // Support both map-by-tenantId and legacy single object
         const tenantData = parsed[currentTenantId] || (parsed.tenantId === currentTenantId ? parsed : null);
 
@@ -101,7 +121,12 @@ export default function SettingsPage() {
           if (tenantData.bankName) setBankName(tenantData.bankName);
           if (tenantData.bankAccountNumber) setBankAccountNumber(tenantData.bankAccountNumber);
           if (tenantData.bankAccountHolder) setBankAccountHolder(tenantData.bankAccountHolder);
+          if (tenantData.status) setTenantStatusState(tenantData.status === "INACTIVE" ? "INACTIVE" : "ACTIVE");
+        } else {
+          setTenantStatusState(getTenantStatus(currentTenantId));
         }
+      } else {
+        setTenantStatusState(getTenantStatus(currentTenantId));
       }
     } catch (e) {
       console.error("Failed to load tenant settings from localStorage", e);
@@ -174,11 +199,13 @@ export default function SettingsPage() {
       bankName: bankName,
       bankAccountNumber: bankAccountNumber.trim(),
       bankAccountHolder: bankAccountHolder.trim(),
+      status: tenantStatus,
       updatedAt: new Date().toISOString(),
     };
 
     try {
       localStorage.setItem("dagoeng_tenant_settings_v1", JSON.stringify(existingMap));
+      window.dispatchEvent(new Event("tenant_settings_updated"));
     } catch (err) {
       console.error("Failed saving tenant settings", err);
     }
@@ -200,13 +227,6 @@ export default function SettingsPage() {
       name: "Co-working Space & Memberships",
       desc: "Manajemen meja fleksibel/dedicated, booking ruang meeting, paket keanggotaan, dan penagihan berkala.",
       icon: <Laptop className="w-5 h-5 text-blue-600" />,
-      isRequired: false,
-    },
-    {
-      code: "COMMERCIAL",
-      name: "Commercial Retail Leases",
-      desc: "Manajemen sewa lot komersial, kontrak tenant retail, dan rekonsiliasi pembayaran sewa ruang.",
-      icon: <Briefcase className="w-5 h-5 text-purple-600" />,
       isRequired: false,
     },
   ];
@@ -277,6 +297,87 @@ export default function SettingsPage() {
         </div>
 
         <form onSubmit={handleSaveTenantSettings} className="space-y-6 text-xs">
+          {/* Card 0: Status Operasional Mitra (Aktif / Nonaktif) */}
+          <Card className="shadow-xs border border-slate-200 overflow-hidden">
+            <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                  <Power className={`w-4 h-4 ${tenantStatus === "ACTIVE" ? "text-emerald-600" : "text-slate-400"}`} />
+                  <span>Status Operasional Mitra F&B</span>
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Kontrol visibilitas gerai dan penerimaan pesanan di Customer Portal & Kasir POS.
+                </CardDescription>
+              </div>
+              <div>
+                <span
+                  className={`text-xs font-bold px-3 py-1 rounded-full flex items-center space-x-1.5 border ${
+                    tenantStatus === "ACTIVE"
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                      : "bg-red-50 text-red-700 border-red-300"
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      tenantStatus === "ACTIVE" ? "bg-emerald-500 animate-pulse" : "bg-red-500"
+                    }`}
+                  />
+                  <span>{tenantStatus === "ACTIVE" ? "STATUS: AKTIF" : "STATUS: NONAKTIF"}</span>
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div
+                  onClick={() => setTenantStatusState("ACTIVE")}
+                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    tenantStatus === "ACTIVE"
+                      ? "border-emerald-500 bg-emerald-50/40 text-emerald-950 shadow-xs"
+                      : "border-slate-200 bg-white hover:border-slate-300 opacity-70"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-base">🟢</span>
+                      <span className="font-bold text-sm text-emerald-900">Aktif / Buka Operasional</span>
+                    </div>
+                    {tenantStatus === "ACTIVE" && <CheckCircle2 className="w-5 h-5 text-emerald-600" />}
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    Mitra <strong>tampil di Customer Portal</strong> dan pelanggan dapat memesan secara mandiri. Kasir POS <strong>dapat memilih dan membuat transaksi</strong> untuk mitra ini.
+                  </p>
+                </div>
+
+                <div
+                  onClick={() => setTenantStatusState("INACTIVE")}
+                  className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    tenantStatus === "INACTIVE"
+                      ? "border-red-500 bg-red-50/40 text-red-950 shadow-xs"
+                      : "border-slate-200 bg-white hover:border-slate-300 opacity-70"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-base">🔴</span>
+                      <span className="font-bold text-sm text-red-900">Nonaktif / Tutup Sementara</span>
+                    </div>
+                    {tenantStatus === "INACTIVE" && <CheckCircle2 className="w-5 h-5 text-red-600" />}
+                  </div>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    Mitra <strong>disembunyikan dari Customer Portal</strong>. Kasir POS <strong>tidak dapat membuat transaksi baru</strong> untuk menu mitra ini.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 space-y-1">
+                <p className="font-semibold text-slate-700">⚡ Sinkronisasi Real-time:</p>
+                <p>
+                  Perubahan status akan segera diterapkan pada <strong>Portal Pelanggan (QR Menu)</strong> dan <strong>Sistem Kasir (POS)</strong> setelah tombol Simpan diklik.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Card 1: Brand & Profile Info */}
           <Card className="shadow-xs border border-slate-200">
             <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
@@ -640,70 +741,121 @@ export default function SettingsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
-              <tr>
-                <td className="py-2.5 font-bold text-slate-900">
-                  {selectedMasterTab === "Paket Membership" ? "Flexi Nomad Pass (50 Jam)" : `${selectedMasterTab} Contoh #01`}
-                </td>
-                <td className="py-2.5 font-mono text-slate-500">
-                  {selectedMasterTab === "Paket Membership" ? "MEMB-50H" : "DAGO-MASTER-01"}
-                </td>
-                <td className="py-2.5 font-bold text-brand-orange">
-                  {selectedMasterTab === "Paket Membership" ? "Rp 500.000 / 30 Hari" : "Aktif"}
-                </td>
-                <td className="py-2.5">
-                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    AKTIF
-                  </span>
-                </td>
-                <td className="py-2.5 text-right space-x-1">
-                  <button
-                    type="button"
-                    onClick={() => alert(`Edit ${selectedMasterTab}`)}
-                    className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => alert(`Hapus ${selectedMasterTab}`)}
-                    className="p-1 text-red-600 hover:bg-red-50 rounded"
-                  >
-                    🗑️
-                  </button>
-                </td>
-              </tr>
-              <tr>
-                <td className="py-2.5 font-bold text-slate-900">
-                  {selectedMasterTab === "Paket Membership" ? "Resident Dedicated Desk (1 Bulan)" : `${selectedMasterTab} Contoh #02`}
-                </td>
-                <td className="py-2.5 font-mono text-slate-500">
-                  {selectedMasterTab === "Paket Membership" ? "MEMB-DEDICATED" : "DAGO-MASTER-02"}
-                </td>
-                <td className="py-2.5 font-bold text-brand-orange">
-                  {selectedMasterTab === "Paket Membership" ? "Rp 1.500.000 / Bulan" : "Aktif"}
-                </td>
-                <td className="py-2.5">
-                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                    AKTIF
-                  </span>
-                </td>
-                <td className="py-2.5 text-right space-x-1">
-                  <button
-                    type="button"
-                    onClick={() => alert(`Edit ${selectedMasterTab}`)}
-                    className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => alert(`Hapus ${selectedMasterTab}`)}
-                    className="p-1 text-red-600 hover:bg-red-50 rounded"
-                  >
-                    🗑️
-                  </button>
-                </td>
-              </tr>
+              {selectedMasterTab === "Tenant" ? (
+                DEFAULT_FNB_TENANTS.map((t) => {
+                  const status = allTenantStatuses[t.id] || "ACTIVE";
+                  const isAct = status === "ACTIVE";
+                  return (
+                    <tr key={t.id} className="hover:bg-slate-50/50">
+                      <td className="py-2.5 font-bold text-slate-900 flex items-center space-x-2">
+                        <Store className="w-3.5 h-3.5 text-brand-orange" />
+                        <span>{t.name}</span>
+                        <span className="text-[10px] text-slate-500 font-normal">({t.badge})</span>
+                      </td>
+                      <td className="py-2.5 font-mono text-slate-500">{t.code}</td>
+                      <td className="py-2.5 font-medium text-slate-600">Food & Beverage (F&B)</td>
+                      <td className="py-2.5">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            isAct
+                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                              : "bg-red-100 text-red-800 border-red-300"
+                          }`}
+                        >
+                          {isAct ? "ACTIVE (BUKA)" : "INACTIVE (TUTUP)"}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-right space-x-2">
+                        <Button
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            const next = isAct ? "INACTIVE" : "ACTIVE";
+                            setTenantStatus(t.id, next);
+                            refreshAllTenantStatuses();
+                          }}
+                          className={`h-7 text-xs font-bold px-2.5 ${
+                            isAct
+                              ? "border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                              : "border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                          }`}
+                        >
+                          <Power className="w-3 h-3 mr-1" />
+                          <span>{isAct ? "Nonaktifkan" : "Aktifkan"}</span>
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <>
+                  <tr>
+                    <td className="py-2.5 font-bold text-slate-900">
+                      {selectedMasterTab === "Paket Membership" ? "Flexi Nomad Pass (50 Jam)" : `${selectedMasterTab} Contoh #01`}
+                    </td>
+                    <td className="py-2.5 font-mono text-slate-500">
+                      {selectedMasterTab === "Paket Membership" ? "MEMB-50H" : "DAGO-MASTER-01"}
+                    </td>
+                    <td className="py-2.5 font-bold text-brand-orange">
+                      {selectedMasterTab === "Paket Membership" ? "Rp 500.000 / 30 Hari" : "Aktif"}
+                    </td>
+                    <td className="py-2.5">
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        AKTIF
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-right space-x-1">
+                      <button
+                        type="button"
+                        onClick={() => alert(`Edit ${selectedMasterTab}`)}
+                        className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => alert(`Hapus ${selectedMasterTab}`)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        🗑️
+                      </button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 font-bold text-slate-900">
+                      {selectedMasterTab === "Paket Membership" ? "Resident Dedicated Desk (1 Bulan)" : `${selectedMasterTab} Contoh #02`}
+                    </td>
+                    <td className="py-2.5 font-mono text-slate-500">
+                      {selectedMasterTab === "Paket Membership" ? "MEMB-DEDICATED" : "DAGO-MASTER-02"}
+                    </td>
+                    <td className="py-2.5 font-bold text-brand-orange">
+                      {selectedMasterTab === "Paket Membership" ? "Rp 1.500.000 / Bulan" : "Aktif"}
+                    </td>
+                    <td className="py-2.5">
+                      <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        AKTIF
+                      </span>
+                    </td>
+                    <td className="py-2.5 text-right space-x-1">
+                      <button
+                        type="button"
+                        onClick={() => alert(`Edit ${selectedMasterTab}`)}
+                        className="p-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => alert(`Hapus ${selectedMasterTab}`)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        🗑️
+                      </button>
+                    </td>
+                  </tr>
+                </>
+              )}
             </tbody>
           </table>
         </div>
@@ -928,51 +1080,89 @@ export default function SettingsPage() {
             <div>
               <CardTitle className="text-sm font-bold text-slate-800 flex items-center space-x-2">
                 <Tag className="w-4 h-4 text-emerald-600" />
-                <span>Manajemen Promo & Diskon</span>
+                <span>Manajemen Promo, Kupon & Voucher</span>
               </CardTitle>
-              <CardDescription className="text-xs">Konfigurasi promo yang akan digunakan pada saat checkout.</CardDescription>
+              <CardDescription className="text-xs">
+                Konfigurasi voucher kode dan diskon promosi untuk F&B (Kasir / Customer Portal) dan Co-Working.
+              </CardDescription>
             </div>
             <Button
               type="button"
               size="sm"
               onClick={() => {
+                const newCode = `PROMO${Math.floor(10 + Math.random() * 90)}`;
                 setPromos([
                   ...promos,
                   {
                     id: `promo-${Date.now()}`,
-                    name: "Promo Baru",
+                    code: newCode,
+                    name: "Promo Spesial Dago",
+                    description: "Diskon spesial untuk transaksi",
                     discountType: "PERCENTAGE",
                     discountValue: 10,
+                    maxDiscount: 25000,
+                    minimumAmount: 30000,
                     targetType: "ALL",
-                    isActive: false,
+                    scope: "ALL",
+                    quota: 50,
+                    usageCount: 0,
+                    validFrom: new Date().toISOString().split("T")[0],
+                    validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+                    isActive: true,
                   },
                 ]);
               }}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs px-3"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs px-3 font-bold"
             >
-              <Plus className="w-4 h-4 mr-1" /> Tambah Promo
+              <Plus className="w-4 h-4 mr-1" /> Tambah Voucher Promo
             </Button>
           </CardHeader>
           <CardContent className="p-4 space-y-4">
             {promos.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 text-xs italic">Belum ada promo yang ditambahkan.</div>
+              <div className="text-center py-6 text-slate-500 text-xs italic">Belum ada promo yang dikonfigurasi. Klik Tambah Voucher Promo di atas.</div>
             ) : (
               promos.map((promo, idx) => (
-                <div key={promo.id} className="border border-slate-200 rounded-lg p-3 space-y-3 bg-slate-50">
-                  <div className="flex items-center justify-between">
-                    <input
-                      type="text"
-                      value={promo.name}
-                      onChange={(e) => {
-                        const newPromos = [...promos];
-                        newPromos[idx].name = e.target.value;
-                        setPromos(newPromos);
-                      }}
-                      placeholder="Nama Promo"
-                      className="px-2 py-1 border rounded text-xs font-bold w-1/3"
-                    />
-                    <div className="flex items-center space-x-2">
-                      <label className="text-xs flex items-center space-x-1 cursor-pointer">
+                <div key={promo.id} className="border border-slate-200 rounded-2xl p-4 space-y-3 bg-slate-50 shadow-xs">
+                  {/* Row 1: Code, Name, Active Toggle & Delete */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-200/80">
+                    <div className="flex items-center space-x-2 flex-1">
+                      <div className="w-28">
+                        <label className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">Kode Kupon</label>
+                        <input
+                          type="text"
+                          value={promo.code || ""}
+                          onChange={(e) => {
+                            const newPromos = [...promos];
+                            newPromos[idx].code = e.target.value.toUpperCase();
+                            setPromos(newPromos);
+                          }}
+                          placeholder="DAGO20"
+                          className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-black uppercase w-full bg-white text-emerald-700 focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">Nama Promo</label>
+                        <input
+                          type="text"
+                          value={promo.name}
+                          onChange={(e) => {
+                            const newPromos = [...promos];
+                            newPromos[idx].name = e.target.value;
+                            setPromos(newPromos);
+                          }}
+                          placeholder="Nama Promo"
+                          className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold w-full bg-white text-slate-800"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-3 self-end sm:self-center">
+                      <div className="text-right">
+                        <span className="text-[10px] font-bold text-slate-500 block">
+                          Terpakai: <strong className="text-slate-900">{promo.usageCount || 0}</strong> / {promo.quota || "∞"}
+                        </span>
+                      </div>
+                      <label className="text-xs flex items-center space-x-1.5 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200">
                         <input
                           type="checkbox"
                           checked={promo.isActive}
@@ -981,21 +1171,57 @@ export default function SettingsPage() {
                             newPromos[idx].isActive = e.target.checked;
                             setPromos(newPromos);
                           }}
+                          className="rounded text-emerald-600"
                         />
-                        <span>Aktif</span>
+                        <span className="font-bold text-[11px] text-slate-700">{promo.isActive ? "Aktif" : "Nonaktif"}</span>
                       </label>
                       <button
                         type="button"
                         onClick={() => setPromos(promos.filter((p) => p.id !== promo.id))}
-                        className="text-red-500 hover:text-red-700 p-1"
+                        className="text-rose-500 hover:text-rose-700 p-1.5 hover:bg-rose-50 rounded-lg transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+
+                  {/* Row 2: Deskripsi */}
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Deskripsi Singkat / Syarat Ketentuan</label>
+                    <input
+                      type="text"
+                      value={promo.description || ""}
+                      onChange={(e) => {
+                        const newPromos = [...promos];
+                        newPromos[idx].description = e.target.value;
+                        setPromos(newPromos);
+                      }}
+                      placeholder="Contoh: Diskon 20% untuk semua transaksi weekend..."
+                      className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs w-full bg-white text-slate-600"
+                    />
+                  </div>
+
+                  {/* Row 3: Grid Configuration */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
                     <div>
-                      <label className="block text-slate-500 mb-1">Tipe Diskon</label>
+                      <label className="block text-slate-500 font-medium mb-1">Berlaku Untuk</label>
+                      <select
+                        value={promo.scope || "ALL"}
+                        onChange={(e) => {
+                          const newPromos = [...promos];
+                          newPromos[idx].scope = e.target.value as any;
+                          setPromos(newPromos);
+                        }}
+                        className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
+                      >
+                        <option value="ALL">Semua (F&B & Co-Work)</option>
+                        <option value="FNB">Khusus F&B</option>
+                        <option value="COWORKING">Khusus Co-Working</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-500 font-medium mb-1">Tipe Diskon</label>
                       <select
                         value={promo.discountType}
                         onChange={(e) => {
@@ -1003,55 +1229,107 @@ export default function SettingsPage() {
                           newPromos[idx].discountType = e.target.value as PromoType;
                           setPromos(newPromos);
                         }}
-                        className="w-full px-2 py-1 border rounded bg-white"
+                        className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
                       >
                         <option value="PERCENTAGE">Persentase (%)</option>
                         <option value="FIXED">Nominal Fixed (Rp)</option>
                       </select>
                     </div>
+
                     <div>
-                      <label className="block text-slate-500 mb-1">Nilai Diskon</label>
+                      <label className="block text-slate-500 font-medium mb-1">
+                        {promo.discountType === "PERCENTAGE" ? "Nilai Diskon (%)" : "Nilai Diskon (Rp)"}
+                      </label>
                       <input
                         type="number"
+                        min={0}
                         value={promo.discountValue}
                         onChange={(e) => {
                           const newPromos = [...promos];
                           newPromos[idx].discountValue = Number(e.target.value);
                           setPromos(newPromos);
                         }}
-                        className="w-full px-2 py-1 border rounded"
+                        className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-slate-500 mb-1">Minimum Transaksi</label>
+                      <label className="block text-slate-500 font-medium mb-1">Maks. Diskon (Rp)</label>
                       <input
                         type="number"
+                        min={0}
+                        value={promo.maxDiscount || ""}
+                        onChange={(e) => {
+                          const newPromos = [...promos];
+                          newPromos[idx].maxDiscount = e.target.value ? Number(e.target.value) : undefined;
+                          setPromos(newPromos);
+                        }}
+                        placeholder="Tanpa batas"
+                        className="w-full px-2 py-1.5 border rounded-lg bg-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-500 font-medium mb-1">Min. Belanja (Rp)</label>
+                      <input
+                        type="number"
+                        min={0}
                         value={promo.minimumAmount || ""}
                         onChange={(e) => {
                           const newPromos = [...promos];
                           newPromos[idx].minimumAmount = e.target.value ? Number(e.target.value) : undefined;
                           setPromos(newPromos);
                         }}
-                        placeholder="Tidak ada"
-                        className="w-full px-2 py-1 border rounded"
+                        placeholder="0 (Tanpa min)"
+                        className="w-full px-2 py-1.5 border rounded-lg bg-white"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-slate-500 mb-1">Target</label>
-                      <select
-                        value={promo.targetType}
+                      <label className="block text-slate-500 font-medium mb-1">Kuota Pemakaian</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={promo.quota || ""}
                         onChange={(e) => {
                           const newPromos = [...promos];
-                          newPromos[idx].targetType = e.target.value as TargetType;
+                          newPromos[idx].quota = e.target.value ? Number(e.target.value) : undefined;
                           setPromos(newPromos);
                         }}
-                        className="w-full px-2 py-1 border rounded bg-white"
-                      >
-                        <option value="ALL">Semua</option>
-                        <option value="PRODUCT">Produk</option>
-                        <option value="CATEGORY">Kategori</option>
-                        <option value="TENANT">Tenant</option>
-                      </select>
+                        placeholder="Tanpa batas"
+                        className="w-full px-2 py-1.5 border rounded-lg bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 4: Periode Validitas */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                    <div>
+                      <label className="block text-slate-500 font-medium mb-1">Tanggal Mulai Berlaku</label>
+                      <input
+                        type="date"
+                        value={promo.validFrom ? promo.validFrom.split("T")[0] : ""}
+                        onChange={(e) => {
+                          const newPromos = [...promos];
+                          newPromos[idx].validFrom = e.target.value ? new Date(e.target.value).toISOString() : undefined;
+                          setPromos(newPromos);
+                        }}
+                        className="w-full px-2.5 py-1.5 border rounded-lg bg-white text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-500 font-medium mb-1">Tanggal Berakhir (Expired)</label>
+                      <input
+                        type="date"
+                        value={promo.validUntil ? promo.validUntil.split("T")[0] : ""}
+                        onChange={(e) => {
+                          const newPromos = [...promos];
+                          newPromos[idx].validUntil = e.target.value ? new Date(e.target.value + "T23:59:59.000Z").toISOString() : undefined;
+                          setPromos(newPromos);
+                        }}
+                        className="w-full px-2.5 py-1.5 border rounded-lg bg-white text-xs"
+                      />
                     </div>
                   </div>
                 </div>

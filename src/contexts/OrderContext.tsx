@@ -7,173 +7,7 @@ import { useOutlet } from "./OutletContext";
 import { useDateFilter } from "./DateFilterContext";
 import { useActivityLog } from "./ActivityLogContext";
 
-export const INITIAL_ORDERS: OrderRecord[] = [
-  // 1. In Cooking Stage (Singaraja - Table T-01)
-  {
-    id: "ord-101",
-    orderNumber: "ORD-20260914-0101",
-    organizationId: "org-dago-hub",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    tableNumber: "T-01",
-    customerName: "Budi Santoso",
-    orderType: "DINE_IN",
-    status: "COOKING",
-    targetServiceMinutes: 10,
-    items: [
-      { id: "it-1", productName: "Signature Wagyu Beef Bowl", quantity: 2, unitPrice: 65000, modifiers: ["Onsen Egg", "No Onion"] },
-      { id: "it-2", productName: "Flaky French Butter Croissant", quantity: 1, unitPrice: 20000 },
-    ],
-    subtotal: 150000,
-    tax: 15000,
-    total: 165000,
-    paymentStatus: "PAID",
-    paymentMethod: "QRIS",
-    createdAt: "2026-09-14T10:30:00Z",
-    confirmedAt: "2026-09-14T10:31:00Z",
-    kitchenReceivedAt: "2026-09-14T10:32:00Z",
-    cookingStartedAt: "2026-09-14T10:34:00Z",
-    statusHistory: [
-      { id: "h-1", orderId: "ord-101", fromStatus: null, toStatus: "NEW", timestamp: "2026-09-14T10:30:00Z", actorName: "Ni Kadek Sri (Cashier)" },
-      { id: "h-2", orderId: "ord-101", fromStatus: "NEW", toStatus: "CONFIRMED", timestamp: "2026-09-14T10:31:00Z", actorName: "Ni Kadek Sri (Cashier)", note: "Payment QRIS Confirmed" },
-      { id: "h-3", orderId: "ord-101", fromStatus: "CONFIRMED", toStatus: "KITCHEN_RECEIVED", timestamp: "2026-09-14T10:32:00Z", actorName: "Gede Agus (Kitchen)", note: "Ticket printed on Kitchen Station" },
-      { id: "h-4", orderId: "ord-101", fromStatus: "KITCHEN_RECEIVED", toStatus: "COOKING", timestamp: "2026-09-14T10:34:00Z", actorName: "Gede Agus (Kitchen)", note: "Chef started beef bowl searing" },
-    ],
-  },
-
-  // 2. New / Kitchen Received Stage (Singaraja - Table T-03)
-  {
-    id: "ord-102",
-    orderNumber: "ORD-20260914-0102",
-    organizationId: "org-dago-hub",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    tableNumber: "T-03",
-    customerName: "Ketut Dian",
-    orderType: "DINE_IN",
-    status: "KITCHEN_RECEIVED",
-    targetServiceMinutes: 10,
-    items: [
-      { id: "it-3", productName: "Kopi Senja Aren (Regular)", quantity: 2, unitPrice: 24000, modifiers: ["Less Sugar (50%)", "Oat Milk"] },
-      { id: "it-4", productName: "Artisan Peach White Tea", quantity: 1, unitPrice: 28000 },
-    ],
-    subtotal: 76000,
-    tax: 7600,
-    total: 83600,
-    paymentStatus: "PAID",
-    paymentMethod: "QRIS",
-    createdAt: "2026-09-14T10:40:00Z",
-    confirmedAt: "2026-09-14T10:41:00Z",
-    kitchenReceivedAt: "2026-09-14T10:42:00Z",
-    statusHistory: [
-      { id: "h-5", orderId: "ord-102", fromStatus: null, toStatus: "NEW", timestamp: "2026-09-14T10:40:00Z", actorName: "Ketut Dian (Customer Self-Order)" },
-      { id: "h-6", orderId: "ord-102", fromStatus: "NEW", toStatus: "CONFIRMED", timestamp: "2026-09-14T10:41:00Z", actorName: "Ni Kadek Sri (Cashier)" },
-      { id: "h-7", orderId: "ord-102", fromStatus: "CONFIRMED", toStatus: "KITCHEN_RECEIVED", timestamp: "2026-09-14T10:42:00Z", actorName: "Gede Agus (Kitchen)" },
-    ],
-  },
-
-  // 3. Ready at Bar / Pick-up (Singaraja - Table OUT-02)
-  {
-    id: "ord-103",
-    orderNumber: "ORD-20260914-0103",
-    organizationId: "org-dago-hub",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    tableNumber: "OUT-02",
-    customerName: "Siti Rahma",
-    orderType: "DINE_IN",
-    status: "READY",
-    targetServiceMinutes: 10,
-    items: [
-      { id: "it-5", productName: "Artisan Peach White Tea", quantity: 2, unitPrice: 28000 },
-    ],
-    subtotal: 56000,
-    tax: 5600,
-    total: 61600,
-    paymentStatus: "PAID",
-    paymentMethod: "CASH",
-    createdAt: "2026-09-14T10:15:00Z",
-    confirmedAt: "2026-09-14T10:16:00Z",
-    kitchenReceivedAt: "2026-09-14T10:17:00Z",
-    cookingStartedAt: "2026-09-14T10:18:00Z",
-    readyAt: "2026-09-14T10:24:00Z",
-    statusHistory: [
-      { id: "h-8", orderId: "ord-103", fromStatus: null, toStatus: "NEW", timestamp: "2026-09-14T10:15:00Z" },
-      { id: "h-9", orderId: "ord-103", fromStatus: "NEW", toStatus: "CONFIRMED", timestamp: "2026-09-14T10:16:00Z" },
-      { id: "h-10", orderId: "ord-103", fromStatus: "CONFIRMED", toStatus: "KITCHEN_RECEIVED", timestamp: "2026-09-14T10:17:00Z" },
-      { id: "h-11", orderId: "ord-103", fromStatus: "KITCHEN_RECEIVED", toStatus: "COOKING", timestamp: "2026-09-14T10:18:00Z" },
-      { id: "h-12", orderId: "ord-103", fromStatus: "COOKING", toStatus: "READY", timestamp: "2026-09-14T10:24:00Z", note: "Teas assembled and placed on serving pass" },
-    ],
-  },
-
-  // 4. Fully Completed Order (Singaraja - Table T-02)
-  {
-    id: "ord-104",
-    orderNumber: "ORD-20260914-0104",
-    organizationId: "org-dago-hub",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    tableNumber: "T-02",
-    customerName: "Ahmad Faisal",
-    orderType: "DINE_IN",
-    status: "COMPLETED",
-    targetServiceMinutes: 10,
-    items: [
-      { id: "it-6", productName: "Kopi Senja Aren", quantity: 1, unitPrice: 24000 },
-      { id: "it-7", productName: "Flaky French Butter Croissant", quantity: 1, unitPrice: 20000 },
-    ],
-    subtotal: 44000,
-    tax: 4400,
-    total: 48400,
-    paymentStatus: "PAID",
-    paymentMethod: "QRIS",
-    createdAt: "2026-09-14T09:10:00Z",
-    confirmedAt: "2026-09-14T09:11:00Z",
-    kitchenReceivedAt: "2026-09-14T09:12:00Z",
-    cookingStartedAt: "2026-09-14T09:14:00Z",
-    readyAt: "2026-09-14T09:20:00Z",
-    servedAt: "2026-09-14T09:22:00Z",
-    completedAt: "2026-09-14T09:55:00Z",
-    statusHistory: [
-      { id: "h-13", orderId: "ord-104", fromStatus: null, toStatus: "NEW", timestamp: "2026-09-14T09:10:00Z" },
-      { id: "h-14", orderId: "ord-104", fromStatus: "NEW", toStatus: "CONFIRMED", timestamp: "2026-09-14T09:11:00Z" },
-      { id: "h-15", orderId: "ord-104", fromStatus: "CONFIRMED", toStatus: "KITCHEN_RECEIVED", timestamp: "2026-09-14T09:12:00Z" },
-      { id: "h-16", orderId: "ord-104", fromStatus: "KITCHEN_RECEIVED", toStatus: "COOKING", timestamp: "2026-09-14T09:14:00Z" },
-      { id: "h-17", orderId: "ord-104", fromStatus: "COOKING", toStatus: "READY", timestamp: "2026-09-14T09:20:00Z" },
-      { id: "h-18", orderId: "ord-104", fromStatus: "READY", toStatus: "SERVED", timestamp: "2026-09-14T09:22:00Z" },
-      { id: "h-19", orderId: "ord-104", fromStatus: "SERVED", toStatus: "COMPLETED", timestamp: "2026-09-14T09:55:00Z" },
-    ],
-  },
-
-  // 5. Denpasar Order (Strictly Scoped)
-  {
-    id: "ord-201",
-    orderNumber: "ORD-20260914-0201",
-    organizationId: "org-dago-hub",
-    outletId: "outlet-dps",
-    outletName: "Denpasar",
-    tableNumber: "DPS-02",
-    customerName: "Dewi Lestari",
-    orderType: "DINE_IN",
-    status: "SERVED",
-    targetServiceMinutes: 10,
-    items: [
-      { id: "it-8", productName: "Signature Wagyu Beef Bowl", quantity: 3, unitPrice: 65000 },
-    ],
-    subtotal: 195000,
-    tax: 19500,
-    total: 214500,
-    paymentStatus: "PAID",
-    paymentMethod: "EDC",
-    createdAt: "2026-09-14T08:30:00Z",
-    confirmedAt: "2026-09-14T08:32:00Z",
-    kitchenReceivedAt: "2026-09-14T08:35:00Z",
-    cookingStartedAt: "2026-09-14T08:37:00Z",
-    readyAt: "2026-09-14T08:48:00Z",
-    servedAt: "2026-09-14T08:52:00Z",
-    statusHistory: [],
-  },
-];
+export const INITIAL_ORDERS: OrderRecord[] = [];
 
 interface OrderContextType {
   orders: OrderRecord[];
@@ -191,7 +25,7 @@ interface OrderContextType {
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
-const STORAGE_KEY_ORDERS = "dagoeng_orders_v2";
+const STORAGE_KEY_ORDERS = "dagoeng_orders_v3";
 
 export function OrderProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -207,7 +41,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       const saved = localStorage.getItem(STORAGE_KEY_ORDERS);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           setOrders(parsed);
         }
       }

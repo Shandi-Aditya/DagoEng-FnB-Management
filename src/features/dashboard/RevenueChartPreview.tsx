@@ -26,13 +26,23 @@ export function RevenueChartPreview() {
   const { user } = useAuth();
   const [viewMode, setViewMode] = useState<ChartViewMode>("weekly");
 
-  // Calculate dynamic weekly data based on filteredOrders and baseline trend
+  // Calculate dynamic weekly data based strictly on filteredOrders
   const weeklyData = useMemo(() => {
     const dayNames = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
     const now = new Date();
     
+    interface DayBucket {
+      dateStr: string;
+      day: string;
+      isToday: boolean;
+      revenue: number;
+      cogs: number;
+      discount: number;
+      ordersCount: number;
+    }
+
     // Initialize 7 days ending today
-    const days = [];
+    const days: DayBucket[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
@@ -51,78 +61,73 @@ export function RevenueChartPreview() {
       });
     }
 
-    // Baselines for realistic demo curves
-    const baselines: Record<string, { rev: number; cogs: number; disc: number }> = {
-      Sen: { rev: 18500000, cogs: 7200000, disc: 950000 },
-      Sel: { rev: 16200000, cogs: 6800000, disc: 800000 },
-      Rab: { rev: 21000000, cogs: 8100000, disc: 1200000 },
-      Kam: { rev: 23400000, cogs: 8900000, disc: 1400000 },
-      Jum: { rev: 29800000, cogs: 11200000, disc: 2100000 },
-      Sab: { rev: 34500000, cogs: 13100000, disc: 2800000 },
-      Min: { rev: 31200000, cogs: 12000000, disc: 2500000 },
-    };
-
-    days.forEach((dayObj) => {
-      const base = baselines[dayObj.day] || { rev: 15000000, cogs: 6000000, disc: 500000 };
-      dayObj.revenue = base.rev;
-      dayObj.cogs = base.cogs;
-      dayObj.discount = base.disc;
-      dayObj.ordersCount = Math.round(base.rev / 55000);
+    // Populate with real filteredOrders
+    filteredOrders.forEach((order) => {
+      const orderDateStr = order.createdAt ? order.createdAt.split("T")[0] : "";
+      const matchedDay = days.find((d) => d.dateStr === orderDateStr) || days[days.length - 1];
+      if (matchedDay) {
+        matchedDay.revenue += order.total || 0;
+        matchedDay.discount += order.discount || 0;
+        matchedDay.cogs += Math.round((order.total || 0) * 0.38);
+        matchedDay.ordersCount += 1;
+      }
     });
-
-    // Add actual context filteredOrders into today's bucket
-    const todayObj = days[days.length - 1];
-    if (todayObj && filteredOrders.length > 0) {
-      const liveRev = filteredOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-      const liveDisc = filteredOrders.reduce((sum, o) => sum + (o.discount || 0), 0);
-      const liveCogs = Math.round(liveRev * 0.38); // estimated COGS 38%
-      
-      todayObj.revenue = liveRev > 0 ? liveRev : todayObj.revenue;
-      todayObj.discount = liveDisc > 0 ? liveDisc : todayObj.discount;
-      todayObj.cogs = liveRev > 0 ? liveCogs : todayObj.cogs;
-      todayObj.ordersCount = filteredOrders.length > 0 ? filteredOrders.length : todayObj.ordersCount;
-    }
 
     return days.map((d) => ({
       ...d,
       netProfit: d.revenue - d.cogs,
       marginPercent: d.revenue > 0 ? Math.round(((d.revenue - d.cogs) / d.revenue) * 100) : 0,
-      revJuta: +(d.revenue / 1000000).toFixed(1),
-      cogsJuta: +(d.cogs / 1000000).toFixed(1),
-      discJuta: +(d.discount / 1000000).toFixed(1),
+      revJuta: +(d.revenue / 1000000).toFixed(2),
+      cogsJuta: +(d.cogs / 1000000).toFixed(2),
+      discJuta: +(d.discount / 1000000).toFixed(2),
     }));
   }, [filteredOrders]);
 
-  // Hourly Peak data for demo (08:00 - 22:00)
+  // Hourly Peak data from live orders
   const hourlyData = useMemo(() => {
-    const hours = [
-      { hour: "08:00", orders: 12, rev: 640000, traffic: "Rendah" },
-      { hour: "10:00", orders: 28, rev: 1520000, traffic: "Sedang" },
-      { hour: "12:00", orders: 54, rev: 3240000, traffic: "Peak Siang" },
-      { hour: "14:00", orders: 36, rev: 1980000, traffic: "Sedang" },
-      { hour: "16:00", orders: 42, rev: 2350000, traffic: "Sedang" },
-      { hour: "18:00", orders: 78, rev: 4680000, traffic: "Peak Malam" },
-      { hour: "20:00", orders: 65, rev: 3900000, traffic: "Peak Malam" },
-      { hour: "22:00", orders: 22, rev: 1100000, traffic: "Closing" },
-    ];
-    return hours.map((h) => ({
-      ...h,
-      revJuta: +(h.rev / 1000000).toFixed(2),
-    }));
-  }, []);
+    const hourSlots = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00", "22:00"];
+    const slotMap: Record<string, { orders: number; rev: number }> = {};
+    hourSlots.forEach((h) => {
+      slotMap[h] = { orders: 0, rev: 0 };
+    });
 
-  // Promo vs Regular Breakdown
+    filteredOrders.forEach((o) => {
+      if (o.createdAt) {
+        const orderHour = new Date(o.createdAt).getHours();
+        let closestSlot = "08:00";
+        if (orderHour >= 21) closestSlot = "22:00";
+        else if (orderHour >= 19) closestSlot = "20:00";
+        else if (orderHour >= 17) closestSlot = "18:00";
+        else if (orderHour >= 15) closestSlot = "16:00";
+        else if (orderHour >= 13) closestSlot = "14:00";
+        else if (orderHour >= 11) closestSlot = "12:00";
+        else if (orderHour >= 9) closestSlot = "10:00";
+        slotMap[closestSlot].orders += 1;
+        slotMap[closestSlot].rev += o.total || 0;
+      }
+    });
+
+    return hourSlots.map((h) => ({
+      hour: h,
+      orders: slotMap[h].orders,
+      rev: slotMap[h].rev,
+      traffic: slotMap[h].orders > 10 ? "Peak" : slotMap[h].orders > 0 ? "Normal" : "Tenang",
+      revJuta: +(slotMap[h].rev / 1000000).toFixed(2),
+    }));
+  }, [filteredOrders]);
+
+  // Promo vs Regular Breakdown from live orders
   const promoData = useMemo(() => {
     const ordersWithPromo = filteredOrders.filter((o) => (o.discount && o.discount > 0) || o.promoId);
-    const promoRev = ordersWithPromo.reduce((sum, o) => sum + o.total, 0) || 5400000;
-    const promoDisc = ordersWithPromo.reduce((sum, o) => sum + (o.discount || 0), 0) || 680000;
+    const promoRev = ordersWithPromo.reduce((sum, o) => sum + o.total, 0);
+    const promoDisc = ordersWithPromo.reduce((sum, o) => sum + (o.discount || 0), 0);
     
     const regularOrders = filteredOrders.filter((o) => !o.discount && !o.promoId);
-    const regularRev = regularOrders.reduce((sum, o) => sum + o.total, 0) || 12800000;
+    const regularRev = regularOrders.reduce((sum, o) => sum + o.total, 0);
 
     return [
-      { name: "Transaksi Promo (Diskon)", revenue: promoRev, discount: promoDisc, orders: ordersWithPromo.length || 38 },
-      { name: "Transaksi Reguler", revenue: regularRev, discount: 0, orders: regularOrders.length || 94 },
+      { name: "Transaksi Promo (Diskon)", revenue: promoRev, discount: promoDisc, orders: ordersWithPromo.length },
+      { name: "Transaksi Reguler", revenue: regularRev, discount: 0, orders: regularOrders.length },
     ];
   }, [filteredOrders]);
 
@@ -130,7 +135,7 @@ export function RevenueChartPreview() {
   const totalWeeklyRev = weeklyData.reduce((sum, d) => sum + d.revenue, 0);
   const totalWeeklyCogs = weeklyData.reduce((sum, d) => sum + d.cogs, 0);
   const totalWeeklyDisc = weeklyData.reduce((sum, d) => sum + d.discount, 0);
-  const overallMargin = Math.round(((totalWeeklyRev - totalWeeklyCogs) / totalWeeklyRev) * 100);
+  const overallMargin = totalWeeklyRev > 0 ? Math.round(((totalWeeklyRev - totalWeeklyCogs) / totalWeeklyRev) * 100) : 0;
 
   return (
     <Card className="col-span-2 shadow-sm border border-slate-200">

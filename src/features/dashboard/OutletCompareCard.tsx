@@ -1,50 +1,51 @@
+"use client";
+
 import React from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Store, ArrowUpRight } from "lucide-react";
+import { useOrders } from "@/contexts/OrderContext";
+import { formatCurrencyIDR } from "@/lib/utils";
+import { Store } from "lucide-react";
 
 export function OutletCompareCard() {
-  const outlets = [
-    {
-      name: "Singaraja",
-      code: "KS-SGR",
-      revenue: "Rp 64.200.000",
-      orders: "1.240",
-      margin: "63.2%",
-      status: "TOP REVENUE",
-      statusColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    },
-    {
-      name: "Denpasar",
-      code: "KS-DPS",
-      revenue: "Rp 72.850.000",
-      orders: "1.580",
-      margin: "59.8%",
-      status: "HIGHEST VOLUME",
-      statusColor: "bg-blue-50 text-blue-700 border-blue-200",
-    },
-    {
-      name: "Ubud",
-      code: "KS-UBD",
-      revenue: "Rp 37.540.000",
-      orders: "690",
-      margin: "66.4%",
-      status: "HIGHEST MARGIN",
-      statusColor: "bg-amber-50 text-amber-700 border-amber-200",
-    },
+  const { orders } = useOrders();
+
+  const outletBases = [
+    { id: "outlet-sgr", name: "Singaraja", code: "KS-SGR" },
+    { id: "outlet-dps", name: "Denpasar", code: "KS-DPS" },
+    { id: "outlet-ubd", name: "Ubud", code: "KS-UBD" },
   ];
 
+  const outlets = outletBases.map((o) => {
+    const oOrders = orders.filter((ord) => ord.outletId === o.id);
+    const rev = oOrders.reduce((sum, ord) => sum + ord.total, 0);
+    const count = oOrders.length;
+    return {
+      ...o,
+      revenue: formatCurrencyIDR(rev),
+      orders: `${count} Transaksi`,
+      status: count > 0 ? "AKTIF" : "SIAP",
+      statusColor: count > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200",
+    };
+  });
+
   return (
-    <Card className="shadow-sm">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm font-bold flex items-center space-x-2 text-slate-900">
-          <Store className="w-4 h-4 text-brand-cyan" />
-          <span>Komparasi Antar Outlet (Bulan Ini)</span>
-        </CardTitle>
-        <CardDescription>
-          Perbandingan performa penjualan 3 cabang Kopi Senja
+    <Card className="h-full shadow-sm flex flex-col justify-between">
+      <CardHeader className="pb-3 border-b border-slate-100">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-bold flex items-center space-x-2 text-slate-900">
+            <Store className="w-4 h-4 text-brand-cyan" />
+            <span>Komparasi Antar Outlet</span>
+          </CardTitle>
+          <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+            3 Cabang
+          </span>
+        </div>
+        <CardDescription className="text-xs">
+          Monitoring performa seluruh cabang outlet F&B
         </CardDescription>
       </CardHeader>
-      <CardContent className="divide-y divide-slate-100">
+
+      <CardContent className="divide-y divide-slate-100 pt-3 flex-1 flex flex-col justify-around">
         {outlets.map((o) => (
           <div key={o.code} className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between">
             <div>
@@ -54,7 +55,7 @@ export function OutletCompareCard() {
                   {o.status}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 mt-0.5">{o.orders} transaksi | Margin: {o.margin}</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">{o.orders}</p>
             </div>
             <div className="text-right">
               <span className="font-bold text-xs text-slate-900">{o.revenue}</span>

@@ -9,9 +9,7 @@ import { KPICard } from "@/features/dashboard/KPICard";
 import { RevenueChartPreview } from "@/features/dashboard/RevenueChartPreview";
 import { OutletCompareCard } from "@/features/dashboard/OutletCompareCard";
 import { InventoryRiskCard } from "@/features/dashboard/InventoryRiskCard";
-import { AIInsightCard } from "@/features/dashboard/AIInsightCard";
 import { DateRangePicker } from "@/features/dashboard/DateRangePicker";
-import { WaitingTimeAnalytics } from "@/features/dashboard/WaitingTimeAnalytics";
 import { DailyProgressSummary } from "@/features/dashboard/DailyProgressSummary";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { formatCurrencyIDR } from "@/lib/utils";
@@ -20,13 +18,11 @@ import {
   ShoppingBag,
   TrendingUp,
   Percent,
-  Sparkles,
   Building,
   Coffee,
   Laptop,
-  Briefcase,
   Layers,
-  ArrowRight,
+  CheckCircle2,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -34,289 +30,219 @@ export default function DashboardPage() {
   const { isAllOutlets, activeOutlet } = useOutlet();
   const { formattedRangeLabel } = useDateFilter();
   const { filteredOrders } = useOrders();
-  const [activeTab, setActiveTab] = React.useState<"LAPORAN" | "FNB" | "WORKING_SPACE" | "PAJAK">("LAPORAN");
+
+  const [isMounted, setIsMounted] = React.useState(false);
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const isDagoOwner = user?.scopeLevel === "ORGANIZATION";
 
-  // Data for F&B Tenant View (Kopi Senja)
-  const fnbRevenue = filteredOrders.reduce((sum, o) => sum + o.total, 0) || 18450000;
-  const fnbOrdersCount = filteredOrders.length || 186;
+  // Real-time calculated values from context
+  const totalRevenue = filteredOrders.reduce((sum, o) => sum + o.total, 0);
+  const totalOrdersCount = filteredOrders.length;
+  const averageOrderValue =
+    totalOrdersCount > 0 ? Math.round(totalRevenue / totalOrdersCount) : 0;
+  const completedOrdersCount =
+    filteredOrders.filter((o) => o.status === "COMPLETED" || o.status === "SERVED").length;
 
   // Multi-Business Breakdown for Dago Organization Owner
-  const orgTotalRevenue = 125000000;
+  const fnbRevenue = totalRevenue;
+  const cwkRevenue = 0;
+  const consolidatedTotal = fnbRevenue + cwkRevenue;
+  const fnbShare = consolidatedTotal > 0 ? `${Math.round((fnbRevenue / consolidatedTotal) * 100)}%` : "0%";
+  const cwkShare = consolidatedTotal > 0 ? `${Math.round((cwkRevenue / consolidatedTotal) * 100)}%` : "0%";
+
   const businessBreakdown = [
     {
       module: "FNB",
       name: "Food & Beverage (F&B)",
-      revenue: 72000000,
-      share: "57.6%",
-      tenants: "Kopi Senja (2 Outlet), Artisan Bistro (1 Outlet)",
-      status: "ACTIVE",
+      revenue: fnbRevenue,
+      share: fnbShare,
+      tenants: "Kopi Senja, Dapur Mama, Manis Bakery, Warung Bu Narti",
+      status: "AKTIF",
       icon: <Coffee className="w-4 h-4 text-brand-orange" />,
       color: "border-brand-orange",
+      progressColor: "bg-brand-orange",
+      progressWidth: fnbRevenue > 0 ? "w-full" : "w-0",
     },
     {
       module: "CO_WORKING",
       name: "Dago Co-working Space",
-      revenue: 31000000,
-      share: "24.8%",
+      revenue: cwkRevenue,
+      share: cwkShare,
       tenants: "1 Hub (30 Desk, 4 Meeting Room)",
-      status: activeOrgModules.includes("CO_WORKING") ? "ACTIVE" : "INACTIVE",
+      status: activeOrgModules.includes("CO_WORKING") ? "AKTIF" : "NON-AKTIF",
       icon: <Laptop className="w-4 h-4 text-blue-600" />,
       color: "border-blue-500",
-    },
-    {
-      module: "COMMERCIAL",
-      name: "Commercial Retail Leases",
-      revenue: 22000000,
-      share: "17.6%",
-      tenants: "8 Retail Tenant Leases",
-      status: activeOrgModules.includes("COMMERCIAL") ? "ACTIVE" : "INACTIVE",
-      icon: <Briefcase className="w-4 h-4 text-purple-600" />,
-      color: "border-purple-500",
+      progressColor: "bg-blue-500",
+      progressWidth: cwkRevenue > 0 ? "w-full" : "w-0",
     },
   ];
 
+  if (!isMounted) {
+    return (
+      <div className="space-y-6 max-w-7xl mx-auto animate-pulse">
+        <div className="h-16 bg-slate-100 rounded-xl w-1/3" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="h-28 bg-slate-100 rounded-xl" />
+          <div className="h-28 bg-slate-100 rounded-xl" />
+          <div className="h-28 bg-slate-100 rounded-xl" />
+          <div className="h-28 bg-slate-100 rounded-xl" />
+        </div>
+        <div className="h-64 bg-slate-100 rounded-xl" />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      {/* Executive Greeting & Global Date Range Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-slate-200">
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* 1. Header Eksekutif & Filter Periode Tanggal */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 flex items-center space-x-2">
-            <span>Selamat Pagi, {user?.name.split(" ")[0]} 👋</span>
-            <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-brand-orange/10 text-brand-orange border border-brand-orange/20">
-              SCOPE: {user?.scopeLevel}
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+              Selamat Datang, {user?.name.split(" ")[0]}
+            </h1>
+            <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+              {isDagoOwner ? "Owner Dago Hub" : `Tenant: ${user?.tenant?.name || "Kopi Senja"}`}
             </span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          </div>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
             {isDagoOwner
-              ? "Ringkasan Konsolidasi Multi-Bisnis Dago Creative Hub"
-              : `Ringkasan Bisnis Tenant F&B: ${user?.tenant?.name || "Kopi Senja"}`} •{" "}
+              ? "Ringkasan eksekutif konsolidasi seluruh domain bisnis Dago Creative Hub"
+              : `Ringkasan operasional bisnis ${user?.tenant?.name || "Kopi Senja"}`} •{" "}
             <span className="font-semibold text-slate-700">
               {isAllOutlets ? "Semua Outlet" : `Outlet ${activeOutlet?.name}`}
             </span>
           </p>
         </div>
 
-        {/* Interactive Global Date Range Filter Picker */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <DateRangePicker />
         </div>
       </div>
 
-      {/* Top Tab Navigation per Manual Book: Laporan | FNB | Working Space | Pajak */}
-      <div className="flex items-center space-x-1 border-b border-slate-200 bg-white p-1.5 rounded-xl shadow-xs">
-        {[
-          { id: "LAPORAN", label: "Laporan Konsolidasi", icon: <TrendingUp className="w-4 h-4 mr-1.5" /> },
-          { id: "FNB", label: "F&B Mitra (Culinary)", icon: <Coffee className="w-4 h-4 mr-1.5" /> },
-          { id: "WORKING_SPACE", label: "Working Space & Suite", icon: <Laptop className="w-4 h-4 mr-1.5" /> },
-          { id: "PAJAK", label: "Pajak & Settlement (10%)", icon: <Percent className="w-4 h-4 mr-1.5" /> },
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`flex items-center px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-              activeTab === tab.id
-                ? "bg-slate-900 text-white shadow-xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            {tab.icon}
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* ------------------------------------------------------------- */}
-      {/* DAGO ORGANIZATION OWNER: MULTI-BUSINESS CONSOLIDATED METRICS  */}
-      {/* ------------------------------------------------------------- */}
-      {isDagoOwner ? (
-        <div className="space-y-6">
-          {/* Top Total Business Revenue Banner */}
-          <Card className="p-6 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white shadow-md border-none">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <span className="text-xs font-bold text-brand-orange uppercase tracking-wider">
-                  TOTAL BUSINESS REVENUE (KONSOLIDASI ORGANISASI)
-                </span>
-                <h3 className="text-3xl font-extrabold tracking-tight mt-1 text-white">
-                  {formatCurrencyIDR(orgTotalRevenue)}
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Total omzet gabungan domain F&B, Co-working, dan Commercial pada periode ini
-                </p>
-              </div>
-
-              <div className="flex items-center space-x-4">
-                <div className="text-right border-l border-slate-700 pl-4">
-                  <p className="text-[11px] text-slate-400">Total Transaksi</p>
-                  <p className="text-lg font-bold text-white">1.428 Transaksi</p>
-                </div>
-                <div className="text-right border-l border-slate-700 pl-4">
-                  <p className="text-[11px] text-slate-400">Tenant Aktif</p>
-                  <p className="text-lg font-bold text-brand-green">11 Tenant</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
-          {/* Breakdown per Domain Bisnis */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
-                <Layers className="w-4 h-4 text-brand-cyan" />
-                <span>Rincian Kontribusi per Domain Bisnis:</span>
-              </h3>
-              <span className="text-xs text-slate-500 font-medium">
-                {activeOrgModules.filter((m) => m !== "CORE").length} Modul Aktif
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {businessBreakdown.map((b) => (
-                <Card key={b.module} className={`p-4 bg-white shadow-sm border-l-4 ${b.color}`}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-1.5 rounded-md bg-slate-100">{b.icon}</div>
-                      <span className="font-bold text-xs text-slate-900">{b.name}</span>
-                    </div>
-                    <span
-                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
-                        b.status === "ACTIVE"
-                          ? "bg-emerald-100 text-emerald-800"
-                          : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {b.status}
-                    </span>
-                  </div>
-
-                  <div className="mt-3">
-                    <p className="text-xl font-bold text-slate-900">{formatCurrencyIDR(b.revenue)}</p>
-                    <div className="flex items-center justify-between text-xs text-slate-500 mt-1">
-                      <span>Kontribusi: <strong>{b.share}</strong></span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-1 truncate">{b.tenants}</p>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* ----------------------------------------------------------- */
-        /* F&B TENANT OWNER: ISOLATED BRAND METRICS (Kopi Senja Only) */
-        /* ----------------------------------------------------------- */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 2. Ringkasan Statistik Utama (4 KPI Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          title={isDagoOwner ? "Total Pendapatan Konsolidasi" : "Total Pendapatan"}
+          value={formatCurrencyIDR(totalRevenue)}
+          trendText={`Periode ${formattedRangeLabel}`}
+          accentColor="orange"
+          icon={<DollarSign className="w-5 h-5 text-brand-orange" />}
+        />
+        <KPICard
+          title="Total Transaksi"
+          value={`${totalOrdersCount.toLocaleString("id-ID")} Pesanan`}
+          trendText={isDagoOwner ? "Semua unit bisnis" : "Transaksi pesanan tenant"}
+          accentColor="cyan"
+          icon={<ShoppingBag className="w-5 h-5 text-brand-cyan" />}
+        />
+        <KPICard
+          title="Rata-rata Nilai Pesanan"
+          value={formatCurrencyIDR(averageOrderValue)}
+          trendText="Rata-rata per transaksi"
+          accentColor="green"
+          icon={<TrendingUp className="w-5 h-5 text-brand-green" />}
+        />
+        {isDagoOwner ? (
           <KPICard
-            title={`Total Revenue ${user?.tenant?.name || "Kopi Senja"}`}
-            value={formatCurrencyIDR(fnbRevenue)}
-            changePercent={14.2}
-            trendText={`pada ${formattedRangeLabel}`}
-            accentColor="orange"
-            icon={<DollarSign className="w-4 h-4 text-brand-orange" />}
-          />
-          <KPICard
-            title="Volume Pesanan Tenant"
-            value={`${fnbOrdersCount} Order`}
-            changePercent={8.5}
-            trendText="transaksi F&B terisolasi"
-            accentColor="cyan"
-            icon={<ShoppingBag className="w-4 h-4 text-brand-cyan" />}
-          />
-          <KPICard
-            title="Average Order Value (AOV)"
-            value="Rp 53.940"
-            changePercent={5.1}
-            trendText="basket size tenant"
-            accentColor="green"
-            icon={<TrendingUp className="w-4 h-4 text-brand-green" />}
-          />
-          <KPICard
-            title="Gross Margin Resep F&B"
-            value="61.8%"
-            changePercent={-1.2}
-            trendText="efisiensi COGS Kopi Senja"
+            title="Unit Bisnis Aktif"
+            value={`${activeOrgModules.filter((m) => m !== "CORE").length + 1} Unit`}
+            trendText="F&B Culinary & Co-Working"
             accentColor="yellow"
-            icon={<Percent className="w-4 h-4 text-brand-yellow" />}
+            icon={<Building className="w-5 h-5 text-amber-500" />}
           />
-        </div>
-      )}
-
-      {/* Progress Harian & Analitik Service Time (Mengikuti Scope) */}
-      <DailyProgressSummary />
-      <WaitingTimeAnalytics />
-
-      {/* AI Business Insight Highlight */}
-      <AIInsightCard
-        insightTitle={
-          isDagoOwner
-            ? "Analisis Portofolio Multi-Bisnis Dago Creative Hub"
-            : "Analisis Efisiensi COGS & Margin Kopi Senja"
-        }
-        insight={
-          isDagoOwner
-            ? "Domain F&B menyumbang 57.6% dari total omzet Dago Hub, disusul Co-working sebesar 24.8%. Modul Commercial saat ini dinonaktifkan."
-            : "Produk 'Kopi Senja Aren' menyumbang 42% laba kotor, namun margin susu cair mengalami penurunan 2.1% di cabang Singaraja."
-        }
-        evidence={
-          isDagoOwner
-            ? "Rata-rata okupansi co-working mencapai 80% pada hari kerja, sementara trafik F&B Kopi Senja tertinggi pada sore hari (18:00-20:00 WITA)."
-            : "Konsumsi susu mencapai 36 liter/hari dengan harga beli Rp 22.000/L (+10% dari baseline harga kontrak supplier)."
-        }
-        recommendation={
-          isDagoOwner
-            ? "Aktifkan paket bundling cross-selling 'Cowork Full-Day Pass + Voucher F&B Kopi Senja' untuk memaksimalkan average spend per member."
-            : "Segera alihkan pesanan PO susu periode minggu depan ke supplier 'Bali Dairy Fresh' untuk mengunci harga Rp 19.800/L."
-        }
-        actionText={isDagoOwner ? "Lihat Analisis Multi-Bisnis" : "Buat Draft PO Susu"}
-      />
-
-      {/* Middle Section: Revenue vs COGS Trend & Outlet Comparison */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <RevenueChartPreview />
-        <OutletCompareCard />
+        ) : (
+          <KPICard
+            title="Pesanan Selesai"
+            value={`${completedOrdersCount} Pesanan`}
+            trendText={`${Math.round((completedOrdersCount / (totalOrdersCount || 1)) * 100)}% tingkat selesai`}
+            accentColor="yellow"
+            icon={<CheckCircle2 className="w-5 h-5 text-amber-500" />}
+          />
+        )}
       </div>
 
-      {/* Lower Section: Inventory Risk Detection & Top Menus */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <InventoryRiskCard />
+      {/* 3. Visual Utama & Analisis Performa (Tren Penjualan & Komparasi/Kontribusi) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <RevenueChartPreview />
+        </div>
 
-        {/* Top Product Movers */}
-        <div className="p-5 rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900">
-                {isDagoOwner ? "Top Movers Seluruh Tenant F&B" : "Menu Terlaris Kopi Senja"}
-              </h3>
-              <p className="text-xs text-slate-500">Klasifikasi menu berdasarkan volume & margin</p>
-            </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Live Data
-            </span>
-          </div>
-          <div className="space-y-3">
-            {[
-              { name: "Kopi Senja Aren (Regular)", sold: "142 cup", rev: "Rp 3.408.000", tag: "STAR", margin: "64%" },
-              { name: "Artisan Peach White Tea", sold: "68 cup", rev: "Rp 1.904.000", tag: "STAR", margin: "72%" },
-              { name: "Flaky French Butter Croissant", sold: "45 pcs", rev: "Rp 900.000", tag: "CASH COW", margin: "58%" },
-              { name: "Signature Wagyu Beef Bowl", sold: "24 porsi", rev: "Rp 1.560.000", tag: "PUZZLE", margin: "44%" },
-            ].map((prod, i) => (
-              <div key={i} className="flex items-center justify-between text-xs py-1.5 border-b border-slate-100 last:border-0">
-                <div>
-                  <p className="font-semibold text-slate-800">{prod.name}</p>
-                  <p className="text-[11px] text-slate-400">{prod.sold} terjual • Margin {prod.margin}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-bold text-slate-900">{prod.rev}</p>
-                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-700">
-                    {prod.tag}
+        <div className="lg:col-span-1">
+          {isDagoOwner ? (
+            <Card className="h-full shadow-sm flex flex-col justify-between">
+              <CardHeader className="pb-3 border-b border-slate-100">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-bold flex items-center space-x-2 text-slate-900">
+                    <Layers className="w-4 h-4 text-brand-cyan" />
+                    <span>Kontribusi Unit Bisnis</span>
+                  </CardTitle>
+                  <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                    Konsolidasi
                   </span>
                 </div>
-              </div>
-            ))}
-          </div>
+                <CardDescription className="text-xs">
+                  Porsi pendapatan antar domain operasional
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="pt-4 space-y-4 flex-1 flex flex-col justify-around">
+                {businessBreakdown.map((b) => (
+                  <div
+                    key={b.module}
+                    className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <div className="p-1.5 rounded-lg bg-white shadow-xs border border-slate-100">
+                          {b.icon}
+                        </div>
+                        <div>
+                          <p className="font-bold text-xs text-slate-900">{b.name}</p>
+                          <p className="text-[10px] text-slate-400">{b.tenants}</p>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          b.status === "AKTIF"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-slate-100 text-slate-500 border border-slate-200"
+                        }`}
+                      >
+                        {b.status}
+                      </span>
+                    </div>
+
+                    <div>
+                      <div className="flex items-baseline justify-between text-xs">
+                        <span className="font-bold text-slate-900">
+                          {formatCurrencyIDR(b.revenue)}
+                        </span>
+                        <span className="font-semibold text-slate-500">
+                          Porsi: <strong className="text-slate-900">{b.share}</strong>
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-200 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                        <div className={`h-full ${b.progressColor} ${b.progressWidth} rounded-full`} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : (
+            <OutletCompareCard />
+          )}
         </div>
+      </div>
+
+      {/* 4. Ringkasan Operasional & Deteksi Stok (2 Kolom Seimbang) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <DailyProgressSummary />
+        <InventoryRiskCard />
       </div>
     </div>
   );

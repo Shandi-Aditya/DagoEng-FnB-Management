@@ -7,9 +7,11 @@ import { useOutlet } from "@/contexts/OutletContext";
 import { useProducts } from "@/contexts/ProductContext";
 import { useInventory } from "@/contexts/InventoryContext";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { BookOpen, Plus, Search, Trash2, X, UtensilsCrossed, ArrowRight, Sparkles, CheckCircle2, AlertTriangle, Ban } from "lucide-react";
+import { BookOpen, Plus, Search, Trash2, X, UtensilsCrossed, ArrowRight, Sparkles, CheckCircle2, AlertTriangle, Ban, Edit2, Image as ImageIcon, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { isTenantActive, getTenantStatus } from "@/lib/tenant";
+import { MasterProduct } from "@/types/product";
 
 const AVAILABLE_MITRA = [
   { id: "tenant-ks", name: "Kopi Senja", badge: "Official Mitra Kopi" },
@@ -21,8 +23,20 @@ const AVAILABLE_MITRA = [
 export default function MenuPage() {
   const { user } = useAuth();
   const { activeOutlet } = useOutlet();
-  const { filteredProducts, categories, addProduct, addCategory, toggleProductStatus, deleteProduct } = useProducts();
+  const { filteredProducts, categories, addProduct, updateProduct, addCategory, toggleProductStatus, deleteProduct } = useProducts();
   const { checkProductStockStatus } = useInventory();
+
+  const [tenantSettingsVersion, setTenantSettingsVersion] = useState(0);
+
+  React.useEffect(() => {
+    const handleUpdate = () => setTenantSettingsVersion((v) => v + 1);
+    window.addEventListener("tenant_settings_updated", handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener("tenant_settings_updated", handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
 
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
   const userTenantId = user?.tenant?.id;
@@ -33,20 +47,62 @@ export default function MenuPage() {
 
   // Modals
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
+  const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<MasterProduct | null>(null);
   const [isAddCatModalOpen, setIsAddCatModalOpen] = useState(false);
 
-  // Form States
+  // Add Form States
   const [newName, setNewName] = useState("");
-  const [newCat, setNewCat] = useState(categories[0] || "Signature Coffee");
+  const [newCat, setNewCat] = useState(categories[0] || "Minuman");
   const [newTenantId, setNewTenantId] = useState<string>(userTenantId || "tenant-ks");
   const [newPrice, setNewPrice] = useState<number>(25000);
   const [newCogs, setNewCogs] = useState<number>(9000);
   const [newDesc, setNewDesc] = useState("");
+  const [newImageUrl, setNewImageUrl] = useState("");
   const [newCatName, setNewCatName] = useState("");
+
+  // Edit Form States
+  const [editName, setEditName] = useState("");
+  const [editCat, setEditCat] = useState("");
+  const [editTenantId, setEditTenantId] = useState("");
+  const [editPrice, setEditPrice] = useState<number>(0);
+  const [editCogs, setEditCogs] = useState<number>(0);
+  const [editDesc, setEditDesc] = useState("");
+  const [editImageUrl, setEditImageUrl] = useState("");
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(""), 4000);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      showToast("Format file tidak valid. Harap pilih gambar (JPG, PNG, WEBP).");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Ukuran foto maksimal 5MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setter(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleOpenEditModal = (p: MasterProduct) => {
+    setEditingProduct(p);
+    setEditName(p.name);
+    setEditCat(p.category);
+    setEditTenantId(p.tenantId || "tenant-ks");
+    setEditPrice(p.basePrice);
+    setEditCogs(p.cogsEstimate);
+    setEditDesc(p.description || "");
+    setEditImageUrl(p.imageUrl || "");
+    setIsEditProductModalOpen(true);
   };
 
   const handleAddCategory = (e: React.FormEvent) => {
@@ -113,13 +169,40 @@ export default function MenuPage() {
       outletName: "Semua Outlet",
       isAvailable: true,
       description: newDesc.trim() || undefined,
+      imageUrl: newImageUrl.trim() || undefined,
       tenantId: targetTenant,
     });
 
     setIsAddProductModalOpen(false);
     setNewName("");
     setNewDesc("");
+    setNewImageUrl("");
     showToast(`Produk "${newProd.name}" berhasil ditambahkan & otomatis aktif di POS dan QR!`);
+  };
+
+  const handleUpdateProductSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct || !editName.trim()) return;
+
+    const targetTenant = isTenantOwner && userTenantId ? userTenantId : editTenantId;
+
+    updateProduct(
+      editingProduct.id,
+      {
+        name: editName.trim(),
+        category: editCat,
+        basePrice: Number(editPrice),
+        cogsEstimate: Number(editCogs),
+        tenantId: targetTenant,
+        description: editDesc.trim() || undefined,
+        imageUrl: editImageUrl.trim() || undefined,
+      },
+      "Update data menu dari Master Menu"
+    );
+
+    setIsEditProductModalOpen(false);
+    setEditingProduct(null);
+    showToast(`Produk "${editName}" berhasil diperbarui!`);
   };
 
   const handleToggle = (id: string) => {
@@ -150,7 +233,7 @@ export default function MenuPage() {
             <span>Katalog Master Menu, Resep & COGS</span>
           </h2>
           <p className="text-xs text-slate-500">
-            Master {filteredProducts.length} Menu Produk • Produk aktif otomatis tersedia di POS Kasir dan QR Table Self-Order
+            Master {filteredProducts.length} Menu Produk • Foto dan keterangan tersinkronisasi otomatis ke POS Kasir dan Portal Pelanggan
           </p>
         </div>
         <div className="flex items-center space-x-2">
@@ -212,7 +295,7 @@ export default function MenuPage() {
             <table className="w-full text-xs text-left">
               <thead className="bg-slate-50 border-b border-slate-100 font-semibold text-slate-600">
                 <tr>
-                  <th className="p-3">Nama Produk</th>
+                  <th className="p-3">Menu & Foto</th>
                   <th className="p-3">Mitra / Tenant</th>
                   <th className="p-3">Kategori</th>
                   <th className="p-3">Harga Jual</th>
@@ -237,15 +320,39 @@ export default function MenuPage() {
                   return (
                     <tr key={p.id} className="hover:bg-slate-50">
                       <td className="p-3 font-semibold text-slate-900">
-                        <p>{p.name}</p>
-                        {p.description && (
-                          <p className="text-[10px] text-slate-400 font-normal line-clamp-1">{p.description}</p>
-                        )}
+                        <div className="flex items-center space-x-3">
+                          {p.imageUrl ? (
+                            <div className="w-11 h-11 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
+                              <img
+                                src={p.imageUrl}
+                                alt={p.name}
+                                className="w-full h-full object-cover"
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0 text-slate-400">
+                              <UtensilsCrossed className="w-5 h-5 opacity-40" />
+                            </div>
+                          )}
+                          <div className="min-w-0 max-w-xs">
+                            <p className="font-bold text-slate-900 truncate">{p.name}</p>
+                            <p className="text-[10px] text-slate-400 font-normal line-clamp-1">
+                              {p.description || "Belum ada deskripsi"}
+                            </p>
+                          </div>
+                        </div>
                       </td>
                       <td className="p-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-brand-orange border border-orange-200">
-                          {currentMitra.name}
-                        </span>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-brand-orange border border-orange-200">
+                            {currentMitra.name}
+                          </span>
+                          {!isTenantActive(p.tenantId || "tenant-ks") && (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-red-100 text-red-800 border border-red-200">
+                              Mitra Nonaktif (Tutup)
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="p-3 text-slate-500">{p.category}</td>
                       <td className="p-3 font-bold font-mono text-slate-900">
@@ -287,13 +394,22 @@ export default function MenuPage() {
                         </button>
                       </td>
                       <td className="p-3 text-right">
-                        <button
-                          onClick={() => handleDelete(p.id)}
-                          className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                          title="Hapus Produk"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end space-x-1">
+                          <button
+                            onClick={() => handleOpenEditModal(p)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                            title="Edit Menu"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p.id)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Hapus Produk"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -307,7 +423,7 @@ export default function MenuPage() {
       {/* Modal Tambah Menu */}
       {isAddProductModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 space-y-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-bold text-sm text-slate-900">Tambah Menu Produk Baru</h3>
               <button
@@ -402,14 +518,55 @@ export default function MenuPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">Deskripsi Detail Menu</label>
+                <label className="font-bold text-slate-700">Deskripsi / Keterangan Menu</label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder="Jelaskan komposisi, cita rasa, atau keunikan menu (akan tampil di kartu POS & Portal Pelanggan)..."
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl resize-none text-xs"
                 />
+              </div>
+
+              {/* Photo Upload & Preview */}
+              <div className="space-y-1.5 pt-1">
+                <label className="font-bold text-slate-700 flex items-center justify-between">
+                  <span className="flex items-center space-x-1">
+                    <ImageIcon className="w-3.5 h-3.5 text-brand-orange" />
+                    <span>Foto Menu</span>
+                  </span>
+                  {newImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setNewImageUrl("")}
+                      className="text-[10px] text-rose-500 font-bold hover:underline"
+                    >
+                      Hapus Foto
+                    </button>
+                  )}
+                </label>
+
+                {newImageUrl ? (
+                  <div className="relative w-full h-32 rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                    <img
+                      src={newImageUrl}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <label className="w-full h-24 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-brand-orange/60 hover:bg-orange-50/20 transition-all text-slate-500">
+                    <Upload className="w-5 h-5 mb-1 text-slate-400" />
+                    <span className="text-[11px] font-semibold text-slate-600">Pilih / Upload Foto Menu</span>
+                    <span className="text-[9px] text-slate-400">JPG, PNG, atau WEBP (maks 5MB)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e, setNewImageUrl)}
+                      className="hidden"
+                    />
+                  </label>
+                )}
               </div>
 
               <div className="flex justify-end space-x-2 pt-3 border-t">
@@ -423,6 +580,190 @@ export default function MenuPage() {
                 </Button>
                 <Button type="submit" size="sm" className="bg-brand-orange text-white font-bold">
                   Simpan & Aktifkan Menu
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Menu */}
+      {isEditProductModalOpen && editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+                <Edit2 className="w-4 h-4 text-blue-600" />
+                <span>Edit Menu: {editingProduct.name}</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setIsEditProductModalOpen(false);
+                  setEditingProduct(null);
+                }}
+                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateProductSubmit} className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Nama Menu Produk</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl"
+                />
+              </div>
+
+              {/* Mitra / Tenant Assignment */}
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Mitra / Tenant Pemilik</label>
+                {isTenantOwner && user?.tenant ? (
+                  <div className="px-3 py-2 bg-slate-50 border rounded-xl text-slate-700 font-semibold flex items-center justify-between">
+                    <span>{user.tenant.name}</span>
+                    <span className="text-[10px] bg-orange-100 text-brand-orange px-2 py-0.5 rounded-md font-bold">
+                      Tenant Anda
+                    </span>
+                  </div>
+                ) : (
+                  <select
+                    value={editTenantId}
+                    onChange={(e) => setEditTenantId(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-xl bg-white font-medium text-slate-800"
+                  >
+                    {AVAILABLE_MITRA.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.badge})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Kategori Menu</label>
+                <select
+                  value={editCat}
+                  onChange={(e) => setEditCat(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-xl bg-white font-medium"
+                >
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Harga Jual (Rp)</label>
+                  <input
+                    type="number"
+                    required
+                    min={1000}
+                    step={500}
+                    value={editPrice}
+                    onChange={(e) => setEditPrice(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-mono font-bold"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Estimasi COGS Resep (Rp)</label>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    step={500}
+                    value={editCogs}
+                    onChange={(e) => setEditCogs(Number(e.target.value))}
+                    className="w-full px-3 py-2 border rounded-xl font-mono text-slate-600"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-bold text-slate-700">Deskripsi / Keterangan Menu</label>
+                <textarea
+                  rows={2}
+                  placeholder="Jelaskan komposisi, cita rasa, atau keunikan menu..."
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl resize-none text-xs"
+                />
+              </div>
+
+              {/* Photo Upload, Replace & Preview */}
+              <div className="space-y-1.5 pt-1">
+                <label className="font-bold text-slate-700 flex items-center justify-between">
+                  <span className="flex items-center space-x-1">
+                    <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Foto Menu</span>
+                  </span>
+                  {editImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setEditImageUrl("")}
+                      className="text-[10px] text-rose-500 font-bold hover:underline"
+                    >
+                      Hapus Foto
+                    </button>
+                  )}
+                </label>
+
+                {editImageUrl ? (
+                  <div className="space-y-2">
+                    <div className="relative w-full h-32 rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
+                      <img
+                        src={editImageUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <label className="inline-flex items-center space-x-1.5 text-xs font-bold text-blue-600 cursor-pointer hover:underline">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Ganti Foto Menu</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handleImageUpload(e, setEditImageUrl)}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <label className="w-full h-24 border-2 border-dashed border-slate-300 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-500/60 hover:bg-blue-50/20 transition-all text-slate-500">
+                    <Upload className="w-5 h-5 mb-1 text-slate-400" />
+                    <span className="text-[11px] font-semibold text-slate-600">Pilih / Upload Foto Baru</span>
+                    <span className="text-[9px] text-slate-400">JPG, PNG, atau WEBP (maks 5MB)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => handleImageUpload(e, setEditImageUrl)}
+                      className="hidden"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setIsEditProductModalOpen(false);
+                    setEditingProduct(null);
+                  }}
+                >
+                  Batal
+                </Button>
+                <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
+                  Simpan Perubahan
                 </Button>
               </div>
             </form>

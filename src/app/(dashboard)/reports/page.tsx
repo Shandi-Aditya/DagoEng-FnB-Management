@@ -68,6 +68,14 @@ export default function ReportsPage() {
   const totalOrdersCount = filteredOrders.length;
   const totalItemsSold = filteredOrders.reduce((sum, o) => sum + o.items.reduce((iSum, it) => iSum + it.quantity, 0), 0);
 
+  const totalNonCashRevenue = filteredOrders
+    .filter((o) => o.status !== "CANCELLED" && o.paymentMethod !== "CASH")
+    .reduce((sum, o) => sum + o.total, 0);
+
+  const totalCashRevenue = filteredOrders
+    .filter((o) => o.status !== "CANCELLED" && o.paymentMethod === "CASH")
+    .reduce((sum, o) => sum + o.total, 0);
+
   // Generate Report Configuration Data for PDF/CSV
   const getReportData = (type: ReportType) => {
     switch (type) {
@@ -101,7 +109,8 @@ export default function ReportsPage() {
             { label: "Total Pajak PB1 (10%)", value: `Rp ${Math.round(totalRevenue * 0.1).toLocaleString("id-ID")}` },
             { label: "Total Service Charge (5%)", value: `Rp ${Math.round(totalRevenue * 0.05).toLocaleString("id-ID")}` },
             { label: "Total Diskon Promo", value: `Rp ${totalDiscounts.toLocaleString("id-ID")}` },
-            { label: "Metode QRIS & Transfer", value: `Rp ${Math.round(totalRevenue * 0.65).toLocaleString("id-ID")}` },
+            { label: "Metode Non-Tunai / QRIS", value: `Rp ${totalNonCashRevenue.toLocaleString("id-ID")}` },
+            { label: "Metode Kas Tunai", value: `Rp ${totalCashRevenue.toLocaleString("id-ID")}` },
           ],
         };
 

@@ -37,6 +37,9 @@ interface CashDrawerShiftModalProps {
   totalCashSales: number;
   totalNonCashSales: number;
   totalTransactionsCount: number;
+  qrisSales?: number;
+  edcSales?: number;
+  totalDiscounts?: number;
   isTaxEnabled?: boolean;
   taxRatePercent?: number;
 }
@@ -50,6 +53,9 @@ export function CashDrawerShiftModal({
   totalCashSales,
   totalNonCashSales,
   totalTransactionsCount,
+  qrisSales,
+  edcSales,
+  totalDiscounts = 0,
   isTaxEnabled = true,
   taxRatePercent = 10,
 }: CashDrawerShiftModalProps) {
@@ -61,9 +67,16 @@ export function CashDrawerShiftModal({
   const [toastMsg, setToastMsg] = useState<string>("");
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
 
+  // Sync actual cash when modal opens or live values change
+  React.useEffect(() => {
+    const expected = initialCash + totalCashSales;
+    setActualCashEnding(expected);
+    setActualInput(expected.toString());
+  }, [initialCash, totalCashSales, isOpen]);
+
   // Payment Breakdown Estimation (QRIS vs EDC)
-  const qrisSales = Math.round(totalNonCashSales * 0.85); // 85% QRIS
-  const edcSales = totalNonCashSales - qrisSales; // 15% EDC
+  const finalQrisSales = qrisSales !== undefined ? qrisSales : Math.round(totalNonCashSales * 0.85);
+  const finalEdcSales = edcSales !== undefined ? edcSales : totalNonCashSales - finalQrisSales;
 
   // Revenue Sharing Split Settings (Default: 85% Tenant, 15% Dago Hub Platform)
   const [tenantSharePercent, setTenantSharePercent] = useState<number>(85);
@@ -84,8 +97,8 @@ export function CashDrawerShiftModal({
   const tenantTotalShare = Math.round((totalNetSales * tenantSharePercent) / 100);
   const dagoTotalShare = totalNetSales - tenantTotalShare;
 
-  const tenantQrisShare = Math.round((qrisSales * tenantSharePercent) / 100);
-  const dagoQrisShare = qrisSales - tenantQrisShare;
+  const tenantQrisShare = Math.round((finalQrisSales * tenantSharePercent) / 100);
+  const dagoQrisShare = finalQrisSales - tenantQrisShare;
 
   const tenantCashShare = Math.round((totalCashSales * tenantSharePercent) / 100);
   const dagoCashShare = totalCashSales - tenantCashShare;
@@ -115,11 +128,11 @@ export function CashDrawerShiftModal({
     shiftName: "Shift 2 (Sore/Penutupan)",
     initialCash,
     totalCashSales,
-    qrisSales,
-    edcSales,
+    qrisSales: finalQrisSales,
+    edcSales: finalEdcSales,
     totalTransactionsCount,
     totalGrossSales,
-    totalDiscounts: 45000,
+    totalDiscounts,
     isTaxEnabled,
     taxRatePercent,
     totalTax: estimatedTax,
@@ -162,9 +175,9 @@ export function CashDrawerShiftModal({
 • *Total Omset Bersih:* *${formatCurrencyIDR(totalNetSales)}*
 
 💳 *METODE PEMBAYARAN*
-• 📲 QRIS Dinamis: ${formatCurrencyIDR(qrisSales)}
+• 📲 QRIS Dinamis: ${formatCurrencyIDR(finalQrisSales)}
 • 💵 Tunai (Cash Laci): ${formatCurrencyIDR(totalCashSales)}
-• 💳 Kartu EDC: ${formatCurrencyIDR(edcSales)}
+• 💳 Kartu EDC: ${formatCurrencyIDR(finalEdcSales)}
 
 🤝 *SPLIT BAGI HASIL REVENUE SHARE*
 • *Porsi Pemilik Usaha / Tenant (${tenantSharePercent}%):* *${formatCurrencyIDR(tenantTotalShare)}*
@@ -302,7 +315,7 @@ _Laporan otomatis digenerate dari POS DagoEng Platform_`;
                   <QrCode className="w-3.5 h-3.5" />
                 </div>
                 <p className="text-base font-bold text-blue-700 font-mono">
-                  {formatCurrencyIDR(qrisSales)}
+                  {formatCurrencyIDR(finalQrisSales)}
                 </p>
                 <span className="text-[10px] text-blue-600 font-medium">Auto-Settlement Bank</span>
               </div>

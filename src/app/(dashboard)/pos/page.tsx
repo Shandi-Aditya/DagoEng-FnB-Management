@@ -10,8 +10,11 @@ import { useProducts } from "@/contexts/ProductContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { calculateOrderPricing, PromoConfig } from "@/lib/promo";
+import { calculateOrderPricing, calculateCoworkingPricing, validateVoucherCode, PromoConfig } from "@/lib/promo";
 import { LOYALTY_VOUCHERS } from "@/features/pos/mock-data";
+import { useCoworking } from "@/contexts/CoworkingContext";
+import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
+import { CoworkingSpaceItem, SpaceType } from "@/types/coworking";
 import {
   POSProductItem,
   POSCartItem,
@@ -24,6 +27,7 @@ import { ModifierModal } from "@/features/pos/ModifierModal";
 import { PaymentModal } from "@/features/pos/PaymentModal";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { isTenantActive, DEFAULT_FNB_TENANTS, getTenantName } from "@/lib/tenant";
 import {
   Calculator,
   ShoppingCart,
@@ -44,22 +48,106 @@ import {
   Percent,
   AlertTriangle,
   Ban,
+  Store,
+  Laptop,
+  Calendar,
+  Clock,
+  MapPin,
+  Users,
+  Check,
+  User,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+const COWORKING_TIME_SLOTS = [
+  "08:00",
+  "09:00",
+  "10:00",
+  "11:00",
+  "12:00",
+  "13:00",
+  "14:00",
+  "15:00",
+  "16:00",
+  "17:00",
+  "18:00",
+  "19:00",
+  "20:00",
+];
+
+function parseHour(timeStr: string): number {
+  if (!timeStr) return 9;
+  const match = timeStr.match(/(\d{1,2}):(\d{2})/);
+  if (match) return parseInt(match[1], 10);
+  const matchNum = timeStr.match(/(\d{1,2})/);
+  if (matchNum) return parseInt(matchNum[1], 10);
+  return 9;
+}
+
+function calculateEndTime(startTime: string, durationHours: number): string {
+  const startHour = parseHour(startTime);
+  const endHour = startHour + durationHours;
+  return `${endHour.toString().padStart(2, "0")}:00`;
+}
 
 export default function POSPage() {
   const { user } = useAuth();
   const { activeOutlet, activeOutletId } = useOutlet();
   const { createPosOrder } = useOrders();
-  const { getAvailableTables, occupyTableWithOrder, areas } = useTables();
+  const { getAvailableTables, occupyTableWithOrder, areas, filteredAreas } = useTables();
   const { simulateBOMDeduction, checkProductStockStatus } = useInventory();
   const { filteredProducts: masterProducts, categories } = useProducts();
   const { filteredMembers: membersList, addPoints, redeemPoints } = useLoyalty();
   const { logActivity } = useActivityLog();
   const { settings } = useSettings();
+  const { spaces: cwSpaces, bookings: cwBookings, bookSpace: cwBookSpace } = useCoworking();
 
-  // Search and Category Filter
-  const [selectedCategory, setSelectedCategory] = useState<string>("Semua Menu");
+  // Mode: FNB vs COWORKING
+  const [posMode, setPosMode] = useState<"FNB" | "COWORKING">("FNB");
+
+  // Co-Working Specific States
+  const [cwSelectedSpaceId, setCwSelectedSpaceId] = useState<string>("");
+  const [cwSpaceTypeFilter, setCwSpaceTypeFilter] = useState<string>("ALL");
+  const [cwSearchQuery, setCwSearchQuery] = useState<string>("");
+  const [cwDate, setCwDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [cwStartTime, setCwStartTime] = useState<string>("09:00");
+  const [cwDuration, setCwDuration] = useState<number>(2); // hours
+  const [cwCustomerType, setCwCustomerType] = useState<"MEMBER" | "WALK_IN">("MEMBER");
+  const [cwMemberId, setCwMemberId] = useState<string>("");
+  const [cwGuestName, setCwGuestName] = useState<string>("");
+  const [cwGuestPhone, setCwGuestPhone] = useState<string>("");
+  const [cwGuestEmail, setCwGuestEmail] = useState<string>("");
+  const [cwNotes, setCwNotes] = useState<string>("");
+  const [cwPaymentMethod, setCwPaymentMethod] = useState<POSPaymentMethod>("QRIS");
+  const [cwVoucherCode, setCwVoucherCode] = useState<string>("");
+  const [cwAppliedPromo, setCwAppliedPromo] = useState<PromoConfig | null>(null);
+  const [cwVoucherValidationMsg, setCwVoucherValidationMsg] = useState<{ type: "SUCCESS" | "ERROR"; text: string } | null>(null);
+  const [lastCoworkReceiptData, setLastCoworkReceiptData] = useState<CoworkingReceiptData | null>(null);
+  const [isCoworkReceiptModalOpen, setIsCoworkReceiptModalOpen] = useState<boolean>(false);
+
+  const [tenantSettingsVersion, setTenantSettingsVersion] = useState(0);
+
+  useEffect(() => {
+    const handleTenantUpdate = () => setTenantSettingsVersion((v) => v + 1);
+    window.addEventListener("tenant_settings_updated", handleTenantUpdate);
+    window.addEventListener("storage", handleTenantUpdate);
+    return () => {
+      window.removeEventListener("tenant_settings_updated", handleTenantUpdate);
+      window.removeEventListener("storage", handleTenantUpdate);
+    };
+  }, []);
+
+  // Filter Active Mitra (Tenant) - Priority Filter Utama
+  const activeTenants = useMemo(() => {
+    return DEFAULT_FNB_TENANTS.filter((t) => isTenantActive(t.id));
+  }, [tenantSettingsVersion]);
+
+  // Primary Filter: Selected Mitra/Tenant
+  const [selectedTenantId, setSelectedTenantId] = useState<string>("ALL");
+
+  // Secondary Filter: Category & Search
+  const [selectedCategory, setSelectedCategory] = useState<string>("Semua Kategori");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Cart & Order Settings
@@ -93,12 +181,6 @@ export default function POSPage() {
   const [lastReceiptData, setLastReceiptData] = useState<POSReceiptData | null>(null);
   const [posToast, setPosToast] = useState<string>("");
 
-  // Shift & Cash Drawer Metrics
-  const [initialCashDrawer] = useState<number>(500000);
-  const [totalCashSales, setTotalCashSales] = useState<number>(342000);
-  const [totalNonCashSales, setTotalNonCashSales] = useState<number>(688000);
-  const [totalTransactionsCount, setTotalTransactionsCount] = useState<number>(14);
-
   // Real-time Available Tables for the Selected Outlet Scope ONLY
   const availableTables = useMemo(() => {
     return getAvailableTables(activeOutletId);
@@ -120,9 +202,15 @@ export default function POSPage() {
     return membersList.find((m) => m.id === selectedMemberId) || null;
   }, [membersList, selectedMemberId]);
 
-  // Convert Master Products to POS format with Live Stock Status
+  // Convert Master Products to POS format with Live Stock Status & Tenant Active Guard
   const posProducts = useMemo(() => {
-    return masterProducts.map((prod) => {
+    // Strictly filter out products from inactive F&B partners
+    const activeTenantProducts = masterProducts.filter((prod) => {
+      const tenantId = prod.tenantId || "tenant-ks";
+      return isTenantActive(tenantId);
+    });
+
+    return activeTenantProducts.map((prod) => {
       const stockCheck = checkProductStockStatus(prod.name);
       return {
         id: prod.id,
@@ -132,6 +220,8 @@ export default function POSPage() {
         basePrice: prod.basePrice,
         cogs: prod.cogsEstimate,
         margin: prod.grossMarginPercent,
+        description: prod.description,
+        imageUrl: prod.imageUrl,
         stockStatus: stockCheck.status,
         stockLabel: stockCheck.label,
         isAvailable: prod.status === "ACTIVE" && stockCheck.status !== "OUT_OF_STOCK",
@@ -166,23 +256,37 @@ export default function POSPage() {
         ],
       };
     });
-  }, [masterProducts, checkProductStockStatus]);
+  }, [masterProducts, checkProductStockStatus, tenantSettingsVersion]);
 
-  // Category List for filter tabs
+  // 1. Scoped to Selected Mitra (Primary Filter)
+  const tenantScopedProducts = useMemo(() => {
+    if (selectedTenantId === "ALL") return posProducts;
+    return posProducts.filter((p) => (p.tenantId || "tenant-ks") === selectedTenantId);
+  }, [posProducts, selectedTenantId]);
+
+  // 2. Dynamic Categories for the chosen Mitra (Secondary Filter)
   const categoryTabs = useMemo(() => {
-    return ["Semua Menu", ...Array.from(new Set(posProducts.map((p) => p.category)))];
-  }, [posProducts]);
+    const cats = Array.from(new Set(tenantScopedProducts.map((p) => p.category)));
+    return ["Semua Kategori", ...cats];
+  }, [tenantScopedProducts]);
 
-  // Filtered Products based on search & category
+  // Fallback category if selected category is not in the scoped categories
+  useEffect(() => {
+    if (selectedCategory !== "Semua Kategori" && !categoryTabs.includes(selectedCategory)) {
+      setSelectedCategory("Semua Kategori");
+    }
+  }, [categoryTabs, selectedCategory]);
+
+  // 3. Final Filtered Products based on search, tenant, and category
   const filteredProducts = useMemo(() => {
-    return posProducts.filter((prod) => {
-      const matchCat = selectedCategory === "Semua Menu" || prod.category === selectedCategory;
+    return tenantScopedProducts.filter((prod) => {
+      const matchCat = selectedCategory === "Semua Kategori" || prod.category === selectedCategory;
       const matchQuery =
         prod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         prod.category.toLowerCase().includes(searchQuery.toLowerCase());
       return matchCat && matchQuery;
     });
-  }, [posProducts, selectedCategory, searchQuery]);
+  }, [tenantScopedProducts, selectedCategory, searchQuery]);
 
   // Calculations
   const activePromo = useMemo(() => {
@@ -389,14 +493,6 @@ export default function POSPage() {
       };
     }
 
-    // 5. Update Cash Drawer Metrics
-    if (paymentData.method === "CASH") {
-      setTotalCashSales((prev) => prev + grandTotal);
-    } else {
-      setTotalNonCashSales((prev) => prev + grandTotal);
-    }
-    setTotalTransactionsCount((prev) => prev + 1);
-
     // 6. Audit Trail Logging
     logActivity({
       module: "POS",
@@ -427,6 +523,8 @@ export default function POSPage() {
         variantName: item.selectedVariant?.name,
         modifiers: item.selectedModifiers.map((m) => m.name),
         notes: item.notes,
+        tenantId: item.tenantId,
+        tenantName: getTenantName(item.tenantId),
       })),
       subtotal,
       tax: taxPB1,
@@ -460,6 +558,222 @@ export default function POSPage() {
     setTimeout(() => setPosToast(""), 3500);
   };
 
+  // ==========================================
+  // CO-WORKING COMPUTATIONS & HANDLERS
+  // ==========================================
+  const selectedSpace = useMemo(() => {
+    return cwSpaces.find((s) => s.id === cwSelectedSpaceId) || cwSpaces[0] || null;
+  }, [cwSpaces, cwSelectedSpaceId]);
+
+  useEffect(() => {
+    if (cwSpaces.length > 0 && !cwSelectedSpaceId) {
+      setCwSelectedSpaceId(cwSpaces[0].id);
+    }
+  }, [cwSpaces, cwSelectedSpaceId]);
+
+  const filteredCwSpaces = useMemo(() => {
+    return cwSpaces.filter((sp) => {
+      const matchType = cwSpaceTypeFilter === "ALL" || sp.type === cwSpaceTypeFilter;
+      const matchSearch =
+        sp.name.toLowerCase().includes(cwSearchQuery.toLowerCase()) ||
+        sp.area.toLowerCase().includes(cwSearchQuery.toLowerCase()) ||
+        sp.amenities.some((a) => a.toLowerCase().includes(cwSearchQuery.toLowerCase()));
+      return matchType && matchSearch;
+    });
+  }, [cwSpaces, cwSpaceTypeFilter, cwSearchQuery]);
+
+  const checkSlotAvailability = (
+    spaceId: string,
+    targetDate: string,
+    startHour: number,
+    durationHours: number
+  ): { isAvailable: boolean; reason?: string; conflictingBooking?: any } => {
+    const space = cwSpaces.find((s) => s.id === spaceId);
+    const maxCapacity = space?.type === "HOT_DESK" ? (space.capacity || 8) : 1;
+    const targetEndHour = startHour + durationHours;
+
+    const activeBookings = cwBookings.filter(
+      (b) =>
+        b.spaceId === spaceId &&
+        b.date === targetDate &&
+        b.checkInStatus !== "CANCELLED"
+    );
+
+    for (let h = startHour; h < targetEndHour; h++) {
+      const overlapping = activeBookings.filter((b) => {
+        const bStart = parseHour(b.startTime);
+        const bEnd = bStart + (b.duration || 1);
+        return h >= bStart && h < bEnd;
+      });
+
+      if (overlapping.length >= maxCapacity) {
+        return {
+          isAvailable: false,
+          reason: "Sudah dibooking",
+          conflictingBooking: overlapping[0],
+        };
+      }
+    }
+
+    return { isAvailable: true };
+  };
+
+  const cwSelectedMember = useMemo(() => {
+    return membersList.find((m) => m.id === cwMemberId) || null;
+  }, [membersList, cwMemberId]);
+
+  const cwBaseAmount = useMemo(() => {
+    if (!selectedSpace) return 0;
+    return (selectedSpace.hourlyRate || 15000) * cwDuration;
+  }, [selectedSpace, cwDuration]);
+
+  const cwTaxRate = isTaxEnabled ? (taxRatePercent || 10) / 100 : 0;
+  const cwPricing = useMemo(() => {
+    return calculateCoworkingPricing(cwBaseAmount, cwAppliedPromo || undefined, cwTaxRate);
+  }, [cwBaseAmount, cwAppliedPromo, cwTaxRate]);
+
+  const handleApplyCoworkVoucher = (codeToApply?: string) => {
+    const code = (codeToApply !== undefined ? codeToApply : cwVoucherCode).trim();
+    if (!code) {
+      setCwAppliedPromo(null);
+      setCwVoucherValidationMsg(null);
+      return;
+    }
+    const res = validateVoucherCode(code, settings.promos || [], cwBaseAmount, {
+      customerId: cwSelectedMember?.id,
+      scope: "COWORKING",
+    });
+    if (res.isValid && res.promo) {
+      setCwAppliedPromo(res.promo);
+      setCwVoucherValidationMsg({
+        type: "SUCCESS",
+        text: `Voucher "${res.promo.code || res.promo.name}" aktif! Hemat ${formatCurrencyIDR(res.discountAmount)}`,
+      });
+      setPosToast(`Voucher ${res.promo.code || res.promo.name} berhasil diterapkan!`);
+    } else {
+      setCwAppliedPromo(null);
+      setCwVoucherValidationMsg({
+        type: "ERROR",
+        text: res.reason || "Voucher tidak valid untuk Co-Working.",
+      });
+    }
+  };
+
+  const handleCompleteCoworkingPayment = () => {
+    if (!selectedSpace) {
+      setPosToast("Silakan pilih workspace terlebih dahulu.");
+      return;
+    }
+
+    let effectiveGuestName = "";
+    let effectiveGuestPhone = "";
+    let effectiveGuestEmail = "";
+
+    if (cwCustomerType === "MEMBER") {
+      if (!cwSelectedMember) {
+        setPosToast("Silakan pilih member terdaftar dari daftar.");
+        return;
+      }
+      effectiveGuestName = cwSelectedMember.name;
+      effectiveGuestPhone = cwSelectedMember.phone;
+      effectiveGuestEmail = cwSelectedMember.email || "";
+    } else {
+      if (!cwGuestName.trim()) {
+        setPosToast("Silakan isi nama tamu walk-in.");
+        return;
+      }
+      effectiveGuestName = cwGuestName.trim();
+      effectiveGuestPhone = cwGuestPhone.trim() || "-";
+      effectiveGuestEmail = cwGuestEmail.trim() || "-";
+    }
+
+    const startH = parseHour(cwStartTime);
+    const avail = checkSlotAvailability(selectedSpace.id, cwDate, startH, cwDuration);
+    if (!avail.isAvailable) {
+      setPosToast(`Slot waktu ${cwStartTime} (${cwDuration} Jam) pada tanggal ${cwDate} sudah tidak tersedia/penuh.`);
+      return;
+    }
+
+    const createdBooking = cwBookSpace({
+      guestName: effectiveGuestName,
+      guestPhone: effectiveGuestPhone,
+      guestEmail: effectiveGuestEmail,
+      company: "Walk-in / POS Kasir",
+      spaceId: selectedSpace.id,
+      spaceName: selectedSpace.name,
+      spaceType: selectedSpace.type,
+      bookingType: "HOURLY",
+      date: cwDate,
+      startTime: cwStartTime,
+      duration: cwDuration,
+      price: cwPricing.originalSubtotal,
+      discount: cwPricing.discountAmount,
+      totalAmount: cwPricing.total,
+      paymentMethod: cwPaymentMethod,
+      paidAmount: cwPricing.total,
+      remainingAmount: 0,
+      paymentStatus: "PAID",
+      fnbVoucherApplied: cwAppliedPromo?.code,
+      notes: cwNotes || undefined,
+    });
+
+    if (cwCustomerType === "MEMBER" && cwSelectedMember) {
+      const earnedPoints = Math.floor(cwPricing.total / 1000);
+      if (earnedPoints > 0) {
+        addPoints(cwSelectedMember.id, earnedPoints, `Booking Coworking #${createdBooking.bookingCode}`);
+      }
+    }
+
+    logActivity({
+      module: "COWORKING",
+      action: "PAYMENT_SUCCESS",
+      recordId: createdBooking.bookingCode,
+      newValue: `Booking: ${selectedSpace.name} - ${effectiveGuestName} (${formatCurrencyIDR(cwPricing.total)} via ${cwPaymentMethod})`,
+      description: `Transaksi booking Co-working ${createdBooking.bookingCode} berhasil di Kasir`,
+      reason: `Pembayaran kasir selesai via ${cwPaymentMethod}`,
+      status: "SUCCESS",
+    });
+
+    const endTimeFormatted = calculateEndTime(cwStartTime, cwDuration);
+    const coworkReceipt: CoworkingReceiptData = {
+      bookingCode: createdBooking.bookingCode,
+      transactionDate: new Date().toLocaleString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }) + " WITA",
+      guestName: effectiveGuestName,
+      guestPhone: effectiveGuestPhone,
+      guestEmail: effectiveGuestEmail,
+      company: "Personal / POS Kasir",
+      spaceName: selectedSpace.name,
+      spaceType: selectedSpace.type,
+      outletName: activeOutlet?.name ? `Kopi Senja — ${activeOutlet.name}` : "Dago Creative Hub",
+      outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
+      outletPhone: "(0362) 23456",
+      bookingDate: cwDate,
+      startTime: cwStartTime,
+      endTime: endTimeFormatted,
+      duration: cwDuration,
+      bookingType: "HOURLY",
+      basePrice: cwPricing.originalSubtotal,
+      discount: cwPricing.discountAmount > 0 ? cwPricing.discountAmount : undefined,
+      promoTitle: cwAppliedPromo ? (cwAppliedPromo.code ? `[${cwAppliedPromo.code}] ${cwAppliedPromo.name}` : cwAppliedPromo.name) : undefined,
+      tax: cwPricing.tax > 0 ? cwPricing.tax : 0,
+      serviceCharge: 0,
+      totalAmount: cwPricing.total,
+      paymentMethod: cwPaymentMethod,
+      paymentStatus: "PAID",
+      notes: cwNotes || undefined,
+    };
+
+    setLastCoworkReceiptData(coworkReceipt);
+    setIsCoworkReceiptModalOpen(true);
+    setPosToast(`Booking ${createdBooking.bookingCode} berhasil diproses!`);
+  };
+
   return (
     <div className="space-y-4">
       {/* POS Toast Notification */}
@@ -470,27 +784,65 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* Top Bar */}
+      {/* Top Bar with POS Mode Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
+        <div className="space-y-1">
+          <div className="flex items-center space-x-2">
             <Calculator className="w-5 h-5 text-brand-orange" />
-            <span>Point of Sale (POS) Kasir — {activeOutlet?.name || "Singaraja"}</span>
-          </h2>
+            <h2 className="text-lg font-bold text-slate-900">
+              Point of Sale (POS) Kasir — {activeOutlet?.name || "Singaraja"}
+            </h2>
+          </div>
           <p className="text-xs text-slate-500">
-            Kasir Bertugas: <strong className="text-slate-800">{user?.name}</strong> • Scope: <strong className="text-brand-orange font-mono">{activeOutlet?.name || "Singaraja"}</strong>
+            Kasir Bertugas: <strong className="text-slate-800">{user?.name}</strong> • Scope:{" "}
+            <strong className="text-brand-orange font-mono">{activeOutlet?.name || "Singaraja"}</strong>
           </p>
         </div>
 
-        <div className="flex items-center space-x-2">
+        {/* Mode Switcher & Tax Controls */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* POS Mode Switcher */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setPosMode("FNB")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${
+                posMode === "FNB"
+                  ? "bg-brand-orange text-white shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Utensils className="w-3.5 h-3.5" />
+              <span>Kuliner F&B</span>
+              {cartItems.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 bg-white text-brand-orange rounded-full text-[10px] font-black">
+                  {cartItems.reduce((s, i) => s + i.quantity, 0)}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPosMode("COWORKING")}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${
+                posMode === "COWORKING"
+                  ? "bg-slate-900 text-white shadow-sm"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Laptop className="w-3.5 h-3.5" />
+              <span>Co-Working & Ruang Kerja</span>
+            </button>
+          </div>
+
           <Button
             size="sm"
             variant="outline"
             onClick={() => setIsTaxSettingsModalOpen(true)}
-            className={`text-xs font-semibold space-x-1.5 ${isTaxEnabled
+            className={`text-xs font-semibold space-x-1.5 ${
+              isTaxEnabled
                 ? "border-emerald-300 text-emerald-800 bg-emerald-50/50"
                 : "border-slate-300 text-slate-500"
-              }`}
+            }`}
           >
             <Percent className="w-3.5 h-3.5" />
             <span>Pajak: {isTaxEnabled ? `PB1 ${taxRatePercent}%` : "Non-Aktif"}</span>
@@ -507,39 +859,93 @@ export default function POSPage() {
         </div>
       </div>
 
-      {/* Main Grid: Left (Catalog) & Right (Cart) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      {/* ==================================================== */}
+      {/* 1. F&B TRANSACTION MODE */}
+      {/* ==================================================== */}
+      {posMode === "FNB" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 animate-in fade-in duration-200">
         {/* Left Catalog (Col 7 / 12) */}
         <div className="lg:col-span-7 xl:col-span-8 space-y-4">
-          {/* Search & Category Tabs */}
-          <div className="space-y-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          {/* Search, Primary Mitra Filter, & Secondary Category Tabs */}
+          <div className="space-y-3.5 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
             <div className="relative">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Cari menu, SKU, atau kategori..."
-                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange"
+                className="w-full pl-10 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange shadow-2xs"
               />
             </div>
 
-            {/* Category Filter Badges */}
-            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-              {categoryTabs.map((cat) => (
+            {/* 1. Primary Filter: Mitra F&B Navigation Buttons */}
+            <div className="space-y-1.5 pt-1">
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                <span className="flex items-center space-x-1">
+                  <Store className="w-3.5 h-3.5 text-brand-orange" />
+                  <span>Pilih Mitra F&B:</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">
+                  {activeTenants.length} Mitra Aktif
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-2 overflow-x-auto pb-1 text-xs no-scrollbar">
                 <button
-                  key={cat}
                   type="button"
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition-all ${selectedCategory === cat
-                      ? "bg-brand-orange text-white shadow-sm"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
+                  onClick={() => setSelectedTenantId("ALL")}
+                  className={`px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all duration-200 flex items-center space-x-1.5 ${
+                    selectedTenantId === "ALL"
+                      ? "bg-slate-900 text-white shadow-sm"
+                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900"
+                  }`}
                 >
-                  {cat}
+                  <span>🏢</span>
+                  <span>Semua Mitra</span>
                 </button>
-              ))}
+
+                {activeTenants.map((tenant) => {
+                  const isSelected = selectedTenantId === tenant.id;
+                  return (
+                    <button
+                      key={tenant.id}
+                      type="button"
+                      onClick={() => setSelectedTenantId(tenant.id)}
+                      className={`px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all duration-200 flex items-center space-x-1.5 ${
+                        isSelected
+                          ? "bg-slate-900 text-white shadow-sm"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900"
+                      }`}
+                    >
+                      <span className="text-sm">{tenant.icon}</span>
+                      <span>{tenant.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
+
+            {/* 2. Secondary Filter: Category Sub-Pills */}
+            {categoryTabs.length > 1 && (
+              <div className="pt-2 border-t border-slate-100 flex items-center space-x-1.5 overflow-x-auto pb-0.5 text-xs no-scrollbar">
+                <span className="text-[10px] font-semibold text-slate-400 mr-1 flex-shrink-0">Kategori:</span>
+                {categoryTabs.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all ${
+                      selectedCategory === cat
+                        ? "bg-brand-orange text-white shadow-2xs"
+                        : "bg-slate-50 border border-slate-200/80 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Product Cards Grid with Live Stock Status & Disabled Out of Stock */}
@@ -552,34 +958,48 @@ export default function POSPage() {
                 <div
                   key={product.id}
                   onClick={() => handleSelectProduct(product)}
-                  className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between h-36 relative overflow-hidden ${isOutOfStock
+                  className={`p-3 rounded-xl border transition-all flex flex-col justify-between relative overflow-hidden ${isOutOfStock
                       ? "bg-slate-100/80 border-slate-300 opacity-60 cursor-not-allowed select-none"
                       : "bg-white border-slate-200 hover:border-brand-orange hover:shadow-md cursor-pointer group"
                     }`}
                 >
                   {/* Stock Status Badge */}
                   {isOutOfStock ? (
-                    <div className="absolute top-2 right-2 bg-rose-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded shadow-sm flex items-center space-x-1">
+                    <div className="absolute top-2 right-2 z-10 bg-rose-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded shadow-sm flex items-center space-x-1">
                       <Ban className="w-2.5 h-2.5" />
                       <span>Habis</span>
                     </div>
                   ) : isCriticalStock ? (
-                    <div className="absolute top-2 right-2 bg-amber-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-sm flex items-center space-x-1">
+                    <div className="absolute top-2 right-2 z-10 bg-amber-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-sm flex items-center space-x-1">
                       <AlertTriangle className="w-2.5 h-2.5" />
                       <span>Stok Menipis</span>
                     </div>
                   ) : null}
 
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between pr-14">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                  <div className="space-y-2">
+                    {product.imageUrl ? (
+                      <div className="relative w-full h-24 rounded-lg overflow-hidden bg-slate-100 border border-slate-100">
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-full h-16 rounded-lg bg-slate-100 border border-slate-100 flex items-center justify-center text-slate-400">
+                        <Utensils className="w-6 h-6 opacity-30" />
+                      </div>
+                    )}
+
+                    <div className="space-y-0.5">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
                         {product.category}
                       </span>
+                      <h4 className={`font-bold text-xs line-clamp-2 transition-colors ${isOutOfStock ? "text-slate-500" : "text-slate-900 group-hover:text-brand-orange"
+                        }`}>
+                        {product.name}
+                      </h4>
                     </div>
-                    <h4 className={`font-bold text-xs line-clamp-2 transition-colors ${isOutOfStock ? "text-slate-500" : "text-slate-900 group-hover:text-brand-orange"
-                      }`}>
-                      {product.name}
-                    </h4>
                   </div>
 
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
@@ -657,11 +1077,19 @@ export default function POSPage() {
                         onChange={(e) => setSelectedTable(e.target.value)}
                         className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-white focus:outline-none focus:ring-1 focus:ring-brand-orange"
                       >
-                        {availableTables.map((t) => (
-                          <option key={t.id} value={t.number || t.id}>
-                            Meja {t.number || t.id} (Kapasitas {t.cap} Org)
-                          </option>
-                        ))}
+                        {filteredAreas.map((area) => {
+                          const areaAvailableTables = area.tables.filter((t) => t.status === "AVAILABLE");
+                          if (areaAvailableTables.length === 0) return null;
+                          return (
+                            <optgroup key={area.id} label={`${area.name} (${area.outletName})`}>
+                              {areaAvailableTables.map((t) => (
+                                <option key={t.id} value={t.number || t.id}>
+                                  Meja {t.number || t.id} (Kapasitas {t.cap} Org)
+                                </option>
+                              ))}
+                            </optgroup>
+                          );
+                        })}
                       </select>
                     )}
                   </div>
@@ -818,20 +1246,40 @@ export default function POSPage() {
 
             {/* Calculations & Checkout Trigger */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-3">
-              {/* Promo Select */}
-              <div className="space-y-1">
+              {/* Promo & Voucher Code Selector */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-slate-700 flex items-center gap-1">
+                    <Tag className="w-3 h-3 text-emerald-600" />
+                    <span>Promo / Voucher Diskon</span>
+                  </span>
+                  {selectedPromoId && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPromoId("")}
+                      className="text-[10px] text-rose-600 hover:underline font-bold"
+                    >
+                      Hapus Promo
+                    </button>
+                  )}
+                </div>
                 <select
                   value={selectedPromoId}
                   onChange={(e) => setSelectedPromoId(e.target.value)}
                   className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange"
                 >
-                  <option value="">-- Pilih Promo (Opsional) --</option>
-                  {settings.promos?.filter((p: PromoConfig) => p.isActive).map((promo: PromoConfig) => (
+                  <option value="">-- Pilih Promo / Masukkan Kode --</option>
+                  {settings.promos?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "FNB")).map((promo: PromoConfig) => (
                     <option key={promo.id} value={promo.id}>
-                      {promo.name} {promo.discountType === "PERCENTAGE" ? `(${promo.discountValue}%)` : `(-Rp${promo.discountValue.toLocaleString()})`}
+                      {promo.code ? `[${promo.code}] ` : ""}{promo.name} &bull; {promo.discountType === "PERCENTAGE" ? `${promo.discountValue}% (Maks Rp${(promo.maxDiscount || 0).toLocaleString()})` : `Potongan Rp${promo.discountValue.toLocaleString()}`}
                     </option>
                   ))}
                 </select>
+                {activePromo && activePromo.minimumAmount && subtotal < activePromo.minimumAmount && (
+                  <p className="text-[10px] text-amber-600 font-medium">
+                    * Belum mencapai min. belanja Rp {activePromo.minimumAmount.toLocaleString("id-ID")}.
+                  </p>
+                )}
               </div>
 
               {/* Price Breakdown */}
@@ -886,7 +1334,445 @@ export default function POSPage() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* 2. CO-WORKING TRANSACTION MODE */}
+      {/* ==================================================== */}
+      {posMode === "COWORKING" && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 animate-in fade-in duration-200">
+          {/* Left Column: Workspace Catalog (Col 7 / 12) */}
+          <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+            <div className="space-y-3.5 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={cwSearchQuery}
+                  onChange={(e) => setCwSearchQuery(e.target.value)}
+                  placeholder="Cari ruang kerja, area, fasilitas..."
+                  className="w-full pl-10 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 shadow-2xs"
+                />
+              </div>
+
+              {/* Workspace Type Pills */}
+              <div className="flex items-center space-x-1.5 overflow-x-auto pb-0.5 text-xs no-scrollbar">
+                {[
+                  { key: "ALL", label: "Semua Tipe" },
+                  { key: "HOT_DESK", label: "Hot Desk" },
+                  { key: "DEDICATED_DESK", label: "Dedicated Desk" },
+                  { key: "MEETING_ROOM", label: "Meeting Room" },
+                  { key: "PRIVATE_POD", label: "Private Pod" },
+                ].map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => setCwSpaceTypeFilter(f.key)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${
+                      cwSpaceTypeFilter === f.key
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Workspaces Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {filteredCwSpaces.map((space) => {
+                const isSelected = selectedSpace?.id === space.id;
+                const startH = parseHour(cwStartTime);
+                const avail = checkSlotAvailability(space.id, cwDate, startH, cwDuration);
+
+                return (
+                  <div
+                    key={space.id}
+                    onClick={() => setCwSelectedSpaceId(space.id)}
+                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
+                      isSelected
+                        ? "bg-blue-50/40 border-blue-600 ring-2 ring-blue-600/20 shadow-md"
+                        : "bg-white border-slate-200 hover:border-slate-400 hover:shadow-sm"
+                    }`}
+                  >
+                    <div className="space-y-2.5">
+                      {space.imageUrl ? (
+                        <div className="relative w-full h-28 rounded-xl overflow-hidden bg-slate-100 border border-slate-100">
+                          <img
+                            src={space.imageUrl}
+                            alt={space.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-full h-16 rounded-xl bg-slate-100 border border-slate-100 flex items-center justify-center text-slate-400">
+                          <Laptop className="w-6 h-6 opacity-30" />
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
+                              {space.type.replace("_", " ")}
+                            </span>
+                            <h4 className="font-bold text-sm text-slate-900 line-clamp-1">{space.name}</h4>
+                            <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                              <MapPin className="w-3 h-3 text-slate-400" />
+                              <span>{space.area}</span>
+                            </p>
+                          </div>
+
+                          <span
+                            className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${
+                              avail.isAvailable
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : "bg-rose-50 text-rose-700 border-rose-200"
+                            }`}
+                          >
+                            {avail.isAvailable ? "🟢 Tersedia" : "🔴 Terisi"}
+                          </span>
+                        </div>
+
+                        {space.description && (
+                          <p className="text-[11px] text-slate-500 line-clamp-1 leading-relaxed">
+                            {space.description}
+                          </p>
+                        )}
+
+                        {/* Amenities */}
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {space.amenities.slice(0, 3).map((a, idx) => (
+                            <span key={idx} className="text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                              • {a}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <div className="flex items-center space-x-1 text-slate-600">
+                        <Users className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="font-medium text-[11px]">{space.capacity} Tamu</span>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="font-mono font-black text-xs text-blue-600">
+                          {formatCurrencyIDR(space.hourlyRate)}
+                        </span>
+                        <span className="text-[10px] text-slate-400">/jam</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right Column: Reservation & Checkout Panel (Col 5 / 12) */}
+          <div className="lg:col-span-5 xl:col-span-4 flex flex-col space-y-3">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
+              {/* Workspace Summary Header */}
+              {selectedSpace && (
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                  {selectedSpace.imageUrl && (
+                    <div className="relative w-full h-24 rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
+                      <img
+                        src={selectedSpace.imageUrl}
+                        alt={selectedSpace.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <span className="text-[9px] uppercase font-bold text-slate-400">{selectedSpace.type.replace("_", " ")}</span>
+                      <h4 className="font-black text-xs text-slate-900">{selectedSpace.name}</h4>
+                      <p className="text-[10px] text-slate-500">{selectedSpace.area}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-black text-xs text-blue-600 font-mono">
+                        {formatCurrencyIDR(selectedSpace.hourlyRate)}
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">/jam</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Date & Duration */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Tanggal</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={cwDate}
+                    min={new Date().toISOString().split("T")[0]}
+                    onChange={(e) => setCwDate(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Durasi</span>
+                  </label>
+                  <select
+                    value={cwDuration}
+                    onChange={(e) => setCwDuration(Number(e.target.value))}
+                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                  >
+                    <option value={1}>1 Jam</option>
+                    <option value={2}>2 Jam</option>
+                    <option value={3}>3 Jam</option>
+                    <option value={4}>4 Jam (Setengah Hari)</option>
+                    <option value={8}>8 Jam (Seharian Penuh)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Time Slots Selector with Availability Matrix */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <label className="font-bold text-slate-700 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Pilih Jam Mulai</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500">
+                    Sewa: <strong>{cwStartTime} - {calculateEndTime(cwStartTime, cwDuration)} WITA</strong>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-4 gap-1 max-h-32 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200/80">
+                  {COWORKING_TIME_SLOTS.map((slot) => {
+                    const startH = parseHour(slot);
+                    const avail = selectedSpace
+                      ? checkSlotAvailability(selectedSpace.id, cwDate, startH, cwDuration)
+                      : { isAvailable: true };
+                    const isSelected = cwStartTime === slot;
+
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        disabled={!avail.isAvailable}
+                        onClick={() => setCwStartTime(slot)}
+                        className={`py-1.5 px-1 rounded-lg text-center transition-all flex flex-col items-center justify-center ${
+                          !avail.isAvailable
+                            ? "bg-rose-50 border border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
+                            : isSelected
+                            ? "bg-slate-900 text-white shadow-xs font-black ring-1 ring-slate-900 scale-105"
+                            : "bg-white border border-slate-200 text-slate-700 hover:bg-blue-50"
+                        }`}
+                      >
+                        <span className="text-[11px] font-mono">{slot}</span>
+                        <span className={`text-[8px] font-bold ${!avail.isAvailable ? "text-rose-600" : isSelected ? "text-blue-200" : "text-emerald-600"}`}>
+                          {avail.isAvailable ? "Tersedia" : "Terisi"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Customer / Guest Selection */}
+              <div className="space-y-2 pt-2 border-t border-slate-100">
+                <div className="flex items-center justify-between text-xs">
+                  <label className="font-bold text-slate-700 flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Identitas Pelanggan / Tamu</span>
+                  </label>
+                  <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setCwCustomerType("MEMBER")}
+                      className={`px-2 py-0.5 rounded ${cwCustomerType === "MEMBER" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500"}`}
+                    >
+                      Member
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCwCustomerType("WALK_IN")}
+                      className={`px-2 py-0.5 rounded ${cwCustomerType === "WALK_IN" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500"}`}
+                    >
+                      Walk-in
+                    </button>
+                  </div>
+                </div>
+
+                {cwCustomerType === "MEMBER" ? (
+                  <select
+                    value={cwMemberId}
+                    onChange={(e) => setCwMemberId(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none"
+                  >
+                    <option value="">-- Pilih Member Terdaftar ({membersList.length}) --</option>
+                    {membersList.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.tier} • {m.points} Pts) - {m.phone}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="space-y-1.5">
+                    <input
+                      type="text"
+                      placeholder="Nama Lengkap Tamu *"
+                      value={cwGuestName}
+                      onChange={(e) => setCwGuestName(e.target.value)}
+                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none"
+                    />
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <input
+                        type="tel"
+                        placeholder="No. WhatsApp / HP"
+                        value={cwGuestPhone}
+                        onChange={(e) => setCwGuestPhone(e.target.value)}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none"
+                      />
+                      <input
+                        type="email"
+                        placeholder="Email Tamu"
+                        value={cwGuestEmail}
+                        onChange={(e) => setCwGuestEmail(e.target.value)}
+                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Voucher / Promo Co-Working */}
+              <div className="space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+                <div className="flex items-center justify-between text-xs">
+                  <label className="font-bold text-slate-800 flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Voucher Promo Co-Working</span>
+                  </label>
+                  {cwAppliedPromo && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCwAppliedPromo(null);
+                        setCwVoucherCode("");
+                        setCwVoucherValidationMsg(null);
+                      }}
+                      className="text-[10px] text-rose-600 font-bold hover:underline"
+                    >
+                      Hapus
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex space-x-1.5">
+                  <input
+                    type="text"
+                    placeholder="Kode: COWORK50 / DAGO20"
+                    value={cwVoucherCode}
+                    onChange={(e) => setCwVoucherCode(e.target.value.toUpperCase())}
+                    className="flex-1 px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold uppercase text-slate-900 outline-none"
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => handleApplyCoworkVoucher()}
+                    className="h-8 px-3 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs"
+                  >
+                    Terapkan
+                  </Button>
+                </div>
+
+                {cwVoucherValidationMsg && (
+                  <div
+                    className={`p-2 rounded-lg text-[11px] font-medium flex items-center space-x-1.5 ${
+                      cwVoucherValidationMsg.type === "SUCCESS"
+                        ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                        : "bg-rose-50 border border-rose-200 text-rose-800"
+                    }`}
+                  >
+                    {cwVoucherValidationMsg.type === "SUCCESS" ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    )}
+                    <span>{cwVoucherValidationMsg.text}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Price Breakdown */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-600">
+                  <span>Sewa ({cwDuration} Jam)</span>
+                  <span>{formatCurrencyIDR(cwPricing.originalSubtotal)}</span>
+                </div>
+                {cwPricing.discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-bold">
+                    <span>Diskon Promo {cwAppliedPromo ? `(${cwAppliedPromo.code || cwAppliedPromo.name})` : ""}</span>
+                    <span>-{formatCurrencyIDR(cwPricing.discountAmount)}</span>
+                  </div>
+                )}
+                {isTaxEnabled && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Pajak PB1 ({taxRatePercent}%)</span>
+                    <span>{formatCurrencyIDR(cwPricing.tax)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-black text-slate-900 pt-1.5 border-t border-slate-200 text-sm">
+                  <span>Total Tagihan</span>
+                  <span className="text-blue-600 font-black">{formatCurrencyIDR(cwPricing.total)}</span>
+                </div>
+              </div>
+
+              {/* Payment Method Selector */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">Metode Pembayaran Kasir</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { id: "QRIS", label: "QRIS", desc: "e-Wallet" },
+                    { id: "CASH", label: "Kasir", desc: "Tunai" },
+                    { id: "EDC", label: "Debit/EDC", desc: "Kartu Bank" },
+                  ].map((pm) => (
+                    <button
+                      key={pm.id}
+                      type="button"
+                      onClick={() => setCwPaymentMethod(pm.id as POSPaymentMethod)}
+                      className={`p-2 rounded-xl border text-center transition-all ${
+                        cwPaymentMethod === pm.id
+                          ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                          : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      <span className="text-xs font-black block">{pm.label}</span>
+                      <span className={`text-[9px] block ${cwPaymentMethod === pm.id ? "text-slate-300" : "text-slate-400"}`}>
+                        {pm.desc}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <Button
+                type="button"
+                onClick={handleCompleteCoworkingPayment}
+                className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs rounded-xl shadow-md space-x-2"
+              >
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>Bayar & Cetak Nota Co-Working ({formatCurrencyIDR(cwPricing.total)})</span>
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODALS */}
       {/* 1. Modifier Modal */}
@@ -1002,6 +1888,18 @@ export default function POSPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 5. Coworking Receipt Modal */}
+      {lastCoworkReceiptData && (
+        <CoworkingReceiptModal
+          isOpen={isCoworkReceiptModalOpen}
+          booking={lastCoworkReceiptData}
+          onClose={() => {
+            setIsCoworkReceiptModalOpen(false);
+            setLastCoworkReceiptData(null);
+          }}
+        />
       )}
     </div>
   );

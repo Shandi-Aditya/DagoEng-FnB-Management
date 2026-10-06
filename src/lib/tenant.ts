@@ -120,3 +120,127 @@ export function getScopedDataFilter(
     outletId: user.outlet?.id,
   };
 }
+
+export const TENANT_STORAGE_KEY = "dagoeng_tenant_settings_v1";
+
+export interface FnbPartnerInfo {
+  id: string;
+  code: string;
+  name: string;
+  badge: string;
+  icon: string;
+  tagline: string;
+  desc: string;
+}
+
+export const DEFAULT_FNB_TENANTS: FnbPartnerInfo[] = [
+  {
+    id: "tenant-ks",
+    code: "KOPI-SENJA",
+    name: "Kopi Senja",
+    badge: "Official Mitra Kopi",
+    icon: "☕",
+    tagline: "Kopi Spesialti & Aneka Minuman",
+    desc: "Sajian kopi pilihan dan aneka minuman segar untuk menemani aktivitas Anda.",
+  },
+  {
+    id: "tenant-kitchen",
+    code: "DAPUR-MAMA",
+    name: "Dapur Mama",
+    badge: "Official Kitchen",
+    icon: "🍽️",
+    tagline: "Masakan Rumahan & Hidangan Utama",
+    desc: "Hidangan utama hangat, aneka olahan nasi, dan lauk lezat khas masakan rumah.",
+  },
+  {
+    id: "tenant-bakery",
+    code: "MANIS-BAKERY",
+    name: "Manis Bakery",
+    badge: "Fresh Baked Daily",
+    icon: "🥐",
+    tagline: "Roti, Kue & Pastry Segar",
+    desc: "Roti segar, pastry mentega lembut, dan camilan lezat yang dipanggang setiap hari.",
+  },
+  {
+    id: "tenant-tea",
+    code: "WARUNG-BU-NARTI",
+    name: "Warung Bu Narti",
+    badge: "Mitra Nusantara",
+    icon: "🍃",
+    tagline: "Kuliner Tradisional & Minuman Nusantara",
+    desc: "Aneka seduhan teh segar, minuman rempah tradisional, dan sajian khas nusantara.",
+  },
+];
+
+/**
+ * Helper to get readable tenant name by tenantId
+ */
+export function getTenantName(tenantId?: string): string | undefined {
+  if (!tenantId) return undefined;
+  const match = DEFAULT_FNB_TENANTS.find((t) => t.id === tenantId);
+  return match ? match.name : tenantId;
+}
+
+/**
+ * Reads all stored tenant settings from localStorage.
+ */
+export function getAllStoredTenantSettings(): Record<string, any> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(TENANT_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object") {
+      if (parsed.tenantId && typeof parsed.tenantId === "string") {
+        return { [parsed.tenantId]: parsed };
+      }
+      return parsed;
+    }
+  } catch (e) {
+    console.error("Failed to read tenant settings from localStorage", e);
+  }
+  return {};
+}
+
+/**
+ * Returns the status for a given tenant ("ACTIVE" | "INACTIVE").
+ * Defaults to "ACTIVE" in accordance with Prisma schema default: Tenant.status @default("ACTIVE").
+ */
+export function getTenantStatus(tenantId: string): "ACTIVE" | "INACTIVE" {
+  if (typeof window === "undefined") return "ACTIVE";
+  const map = getAllStoredTenantSettings();
+  const tenantData = map[tenantId];
+  if (tenantData && tenantData.status) {
+    return tenantData.status === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+  }
+  return "ACTIVE";
+}
+
+/**
+ * Returns true if tenant is currently ACTIVE.
+ */
+export function isTenantActive(tenantId: string): boolean {
+  return getTenantStatus(tenantId) === "ACTIVE";
+}
+
+/**
+ * Updates the operational status of a tenant in localStorage.
+ */
+export function setTenantStatus(tenantId: string, status: "ACTIVE" | "INACTIVE"): void {
+  if (typeof window === "undefined") return;
+  try {
+    const map = getAllStoredTenantSettings();
+    const existing = map[tenantId] || { tenantId };
+    map[tenantId] = {
+      ...existing,
+      tenantId,
+      status,
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(TENANT_STORAGE_KEY, JSON.stringify(map));
+    // Trigger custom event so other components on same window can react
+    window.dispatchEvent(new Event("tenant_settings_updated"));
+  } catch (e) {
+    console.error("Failed to set tenant status in localStorage", e);
+  }
+}

@@ -27,12 +27,15 @@ import {
   Check,
   FileText,
   FileSpreadsheet,
+  Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { PaymentModal } from "@/features/pos/PaymentModal";
-import { POSCartItem, POSPaymentMethod } from "@/features/pos/types";
+import { POSCartItem, POSPaymentMethod, POSReceiptData } from "@/features/pos/types";
 import { OrdersReportPDFModal } from "@/features/orders/OrdersReportPDFModal";
+import { ReceiptModal } from "@/features/pos/ReceiptModal";
+import { getTenantName } from "@/lib/tenant";
 
 export default function OrdersPage() {
   const { filteredOrders, advanceOrderStatus } = useOrders();
@@ -46,7 +49,48 @@ export default function OrdersPage() {
   const [paymentOrder, setPaymentOrder] = useState<OrderRecord | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
+  const [receiptModalOrder, setReceiptModalOrder] = useState<POSReceiptData | null>(null);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  const convertOrderToReceiptData = (order: OrderRecord): POSReceiptData => {
+    return {
+      orderNumber: order.orderNumber,
+      date: new Date(order.createdAt).toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      cashierName: "Kasir / Staff Bertugas",
+      outletName: order.outletName ? `Kopi Senja — ${order.outletName}` : "Dago Creative Hub",
+      outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
+      outletPhone: "(0362) 23456",
+      tableNumber: order.tableNumber,
+      customerName: order.customerName,
+      orderType: (order.orderType as any) || "DINE_IN",
+      items: order.items.map((i) => ({
+        name: i.productName,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        subtotal: i.quantity * i.unitPrice,
+        modifiers: i.modifiers,
+        notes: i.notes,
+        tenantId: i.tenantId,
+        tenantName: getTenantName(i.tenantId),
+      })),
+      subtotal: order.subtotal,
+      tax: order.tax || 0,
+      serviceCharge: 0,
+      promoName: order.promoId,
+      discount: order.discount || 0,
+      grandTotal: order.total,
+      paymentMethod: (order.paymentMethod as any) || "QRIS",
+      amountPaid: order.total,
+      changeDue: 0,
+    };
+  };
 
   const getOrderExportData = () => {
     const headers = [
@@ -285,83 +329,91 @@ export default function OrdersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredOrders.map((o) => {
-                  const metrics = calculateOrderMetrics(o);
-                  const isDelayed = metrics.slaStatus === "DELAYED";
-                  const isCompleted = o.status === "COMPLETED";
+                {filteredOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center text-slate-400 text-xs">
+                      Belum ada riwayat transaksi pesanan pada periode ini.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredOrders.map((o) => {
+                    const metrics = calculateOrderMetrics(o);
+                    const isDelayed = metrics.slaStatus === "DELAYED";
+                    const isCompleted = o.status === "COMPLETED";
 
-                  return (
-                    <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="p-3 font-bold text-slate-900">{o.orderNumber}</td>
-                      <td className="p-3 font-semibold">
-                        <p className="text-slate-900 font-bold">{o.tableNumber}</p>
-                        <p className="text-[10px] text-slate-400 font-normal">{o.customerName}</p>
-                      </td>
-                      <td className="p-3">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            isCompleted
-                              ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                              : "bg-brand-orange/10 text-brand-orange border border-brand-orange/20"
-                          }`}
-                        >
-                          {o.status.replace("_", " ")}
-                        </span>
-                      </td>
-                      <td className="p-3 font-mono font-semibold" suppressHydrationWarning>
-                        {formatMinutesToHuman(metrics.totalCustomerWaitingMinutes)}
-                      </td>
-                      <td className="p-3">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            isDelayed
-                              ? "bg-red-100 text-red-700 border border-red-200"
-                              : metrics.slaStatus === "AT_RISK"
-                              ? "bg-amber-100 text-amber-800 border border-amber-200"
-                              : "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                          }`}
-                        >
-                          {metrics.slaStatus.replace("_", " ")}
-                        </span>
-                      </td>
-                      <td className="p-3 font-bold text-slate-900">{formatCurrencyIDR(o.total)}</td>
-                      <td className="p-3">
-                        <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                            o.paymentStatus === "PAID"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : "bg-amber-50 text-amber-700 border border-amber-200"
-                          }`}
-                        >
-                          {o.paymentMethod || (o.paymentStatus === "PAID" ? "QRIS" : "PENDING")}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end space-x-1.5">
-                          {!isCompleted && o.status !== "CANCELLED" && (
+                    return (
+                      <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3 font-bold text-slate-900">{o.orderNumber}</td>
+                        <td className="p-3 font-semibold">
+                          <p className="text-slate-900 font-bold">{o.tableNumber}</p>
+                          <p className="text-[10px] text-slate-400 font-normal">{o.customerName}</p>
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              isCompleted
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                : "bg-brand-orange/10 text-brand-orange border border-brand-orange/20"
+                            }`}
+                          >
+                            {o.status.replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono font-semibold" suppressHydrationWarning>
+                          {formatMinutesToHuman(metrics.totalCustomerWaitingMinutes)}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              isDelayed
+                                ? "bg-red-100 text-red-700 border border-red-200"
+                                : metrics.slaStatus === "AT_RISK"
+                                ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                            }`}
+                          >
+                            {metrics.slaStatus.replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="p-3 font-bold text-slate-900">{formatCurrencyIDR(o.total)}</td>
+                        <td className="p-3">
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                              o.paymentStatus === "PAID"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-200"
+                            }`}
+                          >
+                            {o.paymentMethod || (o.paymentStatus === "PAID" ? "QRIS" : "PENDING")}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end space-x-1.5">
+                            {!isCompleted && o.status !== "CANCELLED" && (
+                              <Button
+                                size="sm"
+                                onClick={() => handleOpenPayment(o)}
+                                className="h-7 text-[11px] px-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold space-x-1 shadow-xs"
+                              >
+                                <CreditCard className="w-3 h-3" />
+                                <span>Proses Pembayaran</span>
+                              </Button>
+                            )}
                             <Button
                               size="sm"
-                              onClick={() => handleOpenPayment(o)}
-                              className="h-7 text-[11px] px-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold space-x-1 shadow-xs"
+                              variant="outline"
+                              onClick={() => setSelectedOrder(o)}
+                              className="h-7 text-[11px] px-2.5 space-x-1"
                             >
-                              <CreditCard className="w-3 h-3" />
-                              <span>Proses Pembayaran</span>
+                              <History className="w-3 h-3 text-brand-orange" />
+                              <span>Timeline</span>
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setSelectedOrder(o)}
-                            className="h-7 text-[11px] px-2.5 space-x-1"
-                          >
-                            <History className="w-3 h-3 text-brand-orange" />
-                            <span>Timeline</span>
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -531,9 +583,9 @@ export default function OrdersPage() {
             </div>
 
             {/* Modal Actions */}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-              <div>
-                {selectedOrder.status !== "COMPLETED" && selectedOrder.status !== "CANCELLED" && (
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+              <div className="flex items-center space-x-2">
+                {selectedOrder.status !== "COMPLETED" && selectedOrder.status !== "CANCELLED" && selectedOrder.paymentStatus !== "PAID" && (
                   <Button
                     size="sm"
                     onClick={() => {
@@ -543,7 +595,22 @@ export default function OrdersPage() {
                     className="text-xs bg-brand-orange hover:bg-orange-600 text-white font-bold space-x-1.5"
                   >
                     <CreditCard className="w-3.5 h-3.5" />
-                    <span>Proses Pembayaran & Selesaikan Pesanan</span>
+                    <span>Proses Pembayaran</span>
+                  </Button>
+                )}
+
+                {selectedOrder.paymentStatus === "PAID" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setReceiptModalOrder(convertOrderToReceiptData(selectedOrder));
+                      setIsReceiptModalOpen(true);
+                    }}
+                    className="text-xs font-bold space-x-1.5 border-slate-300"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Cetak Nota Struk</span>
                   </Button>
                 )}
               </div>
@@ -584,6 +651,13 @@ export default function OrdersPage() {
         onClose={() => setIsPDFModalOpen(false)}
         orders={filteredOrders}
         outletName={filteredOrders[0]?.outletName || "Singaraja"}
+      />
+
+      {/* POS Thermal Receipt Modal for Reprinting */}
+      <ReceiptModal
+        isOpen={isReceiptModalOpen}
+        receiptData={receiptModalOrder}
+        onClose={() => setIsReceiptModalOpen(false)}
       />
     </div>
   );

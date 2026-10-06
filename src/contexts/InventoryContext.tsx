@@ -36,10 +36,10 @@ interface InventoryContextType {
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
-const STORAGE_KEY_INGREDIENTS = "dagoeng_inventory_ingredients_v2";
-const STORAGE_KEY_RECIPES = "dagoeng_inventory_recipes_v2";
-const STORAGE_KEY_POS = "dagoeng_inventory_pos_v2";
-const STORAGE_KEY_LOGS = "dagoeng_inventory_logs_v2";
+const STORAGE_KEY_INGREDIENTS = "dagoeng_inventory_ingredients_v3";
+const STORAGE_KEY_RECIPES = "dagoeng_inventory_recipes_v3";
+const STORAGE_KEY_POS = "dagoeng_inventory_pos_v3";
+const STORAGE_KEY_LOGS = "dagoeng_inventory_logs_v3";
 
 export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const { activeOutletId, activeOutlet, isAllOutlets } = useOutlet();

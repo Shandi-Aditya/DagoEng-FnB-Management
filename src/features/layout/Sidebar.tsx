@@ -7,6 +7,8 @@ import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useOutlet } from "@/contexts/OutletContext";
+import { useOrders } from "@/contexts/OrderContext";
+import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { CashDrawerShiftModal } from "@/features/pos/CashDrawerShiftModal";
 import { getAuthorizedNavItems } from "@/lib/rbac";
 import {
@@ -53,9 +55,42 @@ export function Sidebar() {
   const { t, settings } = useSettings();
   const { activeOutlet } = useOutlet();
   const [isCashDrawerModalOpen, setIsCashDrawerModalOpen] = useState(false);
+  const { filteredOrders } = useOrders();
+  const { activeShift } = useEmployeeShift();
   const navItems = getAuthorizedNavItems(user, activeOrgModules);
 
   const isCashier = user?.role?.slug === "CASHIER";
+
+  // Live sales metrics for cashier shift reconciliation
+  const liveCashSales = React.useMemo(() => {
+    return filteredOrders
+      .filter((o) => o.paymentMethod === "CASH" && o.paymentStatus === "PAID")
+      .reduce((sum, o) => sum + (o.total || 0), 0);
+  }, [filteredOrders]);
+
+  const liveQrisSales = React.useMemo(() => {
+    return filteredOrders
+      .filter((o) => (o.paymentMethod === "QRIS" || !o.paymentMethod) && o.paymentStatus === "PAID")
+      .reduce((sum, o) => sum + (o.total || 0), 0);
+  }, [filteredOrders]);
+
+  const liveEdcSales = React.useMemo(() => {
+    return filteredOrders
+      .filter((o) => o.paymentMethod === "EDC" && o.paymentStatus === "PAID")
+      .reduce((sum, o) => sum + (o.total || 0), 0);
+  }, [filteredOrders]);
+
+  const liveOtherNonCashSales = React.useMemo(() => {
+    return filteredOrders
+      .filter((o) => o.paymentMethod === "TRANSFER" && o.paymentStatus === "PAID")
+      .reduce((sum, o) => sum + (o.total || 0), 0);
+  }, [filteredOrders]);
+
+  const liveNonCashSales = liveQrisSales + liveEdcSales + liveOtherNonCashSales;
+  const livePaidOrders = filteredOrders.filter((o) => o.paymentStatus === "PAID");
+  const liveTransactionsCount = livePaidOrders.length;
+  const liveDiscounts = livePaidOrders.reduce((sum, o) => sum + (o.discount || 0), 0);
+  const liveInitialCash = activeShift?.openingCash ?? 0;
 
   const handleLogoutClick = async () => {
     if (isCashier) {
@@ -161,10 +196,13 @@ export function Sidebar() {
           onClose={() => setIsCashDrawerModalOpen(false)}
           cashierName={user?.name || "Kasir Bertugas"}
           outletName={activeOutlet?.name || user?.outlet?.name || "Singaraja"}
-          initialCash={500000}
-          totalCashSales={342000}
-          totalNonCashSales={688000}
-          totalTransactionsCount={14}
+          initialCash={liveInitialCash}
+          totalCashSales={liveCashSales}
+          totalNonCashSales={liveNonCashSales}
+          totalTransactionsCount={liveTransactionsCount}
+          qrisSales={liveQrisSales}
+          edcSales={liveEdcSales}
+          totalDiscounts={liveDiscounts}
           isTaxEnabled={settings.isTaxEnabled}
           taxRatePercent={settings.taxRatePercent}
         />

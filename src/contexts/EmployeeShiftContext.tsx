@@ -94,46 +94,7 @@ export const INITIAL_EMPLOYEES: EmployeeProfile[] = [
   },
 ];
 
-export const INITIAL_SHIFTS: ShiftRecord[] = [
-  {
-    id: "shf-active-01",
-    shiftName: "Shift Pagi (08:00 - 16:00)",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    assignedCashierId: "emp-002",
-    assignedCashierName: "Ni Kadek Sri",
-    startTime: "17 Sep 2026 08:00 WITA",
-    status: "ACTIVE",
-    openingCash: 500000,
-    cashSales: 342000,
-    nonCashSales: 688000,
-    refundAmount: 0,
-    expectedCash: 842000,
-    actualCash: 842000,
-    cashVariance: 0,
-  },
-  {
-    id: "shf-closed-01",
-    shiftName: "Shift Sore (16:00 - 23:00)",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    assignedCashierId: "emp-002",
-    assignedCashierName: "Ni Kadek Sri",
-    startTime: "16 Sep 2026 16:00 WITA",
-    endTime: "16 Sep 2026 23:15 WITA",
-    status: "CLOSED",
-    openingCash: 500000,
-    cashSales: 1850000,
-    nonCashSales: 3420000,
-    refundAmount: 0,
-    expectedCash: 2350000,
-    actualCash: 2350000,
-    cashVariance: 0,
-    closingNotes: "Closing shift malam lancar, fisik kas cocok sempurna.",
-    closedAt: "16 Sep 2026 23:20 WITA",
-    closedBy: "Ni Kadek Sri (Head Cashier)",
-  },
-];
+export const INITIAL_SHIFTS: ShiftRecord[] = [];
 
 interface EmployeeShiftContextType {
   employees: EmployeeProfile[];
@@ -151,7 +112,7 @@ interface EmployeeShiftContextType {
 
 const EmployeeShiftContext = createContext<EmployeeShiftContextType | undefined>(undefined);
 const STORAGE_KEY_EMPLOYEES = "dagoeng_employees_v1";
-const STORAGE_KEY_SHIFTS = "dagoeng_shifts_v1";
+const STORAGE_KEY_SHIFTS = "dagoeng_shifts_v3";
 
 export function EmployeeShiftProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();

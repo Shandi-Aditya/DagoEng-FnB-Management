@@ -13,6 +13,7 @@ export interface MasterProduct {
   modifierGroupNames?: string[];
   recipeMenuId?: string; // Links to Inventory Recipe BOM
   description?: string;
+  imageUrl?: string;
   tenantId?: string;
   createdAt: string;
   updatedAt: string;

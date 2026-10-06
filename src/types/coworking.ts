@@ -12,6 +12,8 @@ export interface CoworkingSpaceItem {
   monthlyRate?: number;
   status: SpaceStatus;
   amenities: string[];
+  description?: string;
+  imageUrl?: string;
   currentSession?: {
     guestName: string;
     company?: string;

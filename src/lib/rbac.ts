@@ -128,7 +128,7 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "INVENTORY_STAFF"],
   },
   {
-    name: "Menu & Produk (COGS)",
+    name: "Menu & Produk",
     href: "/menu",
     icon: "BookOpen",
     module: "FNB",
@@ -158,16 +158,7 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
   },
 
-  // 4. Commercial Business Module
-  {
-    name: "Commercial Leases",
-    href: "/commercial",
-    icon: "Building2",
-    module: "COMMERCIAL",
-    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
-  },
-
-  // 5. Reports, Staff & Intelligence
+  // 4. Reports, Staff & Governance
   {
     name: "Laporan & Finance",
     href: "/reports",
@@ -181,13 +172,6 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     icon: "UserCheck",
     module: "CORE",
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
-  },
-  {
-    name: "AI Business Insight",
-    href: "/ai-insight",
-    icon: "Sparkles",
-    module: "CORE",
-    allowedRoles: ["SUPER_ADMIN", "OWNER"],
   },
   {
     name: "Audit Trail & Log",
