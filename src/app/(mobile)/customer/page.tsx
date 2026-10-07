@@ -149,8 +149,16 @@ function parseHour(timeStr: string): number {
 }
 
 function calculateEndTime(startTime: string, durationHours: number): string {
+  if (!startTime) return "11:00";
+  const match = startTime.match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    const startHour = parseInt(match[1], 10);
+    const startMin = match[2];
+    const endHour = (startHour + durationHours) % 24;
+    return `${endHour.toString().padStart(2, "0")}:${startMin}`;
+  }
   const startHour = parseHour(startTime);
-  const endHour = startHour + durationHours;
+  const endHour = (startHour + durationHours) % 24;
   return `${endHour.toString().padStart(2, "0")}:00`;
 }
 
@@ -265,6 +273,8 @@ function CustomerPortalContent() {
   const [bookingStartTime, setBookingStartTime] = useState<string>("09:00");
   const [bookingDuration, setBookingDuration] = useState<number>(2); // hours
   const [bookingGuests, setBookingGuests] = useState<number>(1);
+  const [bookingUsageType, setBookingUsageType] = useState<"PERSONAL" | "GROUP">("PERSONAL");
+  const [bookingCompanyName, setBookingCompanyName] = useState<string>("");
   const [bookingPaymentMethod, setBookingPaymentMethod] = useState<"QRIS" | "CASH" | "EDC">("QRIS");
   const [bookingNotes, setBookingNotes] = useState<string>("");
 
@@ -565,6 +575,14 @@ function CustomerPortalContent() {
       tenantId: activePartnerId,
     });
     if (res.isValid && res.promo) {
+      if (usedPromoIds.includes(res.promo.id)) {
+        setAppliedVoucherPromo(null);
+        setVoucherValidationMsg({
+          type: "ERROR",
+          text: `Voucher "${res.promo.code || res.promo.name}" sudah pernah Anda gunakan (Status: USED).`,
+        });
+        return;
+      }
       setAppliedVoucherPromo(res.promo);
       setVoucherValidationMsg({
         type: "SUCCESS",
@@ -594,6 +612,14 @@ function CustomerPortalContent() {
       scope: "COWORKING",
     });
     if (res.isValid && res.promo) {
+      if (usedPromoIds.includes(res.promo.id)) {
+        setAppliedCoworkPromo(null);
+        setCoworkVoucherValidationMsg({
+          type: "ERROR",
+          text: `Voucher "${res.promo.code || res.promo.name}" sudah pernah Anda gunakan (Status: USED).`,
+        });
+        return;
+      }
       setAppliedCoworkPromo(res.promo);
       setCoworkVoucherValidationMsg({
         type: "SUCCESS",
@@ -692,10 +718,10 @@ function CustomerPortalContent() {
       promoId: selectedVoucher
         ? selectedVoucher.title
         : effectiveFnbPromo
-        ? effectiveFnbPromo.code
-          ? `[${effectiveFnbPromo.code}] ${effectiveFnbPromo.name}`
-          : effectiveFnbPromo.name
-        : undefined,
+          ? effectiveFnbPromo.code
+            ? `[${effectiveFnbPromo.code}] ${effectiveFnbPromo.name}`
+            : effectiveFnbPromo.name
+          : undefined,
       outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
       outletName: activeOutlet?.name || "Singaraja",
       status: "NEW",
@@ -706,6 +732,10 @@ function CustomerPortalContent() {
 
     if (effectiveFnbPromo) {
       setUsedPromoIds((prev) => [...prev, effectiveFnbPromo.id]);
+    }
+    if (selectedVoucherId) {
+      setMyVouchers((prev) => prev.filter((v) => v.id !== selectedVoucherId));
+      setSelectedVoucherId("");
     }
 
     // 2. Clear cart & close drawer
@@ -826,7 +856,8 @@ function CustomerPortalContent() {
       (b) =>
         b.spaceId === spaceId &&
         b.date === targetDate &&
-        b.checkInStatus !== "CANCELLED"
+        b.checkInStatus !== "CANCELLED" &&
+        b.checkInStatus !== "COMPLETED"
     );
 
     for (let h = startHour; h < targetEndHour; h++) {
@@ -855,6 +886,8 @@ function CustomerPortalContent() {
     setBookingDate(today);
     setBookingDuration(2);
     setBookingGuests(1);
+    setBookingUsageType("PERSONAL");
+    setBookingCompanyName("");
     setBookingPaymentMethod("QRIS");
     setBookingNotes("");
 
@@ -910,7 +943,7 @@ function CustomerPortalContent() {
       guestName: resolvedName,
       guestPhone: resolvedPhone,
       guestEmail: resolvedEmail,
-      company: "Member Dago",
+      company: bookingUsageType === "GROUP" ? (bookingCompanyName.trim() || "Group / Company") : "Personal",
       bookingType: "HOURLY",
       date: bookingDate,
       startTime: `${bookingStartTime} WITA`,
@@ -1211,13 +1244,6 @@ function CustomerPortalContent() {
               </div>
             ) : (
               <div className="flex items-center space-x-2">
-                <div className="flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 text-amber-950 text-xs font-bold shadow-2xs">
-                  <Crown className="w-3.5 h-3.5 text-amber-500" />
-                  <span>{currentMember?.name.split(" ")[0]}</span>
-                  <span className="text-[10px] bg-amber-200/70 text-amber-900 px-1.5 py-0.2 rounded-md font-black">
-                    {currentMember?.points || 0} Pts
-                  </span>
-                </div>
                 <button
                   onClick={async () => {
                     await logout();
@@ -1545,9 +1571,8 @@ function CustomerPortalContent() {
                                     </span>
                                     <Badge
                                       variant="outline"
-                                      className={`text-[9px] font-bold ${
-                                        isCowork ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-orange-50 text-orange-700 border-orange-200"
-                                      }`}
+                                      className={`text-[9px] font-bold ${isCowork ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-orange-50 text-orange-700 border-orange-200"
+                                        }`}
                                     >
                                       {promo.scope === "COWORKING" ? "Co-Working" : promo.scope === "FNB" ? "Kuliner F&B" : "Semua Layanan"}
                                     </Badge>
@@ -2212,11 +2237,10 @@ function CustomerPortalContent() {
 
                           {/* Validation feedback message */}
                           {voucherValidationMsg && (
-                            <div className={`p-2.5 rounded-xl text-xs font-medium flex items-center space-x-1.5 ${
-                              voucherValidationMsg.type === "SUCCESS"
-                                ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-                                : "bg-rose-50 border border-rose-200 text-rose-800"
-                            }`}>
+                            <div className={`p-2.5 rounded-xl text-xs font-medium flex items-center space-x-1.5 ${voucherValidationMsg.type === "SUCCESS"
+                              ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                              : "bg-rose-50 border border-rose-200 text-rose-800"
+                              }`}>
                               {voucherValidationMsg.type === "SUCCESS" ? (
                                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                               ) : (
@@ -2247,7 +2271,7 @@ function CustomerPortalContent() {
                             >
                               <option value="">-- Pilih dari Voucher Tersedia --</option>
                               {settings.promos
-                                ?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "FNB"))
+                                ?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "FNB") && !usedPromoIds.includes(p.id))
                                 .map((p: PromoConfig) => (
                                   <option key={p.id} value={p.id}>
                                     {p.code ? `[${p.code}] ` : ""}🎟️ {p.name} ({p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : formatCurrencyIDR(p.discountValue)})
@@ -2624,28 +2648,68 @@ function CustomerPortalContent() {
                                   type="button"
                                   disabled={!avail.isAvailable}
                                   onClick={() => setBookingStartTime(slot)}
-                                  className={`py-2 px-1 rounded-xl text-center transition-all flex flex-col items-center justify-center ${
-                                    !avail.isAvailable
-                                      ? "bg-rose-50/70 border border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
-                                      : isSelected
+                                  className={`py-2 px-1 rounded-xl text-center transition-all flex flex-col items-center justify-center ${!avail.isAvailable
+                                    ? "bg-rose-50/70 border border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
+                                    : isSelected
                                       ? "bg-slate-900 text-white shadow-xs font-black ring-2 ring-slate-900/20 scale-[1.02]"
                                       : "bg-white border border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-300 font-bold"
-                                  }`}
+                                    }`}
                                 >
                                   <span className="text-xs font-mono">{slot}</span>
-                                  <span className={`text-[8px] font-bold mt-0.5 ${
-                                    !avail.isAvailable
-                                      ? "text-rose-600 font-black"
-                                      : isSelected
+                                  <span className={`text-[8px] font-bold mt-0.5 ${!avail.isAvailable
+                                    ? "text-rose-600 font-black"
+                                    : isSelected
                                       ? "text-blue-200"
                                       : "text-emerald-600"
-                                  }`}>
+                                    }`}>
                                     {avail.isAvailable ? "Tersedia" : "Sudah Dibooking"}
                                   </span>
                                 </button>
                               );
                             })}
                           </div>
+                        </div>
+
+                        {/* Tipe Penggunaan (Personal vs Group / Company) */}
+                        <div className="space-y-1.5 p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                          <label className="text-xs font-bold text-slate-700 block">Tipe Penggunaan Booking</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setBookingUsageType("PERSONAL")}
+                              className={`py-2 px-3 rounded-lg text-xs font-bold text-center border transition-all ${
+                                bookingUsageType === "PERSONAL"
+                                  ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                              }`}
+                            >
+                              👤 Personal (Individu)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setBookingUsageType("GROUP")}
+                              className={`py-2 px-3 rounded-lg text-xs font-bold text-center border transition-all ${
+                                bookingUsageType === "GROUP"
+                                  ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                              }`}
+                            >
+                              🏢 Group / Company
+                            </button>
+                          </div>
+                          {bookingUsageType === "GROUP" && (
+                            <div className="mt-2 space-y-1">
+                              <label className="text-[11px] font-semibold text-slate-600">Nama Perusahaan / Komunitas / Group *</label>
+                              <input
+                                type="text"
+                                placeholder="Contoh: PT Dago Media Creative"
+                                value={bookingCompanyName}
+                                onChange={(e) => setBookingCompanyName(e.target.value)}
+                                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                required
+                              />
+                            </div>
+                          )}
                         </div>
 
                         {/* Jumlah Tamu & Catatan */}
@@ -2688,11 +2752,10 @@ function CustomerPortalContent() {
                                 key={pm.id}
                                 type="button"
                                 onClick={() => setBookingPaymentMethod(pm.id as "QRIS" | "CASH" | "EDC")}
-                                className={`p-2.5 rounded-xl border text-center transition-all ${
-                                  bookingPaymentMethod === pm.id
-                                    ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                                }`}
+                                className={`p-2.5 rounded-xl border text-center transition-all ${bookingPaymentMethod === pm.id
+                                  ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                                  : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                                  }`}
                               >
                                 <span className="text-xs font-black block">{pm.label}</span>
                                 <span className={`text-[9px] block ${bookingPaymentMethod === pm.id ? "text-slate-300" : "text-slate-400"}`}>
@@ -2743,11 +2806,10 @@ function CustomerPortalContent() {
                           </div>
 
                           {coworkVoucherValidationMsg && (
-                            <div className={`p-2.5 rounded-xl text-xs font-medium flex items-center space-x-1.5 ${
-                              coworkVoucherValidationMsg.type === "SUCCESS"
-                                ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-                                : "bg-rose-50 border border-rose-200 text-rose-800"
-                            }`}>
+                            <div className={`p-2.5 rounded-xl text-xs font-medium flex items-center space-x-1.5 ${coworkVoucherValidationMsg.type === "SUCCESS"
+                              ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                              : "bg-rose-50 border border-rose-200 text-rose-800"
+                              }`}>
                               {coworkVoucherValidationMsg.type === "SUCCESS" ? (
                                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                               ) : (
@@ -2777,7 +2839,7 @@ function CustomerPortalContent() {
                             >
                               <option value="">-- Pilih Promo Co-Working Tersedia --</option>
                               {settings.promos
-                                ?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "COWORKING"))
+                                ?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "COWORKING") && !usedPromoIds.includes(p.id))
                                 .map((p: PromoConfig) => (
                                   <option key={p.id} value={p.id}>
                                     {p.code ? `[${p.code}] ` : ""}🎟️ {p.name} ({p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : formatCurrencyIDR(p.discountValue)})
@@ -3123,6 +3185,9 @@ function CustomerPortalContent() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => {
+                                  const primaryTenantId = ord.items[0]?.tenantId || "tenant-ks";
+                                  const primaryTenantName = FNB_PARTNERS.find((p) => p.id === primaryTenantId)?.name || "Kopi Senja";
+
                                   setReceiptModalFnb({
                                     orderNumber: ord.orderNumber,
                                     date: new Date(ord.createdAt).toLocaleDateString("id-ID", {
@@ -3133,7 +3198,9 @@ function CustomerPortalContent() {
                                       minute: "2-digit",
                                     }),
                                     cashierName: "Kasir / Self-Order Online",
-                                    outletName: ord.outletName ? `Kopi Senja — ${ord.outletName}` : "Dago Creative Hub",
+                                    tenantId: primaryTenantId,
+                                    tenantName: primaryTenantName,
+                                    outletName: ord.outletName ? `${primaryTenantName} — ${ord.outletName}` : "Outlet Singaraja",
                                     outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
                                     outletPhone: "(0362) 23456",
                                     tableNumber: ord.tableNumber,
@@ -3846,11 +3913,11 @@ function CustomerPortalContent() {
         <Image
           src="/logo-dago.png"
           alt="DAGO"
-          width={14}
+          width={15}
           height={18}
           className="inline-block object-contain opacity-75"
         />
-        <span className="font-bold text-slate-700"></span>
+
       </footer>
 
       {/* 13. RECEIPT MODALS (F&B and Co-Working) */}

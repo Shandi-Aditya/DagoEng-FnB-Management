@@ -10,15 +10,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { BookOpen, Plus, Search, Trash2, X, UtensilsCrossed, ArrowRight, Sparkles, CheckCircle2, AlertTriangle, Ban, Edit2, Image as ImageIcon, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyIDR } from "@/lib/utils";
-import { isTenantActive, getTenantStatus } from "@/lib/tenant";
+import { isTenantActive, getTenantStatus, DEFAULT_FNB_TENANTS } from "@/lib/tenant";
 import { MasterProduct } from "@/types/product";
-
-const AVAILABLE_MITRA = [
-  { id: "tenant-ks", name: "Kopi Senja", badge: "Official Mitra Kopi" },
-  { id: "tenant-kitchen", name: "Dapur Mama", badge: "Official Kitchen" },
-  { id: "tenant-bakery", name: "Manis Bakery", badge: "Fresh Baked Daily" },
-  { id: "tenant-tea", name: "Warung Bu Narti", badge: "Mitra Nusantara" },
-];
 
 export default function MenuPage() {
   const { user } = useAuth();
@@ -40,7 +33,9 @@ export default function MenuPage() {
 
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
   const userTenantId = user?.tenant?.id;
+  const canManage = user?.role.slug === "SUPER_ADMIN" || user?.role.slug === "OWNER" || user?.role.slug === "MANAGER";
 
+  const [selectedTenant, setSelectedTenant] = useState<string>(isTenantOwner && userTenantId ? userTenantId : "SEMUA");
   const [selectedCat, setSelectedCat] = useState("Semua");
   const [searchQuery, setSearchQuery] = useState("");
   const [toastMessage, setToastMessage] = useState("");
@@ -146,15 +141,21 @@ export default function MenuPage() {
     if (isTenantOwner && p.tenantId && p.tenantId !== userTenantId) {
       return false;
     }
+    const matchTenant = selectedTenant === "SEMUA" || p.tenantId === selectedTenant;
     const matchCat = selectedCat === "Semua" || p.category === selectedCat;
     const matchSearch =
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchCat && matchSearch;
+      p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchTenant && matchCat && matchSearch;
   });
 
   const handleAddProduct = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManage) {
+      showToast("Akses ditolak: Anda tidak memiliki wewenang untuk menambah menu.");
+      return;
+    }
     if (!newName.trim()) return;
 
     const targetTenant = isTenantOwner && userTenantId ? userTenantId : newTenantId;
@@ -182,6 +183,10 @@ export default function MenuPage() {
 
   const handleUpdateProductSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManage) {
+      showToast("Akses ditolak: Anda tidak memiliki wewenang untuk mengubah menu.");
+      return;
+    }
     if (!editingProduct || !editName.trim()) return;
 
     const targetTenant = isTenantOwner && userTenantId ? userTenantId : editTenantId;
@@ -206,11 +211,19 @@ export default function MenuPage() {
   };
 
   const handleToggle = (id: string) => {
+    if (!canManage) {
+      showToast("Akses ditolak: Hanya Owner/Manager yang dapat mengubah status menu.");
+      return;
+    }
     toggleProductStatus(id);
     showToast("Status produk berhasil diperbarui!");
   };
 
   const handleDelete = (id: string) => {
+    if (!canManage) {
+      showToast("Akses ditolak: Hanya Owner/Manager yang dapat menghapus produk.");
+      return;
+    }
     deleteProduct(id);
     showToast("Produk berhasil diarsipkan dari katalog.");
   };
@@ -236,55 +249,89 @@ export default function MenuPage() {
             Master {filteredProducts.length} Menu Produk • Foto dan keterangan tersinkronisasi otomatis ke POS Kasir dan Portal Pelanggan
           </p>
         </div>
-        <div className="flex items-center space-x-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsAddCatModalOpen(true)}
-            className="text-xs font-bold space-x-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
-          >
-            <Plus className="w-3.5 h-3.5 text-slate-600" />
-            <span>+ Tambah Kategori</span>
-          </Button>
+        {canManage ? (
+          <div className="flex items-center space-x-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsAddCatModalOpen(true)}
+              className="text-xs font-bold space-x-1.5 border-slate-300 text-slate-700 hover:bg-slate-50"
+            >
+              <Plus className="w-3.5 h-3.5 text-slate-600" />
+              <span>+ Tambah Kategori</span>
+            </Button>
 
-          <Button
-            size="sm"
-            onClick={() => setIsAddProductModalOpen(true)}
-            className="text-xs font-bold space-x-1.5 bg-brand-orange hover:bg-orange-600 text-white shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Tambah Menu Produk</span>
-          </Button>
-        </div>
+            <Button
+              size="sm"
+              onClick={() => setIsAddProductModalOpen(true)}
+              className="text-xs font-bold space-x-1.5 bg-brand-orange hover:bg-orange-600 text-white shadow-sm"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Menu Produk</span>
+            </Button>
+          </div>
+        ) : (
+          <div className="px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-600 font-semibold flex items-center gap-1.5">
+            <span>Mode Baca (Read-Only)</span>
+          </div>
+        )}
       </div>
 
-      {/* Category Tabs & Search Bar */}
+      {/* Filters: Tenant / Mitra Selector, Search Bar & Category Tabs */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari menu atau resep..."
-            className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
-          />
+        <div className="flex flex-col sm:flex-row gap-3">
+          {/* Tenant / Mitra Filter (Available for Owner / Admin) */}
+          <div className="sm:w-64 flex-shrink-0">
+            <label className="text-[11px] font-bold text-slate-600 block mb-1">Filter Mitra / Tenant:</label>
+            <select
+              value={selectedTenant}
+              disabled={isTenantOwner}
+              onChange={(e) => setSelectedTenant(e.target.value)}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl bg-slate-50 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+            >
+              {!isTenantOwner && <option value="SEMUA">🍽️ Semua Mitra & Tenant</option>}
+              {DEFAULT_FNB_TENANTS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.icon} {m.name} ({m.badge})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Search Bar */}
+          <div className="flex-1">
+            <label className="text-[11px] font-bold text-slate-600 block mb-1">Pencarian Menu / Resep:</label>
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari nama menu, resep, atau deskripsi..."
+                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center space-x-1.5 overflow-x-auto text-xs no-scrollbar">
-          {categoryList.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCat(cat)}
-              className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition-all ${
-                selectedCat === cat
-                  ? "bg-brand-orange text-white shadow-sm"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+        {/* Category Tabs */}
+        <div>
+          <label className="text-[11px] font-bold text-slate-600 block mb-1">Filter Kategori:</label>
+          <div className="flex items-center space-x-1.5 overflow-x-auto text-xs no-scrollbar pt-0.5">
+            {categoryList.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCat(cat)}
+                className={`px-3 py-1.5 rounded-lg font-semibold whitespace-nowrap transition-all ${
+                  selectedCat === cat
+                    ? "bg-brand-orange text-white shadow-sm font-bold"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -307,113 +354,130 @@ export default function MenuPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {displayedProducts.map((p) => {
-                  const stockCheck = checkProductStockStatus(p.name);
-                  const isOutOfStock = stockCheck.status === "OUT_OF_STOCK";
-                  const isCriticalStock = stockCheck.status === "CRITICAL";
-                  const currentMitra = AVAILABLE_MITRA.find((m) => m.id === p.tenantId) || {
-                    id: p.tenantId || "tenant-ks",
-                    name: p.tenantId === "tenant-ks" ? "Kopi Senja" : p.tenantId || "Kopi Senja",
-                    badge: "Mitra F&B"
-                  };
+                {displayedProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-slate-400">
+                      <UtensilsCrossed className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                      <p className="font-semibold text-sm">Tidak ada produk yang sesuai dengan filter.</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Coba ubah filter mitra, kategori, atau kata kunci pencarian Anda.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  displayedProducts.map((p) => {
+                    const stockCheck = checkProductStockStatus(p.name);
+                    const isOutOfStock = stockCheck.status === "OUT_OF_STOCK";
+                    const isCriticalStock = stockCheck.status === "CRITICAL";
+                    const currentMitra = DEFAULT_FNB_TENANTS.find((m) => m.id === p.tenantId) || {
+                      id: p.tenantId || "tenant-ks",
+                      name: p.tenantId === "tenant-ks" ? "Kopi Senja" : p.tenantId || "Kopi Senja",
+                      badge: "Mitra F&B"
+                    };
 
-                  return (
-                    <tr key={p.id} className="hover:bg-slate-50">
-                      <td className="p-3 font-semibold text-slate-900">
-                        <div className="flex items-center space-x-3">
-                          {p.imageUrl ? (
-                            <div className="w-11 h-11 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
-                              <img
-                                src={p.imageUrl}
-                                alt={p.name}
-                                className="w-full h-full object-cover"
-                              />
+                    return (
+                      <tr key={p.id} className="hover:bg-slate-50">
+                        <td className="p-3 font-semibold text-slate-900">
+                          <div className="flex items-center space-x-3">
+                            {p.imageUrl ? (
+                              <div className="w-11 h-11 rounded-xl overflow-hidden bg-slate-100 flex-shrink-0 border border-slate-200">
+                                <img
+                                  src={p.imageUrl}
+                                  alt={p.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            ) : (
+                              <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0 text-slate-400">
+                                <UtensilsCrossed className="w-5 h-5 opacity-40" />
+                              </div>
+                            )}
+                            <div className="min-w-0 max-w-xs">
+                              <p className="font-bold text-slate-900 truncate">{p.name}</p>
+                              <p className="text-[10px] text-slate-400 font-normal line-clamp-1">
+                                {p.description || "Belum ada deskripsi"}
+                              </p>
                             </div>
-                          ) : (
-                            <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0 text-slate-400">
-                              <UtensilsCrossed className="w-5 h-5 opacity-40" />
-                            </div>
-                          )}
-                          <div className="min-w-0 max-w-xs">
-                            <p className="font-bold text-slate-900 truncate">{p.name}</p>
-                            <p className="text-[10px] text-slate-400 font-normal line-clamp-1">
-                              {p.description || "Belum ada deskripsi"}
-                            </p>
                           </div>
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <div className="flex flex-col items-start gap-1">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-brand-orange border border-orange-200">
-                            {currentMitra.name}
-                          </span>
-                          {!isTenantActive(p.tenantId || "tenant-ks") && (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-red-100 text-red-800 border border-red-200">
-                              Mitra Nonaktif (Tutup)
+                        </td>
+                        <td className="p-3">
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-brand-orange border border-orange-200">
+                              {currentMitra.name}
                             </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-3 text-slate-500">{p.category}</td>
-                      <td className="p-3 font-bold font-mono text-slate-900">
-                        {formatCurrencyIDR(p.basePrice)}
-                      </td>
-                      <td className="p-3 text-slate-500 font-mono">
-                        {formatCurrencyIDR(p.cogsEstimate)}
-                      </td>
-                      <td className="p-3 font-bold text-brand-green font-mono">{p.grossMarginPercent}</td>
-                      <td className="p-3 text-center">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center space-x-1 ${
-                            isOutOfStock
-                              ? "bg-rose-100 text-rose-800 border border-rose-200"
-                              : isCriticalStock
-                              ? "bg-amber-100 text-amber-800 border border-amber-200"
-                              : "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                          }`}
-                        >
-                          {isOutOfStock ? (
-                            <span>Habis (Disabled di POS)</span>
-                          ) : isCriticalStock ? (
-                            <span>Stok Menipis</span>
+                            {!isTenantActive(p.tenantId || "tenant-ks") && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-bold bg-red-100 text-red-800 border border-red-200">
+                                Mitra Nonaktif (Tutup)
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3 text-slate-500 font-medium">{p.category}</td>
+                        <td className="p-3 font-bold font-mono text-slate-900">
+                          {formatCurrencyIDR(p.basePrice)}
+                        </td>
+                        <td className="p-3 text-slate-500 font-mono">
+                          {formatCurrencyIDR(p.cogsEstimate)}
+                        </td>
+                        <td className="p-3 font-bold text-brand-green font-mono">{p.grossMarginPercent}</td>
+                        <td className="p-3 text-center">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold inline-flex items-center space-x-1 ${
+                              isOutOfStock
+                                ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                : isCriticalStock
+                                ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            }`}
+                          >
+                            {isOutOfStock ? (
+                              <span>Habis (Disabled di POS)</span>
+                            ) : isCriticalStock ? (
+                              <span>Stok Menipis</span>
+                            ) : (
+                              <span>Tersedia</span>
+                            )}
+                          </span>
+                        </td>
+                        <td className="p-3 text-center">
+                          <button
+                            disabled={!canManage}
+                            onClick={() => handleToggle(p.id)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                              !canManage ? "cursor-default opacity-80" : "cursor-pointer"
+                            } ${
+                              p.status === "ACTIVE"
+                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            }`}
+                          >
+                            {p.status} {canManage ? "↻" : ""}
+                          </button>
+                        </td>
+                        <td className="p-3 text-right">
+                          {canManage ? (
+                            <div className="flex items-center justify-end space-x-1">
+                              <button
+                                onClick={() => handleOpenEditModal(p)}
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                title="Edit Menu"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(p.id)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                title="Hapus Produk"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           ) : (
-                            <span>Tersedia</span>
+                            <span className="text-slate-400 text-[10px] italic">Terkunci</span>
                           )}
-                        </span>
-                      </td>
-                      <td className="p-3 text-center">
-                        <button
-                          onClick={() => handleToggle(p.id)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-all ${
-                            p.status === "ACTIVE"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {p.status} ↻
-                        </button>
-                      </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end space-x-1">
-                          <button
-                            onClick={() => handleOpenEditModal(p)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                            title="Edit Menu"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(p.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                            title="Hapus Produk"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -463,7 +527,7 @@ export default function MenuPage() {
                     onChange={(e) => setNewTenantId(e.target.value)}
                     className="w-full px-3 py-2 border rounded-xl bg-white font-medium text-slate-800"
                   >
-                    {AVAILABLE_MITRA.map((m) => (
+                    {DEFAULT_FNB_TENANTS.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name} ({m.badge})
                       </option>
@@ -635,7 +699,7 @@ export default function MenuPage() {
                     onChange={(e) => setEditTenantId(e.target.value)}
                     className="w-full px-3 py-2 border rounded-xl bg-white font-medium text-slate-800"
                   >
-                    {AVAILABLE_MITRA.map((m) => (
+                    {DEFAULT_FNB_TENANTS.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name} ({m.badge})
                       </option>

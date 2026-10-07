@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
@@ -69,7 +70,10 @@ function LoginContent() {
     else if (emailLower.includes("waiter")) targetPersona = "WAITER_SGR";
     else if (emailLower.includes("cowork")) targetPersona = "COWORK_MANAGER";
     else if (emailLower.includes("commercial")) targetPersona = "COMMERCIAL_MANAGER";
-    else if (emailLower.includes("kopisenja")) targetPersona = "TENANT_OWNER_KS";
+    else if (emailLower.includes("kopisenja") || emailLower.includes("ks")) targetPersona = "TENANT_OWNER_KS";
+    else if (emailLower.includes("dapurmama") || emailLower.includes("kitchen")) targetPersona = "TENANT_OWNER_KITCHEN";
+    else if (emailLower.includes("manisbakery") || emailLower.includes("bakery")) targetPersona = "TENANT_OWNER_BAKERY";
+    else if (emailLower.includes("warungbunarti") || emailLower.includes("tea")) targetPersona = "TENANT_OWNER_TEA";
     else if (emailLower.includes("admin")) targetPersona = "SUPER_ADMIN";
 
     await login(targetPersona);
@@ -144,7 +148,7 @@ function LoginContent() {
 
   return (
     <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden selection:bg-brand-orange selection:text-white">
-      
+
       {/* Dynamic Ambient Background Glows matching Onboarding */}
       <div className="absolute top-1/4 -right-20 w-96 h-96 bg-brand-orange/15 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-10 -left-20 w-96 h-96 bg-blue-600/15 rounded-full blur-[120px] pointer-events-none" />
@@ -154,7 +158,7 @@ function LoginContent() {
       <div className="absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
 
       <div className="w-full max-w-md space-y-5 relative z-10">
-        
+
         {/* Top Back Navigation Bar */}
         <div className="flex items-center justify-between px-1">
           <Link
@@ -201,11 +205,10 @@ function LoginContent() {
           <button
             type="button"
             onClick={() => setActiveMode("STAFF")}
-            className={`py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center space-x-1.5 ${
-              activeMode === "STAFF"
+            className={`py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center space-x-1.5 ${activeMode === "STAFF"
                 ? "bg-slate-800 text-white shadow-md border border-white/15 scale-[1.02]"
                 : "text-slate-400 hover:text-white"
-            }`}
+              }`}
           >
             <Building2 className="w-3.5 h-3.5 text-blue-400" />
             <span>Staf & Manajemen</span>
@@ -213,11 +216,10 @@ function LoginContent() {
           <button
             type="button"
             onClick={() => setActiveMode("CUSTOMER")}
-            className={`py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center space-x-1.5 ${
-              activeMode === "CUSTOMER"
+            className={`py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center space-x-1.5 ${activeMode === "CUSTOMER"
                 ? "bg-gradient-to-r from-orange-500 to-brand-orange text-white shadow-lg shadow-orange-500/30 border border-orange-400/30 scale-[1.02]"
                 : "text-slate-400 hover:text-white"
-            }`}
+              }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
             <span>Pelanggan / Member</span>
@@ -226,23 +228,23 @@ function LoginContent() {
 
         {/* Main Glassmorphic Login Card */}
         <div className="bg-slate-900/80 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl shadow-black/80 overflow-hidden">
-          
+
           <div className="px-6 pt-6 pb-4 border-b border-white/5 space-y-1">
             <h2 className="text-base font-bold text-white flex items-center space-x-2">
               <span>
                 {activeMode === "STAFF"
                   ? "Masuk ke Sesi Akun Staf"
                   : customerSubMode === "REGISTER"
-                  ? "Daftar Member Baru DagoEng"
-                  : "Masuk Akun Pelanggan"}
+                    ? "Daftar Member Baru DagoEng"
+                    : "Masuk Akun Pelanggan"}
               </span>
             </h2>
             <p className="text-xs text-slate-400 leading-relaxed">
               {activeMode === "STAFF"
                 ? "Gunakan kredensial terdaftar untuk membuka dashboard POS, KDS, atau manajerial."
                 : customerSubMode === "REGISTER"
-                ? "Dapatkan langsung 50 Poin Selamat Datang dan promo eksklusif member."
-                : "Masukkan nomor WhatsApp atau Nama untuk mengakses poin loyalty Anda."}
+                  ? "Dapatkan langsung 50 Poin Selamat Datang dan promo eksklusif member."
+                  : "Masukkan nomor WhatsApp atau Nama untuk mengakses poin loyalty Anda."}
             </p>
           </div>
 
@@ -295,22 +297,20 @@ function LoginContent() {
                   <button
                     type="button"
                     onClick={() => setCustomerSubMode("LOGIN")}
-                    className={`py-2 rounded-lg transition-all ${
-                      customerSubMode === "LOGIN"
+                    className={`py-2 rounded-lg transition-all ${customerSubMode === "LOGIN"
                         ? "bg-white/15 text-white shadow-sm border border-white/20"
                         : "text-slate-400 hover:text-slate-200"
-                    }`}
+                      }`}
                   >
                     Masuk Akun
                   </button>
                   <button
                     type="button"
                     onClick={() => setCustomerSubMode("REGISTER")}
-                    className={`py-2 rounded-lg transition-all flex items-center justify-center space-x-1 ${
-                      customerSubMode === "REGISTER"
+                    className={`py-2 rounded-lg transition-all flex items-center justify-center space-x-1 ${customerSubMode === "REGISTER"
                         ? "bg-brand-orange text-white shadow-md shadow-orange-500/30 font-black"
                         : "text-slate-400 hover:text-slate-200"
-                    }`}
+                      }`}
                   >
                     <Sparkles className="w-3 h-3 text-amber-300" />
                     <span>Daftar (+50 Poin)</span>
@@ -373,8 +373,8 @@ function LoginContent() {
                       {isLoading
                         ? "Menghubungkan..."
                         : customerSubMode === "REGISTER"
-                        ? "Daftar & Klaim 50 Poin"
-                        : "Masuk Customer Portal"}
+                          ? "Daftar & Klaim 50 Poin"
+                          : "Masuk Customer Portal"}
                     </span>
                     <ArrowRight className="w-4 h-4 ml-1" />
                   </Button>
@@ -401,7 +401,28 @@ function LoginContent() {
                   onClick={() => handleQuickLogin("TENANT_OWNER_KS")}
                   className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  ☕ Owner Mitra (Kopi Senja)
+                  ☕ Mitra: Kopi Senja
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin("TENANT_OWNER_KITCHEN")}
+                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  🍽️ Mitra: Dapur Mama
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin("TENANT_OWNER_BAKERY")}
+                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  🥐 Mitra: Manis Bakery
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin("TENANT_OWNER_TEA")}
+                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  🍃 Mitra: Warung Bu Narti
                 </button>
                 <button
                   type="button"

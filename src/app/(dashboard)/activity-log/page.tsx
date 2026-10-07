@@ -30,6 +30,7 @@ import {
   Code,
   Copy,
   ChevronRight,
+  ChevronLeft,
   RefreshCw,
   SlidersHorizontal,
   Table as TableIcon,
@@ -38,6 +39,7 @@ import {
   Eye,
   FileSpreadsheet,
   Printer,
+  ShieldAlert,
 } from "lucide-react";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import ActivityLogPDFModal from "@/features/activity-log/ActivityLogPDFModal";
@@ -50,19 +52,71 @@ export default function ActivityLogPage() {
   const { activeOutlet, activeOutletId } = useOutlet();
   const { logs, simulateActivity, clearLogs } = useActivityLog();
 
+  const isSuperAdmin = user?.role.slug === "SUPER_ADMIN";
+  const isOrgOwner = user?.role.slug === "OWNER" && user?.scopeLevel === "ORGANIZATION";
+  const isManager = user?.role.slug === "MANAGER";
+  const isTenantOwner = user?.role.slug === "OWNER" && user?.scopeLevel === "TENANT";
+  const canAccessAudit = isSuperAdmin || isOrgOwner || isManager || isTenantOwner;
+
   const [viewMode, setViewMode] = useState<ViewMode>("TABLE");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedModule, setSelectedModule] = useState<string>("ALL");
   const [selectedStatus, setSelectedStatus] = useState<string>("ALL");
   const [selectedSeverity, setSelectedSeverity] = useState<string>("ALL");
+  const [selectedRole, setSelectedRole] = useState<string>("ALL");
+  const [selectedActor, setSelectedActor] = useState<string>("ALL");
   const [dateFilter, setDateFilter] = useState<DateFilterType>("ALL");
   const [selectedLog, setSelectedLog] = useState<ActivityLogEntry | null>(null);
   const [copiedJson, setCopiedJson] = useState(false);
   const [showSimModal, setShowSimModal] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
+  // Pagination State
+  const [pageSize, setPageSize] = useState<number>(15);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  // Reset page to 1 whenever filters change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    searchTerm,
+    selectedModule,
+    selectedStatus,
+    selectedSeverity,
+    selectedRole,
+    selectedActor,
+    dateFilter,
+    pageSize,
+    activeOutletId,
+  ]);
+
+  // Extract unique roles and actor names from logs
+  const uniqueRoles = React.useMemo(() => {
+    const rolesSet = new Set<string>();
+    logs.forEach((l) => {
+      if (l.actorRole) rolesSet.add(l.actorRole);
+      if (l.role) rolesSet.add(l.role);
+    });
+    return Array.from(rolesSet).filter(Boolean);
+  }, [logs]);
+
+  const uniqueActors = React.useMemo(() => {
+    const actorsSet = new Set<string>();
+    logs.forEach((l) => {
+      if (l.actorName) actorsSet.add(l.actorName);
+    });
+    return Array.from(actorsSet).filter(Boolean);
+  }, [logs]);
+
   // Scoped logs with all filters
   const scopedLogs = logs.filter((l) => {
+    // Tenant isolation
+    if (isTenantOwner && user?.tenant?.id) {
+      if (l.tenantId && l.tenantId !== user.tenant?.id) {
+        return false;
+      }
+    }
+
     // Outlet filter
     if (activeOutletId !== "ALL" && l.outletId && l.outletId !== activeOutletId) {
       return false;
@@ -80,6 +134,16 @@ export default function ActivityLogPage() {
 
     // Severity filter
     if (selectedSeverity !== "ALL" && l.severity !== selectedSeverity) {
+      return false;
+    }
+
+    // Role filter
+    if (selectedRole !== "ALL" && l.actorRole !== selectedRole && l.role !== selectedRole) {
+      return false;
+    }
+
+    // Actor filter
+    if (selectedActor !== "ALL" && l.actorName !== selectedActor) {
       return false;
     }
 
@@ -126,6 +190,13 @@ export default function ActivityLogPage() {
 
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(scopedLogs.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedLogs = scopedLogs.slice(
+    (safeCurrentPage - 1) * pageSize,
+    safeCurrentPage * pageSize
+  );
 
   const getPeriodLabel = () => {
     if (dateFilter === "TODAY") return "Hari Ini (" + new Date().toLocaleDateString("id-ID") + ")";
@@ -209,7 +280,8 @@ export default function ActivityLogPage() {
   };
 
   const handleExportJSON = () => {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(scopedLogs, null, 2));
+    const dataStr =
+      "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(scopedLogs, null, 2));
     const downloadAnchor = document.createElement("a");
     downloadAnchor.setAttribute("href", dataStr);
     downloadAnchor.setAttribute("download", `Audit_Log_${activeOutlet?.name || "All"}_${Date.now()}.json`);
@@ -254,6 +326,28 @@ export default function ActivityLogPage() {
       : typeof user?.role === "string"
       ? user.role
       : "Owner";
+
+  // RBAC Access Restriction Guard
+  if (!canAccessAudit) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center bg-white rounded-2xl border border-slate-200 shadow-xs space-y-4">
+        <div className="p-4 bg-red-50 rounded-2xl border border-red-200 text-red-600">
+          <ShieldAlert className="w-12 h-12" />
+        </div>
+        <div className="space-y-2 max-w-md">
+          <h2 className="text-xl font-bold text-slate-900">Akses Dibatasi (Restricted Access)</h2>
+          <p className="text-sm text-slate-500">
+            Halaman Audit Trail & Activity Log hanya dapat diakses oleh Super Admin, Owner, atau Manager untuk menjaga keamanan dan integritas histori sistem.
+          </p>
+          <div className="pt-2">
+            <span className="inline-block px-3 py-1 bg-slate-100 text-slate-700 text-xs font-mono font-semibold rounded-full border border-slate-200">
+              Role Anda: {user?.role.name || "Staff / Kasir"}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -494,11 +588,11 @@ export default function ActivityLogPage() {
         {/* Row 1: Search & Date Range */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-3">
           {/* Search Box */}
-          <div className="relative w-full md:w-96">
+          <div className="relative w-full md:w-80">
             <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
             <input
               type="text"
-              placeholder="Cari aksi, nama aktor, record ID, alasan, nilai..."
+              placeholder="Cari aksi, aktor, record ID, alasan, nilai..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
@@ -548,24 +642,63 @@ export default function ActivityLogPage() {
           </div>
         </div>
 
-        {/* Row 2: Module Badges */}
-        <div className="flex items-center space-x-1.5 overflow-x-auto pt-2 border-t border-slate-100">
-          <span className="text-xs text-slate-400 font-bold shrink-0 uppercase text-[10px] mr-1">
-            Modul:
-          </span>
-          {modulesList.map((m) => (
-            <button
-              key={m.key}
-              onClick={() => setSelectedModule(m.key)}
-              className={`px-2.5 py-1 text-[11px] rounded-full font-bold shrink-0 transition-all ${
-                selectedModule === m.key
-                  ? "bg-purple-100 text-purple-900 border border-purple-300 shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
+        {/* Row 2: User, Role, and Module Filters */}
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100">
+          {/* User / Actor Dropdown */}
+          <div className="flex items-center space-x-1.5">
+            <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="text-xs text-slate-500 font-semibold shrink-0">User:</span>
+            <select
+              value={selectedActor}
+              onChange={(e) => setSelectedActor(e.target.value)}
+              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-purple-500"
             >
-              {m.label}
-            </button>
-          ))}
+              <option value="ALL">Semua User</option>
+              {uniqueActors.map((actor) => (
+                <option key={actor} value={actor}>
+                  {actor}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Role Dropdown */}
+          <div className="flex items-center space-x-1.5">
+            <ShieldCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="text-xs text-slate-500 font-semibold shrink-0">Role:</span>
+            <select
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value)}
+              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-purple-500"
+            >
+              <option value="ALL">Semua Role</option>
+              {uniqueRoles.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Module Badges */}
+          <div className="flex items-center space-x-1.5 overflow-x-auto w-full md:w-auto">
+            <span className="text-xs text-slate-400 font-bold shrink-0 uppercase text-[10px] mr-1">
+              Modul:
+            </span>
+            {modulesList.map((m) => (
+              <button
+                key={m.key}
+                onClick={() => setSelectedModule(m.key)}
+                className={`px-2.5 py-1 text-[11px] rounded-full font-bold shrink-0 transition-all ${
+                  selectedModule === m.key
+                    ? "bg-purple-100 text-purple-900 border border-purple-300 shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -578,7 +711,7 @@ export default function ActivityLogPage() {
               Daftar Rekam Jejak Audit ({scopedLogs.length} Entri Ditemukan)
             </CardTitle>
             <span className="text-[11px] font-semibold text-slate-500">
-              Menampilkan entri terkini
+              Halaman {safeCurrentPage} dari {totalPages}
             </span>
           </CardHeader>
           <CardContent className="p-0">
@@ -606,7 +739,7 @@ export default function ActivityLogPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {scopedLogs.map((log) => (
+                    {paginatedLogs.map((log) => (
                       <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="px-4 py-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
                           <div>
@@ -701,6 +834,83 @@ export default function ActivityLogPage() {
                 </table>
               </div>
             )}
+
+            {/* Pagination Controls Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-4 py-3 bg-white border-t border-slate-200">
+              <div className="flex items-center space-x-3 text-xs text-slate-600">
+                <span>Tampilkan:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-purple-500"
+                >
+                  <option value={10}>10 per halaman</option>
+                  <option value={15}>15 per halaman</option>
+                  <option value={25}>25 per halaman</option>
+                  <option value={50}>50 per halaman</option>
+                </select>
+                <span className="text-slate-400">|</span>
+                <span>
+                  Menampilkan {scopedLogs.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1} -{" "}
+                  {Math.min(safeCurrentPage * pageSize, scopedLogs.length)} dari {scopedLogs.length} entri
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={safeCurrentPage <= 1}
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  className="text-xs h-8 px-2.5 space-x-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Sebelumnya</span>
+                </Button>
+
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => {
+                      if (totalPages <= 5) return true;
+                      if (p === 1 || p === totalPages) return true;
+                      return Math.abs(p - safeCurrentPage) <= 1;
+                    })
+                    .map((p, idx, arr) => {
+                      const prevP = arr[idx - 1];
+                      const hasGap = prevP && p - prevP > 1;
+                      return (
+                        <React.Fragment key={p}>
+                          {hasGap && <span className="px-1 text-slate-400 text-xs">...</span>}
+                          <button
+                            onClick={() => setCurrentPage(p)}
+                            className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                              safeCurrentPage === p
+                                ? "bg-purple-600 text-white shadow-xs"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        </React.Fragment>
+                      );
+                    })}
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={safeCurrentPage >= totalPages}
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  className="text-xs h-8 px-2.5 space-x-1"
+                >
+                  <span>Berikutnya</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -713,7 +923,7 @@ export default function ActivityLogPage() {
             </Card>
           ) : (
             <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
-              {scopedLogs.map((log) => (
+              {paginatedLogs.map((log) => (
                 <div key={log.id} className="relative group">
                   {/* Timeline Dot Icon */}
                   <div
@@ -821,6 +1031,85 @@ export default function ActivityLogPage() {
                 </div>
               ))}
             </div>
+          )}
+
+          {/* Pagination Controls Bar for Timeline */}
+          {scopedLogs.length > 0 && (
+            <Card className="p-4 bg-white border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center space-x-3 text-xs text-slate-600">
+                <span>Tampilkan:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-purple-500"
+                >
+                  <option value={10}>10 per halaman</option>
+                  <option value={15}>15 per halaman</option>
+                  <option value={25}>25 per halaman</option>
+                  <option value={50}>50 per halaman</option>
+                </select>
+                <span className="text-slate-400">|</span>
+                <span>
+                  Menampilkan {scopedLogs.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1} -{" "}
+                  {Math.min(safeCurrentPage * pageSize, scopedLogs.length)} dari {scopedLogs.length} entri
+                </span>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={safeCurrentPage <= 1}
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  className="text-xs h-8 px-2.5 space-x-1"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Sebelumnya</span>
+                </Button>
+
+                <div className="flex items-center space-x-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter((p) => {
+                      if (totalPages <= 5) return true;
+                      if (p === 1 || p === totalPages) return true;
+                      return Math.abs(p - safeCurrentPage) <= 1;
+                    })
+                    .map((p, idx, arr) => {
+                      const prevP = arr[idx - 1];
+                      const hasGap = prevP && p - prevP > 1;
+                      return (
+                        <React.Fragment key={p}>
+                          {hasGap && <span className="px-1 text-slate-400 text-xs">...</span>}
+                          <button
+                            onClick={() => setCurrentPage(p)}
+                            className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                              safeCurrentPage === p
+                                ? "bg-purple-600 text-white shadow-xs"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        </React.Fragment>
+                      );
+                    })}
+                </div>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={safeCurrentPage >= totalPages}
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  className="text-xs h-8 px-2.5 space-x-1"
+                >
+                  <span>Berikutnya</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </Card>
           )}
         </div>
       )}

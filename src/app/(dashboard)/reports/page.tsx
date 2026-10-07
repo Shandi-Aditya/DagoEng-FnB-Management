@@ -210,29 +210,35 @@ export default function ReportsPage() {
       case "SETTLEMENT":
         const settlementData = calculateSettlement(filteredOrders);
         const totalNetSettlement = settlementData.reduce((sum, s) => sum + s.netRevenue, 0);
+        const totalTenantShare = settlementData.reduce((sum, s) => sum + (s.tenantShareAmount || 0), 0);
+        const totalDagoShare = settlementData.reduce((sum, s) => sum + (s.dagoShareAmount || 0), 0);
         return {
           title: "Laporan Settlement & Bagi Hasil Mitra",
-          subtitle: `Rincian alokasi pendapatan, rekening tujuan pencairan, dan pajak untuk Dago Hub dan Mitra di ${activeOutlet?.name}`,
+          subtitle: `Rincian alokasi pendapatan, rekening tujuan pencairan, dan bagi hasil untuk Dago Hub dan Mitra di ${activeOutlet?.name}`,
           summaryCards: [
             { label: "Total Net Settlement", value: `Rp ${totalNetSettlement.toLocaleString("id-ID")}` },
+            { label: "Total Bagian Mitra", value: `Rp ${totalTenantShare.toLocaleString("id-ID")}` },
+            { label: "Total Bagian DAGO", value: `Rp ${totalDagoShare.toLocaleString("id-ID")}` },
             { label: "Total Diskon (Prorata)", value: `Rp ${settlementData.reduce((sum, s) => sum + s.discount, 0).toLocaleString("id-ID")}` },
-            { label: "Total Pajak & Charge", value: `Rp ${settlementData.reduce((sum, s) => sum + (s.tax + s.serviceCharge), 0).toLocaleString("id-ID")}` },
           ],
-          tableHeaders: ["Tenant ID", "Tenant Name", "Rekening Pencairan", "Trx", "Item", "Gross (Rp)", "Discount", "Tax & Charge", "Net Settlement"],
+          tableHeaders: ["Tenant ID", "Tenant Name", "Rekening Pencairan", "Skema Bagi Hasil", "Trx", "Gross (Rp)", "Bagian Mitra (Rp)", "Bagian DAGO (Rp)", "Net Settlement"],
           tableRows: settlementData.map((s) => {
             const payout = getTenantPayoutAccount(s.tenantId);
             const payoutDisplay = s.tenantId === "DAGO_HUB"
               ? "Rekening Pusat DAGO"
               : `${payout.bankName} ${maskAccountNumber(payout.accountNumber)}`;
+            const splitDisplay = s.tenantId === "DAGO_HUB"
+              ? "100% DAGO"
+              : `${s.tenantSharePercent ?? 85}% Mitra / ${s.dagoSharePercent ?? 15}% DAGO`;
             return [
               s.tenantId,
               s.tenantName,
               payoutDisplay,
+              splitDisplay,
               s.transactionCount,
-              s.itemCount,
               `Rp ${s.grossRevenue.toLocaleString("id-ID")}`,
-              `-Rp ${s.discount.toLocaleString("id-ID")}`,
-              `+Rp ${(s.tax + s.serviceCharge).toLocaleString("id-ID")}`,
+              `Rp ${(s.tenantShareAmount ?? 0).toLocaleString("id-ID")}`,
+              `Rp ${(s.dagoShareAmount ?? 0).toLocaleString("id-ID")}`,
               `Rp ${s.netRevenue.toLocaleString("id-ID")}`,
             ];
           }),

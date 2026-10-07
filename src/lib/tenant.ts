@@ -172,11 +172,147 @@ export const DEFAULT_FNB_TENANTS: FnbPartnerInfo[] = [
   },
 ];
 
+export interface TenantProfileData {
+  tenantId: string;
+  brandName: string;
+  tagline: string;
+  description: string;
+  contactPhone: string;
+  receiptHeader: string;
+  receiptFooter: string;
+  lowStockThresholdPercent: number;
+  bankName: string;
+  bankAccountNumber: string;
+  bankAccountHolder: string;
+  status: "ACTIVE" | "INACTIVE";
+}
+
+export const DEFAULT_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = {
+  "tenant-ks": {
+    brandName: "Kopi Senja",
+    tagline: "Specialty Coffee & Beverages",
+    description: "Single origin espresso blend Kintamani, olahan susu segar & gula aren organik Bali.",
+    contactPhone: "+62 812-3456-7890",
+    receiptHeader: "Kopi Senja — Specialty Coffee & Beverages",
+    receiptFooter: "Terima kasih telah berkunjung ke Kopi Senja!",
+    lowStockThresholdPercent: 35,
+    bankName: "BCA",
+    bankAccountNumber: "8830192841",
+    bankAccountHolder: "Kopi Senja Utama",
+    status: "ACTIVE",
+  },
+  "tenant-kitchen": {
+    brandName: "Dapur Mama",
+    tagline: "Masakan Rumahan & Hidangan Utama",
+    description: "Hidangan utama hangat, aneka olahan nasi, dan lauk lezat khas masakan rumah.",
+    contactPhone: "+62 813-2233-4411",
+    receiptHeader: "Dapur Mama — Masakan Rumahan Lezat",
+    receiptFooter: "Selamat menikmati sajian khas Dapur Mama!",
+    lowStockThresholdPercent: 30,
+    bankName: "Mandiri",
+    bankAccountNumber: "1420019283741",
+    bankAccountHolder: "Dapur Mama Kuliner",
+    status: "ACTIVE",
+  },
+  "tenant-bakery": {
+    brandName: "Manis Bakery",
+    tagline: "Roti, Kue & Pastry Segar",
+    description: "Roti segar, pastry mentega lembut, dan camilan lezat yang dipanggang setiap hari.",
+    contactPhone: "+62 812-9988-7766",
+    receiptHeader: "Manis Bakery — Fresh Baked Daily",
+    receiptFooter: "Terima kasih telah berbelanja di Manis Bakery!",
+    lowStockThresholdPercent: 25,
+    bankName: "BCA",
+    bankAccountNumber: "7720194821",
+    bankAccountHolder: "Manis Bakery Artisan",
+    status: "ACTIVE",
+  },
+  "tenant-tea": {
+    brandName: "Warung Bu Narti",
+    tagline: "Kuliner Tradisional & Minuman Nusantara",
+    description: "Aneka seduhan teh segar, minuman rempah tradisional, dan sajian khas nusantara.",
+    contactPhone: "+62 817-4455-6677",
+    receiptHeader: "Warung Bu Narti — Cita Rasa Nusantara",
+    receiptFooter: "Matur suksma sampun mampir ring Warung Bu Narti!",
+    lowStockThresholdPercent: 30,
+    bankName: "BRI",
+    bankAccountNumber: "002101928374501",
+    bankAccountHolder: "Warung Bu Narti",
+    status: "ACTIVE",
+  },
+};
+
+/**
+ * Returns complete tenant profile information (branding, contact, receipt header/footer, bank details)
+ * with automatic fallback to default profile.
+ */
+export function getTenantProfile(tenantId: string): TenantProfileData {
+  const map = getAllStoredTenantSettings();
+  const stored = map[tenantId];
+  const defInfo = DEFAULT_FNB_TENANTS.find((t) => t.id === tenantId) || {
+    id: tenantId,
+    code: tenantId.toUpperCase(),
+    name: tenantId,
+    tagline: "Mitra Resmi Dago Creative Hub",
+    desc: "Mitra kuliner terdaftar di Dago Creative Hub.",
+    badge: "Official Mitra",
+    icon: "🍽️",
+  };
+
+  const def = DEFAULT_TENANT_PROFILES[tenantId] || {
+    brandName: defInfo.name,
+    tagline: defInfo.tagline,
+    description: defInfo.desc,
+    contactPhone: "+62 812-0000-0000",
+    receiptHeader: `${defInfo.name} — ${defInfo.tagline}`,
+    receiptFooter: `Terima kasih telah berkunjung ke ${defInfo.name}!`,
+    lowStockThresholdPercent: 30,
+    bankName: "BCA",
+    bankAccountNumber: "-",
+    bankAccountHolder: "-",
+    status: "ACTIVE",
+  };
+
+  if (stored) {
+    return {
+      tenantId,
+      brandName: stored.brandName || def.brandName || defInfo.name,
+      tagline: stored.tagline || def.tagline || "",
+      description: stored.description || def.description || "",
+      contactPhone: stored.contactPhone || def.contactPhone || "",
+      receiptHeader: stored.receiptHeader || def.receiptHeader || "",
+      receiptFooter: stored.receiptFooter || def.receiptFooter || "",
+      lowStockThresholdPercent:
+        stored.lowStockThresholdPercent !== undefined
+          ? stored.lowStockThresholdPercent
+          : (def.lowStockThresholdPercent || 30),
+      bankName: stored.bankName || def.bankName || "BCA",
+      bankAccountNumber: stored.bankAccountNumber || def.bankAccountNumber || "",
+      bankAccountHolder: stored.bankAccountHolder || def.bankAccountHolder || "",
+      status: stored.status === "INACTIVE" ? "INACTIVE" : (def.status || "ACTIVE"),
+    };
+  }
+
+  return {
+    tenantId,
+    brandName: def.brandName || defInfo.name,
+    tagline: def.tagline || "",
+    description: def.description || "",
+    contactPhone: def.contactPhone || "",
+    receiptHeader: def.receiptHeader || "",
+    receiptFooter: def.receiptFooter || "",
+    lowStockThresholdPercent: def.lowStockThresholdPercent || 30,
+    bankName: def.bankName || "BCA",
+    bankAccountNumber: def.bankAccountNumber || "",
+    bankAccountHolder: def.bankAccountHolder || "",
+    status: def.status || "ACTIVE",
+  };
+}
+
 /**
  * Helper to get readable tenant name by tenantId
  */
 export function getTenantName(tenantId?: string): string | undefined {
-  if (!tenantId) return undefined;
   const match = DEFAULT_FNB_TENANTS.find((t) => t.id === tenantId);
   return match ? match.name : tenantId;
 }

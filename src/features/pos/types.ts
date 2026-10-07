@@ -76,6 +76,10 @@ export interface POSReceiptData {
   orderNumber: string;
   date: string;
   cashierName: string;
+  tenantId?: string;
+  tenantName?: string;
+  receiptHeader?: string;
+  receiptFooter?: string;
   outletName: string;
   outletAddress: string;
   outletPhone: string;

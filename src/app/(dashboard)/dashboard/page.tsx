@@ -37,14 +37,33 @@ export default function DashboardPage() {
   }, []);
 
   const isDagoOwner = user?.scopeLevel === "ORGANIZATION";
+  const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
+  const userTenantId = user?.tenant?.id;
 
-  // Real-time calculated values from context
-  const totalRevenue = filteredOrders.reduce((sum, o) => sum + o.total, 0);
-  const totalOrdersCount = filteredOrders.length;
+  // Tenant-aware order filtering
+  const scopedOrders = React.useMemo(() => {
+    if (!isTenantOwner || !userTenantId) return filteredOrders;
+    return filteredOrders.filter((o) => o.items.some((it) => it.tenantId === userTenantId));
+  }, [filteredOrders, isTenantOwner, userTenantId]);
+
+  // Real-time calculated values from context (tenant-scoped if Tenant Owner)
+  const totalRevenue = React.useMemo(() => {
+    if (!isTenantOwner || !userTenantId) {
+      return filteredOrders.reduce((sum, o) => sum + o.total, 0);
+    }
+    return scopedOrders.reduce((sum, o) => {
+      const tenantGross = o.items
+        .filter((it) => it.tenantId === userTenantId)
+        .reduce((iSum, it) => iSum + (it.unitPrice || 0) * (it.quantity || 1), 0);
+      return sum + tenantGross;
+    }, 0);
+  }, [filteredOrders, scopedOrders, isTenantOwner, userTenantId]);
+
+  const totalOrdersCount = scopedOrders.length;
   const averageOrderValue =
     totalOrdersCount > 0 ? Math.round(totalRevenue / totalOrdersCount) : 0;
   const completedOrdersCount =
-    filteredOrders.filter((o) => o.status === "COMPLETED" || o.status === "SERVED").length;
+    scopedOrders.filter((o) => o.status === "COMPLETED" || o.status === "SERVED").length;
 
   // Multi-Business Breakdown for Dago Organization Owner
   const fnbRevenue = totalRevenue;

@@ -79,7 +79,7 @@ describe("Customer Portal Payment Waiting Flow (End-to-End)", () => {
 
     // Stock must NOT be deducted yet
     const initialWagyuStock = INITIAL_INGREDIENTS.find((i) => i.id === "ing-1")?.stockNumber;
-    expect(initialWagyuStock).toBe(4.5);
+    expect(initialWagyuStock).toBe(20);
   });
 
   it("2. PENDING_PAYMENT -> PAID transition confirms order, deducts BOM ingredients, and awards Loyalty points", () => {
@@ -144,7 +144,7 @@ describe("Customer Portal Payment Waiting Flow (End-to-End)", () => {
     });
 
     const wagyuStock = currentIngredients.find((i) => i.id === "ing-1")?.stockNumber;
-    expect(wagyuStock).toBe(4.38); // 4.50kg - 0.12kg = 4.38kg
+    expect(wagyuStock).toBe(19.88); // 20.00L - 0.12L = 19.88L
 
     // Award loyalty points ONLY on PAID
     const earnedPoints = Math.floor(paidOrder.total / 1000);

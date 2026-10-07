@@ -14,6 +14,8 @@ import {
   ArrowRight,
   ShieldCheck,
   Check,
+  AlertTriangle,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -77,10 +79,10 @@ export function PaymentModal({
       setApprovalCode(`APP-${Math.floor(100000 + Math.random() * 900000)}`);
 
       // Initialize Equal Split for 2 guests
-      const perGuest = Math.ceil(grandTotal / 2);
+      const perGuest = Math.floor(grandTotal / 2);
       setSplitGuests([
-        { id: "g-1", guestLabel: "Tamu 1 (Guest A)", assignedAmount: perGuest, paymentMethod: "QRIS", isPaid: false },
-        { id: "g-2", guestLabel: "Tamu 2 (Guest B)", assignedAmount: grandTotal - perGuest, paymentMethod: "CASH", isPaid: false },
+        { id: "g-1", guestLabel: "Tamu 1 (Guest A)", assignedAmount: perGuest, paymentMethod: "QRIS", isPaid: true },
+        { id: "g-2", guestLabel: "Tamu 2 (Guest B)", assignedAmount: grandTotal - perGuest, paymentMethod: "CASH", isPaid: true },
       ]);
     }
   }, [isOpen, grandTotal]);
@@ -96,18 +98,19 @@ export function PaymentModal({
 
   if (!isOpen) return null;
 
-  // Handle Split guest count change
+  // Handle Split guest count change (Equal Split)
   const handleSplitCountChange = (count: number) => {
     setSplitGuestCount(count);
     const perGuest = Math.floor(grandTotal / count);
     const remainder = grandTotal - perGuest * count;
 
+    const defaultMethods: ("QRIS" | "CASH" | "EDC")[] = ["QRIS", "CASH", "EDC", "QRIS", "CASH"];
     const newGuests: SplitGuestBill[] = Array.from({ length: count }, (_, idx) => ({
       id: `g-${idx + 1}`,
       guestLabel: `Tamu ${idx + 1} (Guest ${String.fromCharCode(65 + idx)})`,
       assignedAmount: idx === 0 ? perGuest + remainder : perGuest,
-      paymentMethod: "QRIS",
-      isPaid: false,
+      paymentMethod: defaultMethods[idx % defaultMethods.length],
+      isPaid: true,
     }));
     setSplitGuests(newGuests);
   };
@@ -117,6 +120,25 @@ export function PaymentModal({
       prev.map((g) => (g.id === guestId ? { ...g, isPaid: !g.isPaid } : g))
     );
   };
+
+  const handleGuestAmountChange = (guestId: string, amount: number) => {
+    setSplitGuests((prev) =>
+      prev.map((g) => (g.id === guestId ? { ...g, assignedAmount: Math.max(0, amount) } : g))
+    );
+  };
+
+  const handleGuestMethodChange = (guestId: string, method: "QRIS" | "CASH" | "EDC") => {
+    setSplitGuests((prev) =>
+      prev.map((g) => (g.id === guestId ? { ...g, paymentMethod: method } : g))
+    );
+  };
+
+  // Split calculation helpers
+  const splitTotalAssigned = splitGuests.reduce((sum, g) => sum + g.assignedAmount, 0);
+  const splitRemaining = grandTotal - splitTotalAssigned;
+  const isSplitBalanced = splitTotalAssigned === grandTotal;
+  const isAllGuestsPaid = splitGuests.every((g) => g.isPaid);
+  const isSplitValid = isSplitBalanced && isAllGuestsPaid;
 
   // Cash Change Calculation
   const changeDue = Math.max(0, cashGiven - grandTotal);
@@ -158,6 +180,7 @@ export function PaymentModal({
         changeDue: 0,
       });
     } else if (activeTab === "SPLIT") {
+      if (!isSplitValid) return;
       onPaymentSuccess({
         method: "SPLIT",
         amountPaid: grandTotal,
@@ -411,72 +434,126 @@ export function PaymentModal({
             </div>
           )}
 
-          {/* TAB 4: SPLIT BILL */}
+          {/* TAB 4: SPLIT BILL (Enhanced with Custom Allocation & Multi-Methods) */}
           {activeTab === "SPLIT" && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              {/* Header: Equal Split Presets */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-slate-100">
                 <div>
-                  <h4 className="text-xs font-bold text-slate-900">Bagi Tagihan Rata (Equal Split)</h4>
-                  <p className="text-[11px] text-slate-500">Bagi total tagihan sama rata ke sejumlah tamu</p>
+                  <h4 className="text-xs font-bold text-slate-900">Bagi Tagihan & Metode Pembayaran</h4>
+                  <p className="text-[11px] text-slate-500">Atur nominal dan metode bayar untuk masing-masing tamu</p>
                 </div>
-                <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
-                  {[2, 3, 4, 5].map((cnt) => (
-                    <button
-                      key={cnt}
-                      type="button"
-                      onClick={() => handleSplitCountChange(cnt)}
-                      className={`w-7 h-7 rounded-lg text-xs font-bold font-mono transition-all ${
-                        splitGuestCount === cnt
-                          ? "bg-brand-orange text-white shadow-sm"
-                          : "text-slate-600 hover:bg-slate-200"
-                      }`}
-                    >
-                      {cnt}
-                    </button>
-                  ))}
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-[11px] text-slate-400 font-semibold">Bagi Rata:</span>
+                  <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
+                    {[2, 3, 4, 5].map((cnt) => (
+                      <button
+                        key={cnt}
+                        type="button"
+                        onClick={() => handleSplitCountChange(cnt)}
+                        className={`w-7 h-7 rounded-lg text-xs font-bold font-mono transition-all ${
+                          splitGuestCount === cnt
+                            ? "bg-brand-orange text-white shadow-sm"
+                            : "text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {cnt}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
+              {/* Real-time Allocation Summary Card */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-2 text-center text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Tagihan</span>
+                  <span className="font-mono font-black text-slate-900">{formatCurrencyIDR(grandTotal)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Dialokasikan</span>
+                  <span className={`font-mono font-black ${isSplitBalanced ? "text-emerald-600" : "text-amber-600"}`}>
+                    {formatCurrencyIDR(splitTotalAssigned)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Sisa Alokasi</span>
+                  <span className={`font-mono font-black ${splitRemaining === 0 ? "text-emerald-600" : splitRemaining < 0 ? "text-rose-600" : "text-amber-600"}`}>
+                    {formatCurrencyIDR(splitRemaining)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Warning Alert if allocation does not match grand total */}
+              {!isSplitBalanced && (
+                <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 flex items-center space-x-2 text-xs text-amber-900">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    {splitRemaining > 0
+                      ? `Alokasi pembayaran masih kurang ${formatCurrencyIDR(splitRemaining)}.`
+                      : `Alokasi pembayaran melebihi total tagihan sebesar ${formatCurrencyIDR(Math.abs(splitRemaining))}.`}
+                  </span>
+                </div>
+              )}
+
+              {/* Guest Rows */}
+              <div className="space-y-2.5">
                 {splitGuests.map((guest) => (
                   <div
                     key={guest.id}
-                    className={`p-3 rounded-xl border flex items-center justify-between transition-all ${
+                    className={`p-3.5 rounded-xl border space-y-2.5 transition-all ${
                       guest.isPaid
-                        ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                        ? "bg-emerald-50/50 border-emerald-300 text-emerald-950"
                         : "bg-white border-slate-200"
                     }`}
                   >
-                    <div className="flex items-center space-x-2.5">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleGuestPaid(guest.id)}
-                        className={`w-5 h-5 rounded-md flex items-center justify-center border text-xs ${
-                          guest.isPaid
-                            ? "bg-emerald-600 border-emerald-600 text-white"
-                            : "border-slate-300 hover:border-slate-400 bg-white"
-                        }`}
-                      >
-                        {guest.isPaid && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                      </button>
-                      <div>
-                        <p className="text-xs font-bold">{guest.guestLabel}</p>
-                        <p className="text-[11px] text-slate-500 font-mono">
-                          {formatCurrencyIDR(guest.assignedAmount)}
-                        </p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2.5">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleGuestPaid(guest.id)}
+                          className={`w-5 h-5 rounded-md flex items-center justify-center border text-xs transition-colors ${
+                            guest.isPaid
+                              ? "bg-emerald-600 border-emerald-600 text-white"
+                              : "border-slate-300 hover:border-slate-400 bg-white"
+                          }`}
+                        >
+                          {guest.isPaid && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                        </button>
+                        <span className="text-xs font-bold text-slate-900">{guest.guestLabel}</span>
+                      </div>
+
+                      {/* Payment Method Selector */}
+                      <div className="flex items-center space-x-1">
+                        {(["QRIS", "CASH", "EDC"] as const).map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => handleGuestMethodChange(guest.id, m)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                              guest.paymentMethod === m
+                                ? "bg-slate-900 text-white"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-2">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                          guest.isPaid
-                            ? "bg-emerald-200 text-emerald-900"
-                            : "bg-amber-100 text-amber-800"
-                        }`}
-                      >
-                        {guest.isPaid ? "SUDAH DIBAYAR" : "BELUM LUNAS"}
-                      </span>
+                    {/* Assigned Amount Input */}
+                    <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100/80">
+                      <span className="text-[11px] text-slate-500 font-semibold">Nominal Pembayaran:</span>
+                      <div className="relative w-40">
+                        <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-slate-400">Rp</span>
+                        <input
+                          type="number"
+                          value={guest.assignedAmount}
+                          onChange={(e) => handleGuestAmountChange(guest.id, Number(e.target.value))}
+                          className="w-full pl-8 pr-2 py-1 text-xs font-mono font-bold bg-white border border-slate-200 rounded-lg text-right focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                        />
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -500,10 +577,15 @@ export function PaymentModal({
             type="button"
             disabled={
               (activeTab === "CASH" && !isCashSufficient) ||
+              (activeTab === "SPLIT" && !isSplitValid) ||
               isQrisProcessing
             }
             onClick={handleCompletePayment}
-            className="flex-1 text-xs font-bold h-11 space-x-2 shadow-md bg-brand-orange hover:bg-orange-600 text-white"
+            className={`flex-1 text-xs font-bold h-11 space-x-2 shadow-md ${
+              activeTab === "SPLIT" && !isSplitValid
+                ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                : "bg-brand-orange hover:bg-orange-600 text-white"
+            }`}
           >
             {isQrisProcessing ? (
               <span>Memverifikasi QRIS...</span>

@@ -6,6 +6,9 @@ import { AuthenticatedUser, RoleSlug, BusinessModuleCode, ScopeLevel } from "@/t
 export type PersonaKey =
   | "DAGO_OWNER"
   | "TENANT_OWNER_KS"
+  | "TENANT_OWNER_KITCHEN"
+  | "TENANT_OWNER_BAKERY"
+  | "TENANT_OWNER_TEA"
   | "COWORK_MANAGER"
   | "COMMERCIAL_MANAGER"
   | "CASHIER_SGR"
@@ -46,7 +49,7 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     ],
   },
 
-  // 2. F&B Tenant Owner: Kopi Senja (Scope: TENANT -> sees ONLY Kopi Senja F&B)
+  // 2a. F&B Tenant Owner: Kopi Senja (Scope: TENANT -> sees ONLY Kopi Senja F&B)
   TENANT_OWNER_KS: {
     id: "user-owner-ks",
     email: "owner.kopisenja@dagoeng.com",
@@ -57,7 +60,61 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     allowedModules: ["FNB"],
     organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
     tenant: { id: "tenant-ks", name: "Kopi Senja", code: "KOPI-SENJA", businessModule: "FNB" },
-    outlet: null, // Scoped to Kopi Senja's outlets (Singaraja, Denpasar)
+    outlet: null,
+    permissions: [
+      "dashboard:view", "orders:view", "tables:view", "inventory:view",
+      "menu:view", "menu:manage", "customers:view", "reports:view"
+    ],
+  },
+
+  // 2b. F&B Tenant Owner: Dapur Mama (Scope: TENANT -> sees ONLY Dapur Mama F&B)
+  TENANT_OWNER_KITCHEN: {
+    id: "user-owner-kitchen",
+    email: "owner.dapurmama@dagoeng.com",
+    name: "Siti Aminah (Owner Dapur Mama)",
+    phone: "+62 813-2233-4411",
+    role: { id: "role-owner", slug: "OWNER", name: "Owner" },
+    scopeLevel: "TENANT",
+    allowedModules: ["FNB"],
+    organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
+    tenant: { id: "tenant-kitchen", name: "Dapur Mama", code: "DAPUR-MAMA", businessModule: "FNB" },
+    outlet: null,
+    permissions: [
+      "dashboard:view", "orders:view", "tables:view", "inventory:view",
+      "menu:view", "menu:manage", "customers:view", "reports:view"
+    ],
+  },
+
+  // 2c. F&B Tenant Owner: Manis Bakery (Scope: TENANT -> sees ONLY Manis Bakery F&B)
+  TENANT_OWNER_BAKERY: {
+    id: "user-owner-bakery",
+    email: "owner.manisbakery@dagoeng.com",
+    name: "David Santoso (Owner Manis Bakery)",
+    phone: "+62 812-9988-7766",
+    role: { id: "role-owner", slug: "OWNER", name: "Owner" },
+    scopeLevel: "TENANT",
+    allowedModules: ["FNB"],
+    organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
+    tenant: { id: "tenant-bakery", name: "Manis Bakery", code: "MANIS-BAKERY", businessModule: "FNB" },
+    outlet: null,
+    permissions: [
+      "dashboard:view", "orders:view", "tables:view", "inventory:view",
+      "menu:view", "menu:manage", "customers:view", "reports:view"
+    ],
+  },
+
+  // 2d. F&B Tenant Owner: Warung Bu Narti (Scope: TENANT -> sees ONLY Warung Bu Narti F&B)
+  TENANT_OWNER_TEA: {
+    id: "user-owner-tea",
+    email: "owner.warungbunarti@dagoeng.com",
+    name: "Bu Narti (Owner Warung Bu Narti)",
+    phone: "+62 817-4455-6677",
+    role: { id: "role-owner", slug: "OWNER", name: "Owner" },
+    scopeLevel: "TENANT",
+    allowedModules: ["FNB"],
+    organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
+    tenant: { id: "tenant-tea", name: "Warung Bu Narti", code: "WARUNG-BU-NARTI", businessModule: "FNB" },
+    outlet: null,
     permissions: [
       "dashboard:view", "orders:view", "tables:view", "inventory:view",
       "menu:view", "menu:manage", "customers:view", "reports:view"

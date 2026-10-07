@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { useInventory } from "@/contexts/InventoryContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
@@ -38,12 +39,22 @@ import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import { getTenantName } from "@/lib/tenant";
 
 export default function OrdersPage() {
+  const { user } = useAuth();
   const { filteredOrders, advanceOrderStatus } = useOrders();
   const { simulateBOMDeduction } = useInventory();
   const { members, addPoints } = useLoyalty();
   const { releaseTableToAvailable } = useTables();
   const { logActivity } = useActivityLog();
   const { settings } = useSettings();
+
+  const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
+  const userTenantId = user?.tenant?.id;
+
+  // Strict tenant-aware order list
+  const displayedOrders = useMemo(() => {
+    if (!isTenantOwner || !userTenantId) return filteredOrders;
+    return filteredOrders.filter((o) => o.items.some((it) => it.tenantId === userTenantId));
+  }, [filteredOrders, isTenantOwner, userTenantId]);
 
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
   const [paymentOrder, setPaymentOrder] = useState<OrderRecord | null>(null);
@@ -54,6 +65,9 @@ export default function OrdersPage() {
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
   const convertOrderToReceiptData = (order: OrderRecord): POSReceiptData => {
+    const primaryTenantId = order.items[0]?.tenantId || "tenant-ks";
+    const primaryTenantName = getTenantName(primaryTenantId) || "Kopi Senja";
+
     return {
       orderNumber: order.orderNumber,
       date: new Date(order.createdAt).toLocaleDateString("id-ID", {
@@ -64,7 +78,9 @@ export default function OrdersPage() {
         minute: "2-digit",
       }),
       cashierName: "Kasir / Staff Bertugas",
-      outletName: order.outletName ? `Kopi Senja — ${order.outletName}` : "Dago Creative Hub",
+      tenantId: primaryTenantId,
+      tenantName: primaryTenantName,
+      outletName: order.outletName ? `${primaryTenantName} — ${order.outletName}` : "Outlet Singaraja",
       outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
       outletPhone: "(0362) 23456",
       tableNumber: order.tableNumber,
@@ -106,7 +122,7 @@ export default function OrdersPage() {
       "Jumlah Item",
       "Waktu Dibuat",
     ];
-    const rows = filteredOrders.map((o) => {
+    const rows = displayedOrders.map((o) => {
       const promoName = settings.promos.find((p) => p.id === o.promoId)?.name || o.promoId || "-";
       const discountVal = o.discount ?? Math.max(0, (o.subtotal + (o.tax || 0)) - o.total);
       return [
@@ -329,14 +345,14 @@ export default function OrdersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {filteredOrders.length === 0 ? (
+                {displayedOrders.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="p-8 text-center text-slate-400 text-xs">
                       Belum ada riwayat transaksi pesanan pada periode ini.
                     </td>
                   </tr>
                 ) : (
-                  filteredOrders.map((o) => {
+                  displayedOrders.map((o) => {
                     const metrics = calculateOrderMetrics(o);
                     const isDelayed = metrics.slaStatus === "DELAYED";
                     const isCompleted = o.status === "COMPLETED";

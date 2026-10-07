@@ -57,6 +57,7 @@ import {
   Check,
   User,
   ShieldCheck,
+  Building,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -85,9 +86,24 @@ function parseHour(timeStr: string): number {
   return 9;
 }
 
+function getCurrentTimeFormatted(): string {
+  const now = new Date();
+  const hours = now.getHours().toString().padStart(2, "0");
+  const minutes = now.getMinutes().toString().padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
 function calculateEndTime(startTime: string, durationHours: number): string {
+  if (!startTime) return "11:00";
+  const match = startTime.match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    const startHour = parseInt(match[1], 10);
+    const startMin = match[2];
+    const endHour = (startHour + durationHours) % 24;
+    return `${endHour.toString().padStart(2, "0")}:${startMin}`;
+  }
   const startHour = parseHour(startTime);
-  const endHour = startHour + durationHours;
+  const endHour = (startHour + durationHours) % 24;
   return `${endHour.toString().padStart(2, "0")}:00`;
 }
 
@@ -111,8 +127,10 @@ export default function POSPage() {
   const [cwSpaceTypeFilter, setCwSpaceTypeFilter] = useState<string>("ALL");
   const [cwSearchQuery, setCwSearchQuery] = useState<string>("");
   const [cwDate, setCwDate] = useState<string>(new Date().toISOString().split("T")[0]);
-  const [cwStartTime, setCwStartTime] = useState<string>("09:00");
+  const [cwStartTime, setCwStartTime] = useState<string>(() => getCurrentTimeFormatted());
   const [cwDuration, setCwDuration] = useState<number>(2); // hours
+  const [cwUsageType, setCwUsageType] = useState<"PERSONAL" | "GROUP">("PERSONAL");
+  const [cwCompanyName, setCwCompanyName] = useState<string>("");
   const [cwCustomerType, setCwCustomerType] = useState<"MEMBER" | "WALK_IN">("MEMBER");
   const [cwMemberId, setCwMemberId] = useState<string>("");
   const [cwGuestName, setCwGuestName] = useState<string>("");
@@ -156,6 +174,8 @@ export default function POSPage() {
   const [selectedTable, setSelectedTable] = useState<string>("");
   const [customerName, setCustomerName] = useState<string>("");
   const [selectedPromoId, setSelectedPromoId] = useState<string>("");
+  const [fnbVoucherCode, setFnbVoucherCode] = useState<string>("");
+  const [fnbVoucherValidationMsg, setFnbVoucherValidationMsg] = useState<{ type: "SUCCESS" | "ERROR"; text: string } | null>(null);
 
   // Loyalty & Voucher States
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
@@ -412,6 +432,32 @@ export default function POSPage() {
     setIsVoucherModalOpen(false);
   };
 
+  const handleApplyFnbVoucher = (codeToApply?: string) => {
+    const code = (codeToApply !== undefined ? codeToApply : fnbVoucherCode).trim();
+    if (!code) {
+      setSelectedPromoId("");
+      setFnbVoucherValidationMsg(null);
+      return;
+    }
+    const res = validateVoucherCode(code, settings.promos || [], subtotal, {
+      scope: "FNB",
+      tenantId: selectedTenantId !== "ALL" ? selectedTenantId : undefined,
+    });
+    if (res.isValid && res.promo) {
+      setSelectedPromoId(res.promo.id);
+      setFnbVoucherValidationMsg({
+        type: "SUCCESS",
+        text: `Voucher "${res.promo.code || res.promo.name}" aktif! Diskon Rp ${res.discountAmount.toLocaleString("id-ID")}`,
+      });
+    } else {
+      setSelectedPromoId("");
+      setFnbVoucherValidationMsg({
+        type: "ERROR",
+        text: res.reason || `Kode voucher "${code}" tidak ditemukan atau tidak valid.`,
+      });
+    }
+  };
+
   // Process Successful Payment & Complete Business Actions
   const handlePaymentSuccess = (paymentData: {
     method: POSPaymentMethod;
@@ -505,11 +551,16 @@ export default function POSPage() {
     });
 
     // 7. Prepare Receipt Data
+    const primaryTenantId = cartItems[0]?.tenantId || (selectedTenantId !== "ALL" ? selectedTenantId : "tenant-ks");
+    const primaryTenantName = getTenantName(primaryTenantId) || "Kopi Senja";
+
     const receipt: POSReceiptData = {
       orderNumber: receiptNo,
       date: nowFormatted,
       cashierName: user?.name || "Kasir Bertugas",
-      outletName: activeOutlet?.name ? `Kopi Senja — ${activeOutlet.name}` : "Dago Creative Hub",
+      tenantId: primaryTenantId,
+      tenantName: primaryTenantName,
+      outletName: activeOutlet?.name ? `${primaryTenantName} — ${activeOutlet.name}` : "Outlet Singaraja",
       outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
       outletPhone: "(0362) 23456",
       tableNumber: selectedTable,
@@ -550,6 +601,8 @@ export default function POSPage() {
     setSelectedMemberId("");
     setAppliedVoucher(null);
     setSelectedPromoId("");
+    setFnbVoucherCode("");
+    setFnbVoucherValidationMsg(null);
     setSearchQuery("");
     setSelectedCategory("Semua Menu");
     setSelectedTable("");
@@ -596,7 +649,8 @@ export default function POSPage() {
       (b) =>
         b.spaceId === spaceId &&
         b.date === targetDate &&
-        b.checkInStatus !== "CANCELLED"
+        b.checkInStatus !== "CANCELLED" &&
+        b.checkInStatus !== "COMPLETED"
     );
 
     for (let h = startHour; h < targetEndHour; h++) {
@@ -694,11 +748,13 @@ export default function POSPage() {
       return;
     }
 
+    const effectiveCompany = cwUsageType === "GROUP" ? (cwCompanyName.trim() || "Group / Company") : "Personal";
+
     const createdBooking = cwBookSpace({
       guestName: effectiveGuestName,
       guestPhone: effectiveGuestPhone,
       guestEmail: effectiveGuestEmail,
-      company: "Walk-in / POS Kasir",
+      company: effectiveCompany,
       spaceId: selectedSpace.id,
       spaceName: selectedSpace.name,
       spaceType: selectedSpace.type,
@@ -747,7 +803,7 @@ export default function POSPage() {
       guestName: effectiveGuestName,
       guestPhone: effectiveGuestPhone,
       guestEmail: effectiveGuestEmail,
-      company: "Personal / POS Kasir",
+      company: effectiveCompany,
       spaceName: selectedSpace.name,
       spaceType: selectedSpace.type,
       outletName: activeOutlet?.name ? `Kopi Senja — ${activeOutlet.name}` : "Dago Creative Hub",
@@ -1247,34 +1303,97 @@ export default function POSPage() {
             {/* Calculations & Checkout Trigger */}
             <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-3">
               {/* Promo & Voucher Code Selector */}
-              <div className="space-y-1.5">
+              <div className="space-y-2 p-2.5 bg-white rounded-xl border border-slate-200">
                 <div className="flex items-center justify-between text-[11px]">
                   <span className="font-bold text-slate-700 flex items-center gap-1">
-                    <Tag className="w-3 h-3 text-emerald-600" />
+                    <Tag className="w-3.5 h-3.5 text-emerald-600" />
                     <span>Promo / Voucher Diskon</span>
                   </span>
-                  {selectedPromoId && (
+                  {(selectedPromoId || fnbVoucherCode) && (
                     <button
                       type="button"
-                      onClick={() => setSelectedPromoId("")}
+                      onClick={() => {
+                        setSelectedPromoId("");
+                        setFnbVoucherCode("");
+                        setFnbVoucherValidationMsg(null);
+                      }}
                       className="text-[10px] text-rose-600 hover:underline font-bold"
                     >
                       Hapus Promo
                     </button>
                   )}
                 </div>
+
+                {/* Manual Voucher Code Input */}
+                <div className="flex space-x-1.5">
+                  <input
+                    type="text"
+                    placeholder="Input Kode: DAGO20 / KOPI10"
+                    value={fnbVoucherCode}
+                    onChange={(e) => setFnbVoucherCode(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleApplyFnbVoucher();
+                      }
+                    }}
+                    className="flex-1 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold uppercase text-slate-900 outline-none focus:ring-1 focus:ring-brand-orange"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => handleApplyFnbVoucher()}
+                    className="h-8 px-3 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-2xs"
+                  >
+                    Terapkan
+                  </Button>
+                </div>
+
+                {/* Validation Feedback Message */}
+                {fnbVoucherValidationMsg && (
+                  <div
+                    className={`p-2 rounded-lg text-[11px] font-medium flex items-center space-x-1.5 ${
+                      fnbVoucherValidationMsg.type === "SUCCESS"
+                        ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
+                        : "bg-rose-50 border border-rose-200 text-rose-800"
+                    }`}
+                  >
+                    {fnbVoucherValidationMsg.type === "SUCCESS" ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    )}
+                    <span>{fnbVoucherValidationMsg.text}</span>
+                  </div>
+                )}
+
+                {/* Active Promos Dropdown Selector */}
                 <select
                   value={selectedPromoId}
-                  onChange={(e) => setSelectedPromoId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-white font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedPromoId(val);
+                    if (!val) {
+                      setFnbVoucherCode("");
+                      setFnbVoucherValidationMsg(null);
+                    } else {
+                      const p = settings.promos?.find((promo) => promo.id === val);
+                      if (p) {
+                        setFnbVoucherCode(p.code || p.name);
+                        setFnbVoucherValidationMsg(null);
+                      }
+                    }
+                  }}
+                  className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-brand-orange"
                 >
-                  <option value="">-- Pilih Promo / Masukkan Kode --</option>
+                  <option value="">-- Atau Pilih Promo Aktif ({settings.promos?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "FNB")).length || 0}) --</option>
                   {settings.promos?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "FNB")).map((promo: PromoConfig) => (
                     <option key={promo.id} value={promo.id}>
                       {promo.code ? `[${promo.code}] ` : ""}{promo.name} &bull; {promo.discountType === "PERCENTAGE" ? `${promo.discountValue}% (Maks Rp${(promo.maxDiscount || 0).toLocaleString()})` : `Potongan Rp${promo.discountValue.toLocaleString()}`}
                     </option>
                   ))}
                 </select>
+
                 {activePromo && activePromo.minimumAmount && subtotal < activePromo.minimumAmount && (
                   <p className="text-[10px] text-amber-600 font-medium">
                     * Belum mencapai min. belanja Rp {activePromo.minimumAmount.toLocaleString("id-ID")}.
@@ -1539,19 +1658,39 @@ export default function POSPage() {
                 </div>
               </div>
 
-              {/* Time Slots Selector with Availability Matrix */}
+              {/* Time Slots Selector with Availability Matrix & Automatic End Time */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <label className="font-bold text-slate-700 flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Pilih Jam Mulai</span>
+                    <span>Waktu Mulai & Selesai (Otomatis)</span>
                   </label>
-                  <span className="text-[10px] text-slate-500">
-                    Sewa: <strong>{cwStartTime} - {calculateEndTime(cwStartTime, cwDuration)} WITA</strong>
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCwStartTime(getCurrentTimeFormatted())}
+                    className="text-[10px] text-blue-600 font-bold hover:underline"
+                  >
+                    Set Waktu Sekarang
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-4 gap-1 max-h-32 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200/80">
+                <div className="p-2.5 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs space-y-1">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600">Jam Mulai (Start):</span>
+                    <input
+                      type="time"
+                      value={cwStartTime}
+                      onChange={(e) => setCwStartTime(e.target.value)}
+                      className="px-2 py-0.5 bg-white border border-blue-300 rounded font-mono font-bold text-xs text-slate-900 outline-none"
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-blue-900 font-bold pt-1 border-t border-blue-100">
+                    <span>Estimasi Selesai (End):</span>
+                    <span className="font-mono text-sm">{calculateEndTime(cwStartTime, cwDuration)} WITA</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-4 gap-1 max-h-28 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200/80">
                   {COWORKING_TIME_SLOTS.map((slot) => {
                     const startH = parseHour(slot);
                     const avail = selectedSpace
@@ -1581,6 +1720,42 @@ export default function POSPage() {
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Tipe Penggunaan (Personal vs Group / Company) */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700 flex items-center gap-1">
+                    <Building className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Tipe Penggunaan</span>
+                  </label>
+                  <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setCwUsageType("PERSONAL")}
+                      className={`px-2 py-0.5 rounded ${cwUsageType === "PERSONAL" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500"}`}
+                    >
+                      Personal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCwUsageType("GROUP")}
+                      className={`px-2 py-0.5 rounded ${cwUsageType === "GROUP" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500"}`}
+                    >
+                      Group / Company
+                    </button>
+                  </div>
+                </div>
+
+                {cwUsageType === "GROUP" && (
+                  <input
+                    type="text"
+                    placeholder="Nama Instansi / Perusahaan / Group *"
+                    value={cwCompanyName}
+                    onChange={(e) => setCwCompanyName(e.target.value)}
+                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none"
+                  />
+                )}
               </div>
 
               {/* Customer / Guest Selection */}

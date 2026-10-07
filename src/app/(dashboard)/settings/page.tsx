@@ -32,7 +32,14 @@ import {
   ToggleRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getTenantStatus, setTenantStatus, DEFAULT_FNB_TENANTS } from "@/lib/tenant";
+import { getTenantStatus, setTenantStatus, DEFAULT_FNB_TENANTS, getTenantProfile } from "@/lib/tenant";
+import {
+  getAllTenantRevenueSplits,
+  setTenantRevenueSplit,
+  TenantRevenueSplitConfig,
+  getTenantRevenueSplit,
+  DEFAULT_TENANT_REVENUE_SPLITS,
+} from "@/lib/settlement";
 
 export default function SettingsPage() {
   const { user, activeOrgModules, toggleOrgModule } = useAuth();
@@ -84,6 +91,15 @@ export default function SettingsPage() {
   const [bankAccountHolder, setBankAccountHolder] = useState<string>("");
   const [bankFormError, setBankFormError] = useState<string>("");
 
+  // Flexible Revenue Sharing State (Super Admin & Org Owner)
+  const [revenueSplits, setRevenueSplits] = useState<Record<string, TenantRevenueSplitConfig>>({});
+  const [revenueSplitErrors, setRevenueSplitErrors] = useState<Record<string, string>>({});
+  const [splitSaveFeedback, setSplitSaveFeedback] = useState<string>("");
+
+  const refreshRevenueSplits = () => {
+    setRevenueSplits(getAllTenantRevenueSplits());
+  };
+
   const refreshAllTenantStatuses = () => {
     const statuses: Record<string, "ACTIVE" | "INACTIVE"> = {};
     DEFAULT_FNB_TENANTS.forEach((t) => {
@@ -94,47 +110,87 @@ export default function SettingsPage() {
 
   useEffect(() => {
     refreshAllTenantStatuses();
+    refreshRevenueSplits();
   }, []);
 
   useEffect(() => {
     if (!isTenantOwner) return;
     try {
-      /**
-       * NOTE: LocalStorage persistence below serves as an isolated prototype/demo persistence layer
-       * specifically scoped per tenantId without requiring destructive Prisma database migrations.
-       */
-      const saved = localStorage.getItem("dagoeng_tenant_settings_v1");
       const currentTenantId = user?.tenant?.id || "tenant-ks";
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        // Support both map-by-tenantId and legacy single object
-        const tenantData = parsed[currentTenantId] || (parsed.tenantId === currentTenantId ? parsed : null);
-
-        if (tenantData) {
-          if (tenantData.brandName) setTenantBrandName(tenantData.brandName);
-          if (tenantData.tagline) setTenantTagline(tenantData.tagline);
-          if (tenantData.description) setTenantDesc(tenantData.description);
-          if (tenantData.contactPhone) setTenantPhone(tenantData.contactPhone);
-          if (tenantData.receiptHeader) setTenantReceiptHeader(tenantData.receiptHeader);
-          if (tenantData.receiptFooter) setTenantReceiptFooter(tenantData.receiptFooter);
-          if (tenantData.lowStockThresholdPercent !== undefined) setTenantLowStock(tenantData.lowStockThresholdPercent);
-          if (tenantData.bankName) setBankName(tenantData.bankName);
-          if (tenantData.bankAccountNumber) setBankAccountNumber(tenantData.bankAccountNumber);
-          if (tenantData.bankAccountHolder) setBankAccountHolder(tenantData.bankAccountHolder);
-          if (tenantData.status) setTenantStatusState(tenantData.status === "INACTIVE" ? "INACTIVE" : "ACTIVE");
-        } else {
-          setTenantStatusState(getTenantStatus(currentTenantId));
-        }
-      } else {
-        setTenantStatusState(getTenantStatus(currentTenantId));
-      }
+      const profile = getTenantProfile(currentTenantId);
+      setTenantBrandName(profile.brandName);
+      setTenantTagline(profile.tagline);
+      setTenantDesc(profile.description);
+      setTenantPhone(profile.contactPhone);
+      setTenantReceiptHeader(profile.receiptHeader);
+      setTenantReceiptFooter(profile.receiptFooter);
+      setTenantLowStock(profile.lowStockThresholdPercent);
+      setBankName(profile.bankName);
+      setBankAccountNumber(profile.bankAccountNumber);
+      setBankAccountHolder(profile.bankAccountHolder);
+      setTenantStatusState(profile.status);
     } catch (e) {
-      console.error("Failed to load tenant settings from localStorage", e);
+      console.error("Failed to load tenant settings", e);
     }
   }, [user, isTenantOwner]);
 
+  const handleTenantSplitChange = (tenantId: string, tenantShare: number) => {
+    const validTenantShare = Math.max(0, Math.min(100, isNaN(tenantShare) ? 0 : tenantShare));
+    const dagoShare = 100 - validTenantShare;
+    
+    // Clear error for this tenant if valid
+    setRevenueSplitErrors((prev) => {
+      const next = { ...prev };
+      delete next[tenantId];
+      return next;
+    });
+
+    setRevenueSplits((prev) => {
+      const existing = prev[tenantId] || {
+        tenantId,
+        tenantName: DEFAULT_FNB_TENANTS.find((t) => t.id === tenantId)?.name || tenantId,
+        status: "ACTIVE",
+        tenantSharePercent: 85,
+        dagoSharePercent: 15,
+      };
+      return {
+        ...prev,
+        [tenantId]: {
+          ...existing,
+          tenantSharePercent: validTenantShare,
+          dagoSharePercent: dagoShare,
+        },
+      };
+    });
+  };
+
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate and save revenue splits
+    let hasSplitError = false;
+    const newErrors: Record<string, string> = {};
+
+    Object.values(revenueSplits).forEach((cfg) => {
+      if (cfg.tenantSharePercent < 0 || cfg.tenantSharePercent > 100) {
+        newErrors[cfg.tenantId] = "Persentase harus antara 0% dan 100%";
+        hasSplitError = true;
+      } else if (Math.round(cfg.tenantSharePercent + cfg.dagoSharePercent) !== 100) {
+        newErrors[cfg.tenantId] = "Total pembagian (Mitra + DAGO) harus 100%";
+        hasSplitError = true;
+      }
+    });
+
+    if (hasSplitError) {
+      setRevenueSplitErrors(newErrors);
+      return;
+    }
+
+    // Persist each tenant revenue split
+    Object.values(revenueSplits).forEach((cfg) => {
+      setTenantRevenueSplit(cfg.tenantId, cfg.tenantSharePercent, cfg.dagoSharePercent);
+    });
+
     updateSettings({
       language,
       timezone,
@@ -541,6 +597,22 @@ export default function SettingsPage() {
                 <p className="font-semibold text-slate-700">📌 Catatan Operasional & Keamanan:</p>
                 <p>• Data rekening di atas hanya dapat diakses dan diubah oleh Owner Mitra <strong>{user?.tenant?.name || "terkait"}</strong>.</p>
                 <p>• DAGO Creative Hub menggunakan data ini sebagai tujuan transfer pencairan bagi hasil (settlement) bersih berkala.</p>
+              </div>
+
+              {/* Read-only Active Revenue Sharing Scheme for Tenant Owner */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-[11px] text-blue-900 space-y-1">
+                <div className="flex items-center justify-between font-bold">
+                  <span className="flex items-center space-x-1.5">
+                    <Coins className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Skema Bagi Hasil (Revenue Sharing) Terdaftar:</span>
+                  </span>
+                  <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-mono text-xs">
+                    {getTenantRevenueSplit(user?.tenant?.id || "tenant-ks").tenantSharePercent}% Mitra / {getTenantRevenueSplit(user?.tenant?.id || "tenant-ks").dagoSharePercent}% DAGO
+                  </span>
+                </div>
+                <p className="text-slate-600">
+                  Persentase bagi hasil ditentukan oleh Manajemen Pusat (Super Admin / Organization Owner) dan diterapkan secara otomatis pada setiap settlement transaksi yang diproses.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -1003,6 +1075,121 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Flexible Revenue Sharing Configuration per Tenant */}
+        <Card className="shadow-xs border border-slate-200">
+          <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50 flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                <Coins className="w-4 h-4 text-amber-600" />
+                <span>Skema Bagi Hasil Mitra (Flexible Revenue Sharing & Settlement)</span>
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Konfigurasi persentase bagi hasil individual per tenant/mitra F&B. Berlaku pada saat transaksi diproses.
+              </CardDescription>
+            </div>
+            <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full">
+              Khusus Super Admin & Org Owner
+            </span>
+          </CardHeader>
+          <CardContent className="p-4 space-y-4 text-xs">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {DEFAULT_FNB_TENANTS.map((tenant) => {
+                const config = revenueSplits[tenant.id] || DEFAULT_TENANT_REVENUE_SPLITS[tenant.id] || {
+                  tenantId: tenant.id,
+                  tenantName: tenant.name,
+                  tenantSharePercent: 85,
+                  dagoSharePercent: 15,
+                  status: "ACTIVE",
+                };
+                const hasError = !!revenueSplitErrors[tenant.id];
+
+                // Example simulation with Rp 100.000 gross
+                const simGross = 100000;
+                const simTenant = Math.round(simGross * (config.tenantSharePercent / 100));
+                const simDago = simGross - simTenant;
+
+                return (
+                  <div
+                    key={tenant.id}
+                    className={`p-4 rounded-xl border transition-all ${
+                      hasError
+                        ? "border-red-300 bg-red-50/40"
+                        : "border-slate-200 bg-slate-50/60 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                      <div className="flex items-center space-x-2">
+                        <Store className="w-4 h-4 text-brand-orange" />
+                        <span className="font-bold text-slate-900">{tenant.name}</span>
+                        <span className="text-[10px] text-slate-500 font-mono">({tenant.code})</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                        STATUS: AKTIF
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div>
+                        <label className="block text-slate-700 font-semibold mb-1">
+                          Bagian Mitra / Tenant (%)
+                        </label>
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.5}
+                            value={config.tenantSharePercent}
+                            onChange={(e) => handleTenantSplitChange(tenant.id, parseFloat(e.target.value))}
+                            className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-bold text-slate-900 bg-white"
+                          />
+                          <span className="font-bold text-slate-500">%</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 font-semibold mb-1">
+                          Bagian DAGO Hub (%)
+                        </label>
+                        <div className="flex items-center space-x-1">
+                          <input
+                            type="number"
+                            disabled
+                            value={config.dagoSharePercent}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-bold text-slate-500 bg-slate-100 cursor-not-allowed"
+                          />
+                          <span className="font-bold text-slate-500">%</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {hasError && (
+                      <p className="text-[11px] text-red-600 font-semibold mt-2">
+                        ⚠️ {revenueSplitErrors[tenant.id]}
+                      </p>
+                    )}
+
+                    {/* Simulation Preview */}
+                    <div className="mt-3 p-2.5 bg-white border border-slate-200 rounded-lg text-[11px] text-slate-600 flex items-center justify-between">
+                      <span className="text-slate-400">Simulasi Rp 100k:</span>
+                      <span className="font-mono">
+                        Mitra: <strong className="text-emerald-700">Rp {simTenant.toLocaleString("id-ID")}</strong> | DAGO: <strong className="text-brand-orange">Rp {simDago.toLocaleString("id-ID")}</strong>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-1">
+              <p className="font-semibold">💡 Ketentuan Settlement Multi-Tenant & Immutability:</p>
+              <p>• Perubahan persentase bagi hasil di atas hanya berlaku untuk transaksi baru yang diproses setelah penyimpanan.</p>
+              <p>• Transaksi historis yang telah berstatus PAID tetap mengunci pembagian pendapatan yang berlaku pada saat transaksi diselesaikan.</p>
+              <p>• Kasir POS tidak memiliki izin untuk mengubah skema bagi hasil maupun memasukkan nominal settlement secara manual.</p>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Inventory Stock Thresholds & Loyalty Configuration */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Low Stock Alert */}
@@ -1302,8 +1489,46 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  {/* Row 4: Periode Validitas */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                  {/* Row 4: Target Type & Periode Validitas */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs pt-1">
+                    <div>
+                      <label className="block text-slate-500 font-medium mb-1">Target Menu/Mitra</label>
+                      <select
+                        value={promo.targetType || "ALL"}
+                        onChange={(e) => {
+                          const newPromos = [...promos];
+                          newPromos[idx].targetType = e.target.value as any;
+                          setPromos(newPromos);
+                        }}
+                        className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
+                      >
+                        <option value="ALL">Semua Menu & Mitra</option>
+                        <option value="TENANT">Khusus Mitra / Tenant</option>
+                        <option value="CATEGORY">Khusus Kategori</option>
+                        <option value="PRODUCT">Khusus Produk Tertentu</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-500 font-medium mb-1">
+                        {promo.targetType === "TENANT" ? "Target Tenant ID (misal: tenant-ks)" : promo.targetType === "CATEGORY" ? "Target Kategori (misal: Food)" : promo.targetType === "PRODUCT" ? "Target Product ID" : "Target Scope ID"}
+                      </label>
+                      <input
+                        type="text"
+                        disabled={!promo.targetType || promo.targetType === "ALL"}
+                        value={promo.targetId || ""}
+                        onChange={(e) => {
+                          const newPromos = [...promos];
+                          newPromos[idx].targetId = e.target.value;
+                          setPromos(newPromos);
+                        }}
+                        placeholder={promo.targetType === "ALL" || !promo.targetType ? "Berlaku Semua" : "Masukkan ID / Kategori"}
+                        className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono ${
+                          !promo.targetType || promo.targetType === "ALL" ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-white text-slate-900"
+                        }`}
+                      />
+                    </div>
+
                     <div>
                       <label className="block text-slate-500 font-medium mb-1">Tanggal Mulai Berlaku</label>
                       <input

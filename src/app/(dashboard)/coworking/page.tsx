@@ -996,25 +996,36 @@ export default function CoworkingPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Tipe Sewa</label>
                   <select
                     value={bookType}
                     onChange={(e) => setBookType(e.target.value as any)}
-                    className="w-full px-3 py-2 border rounded-xl bg-white"
+                    className="w-full px-2 py-2 border rounded-xl bg-white text-xs"
                   >
-                    <option value="DAILY">Harian</option>
                     <option value="HOURLY">Per Jam</option>
+                    <option value="DAILY">Harian</option>
                     <option value="MONTHLY">Bulanan</option>
                   </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Durasi ({bookType === "HOURLY" ? "Jam" : "Hari"})</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={bookDuration}
+                    onChange={(e) => setBookDuration(Math.max(1, Number(e.target.value)))}
+                    className="w-full px-2 py-2 border rounded-xl bg-white font-bold text-xs"
+                    required
+                  />
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-700">Metode Bayar</label>
                   <select
                     value={bookPaymentMethod}
                     onChange={(e) => setBookPaymentMethod(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl bg-white font-medium"
+                    className="w-full px-2 py-2 border rounded-xl bg-white font-medium text-xs"
                   >
                     <option value="QRIS DagoPay">QRIS DagoPay</option>
                     <option value="CASH">Tunai (Cash)</option>

@@ -163,12 +163,14 @@ export function CoworkingReceiptModal({
                     <span>{receiptData.guestPhone}</span>
                   </div>
                 )}
-                {receiptData.company && (
-                  <div className="flex justify-between">
-                    <span>Instansi/Perusahaan:</span>
-                    <span>{receiptData.company}</span>
-                  </div>
-                )}
+                <div className="flex justify-between">
+                  <span>Tipe Penggunaan:</span>
+                  <span className="font-bold">
+                    {receiptData.company && receiptData.company !== "Personal" && receiptData.company !== "Member Dago"
+                      ? `Group / Company (${receiptData.company})`
+                      : "Personal"}
+                  </span>
+                </div>
               </div>
 
               {/* Workspace Booking Details */}

@@ -34,6 +34,8 @@ export interface ActivityLogEntry {
   role: string;
   organization: string;
   organizationName?: string;
+  tenantId?: string;
+  tenantName?: string;
   outletId?: string;
   outletName?: string;
   module: ActivityModule;
@@ -53,4 +55,3 @@ export interface ActivityLogEntry {
 }
 
 export type AuditLogEntry = ActivityLogEntry;
-

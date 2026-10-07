@@ -27,7 +27,24 @@ describe("Co-Working Space & Community Membership Engine", () => {
   });
 
   it("ensures cross-business voucher formatting and active session tracking", () => {
-    const activeBooking = INITIAL_BOOKINGS[0];
+    const activeBooking: CoworkingBooking = {
+      id: "bk-sample-active",
+      bookingCode: "BK-CWK-1001",
+      guestName: "Wayan Sudirga",
+      guestPhone: "+62 812-3456-7890",
+      guestEmail: "wayan@example.com",
+      spaceId: "sp-hd-01",
+      spaceName: "Hot Desk 01 (Window View)",
+      spaceType: "HOT_DESK",
+      bookingType: "DAILY",
+      date: new Date().toISOString().split("T")[0],
+      startTime: "09:00 WITA",
+      duration: 8,
+      totalAmount: 75000,
+      paymentStatus: "PAID",
+      checkInStatus: "CHECKED_IN",
+      fnbVoucherApplied: "VOUCHER-CWK-NOMAD-10",
+    };
     expect(activeBooking.checkInStatus).toBe("CHECKED_IN");
     expect(activeBooking.fnbVoucherApplied).toContain("VOUCHER-CWK");
     expect(activeBooking.paymentStatus).toBe("PAID");

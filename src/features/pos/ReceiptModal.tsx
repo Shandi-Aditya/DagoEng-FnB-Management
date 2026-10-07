@@ -4,8 +4,9 @@ import React from "react";
 import Image from "next/image";
 import { POSReceiptData } from "./types";
 import { formatCurrencyIDR } from "@/lib/utils";
-import { X, Printer, Share2, CheckCircle2, RotateCcw } from "lucide-react";
+import { X, Printer, Share2, CheckCircle2, RotateCcw, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DEFAULT_FNB_TENANTS, getAllStoredTenantSettings } from "@/lib/tenant";
 
 interface ReceiptModalProps {
   isOpen?: boolean;
@@ -28,6 +29,33 @@ export function ReceiptModal({
   const handlePrint = () => {
     window.print();
   };
+
+  // Resolve tenant for branding
+  const primaryTenantId =
+    receiptData.tenantId ||
+    receiptData.items?.find((i) => i.tenantId)?.tenantId ||
+    (receiptData.items?.find((i) => i.tenantName)
+      ? DEFAULT_FNB_TENANTS.find((t) => t.name.toLowerCase() === receiptData.items[0]?.tenantName?.toLowerCase())?.id
+      : undefined) ||
+    "tenant-ks";
+
+  const allStoredSettings = typeof window !== "undefined" ? getAllStoredTenantSettings() : {};
+  const storedTenantSettings = allStoredSettings[primaryTenantId];
+  const defaultTenantInfo = DEFAULT_FNB_TENANTS.find((t) => t.id === primaryTenantId) || DEFAULT_FNB_TENANTS[0];
+
+  const brandName =
+    receiptData.receiptHeader ||
+    storedTenantSettings?.receiptHeader ||
+    storedTenantSettings?.brandName ||
+    receiptData.tenantName ||
+    defaultTenantInfo.name;
+
+  const tagline = storedTenantSettings?.tagline || defaultTenantInfo.tagline || defaultTenantInfo.badge;
+  const contactPhone = storedTenantSettings?.contactPhone || receiptData.outletPhone;
+  const footerMessage =
+    receiptData.receiptFooter ||
+    storedTenantSettings?.receiptFooter ||
+    "Terima Kasih Atas Kunjungan Anda!";
 
   return (
     <>
@@ -88,25 +116,15 @@ export function ReceiptModal({
               id="thermal-receipt"
               className="w-full max-w-[340px] bg-white p-5 rounded-lg shadow-sm border border-slate-200 font-mono text-slate-900 text-xs space-y-4 print:w-full print:shadow-none print:border-none"
             >
-              {/* Store Header */}
-              <div className="text-center space-y-1.5 border-b border-dashed border-slate-300 pb-3">
-                <div className="w-8 h-10 relative mx-auto mb-1">
-                  <Image
-                    src="/logo-dago.png"
-                    alt="Dago Logo"
-                    width={32}
-                    height={40}
-                    className="object-contain mx-auto"
-                  />
-                </div>
-                <h2 className="font-black text-sm tracking-wider uppercase">
-                  DAGOENG CREATIVE HUB
+              {/* Store Header (Clean & Neutral, without single-tenant misleading logo) */}
+              <div className="text-center space-y-1 border-b border-dashed border-slate-300 pb-3">
+                <h2 className="font-black text-sm tracking-wider uppercase text-slate-900">
+                  {receiptData.outletName || "DAGO CREATIVE HUB"}
                 </h2>
-                <p className="font-bold text-xs text-slate-700">{receiptData.outletName}</p>
                 <p className="text-[10px] text-slate-500 leading-tight">
-                  {receiptData.outletAddress}
+                  {receiptData.outletAddress || "Jl. Veteran No. 18, Singaraja, Bali"}
                 </p>
-                <p className="text-[10px] text-slate-500">Telp: {receiptData.outletPhone}</p>
+                {contactPhone && <p className="text-[10px] text-slate-500">Telp: {contactPhone}</p>}
               </div>
 
               {/* Meta Order Info */}
@@ -221,21 +239,47 @@ export function ReceiptModal({
                   <span>Metode Bayar:</span>
                   <span className="font-bold">{receiptData.paymentMethod}</span>
                 </div>
+                {receiptData.splitDetails && receiptData.splitDetails.length > 0 && (
+                  <div className="p-1.5 bg-slate-50 rounded border border-slate-200 text-[10px] space-y-0.5 my-1">
+                    <span className="font-bold text-slate-700 block">Rincian Split Payment:</span>
+                    {receiptData.splitDetails.map((g, idx) => (
+                      <div key={g.id || idx} className="flex justify-between text-slate-600">
+                        <span>• {g.guestLabel} ({g.paymentMethod}):</span>
+                        <span className="font-semibold">{formatCurrencyIDR(g.assignedAmount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="flex justify-between">
-                  <span>Uang Diterima:</span>
+                  <span>Total Dibayar:</span>
                   <span>{formatCurrencyIDR(receiptData.amountPaid)}</span>
                 </div>
                 <div className="flex justify-between font-bold">
                   <span>Kembalian:</span>
                   <span>{formatCurrencyIDR(receiptData.changeDue)}</span>
                 </div>
+                <div className="flex justify-between font-bold text-emerald-700">
+                  <span>Status Pembayaran:</span>
+                  <span>LUNAS (PAID)</span>
+                </div>
               </div>
 
               {/* Receipt Footer */}
-              <div className="text-center text-[10px] text-slate-500 space-y-1 pt-1">
-                <p className="font-bold">Terima Kasih Atas Kunjungan Anda!</p>
-                <p>Wi-Fi: DagoCreativeHub • Pass: smarterfnb2026</p>
-                <p className="text-[9px] text-slate-400">Powered by DagoEng F&B Management</p>
+              <div className="text-center text-[10px] text-slate-500 space-y-2 pt-2 border-t border-dashed border-slate-300">
+                <p className="font-bold text-slate-800">{footerMessage}</p>
+                <p className="text-[10px] text-slate-500">Wi-Fi: DagoCreativeHub • Pass: smarterfnb2026</p>
+                <div className="pt-2 border-t border-dashed border-slate-200 flex flex-col items-center justify-center space-y-1 text-slate-400">
+                  <span className="text-[10px] font-semibold tracking-wider">Powered by</span>
+                  <div className="w-6 h-8 relative opacity-85">
+                    <Image
+                      src="/logo-dago.png"
+                      alt="DAGO"
+                      width={18}
+                      height={32}
+                      className="object-contain mx-auto"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
