@@ -376,34 +376,23 @@ export default function ActivityLogPage() {
 
         {/* Header Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Simulation Trigger Button */}
-          <Button
-            size="sm"
-            onClick={() => setShowSimModal(!showSimModal)}
-            className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold space-x-1.5 shadow-xs"
-          >
-            <Zap className="w-3.5 h-3.5 text-amber-300" />
-            <span>Simulasi Event</span>
-          </Button>
-
           {/* Export PDF Button */}
           <Button
             size="sm"
             onClick={() => setIsPdfModalOpen(true)}
-            className="text-xs bg-purple-700 hover:bg-purple-800 text-white font-semibold space-x-1 shadow-xs"
+            className="text-xs bg-slate-800 hover:bg-slate-900 text-white font-bold space-x-1.5 rounded-xl shadow-xs"
           >
             <Printer className="w-3.5 h-3.5" />
-            <span>Export PDF</span>
+            <span>Cetak PDF Audit</span>
           </Button>
 
           {/* Export Excel Button */}
           <Button
             size="sm"
-            variant="outline"
             onClick={handleExportExcel}
-            className="text-xs space-x-1 border-emerald-300 text-emerald-800 hover:bg-emerald-50 font-semibold"
+            className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold space-x-1.5 rounded-xl shadow-xs"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Excel (.xls)</span>
           </Button>
 
@@ -412,9 +401,9 @@ export default function ActivityLogPage() {
             size="sm"
             variant="outline"
             onClick={handleExportCSV}
-            className="text-xs space-x-1 border-slate-300 hover:bg-slate-50 text-slate-700"
+            className="text-xs space-x-1 border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-semibold"
           >
-            <Download className="w-3.5 h-3.5 text-slate-500" />
+            <Download className="w-3.5 h-3.5" />
             <span>CSV</span>
           </Button>
 
@@ -423,14 +412,14 @@ export default function ActivityLogPage() {
             size="sm"
             variant="outline"
             onClick={handleExportJSON}
-            className="text-xs space-x-1 border-slate-300 hover:bg-slate-50 text-slate-700"
+            className="text-xs space-x-1 border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl font-semibold"
           >
             <Code className="w-3.5 h-3.5 text-slate-500" />
             <span>JSON</span>
           </Button>
 
           {/* View Mode Toggle */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 ml-1">
             <button
               onClick={() => setViewMode("TABLE")}
               className={`flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
@@ -456,91 +445,6 @@ export default function ActivityLogPage() {
           </div>
         </div>
       </div>
-
-      {/* Quick Simulation Banner (Expandable) */}
-      {showSimModal && (
-        <div className="p-4 bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200 rounded-2xl space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-purple-600" />
-              <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider">
-                Simulasi Aksi & Pengujian Pencatatan Audit Log
-              </h4>
-            </div>
-            <button
-              onClick={() => setShowSimModal(false)}
-              className="text-slate-400 hover:text-slate-600 text-xs"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <p className="text-xs text-slate-600">
-            Klik tombol simulasi di bawah untuk menguji penambahan entri log baru secara instan dan melihat visualisasi transformasinya:
-          </p>
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                simulateActivity("VOID");
-                setShowSimModal(false);
-              }}
-              className="text-xs bg-white border-amber-300 text-amber-900 hover:bg-amber-50 space-x-1"
-            >
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-              <span>Void Pesanan Kasir (Warning)</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                simulateActivity("DISCOUNT");
-                setShowSimModal(false);
-              }}
-              className="text-xs bg-white border-purple-300 text-purple-900 hover:bg-purple-50 space-x-1"
-            >
-              <Tag className="w-3.5 h-3.5 text-purple-600" />
-              <span>Redeem Poin Diskon (Loyalty)</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                simulateActivity("STOCK_DIFF");
-                setShowSimModal(false);
-              }}
-              className="text-xs bg-white border-blue-300 text-blue-900 hover:bg-blue-50 space-x-1"
-            >
-              <History className="w-3.5 h-3.5 text-blue-600" />
-              <span>Selisih Stok Opname (Inventory)</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                simulateActivity("CONFIG_CHANGE");
-                setShowSimModal(false);
-              }}
-              className="text-xs bg-white border-slate-300 text-slate-900 hover:bg-slate-50 space-x-1"
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 text-slate-600" />
-              <span>Ubah Ambang Loyalty (Settings)</span>
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                simulateActivity("RESERVATION");
-                setShowSimModal(false);
-              }}
-              className="text-xs bg-white border-emerald-300 text-emerald-900 hover:bg-emerald-50 space-x-1"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Reservasi Meja Baru (Tables)</span>
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* KPI Overview Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

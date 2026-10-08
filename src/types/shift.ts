@@ -1,5 +1,16 @@
 export type ShiftStatus = "SCHEDULED" | "OPEN" | "ACTIVE" | "CLOSING" | "CLOSED";
 
+export type EmployeePermission =
+  | "pos_access"
+  | "pos_discount"
+  | "pos_void"
+  | "pos_shift_close"
+  | "inventory_access"
+  | "menu_master_edit"
+  | "financial_reports"
+  | "coworking_manage"
+  | "staff_management";
+
 export interface EmployeeProfile {
   id: string;
   employeeNumber: string;
@@ -13,6 +24,7 @@ export interface EmployeeProfile {
   status: "AKTIF" | "CUTI" | "NON-AKTIF";
   assignedShift: string;
   joinedDate: string;
+  permissions?: string[];
 }
 
 export type Employee = EmployeeProfile;

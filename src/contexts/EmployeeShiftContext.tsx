@@ -21,6 +21,17 @@ export const INITIAL_EMPLOYEES: EmployeeProfile[] = [
     status: "AKTIF",
     assignedShift: "Shift Pagi (08:00 - 16:00)",
     joinedDate: "10 Jan 2025",
+    permissions: [
+      "pos_access",
+      "pos_discount",
+      "pos_void",
+      "pos_shift_close",
+      "inventory_access",
+      "menu_master_edit",
+      "financial_reports",
+      "coworking_manage",
+      "staff_management",
+    ],
   },
   {
     id: "emp-002",
@@ -35,6 +46,7 @@ export const INITIAL_EMPLOYEES: EmployeeProfile[] = [
     status: "AKTIF",
     assignedShift: "Shift Pagi (08:00 - 16:00)",
     joinedDate: "15 Jan 2025",
+    permissions: ["pos_access", "pos_discount", "pos_shift_close"],
   },
   {
     id: "emp-003",
@@ -49,6 +61,7 @@ export const INITIAL_EMPLOYEES: EmployeeProfile[] = [
     status: "AKTIF",
     assignedShift: "Shift Pagi (08:00 - 16:00)",
     joinedDate: "01 Feb 2025",
+    permissions: ["pos_access", "inventory_access"],
   },
   {
     id: "emp-004",
@@ -63,6 +76,7 @@ export const INITIAL_EMPLOYEES: EmployeeProfile[] = [
     status: "AKTIF",
     assignedShift: "Reguler (09:00 - 17:00)",
     joinedDate: "01 Mar 2025",
+    permissions: ["inventory_access"],
   },
   {
     id: "emp-005",
@@ -77,6 +91,7 @@ export const INITIAL_EMPLOYEES: EmployeeProfile[] = [
     status: "AKTIF",
     assignedShift: "Shift Pagi (08:00 - 16:00)",
     joinedDate: "10 Apr 2025",
+    permissions: ["pos_access"],
   },
   {
     id: "emp-006",
@@ -91,6 +106,15 @@ export const INITIAL_EMPLOYEES: EmployeeProfile[] = [
     status: "AKTIF",
     assignedShift: "Shift Sore (14:00 - 22:00)",
     joinedDate: "01 Jun 2025",
+    permissions: [
+      "pos_access",
+      "pos_discount",
+      "pos_void",
+      "pos_shift_close",
+      "inventory_access",
+      "financial_reports",
+      "coworking_manage",
+    ],
   },
 ];
 
@@ -103,6 +127,7 @@ interface EmployeeShiftContextType {
   filteredShifts: ShiftRecord[];
   activeShift: ShiftRecord | null;
   createEmployee: (emp: Omit<EmployeeProfile, "id" | "employeeNumber">) => EmployeeProfile;
+  updateEmployee: (id: string, updates: Partial<EmployeeProfile>) => void;
   toggleEmployeeStatus: (id: string) => void;
   deleteEmployee: (id: string) => void;
   openShift: (shiftName: string, openingCash: number, cashierName?: string) => ShiftRecord;
@@ -204,6 +229,22 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       status: "SUCCESS",
       outletId: target.outletId,
       outletName: target.outletName,
+    });
+  };
+
+  const updateEmployee = (id: string, updates: Partial<EmployeeProfile>) => {
+    setEmployees((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
+    );
+
+    logActivity({
+      module: "EMPLOYEES_SHIFT",
+      action: "UPDATE_EMPLOYEE",
+      recordId: id,
+      newValue: JSON.stringify(updates),
+      description: `Pembaruan profil & hak akses karyawan (ID: ${id})`,
+      reason: "Penyesuaian jabatan / hak akses staf",
+      status: "SUCCESS",
     });
   };
 
@@ -336,6 +377,7 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
         filteredShifts,
         activeShift,
         createEmployee,
+        updateEmployee,
         toggleEmployeeStatus,
         deleteEmployee,
         openShift,

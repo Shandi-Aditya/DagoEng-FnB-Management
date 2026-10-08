@@ -317,7 +317,7 @@ export function PaymentModal({
               <div className="w-full max-w-sm p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-left flex items-start space-x-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-emerald-800">
-                  Pembayaran akan terdeteksi otomatis. Klik tombol di bawah untuk simulasi konfirmasi instan webhook QRIS.
+                  Pembayaran terverifikasi otomatis secara real-time melalui QRIS Payment Gateway.
                 </p>
               </div>
             </div>

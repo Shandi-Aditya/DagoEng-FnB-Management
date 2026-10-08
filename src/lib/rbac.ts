@@ -128,13 +128,6 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "INVENTORY_STAFF"],
   },
   {
-    name: "Menu & Produk",
-    href: "/menu",
-    icon: "BookOpen",
-    module: "FNB",
-    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
-  },
-  {
     name: "Self-Order & Menu QR",
     href: "/customer",
     icon: "UtensilsCrossed",
@@ -181,7 +174,7 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
   },
   {
-    name: "Pengaturan Platform",
+    name: "Master Data & Pengaturan",
     href: "/settings",
     icon: "Settings",
     module: "CORE",
@@ -233,7 +226,7 @@ export function getAuthorizedNavItems(
     return true;
   }).map((item) => {
     if (item.href === "/settings" && user.scopeLevel === "TENANT") {
-      return { ...item, name: "Pengaturan Mitra" };
+      return { ...item, name: "Master Data Mitra" };
     }
     return item;
   });

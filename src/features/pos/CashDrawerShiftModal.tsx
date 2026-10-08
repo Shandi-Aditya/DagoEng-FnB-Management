@@ -1,18 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { formatCurrencyIDR } from "@/lib/utils";
-import {
-  X,
-  Lock,
-  CheckCircle2,
-  AlertCircle,
-  LogOut,
-} from "lucide-react";
+import { X, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ClosingReportData } from "./DailyClosingPDFModal";
 
 interface CashDrawerShiftModalProps {
   isOpen: boolean;
@@ -28,6 +20,8 @@ interface CashDrawerShiftModalProps {
   totalDiscounts?: number;
   isTaxEnabled?: boolean;
   taxRatePercent?: number;
+  tenantName?: string;
+  tenantPhone?: string;
 }
 
 export function CashDrawerShiftModal({
@@ -44,317 +38,276 @@ export function CashDrawerShiftModal({
   totalDiscounts = 0,
   isTaxEnabled = true,
   taxRatePercent = 10,
+  tenantName = "Kopi Senja (Mitra Utama)",
+  tenantPhone = "085737654572",
 }: CashDrawerShiftModalProps) {
-  // Cash reconciliation
-  const [actualCashEnding, setActualCashEnding] = useState<number>(initialCash + totalCashSales);
-  const [actualInput, setActualInput] = useState<string>((initialCash + totalCashSales).toString());
-  const [shiftNotes, setShiftNotes] = useState<string>("");
+  const router = useRouter();
+  const { user, logout } = useAuth();
+
+  const [confirmCashierName, setConfirmCashierName] = useState<string>(cashierName || user?.name || "");
+  const [cashInDrawer, setCashInDrawer] = useState<number>(initialCash + totalCashSales);
+  const [cashInputDisplay, setCashInputDisplay] = useState<string>(
+    (initialCash + totalCashSales).toLocaleString("id-ID")
+  );
   const [isClosing, setIsClosing] = useState<boolean>(false);
-  const [toastMsg, setToastMsg] = useState<string>("");
+  const [currentTimeStr, setCurrentTimeStr] = useState<string>("");
 
-  // Sync actual cash when modal opens or live values change
-  React.useEffect(() => {
+  useEffect(() => {
+    setConfirmCashierName(cashierName || user?.name || "");
     const expected = initialCash + totalCashSales;
-    setActualCashEnding(expected);
-    setActualInput(expected.toString());
-  }, [initialCash, totalCashSales, isOpen]);
+    setCashInDrawer(expected);
+    setCashInputDisplay(expected.toLocaleString("id-ID"));
+  }, [cashierName, user?.name, initialCash, totalCashSales, isOpen]);
 
-  // Payment Breakdown Estimation (QRIS vs EDC)
-  const finalQrisSales = qrisSales !== undefined ? qrisSales : Math.round(totalNonCashSales * 0.85);
-  const finalEdcSales = edcSales !== undefined ? edcSales : totalNonCashSales - finalQrisSales;
-
-  // Revenue Sharing Split Settings (Default: 85% Tenant, 15% Dago Hub Platform)
-  const [tenantSharePercent, setTenantSharePercent] = useState<number>(85);
-  const dagoSharePercent = 100 - tenantSharePercent;
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      const months = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+      ];
+      const day = now.getDate().toString().padStart(2, "0");
+      const month = months[now.getMonth()];
+      const year = now.getFullYear();
+      const hours = now.getHours().toString().padStart(2, "0");
+      const minutes = now.getMinutes().toString().padStart(2, "0");
+      const seconds = now.getSeconds().toString().padStart(2, "0");
+      setCurrentTimeStr(`${day} ${month} ${year} ${hours}.${minutes}.${seconds}`);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   if (!isOpen) return null;
 
+  // 1. Calculations
   const totalGrossSales = totalCashSales + totalNonCashSales;
   const estimatedTax = isTaxEnabled
     ? Math.round(totalGrossSales * (taxRatePercent / (100 + taxRatePercent)))
     : 0;
   const totalNetSales = totalGrossSales - estimatedTax;
 
-  // Calculations for Revenue Sharing Split
+  const finalQrisSales = qrisSales !== undefined ? qrisSales : Math.round(totalNonCashSales * 0.85);
+  const finalEdcSales = edcSales !== undefined ? edcSales : totalNonCashSales - finalQrisSales;
+
+  // Revenue Sharing (Fixed 85% Mitra, 15% Dago Hub Platform)
+  const tenantSharePercent = 85;
+  const dagoSharePercent = 15;
   const tenantTotalShare = Math.round((totalNetSales * tenantSharePercent) / 100);
   const dagoTotalShare = totalNetSales - tenantTotalShare;
 
-  const tenantQrisShare = Math.round((finalQrisSales * tenantSharePercent) / 100);
-  const dagoQrisShare = finalQrisSales - tenantQrisShare;
+  const dateNow = new Date();
+  const dateFormatted = dateNow.toLocaleDateString("id-ID", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+  const timeFormatted = dateNow.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const dateTimeStr = `${dateFormatted}, ${timeFormatted}`;
+  const docNo = `EOD-${dateNow.getFullYear()}${(dateNow.getMonth() + 1)
+    .toString()
+    .padStart(2, "0")}${dateNow.getDate().toString().padStart(2, "0")}-${Math.floor(
+    100 + Math.random() * 900
+  )}`;
 
-  const tenantCashShare = Math.round((totalCashSales * tenantSharePercent) / 100);
-  const dagoCashShare = totalCashSales - tenantCashShare;
-
-  const expectedCashEnding = initialCash + totalCashSales;
-  const cashDifference = actualCashEnding - expectedCashEnding;
-
-  const handleInputChange = (val: string) => {
-    const num = parseInt(val.replace(/\D/g, ""), 10) || 0;
-    setActualInput(val);
-    setActualCashEnding(num);
-  };
-
-  const reportDataForPDF: ClosingReportData = {
-    reportNumber: `EOD-KS-${new Date().getFullYear()}${(new Date().getMonth() + 1)
-      .toString()
-      .padStart(2, "0")}${new Date().getDate().toString().padStart(2, "0")}-001`,
-    outletName,
-    outletAddress: "Jl. Diponegoro No. 45, Singaraja, Bali",
-    outletPhone: "+62 812-3456-7890",
-    cashierName,
-    closingDateTime: `${new Date().toLocaleDateString("id-ID", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    })}, ${new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}`,
-    shiftName: "Shift 2 (Sore/Penutupan)",
-    initialCash,
-    totalCashSales,
-    qrisSales: finalQrisSales,
-    edcSales: finalEdcSales,
-    totalTransactionsCount,
-    totalGrossSales,
-    totalDiscounts,
-    isTaxEnabled,
-    taxRatePercent,
-    totalTax: estimatedTax,
-    totalNetSales,
-    tenantSharePercent,
-    dagoSharePercent,
-    tenantTotalShare,
-    dagoTotalShare,
-    tenantQrisShare,
-    dagoQrisShare,
-    tenantCashShare,
-    dagoCashShare,
-    actualCashEnding,
-    cashDifference,
-    shiftNotes,
-    verificationHash: `SHA256-${Date.now()}-DAGOENG-OFFICIAL-VALIDATED`,
-  };
-
-  // Generate Formatted WhatsApp Text
-  const generateWhatsAppReport = () => {
-    const dateStr = new Date().toLocaleDateString("id-ID", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-    const timeStr = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  // Generate WhatsApp Message strictly matching standard template
+  const generateWhatsAppTemplate = () => {
+    const formatNum = (num: number) => num.toLocaleString("id-ID");
 
     return `📊 *LAPORAN CLOSING SHIFT & REKAP KEUANGAN*
 📍 *Outlet:* ${outletName}
-📅 *Waktu:* ${dateStr}, ${timeStr}
-👤 *Kasir Bertugas:* ${cashierName}
-⚙️ *Status Pajak (PB1):* ${isTaxEnabled ? `AKTIF (${taxRatePercent}%)` : "NON-AKTIF"}
+📅 *Waktu:* ${dateTimeStr}
+👤 *Kasir:* ${confirmCashierName || cashierName}
 
 ━━━━━━━━━━━━━━━━━━━━
 💰 *RINGKASAN PENJUALAN*
 • Total Transaksi: ${totalTransactionsCount} Struk
-• Total Omset Kotor: ${formatCurrencyIDR(totalGrossSales)}
-• Pajak PB1 Restoran: ${formatCurrencyIDR(estimatedTax)}
-• *Total Omset Bersih:* *${formatCurrencyIDR(totalNetSales)}*
+• Omset Kotor: Rp ${formatNum(totalGrossSales)}
+• Pajak PB1 (${taxRatePercent}%): Rp ${formatNum(estimatedTax)}
+• *Omset Bersih:* *Rp ${formatNum(totalNetSales)}*
 
 💳 *METODE PEMBAYARAN*
-• 📲 QRIS Dinamis: ${formatCurrencyIDR(finalQrisSales)}
-• 💵 Tunai (Cash Laci): ${formatCurrencyIDR(totalCashSales)}
-• 💳 Kartu EDC: ${formatCurrencyIDR(finalEdcSales)}
+• 📲 QRIS Dinamis: Rp ${formatNum(finalQrisSales)}
+• 💵 Tunai (Cash): Rp ${formatNum(totalCashSales)}
+• 💳 Kartu EDC: Rp ${formatNum(finalEdcSales)}
 
-🤝 *SPLIT BAGI HASIL REVENUE SHARE*
-• *Porsi Pemilik Usaha / Tenant (${tenantSharePercent}%):* *${formatCurrencyIDR(tenantTotalShare)}*
-  ↳ Dari QRIS: ${formatCurrencyIDR(tenantQrisShare)} (Digital Settlement)
-  ↳ Dari Cash: ${formatCurrencyIDR(tenantCashShare)} (Kas Fisik)
-• *Porsi Pengelola Dago Hub (${dagoSharePercent}%):* *${formatCurrencyIDR(dagoTotalShare)}*
-  ↳ Dari QRIS: ${formatCurrencyIDR(dagoQrisShare)}
-  ↳ Dari Cash: ${formatCurrencyIDR(dagoCashShare)} (Setor Kasir)
-
-💵 *REKONSILIASI KAS LACI*
-• Modal Awal Kas: ${formatCurrencyIDR(initialCash)}
-• Kas Aktual Fisik: ${formatCurrencyIDR(actualCashEnding)}
-• Status Selisih: ${cashDifference === 0 ? "PAS (Rp 0)" : cashDifference > 0 ? `Lebih +${formatCurrencyIDR(cashDifference)}` : `Kurang -${formatCurrencyIDR(Math.abs(cashDifference))}`}
-${shiftNotes ? `\n📝 *Catatan Shift:* ${shiftNotes}` : ""}
-
-📄 *DOKUMEN RESMI PDF:*
-• Tersedia file PDF Rekapitulasi Keuangan Terverifikasi Digital (Tanpa perlu tanda tangan fisik).
+🤝 *ESTIMASI BAGI HASIL*
+• *Mitra / Owner (${tenantSharePercent}%):* Rp ${formatNum(tenantTotalShare)}
+• *Manajemen Dago (${dagoSharePercent}%):* Rp ${formatNum(dagoTotalShare)}
 ━━━━━━━━━━━━━━━━━━━━
-_Laporan otomatis digenerate dari POS DagoEng Platform_`;
+📄 *DOKUMEN RESMI:*
+• File Rekapitulasi PDF terlampir di bawah ini (Auto-Generated).
+_Sent via POS DagoEng Platform_`;
   };
 
-  const router = useRouter();
-  const { logout } = useAuth();
+  const handleCashInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.replace(/\D/g, "");
+    const num = parseInt(rawVal, 10) || 0;
+    setCashInDrawer(num);
+    setCashInputDisplay(num > 0 ? num.toLocaleString("id-ID") : "");
+  };
 
-  const handleCloseShiftAndExit = async () => {
+  const handleConfirmCloseSession = async () => {
     if (isClosing) return;
     setIsClosing(true);
-    setToastMsg("Menutup sesi kasir & memproses pengiriman laporan otomatis...");
 
-    // Auto-dispatch closing report to server-side WhatsApp Gateway (Fonnte API)
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const pdfUrl = `${origin}/api/reports/closing/pdf?outlet=${encodeURIComponent(
+      outletName
+    )}&cashier=${encodeURIComponent(confirmCashierName || cashierName)}&transactions=${totalTransactionsCount}&gross=${totalGrossSales}&tax=${estimatedTax}&net=${totalNetSales}&qris=${finalQrisSales}&cash=${totalCashSales}&edc=${finalEdcSales}&mitra=${tenantTotalShare}&dago=${dagoTotalShare}&docNo=${encodeURIComponent(
+      docNo
+    )}`;
+
+    // 1. Lock shift via backend API
     try {
-      const reportMessage = generateWhatsAppReport();
-      await fetch("/api/notifications/whatsapp", {
+      await fetch("/api/shifts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: reportMessage,
+          action: "CLOSE",
+          cashierName: confirmCashierName || cashierName,
+          outletId: outletName,
+          actualCash: cashInDrawer,
+          notes: "Tutup Sesi Kasir",
         }),
       });
-    } catch (err) {
-      console.error("Gagal mengirim laporan closing ke backend WhatsApp gateway:", err);
+    } catch (e) {
+      console.warn("Shift lock sync:", e);
     }
 
-    // Gracefully complete closing shift, logout and redirect
+    // 2. Dispatch WhatsApp Chatbot to Owner Dago & Admin Mitra (Fonnte API)
+    const waMessage = generateWhatsAppTemplate();
+    try {
+      const waRes = await fetch("/api/notifications/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: waMessage,
+          targetPhone: tenantPhone,
+          url: pdfUrl,
+          filename: `Laporan_Closing_${docNo}.pdf`,
+        }),
+      });
+      const waData = await waRes.json().catch(() => null);
+      if (waData?.success) {
+        console.log("[WhatsApp Chatbot Sent Successfully]:", waData);
+      } else {
+        console.warn("[WhatsApp Chatbot Response]:", waData);
+      }
+    } catch (err) {
+      console.error("WhatsApp dispatch error:", err);
+    }
+
+    // 3. Gracefully logout and redirect
     setTimeout(async () => {
       try {
         await logout();
-      } catch (logoutErr) {
-        console.error("Error during cashier logout:", logoutErr);
+      } catch (err) {
+        console.error("Logout error:", err);
       } finally {
         onClose();
         router.push("/login");
       }
-    }, 600);
+    }, 800);
   };
 
   return (
-    <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white">
-            <div className="flex items-center space-x-3">
-              <div className="w-9 h-9 rounded-xl bg-brand-orange/20 text-brand-orange flex items-center justify-center">
-                <Lock className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm text-white">
-                  Tutup Sesi Kasir
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  {outletName} • Kasir: {cashierName}
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              disabled={isClosing}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 flex flex-col animate-in zoom-in-95 duration-150">
+        {/* Header */}
+        <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100">
+          <h3 className="font-bold text-sm text-slate-800">
+            Close Cashier Session
+          </h3>
+          <button
+            onClick={onClose}
+            disabled={isClosing}
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Content Body */}
+        <div className="p-6 space-y-4 text-xs">
+          {/* Warning Banner */}
+          <div className="p-3.5 bg-amber-50/90 border border-amber-200/80 rounded-xl text-[11px] leading-relaxed text-amber-900">
+            <span>Pastikan semua transaksi sudah selesai. </span>
+            <span className="text-red-600 font-semibold">
+              Anda tidak akan bisa mengubah transaksi yang sudah dicatat setelah menutup cashier session.
+            </span>
           </div>
 
-          {/* Content Body */}
-          <div className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
-            {/* Info Banner */}
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 text-xs flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 text-blue-600 shrink-0" />
-              <span>
-                Hitung uang fisik di laci kasir dan pastikan jumlahnya sesuai sebelum menutup sesi.
-              </span>
-            </div>
-
-            {/* Toast Msg */}
-            {toastMsg && (
-              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-900 font-bold flex items-center space-x-2 animate-in fade-in">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{toastMsg}</span>
-              </div>
-            )}
-
-            {/* Target Cash Breakdown */}
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
-              <div className="flex justify-between text-slate-600">
-                <span>Modal Awal Kas:</span>
-                <span className="font-mono font-semibold text-slate-800">{formatCurrencyIDR(initialCash)}</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Total Penjualan Tunai:</span>
-                <span className="font-mono font-semibold text-emerald-700">+{formatCurrencyIDR(totalCashSales)}</span>
-              </div>
-              <div className="flex justify-between items-center font-bold text-slate-900 border-t border-slate-200 pt-2 text-sm">
-                <span>Total Uang Kas yang Harus Disetor:</span>
-                <span className="font-mono text-base text-brand-orange">
-                  {formatCurrencyIDR(expectedCashEnding)}
-                </span>
-              </div>
-            </div>
-
-            {/* Physical Cash Drawer Reconciliation */}
-            <div className="p-4 bg-orange-50/40 rounded-xl border border-brand-orange/30 space-y-3">
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-800">
-                  Hitungan Uang Fisik Aktual di Laci (Rp) *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2.5 text-xs font-bold text-slate-400">Rp</span>
-                  <input
-                    type="text"
-                    value={actualInput}
-                    onChange={(e) => handleInputChange(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-base font-bold font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange bg-white text-slate-900"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center text-xs pt-2 border-t border-orange-200/50">
-                <span className="font-bold text-slate-600">Selisih Kas Fisik:</span>
-                <span
-                  className={`font-bold font-mono px-2 py-0.5 rounded text-xs ${
-                    cashDifference === 0
-                      ? "bg-emerald-100 text-emerald-800"
-                      : cashDifference > 0
-                      ? "bg-blue-100 text-blue-800"
-                      : "bg-rose-100 text-rose-800"
-                  }`}
-                >
-                  {cashDifference === 0
-                    ? "Sesuai / Pas (Rp 0)"
-                    : cashDifference > 0
-                    ? `Lebih: +${formatCurrencyIDR(cashDifference)}`
-                    : `Kurang: -${formatCurrencyIDR(Math.abs(cashDifference))}`}
-                </span>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-800">Catatan Shift (Opsional):</label>
+          {/* Form Fields */}
+          <div className="space-y-3.5 pt-1">
+            {/* Cashier Name Confirmation */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-slate-600 font-medium block">
+                Tolong masukkan nama Anda (<span className="text-blue-600">kasir</span>) sebagai konfirmasi
+              </label>
               <input
                 type="text"
-                value={shiftNotes}
-                onChange={(e) => setShiftNotes(e.target.value)}
-                placeholder="Contoh: Uang fisik sudah diserahkan ke supervisor..."
-                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange bg-white"
+                value={confirmCashierName}
+                onChange={(e) => setConfirmCashierName(e.target.value)}
+                placeholder="Konfirmasi nama kasir yang menutup sesi"
+                disabled={isClosing}
+                className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 shadow-2xs"
               />
+            </div>
+
+            {/* Cash in Drawer */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-slate-600 font-medium block">
+                (Uang Tunai di Laci)
+              </label>
+              <div className="relative">
+                <span className="absolute left-3.5 top-2 text-xs text-slate-400 font-mono">Rp.</span>
+                <input
+                  type="text"
+                  value={cashInputDisplay}
+                  onChange={handleCashInputChange}
+                  placeholder="0"
+                  disabled={isClosing}
+                  className="w-full pl-10 pr-3.5 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 shadow-2xs"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Footer Actions */}
-          <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={isClosing}
-              className="text-xs font-semibold"
-            >
-              Batal
-            </Button>
+          {/* Server Timestamp */}
+          <div className="pt-2 text-center text-slate-500 text-[11px] space-y-0.5">
+            <p>
+              Kasir ditutup pada{" "}
+              <strong className="text-slate-800 font-bold">{currentTimeStr || "Waktu Server"}</strong>
+            </p>
+            <p className="text-[10px] text-slate-400">Waktu Server</p>
+          </div>
 
+          {/* Confirm Button */}
+          <div className="pt-2">
             <Button
               type="button"
-              disabled={isClosing}
-              onClick={handleCloseShiftAndExit}
-              className="flex-1 text-xs font-bold space-x-2 bg-red-600 hover:bg-red-700 text-white shadow-sm"
+              disabled={isClosing || !confirmCashierName.trim()}
+              onClick={handleConfirmCloseSession}
+              className="w-full py-2.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm transition-all active:scale-98 flex items-center justify-center space-x-2"
             >
-              <LogOut className="w-4 h-4" />
-              <span>{isClosing ? "Menutup Sesi..." : "Tutup Sesi"}</span>
+              {isClosing ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Menutup Sesi & Mengirim Chatbot...</span>
+                </>
+              ) : (
+                <span>Confirm</span>
+              )}
             </Button>
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

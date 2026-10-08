@@ -26,6 +26,7 @@ import {
 import { ModifierModal } from "@/features/pos/ModifierModal";
 import { PaymentModal } from "@/features/pos/PaymentModal";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
+import { CashDrawerShiftModal } from "@/features/pos/CashDrawerShiftModal";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { isTenantActive, DEFAULT_FNB_TENANTS, getTenantName } from "@/lib/tenant";
 import {
@@ -110,7 +111,7 @@ function calculateEndTime(startTime: string, durationHours: number): string {
 export default function POSPage() {
   const { user } = useAuth();
   const { activeOutlet, activeOutletId } = useOutlet();
-  const { createPosOrder } = useOrders();
+  const { createPosOrder, filteredOrders } = useOrders();
   const { getAvailableTables, occupyTableWithOrder, areas, filteredAreas } = useTables();
   const { simulateBOMDeduction, checkProductStockStatus } = useInventory();
   const { filteredProducts: masterProducts, categories } = useProducts();
@@ -144,6 +145,14 @@ export default function POSPage() {
   const [lastCoworkReceiptData, setLastCoworkReceiptData] = useState<CoworkingReceiptData | null>(null);
   const [isCoworkReceiptModalOpen, setIsCoworkReceiptModalOpen] = useState<boolean>(false);
 
+  // Mount state for SSR Hydration safety
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+    setCwStartTime(getCurrentTimeFormatted());
+  }, []);
+
   const [tenantSettingsVersion, setTenantSettingsVersion] = useState(0);
 
   useEffect(() => {
@@ -158,8 +167,9 @@ export default function POSPage() {
 
   // Filter Active Mitra (Tenant) - Priority Filter Utama
   const activeTenants = useMemo(() => {
+    if (!isMounted) return DEFAULT_FNB_TENANTS;
     return DEFAULT_FNB_TENANTS.filter((t) => isTenantActive(t.id));
-  }, [tenantSettingsVersion]);
+  }, [tenantSettingsVersion, isMounted]);
 
   // Primary Filter: Selected Mitra/Tenant
   const [selectedTenantId, setSelectedTenantId] = useState<string>("ALL");
@@ -198,8 +208,36 @@ export default function POSPage() {
   const [isModifierModalOpen, setIsModifierModalOpen] = useState<boolean>(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
+  const [isClosingShiftModalOpen, setIsClosingShiftModalOpen] = useState<boolean>(false);
   const [lastReceiptData, setLastReceiptData] = useState<POSReceiptData | null>(null);
   const [posToast, setPosToast] = useState<string>("");
+
+  // Live Shift Metrics for Instant Closing
+  const livePaidOrders = useMemo(() => {
+    return filteredOrders.filter((o) => o.paymentStatus === "PAID");
+  }, [filteredOrders]);
+
+  const liveCashSales = useMemo(() => {
+    return livePaidOrders
+      .filter((o) => o.paymentMethod === "CASH")
+      .reduce((sum, o) => sum + (o.total || 0), 0);
+  }, [livePaidOrders]);
+
+  const liveQrisSales = useMemo(() => {
+    return livePaidOrders
+      .filter((o) => o.paymentMethod === "QRIS" || !o.paymentMethod)
+      .reduce((sum, o) => sum + (o.total || 0), 0);
+  }, [livePaidOrders]);
+
+  const liveEdcSales = useMemo(() => {
+    return livePaidOrders
+      .filter((o) => o.paymentMethod === "EDC")
+      .reduce((sum, o) => sum + (o.total || 0), 0);
+  }, [livePaidOrders]);
+
+  const liveNonCashSales = liveQrisSales + liveEdcSales;
+  const liveTransactionsCount = livePaidOrders.length;
+  const liveDiscounts = livePaidOrders.reduce((sum, o) => sum + (o.discount || 0), 0);
 
   // Real-time Available Tables for the Selected Outlet Scope ONLY
   const availableTables = useMemo(() => {
@@ -227,6 +265,7 @@ export default function POSPage() {
     // Strictly filter out products from inactive F&B partners
     const activeTenantProducts = masterProducts.filter((prod) => {
       const tenantId = prod.tenantId || "tenant-ks";
+      if (!isMounted) return true;
       return isTenantActive(tenantId);
     });
 
@@ -889,29 +928,6 @@ export default function POSPage() {
               <span>Co-Working & Ruang Kerja</span>
             </button>
           </div>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsTaxSettingsModalOpen(true)}
-            className={`text-xs font-semibold space-x-1.5 ${
-              isTaxEnabled
-                ? "border-emerald-300 text-emerald-800 bg-emerald-50/50"
-                : "border-slate-300 text-slate-500"
-            }`}
-          >
-            <Percent className="w-3.5 h-3.5" />
-            <span>Pajak: {isTaxEnabled ? `PB1 ${taxRatePercent}%` : "Non-Aktif"}</span>
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={handleStartNewTransaction}
-            className="text-xs font-bold space-x-1 bg-slate-900 hover:bg-slate-800 text-white shadow-sm active:scale-95 transition-all"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Transaksi Baru</span>
-          </Button>
         </div>
       </div>
 
@@ -2074,6 +2090,25 @@ export default function POSPage() {
             setIsCoworkReceiptModalOpen(false);
             setLastCoworkReceiptData(null);
           }}
+        />
+      )}
+
+      {/* 6. Instant Closing & WhatsApp Report Modal */}
+      {isClosingShiftModalOpen && (
+        <CashDrawerShiftModal
+          isOpen={isClosingShiftModalOpen}
+          onClose={() => setIsClosingShiftModalOpen(false)}
+          cashierName={user?.name || "Kasir Bertugas"}
+          outletName={activeOutlet?.name || "Singaraja"}
+          initialCash={0}
+          totalCashSales={liveCashSales}
+          totalNonCashSales={liveNonCashSales}
+          totalTransactionsCount={liveTransactionsCount}
+          qrisSales={liveQrisSales}
+          edcSales={liveEdcSales}
+          totalDiscounts={liveDiscounts}
+          isTaxEnabled={isTaxEnabled}
+          taxRatePercent={taxRatePercent}
         />
       )}
     </div>

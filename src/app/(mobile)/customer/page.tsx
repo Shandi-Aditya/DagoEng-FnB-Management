@@ -127,10 +127,12 @@ const COWORKING_TIME_SLOTS = [
   "08:00",
   "09:00",
   "10:00",
+  "10:30",
   "11:00",
   "12:00",
   "13:00",
   "14:00",
+  "14:30",
   "15:00",
   "16:00",
   "17:00",
@@ -139,27 +141,36 @@ const COWORKING_TIME_SLOTS = [
   "20:00",
 ];
 
+function parseTimeToMinutes(timeStr: string): number {
+  if (!timeStr) return 9 * 60;
+  const match = timeStr.match(/(\d{1,2}):(\d{2})/);
+  if (match) {
+    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  }
+  const matchNum = timeStr.match(/(\d{1,2})/);
+  if (matchNum) {
+    return parseInt(matchNum[1], 10) * 60;
+  }
+  return 9 * 60;
+}
+
+function formatMinutesToTime(totalMinutes: number): string {
+  const norm = ((totalMinutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const hours = Math.floor(norm / 60);
+  const mins = norm % 60;
+  return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+}
+
 function parseHour(timeStr: string): number {
   if (!timeStr) return 9;
-  const match = timeStr.match(/(\d{1,2}):(\d{2})/);
-  if (match) return parseInt(match[1], 10);
-  const matchNum = timeStr.match(/(\d{1,2})/);
-  if (matchNum) return parseInt(matchNum[1], 10);
-  return 9;
+  return Math.floor(parseTimeToMinutes(timeStr) / 60);
 }
 
 function calculateEndTime(startTime: string, durationHours: number): string {
   if (!startTime) return "11:00";
-  const match = startTime.match(/(\d{1,2}):(\d{2})/);
-  if (match) {
-    const startHour = parseInt(match[1], 10);
-    const startMin = match[2];
-    const endHour = (startHour + durationHours) % 24;
-    return `${endHour.toString().padStart(2, "0")}:${startMin}`;
-  }
-  const startHour = parseHour(startTime);
-  const endHour = (startHour + durationHours) % 24;
-  return `${endHour.toString().padStart(2, "0")}:00`;
+  const startMins = parseTimeToMinutes(startTime);
+  const endMins = startMins + durationHours * 60;
+  return formatMinutesToTime(endMins);
 }
 
 interface CartItem {
@@ -381,10 +392,10 @@ function CustomerPortalContent() {
     );
   }, [customerOrders]);
 
-  // Past Completed Customer Orders
+  // Past (Completed & Cancelled) Customer Orders for Riwayat Pesanan
   const completedOrders = useMemo(() => {
     return customerOrders.filter(
-      (o) => o.status === "SERVED" || o.status === "COMPLETED"
+      (o) => o.status === "SERVED" || o.status === "COMPLETED" || o.status === "CANCELLED"
     );
   }, [customerOrders]);
 
@@ -513,14 +524,7 @@ function CustomerPortalContent() {
     return undefined;
   }, [settings?.promos, rawCartSubtotal, cart, activePartnerId]);
 
-  const effectiveFnbPromo = useMemo(() => {
-    if (appliedVoucherPromo) return appliedVoucherPromo;
-    return autoDetectedPromo;
-  }, [appliedVoucherPromo, autoDetectedPromo]);
-
-  const selectedVoucher = useMemo(() => {
-    return myVouchers.find((v) => v.id === selectedVoucherId);
-  }, [myVouchers, selectedVoucherId]);
+  const effectiveFnbPromo = appliedVoucherPromo;
 
   const cartPricing = useMemo(() => {
     const items = cart.map((c) => ({
@@ -531,30 +535,8 @@ function CustomerPortalContent() {
       unitPrice: Number(c.product.basePrice) || (c.product as any).price || 0,
     }));
     const taxRate = (settings?.taxRatePercent !== undefined ? settings.taxRatePercent : 10) / 100;
-    const basePricing = calculateOrderPricing(items, effectiveFnbPromo, taxRate);
-
-    // Apply custom voucher if selected
-    if (selectedVoucher) {
-      let voucherDisc = 0;
-      if (selectedVoucher.discountType === "FIXED") {
-        voucherDisc = Math.min(basePricing.originalSubtotal, selectedVoucher.discountValue);
-      } else {
-        voucherDisc = Math.round((basePricing.originalSubtotal * (selectedVoucher.discountValue || 0)) / 100);
-      }
-      const newDisc = Math.min(basePricing.originalSubtotal, Math.max(basePricing.discountAmount, voucherDisc));
-      const taxable = Math.max(0, basePricing.originalSubtotal - newDisc);
-      const tax = Math.round(taxable * taxRate);
-      return {
-        ...basePricing,
-        discountAmount: newDisc,
-        subtotalAfterDiscount: taxable,
-        tax,
-        total: taxable + tax,
-      };
-    }
-
-    return basePricing;
-  }, [cart, effectiveFnbPromo, selectedVoucher, settings?.taxRatePercent]);
+    return calculateOrderPricing(items, effectiveFnbPromo || undefined, taxRate);
+  }, [cart, effectiveFnbPromo, settings?.taxRatePercent]);
 
   const cartSubtotal = cartPricing.originalSubtotal;
   const cartDiscountAmount = cartPricing.discountAmount;
@@ -715,13 +697,11 @@ function CustomerPortalContent() {
       tax: cartTax,
       total: cartGrandTotal,
       discount: cartDiscountAmount > 0 ? cartDiscountAmount : undefined,
-      promoId: selectedVoucher
-        ? selectedVoucher.title
-        : effectiveFnbPromo
-          ? effectiveFnbPromo.code
-            ? `[${effectiveFnbPromo.code}] ${effectiveFnbPromo.name}`
-            : effectiveFnbPromo.name
-          : undefined,
+      promoId: appliedVoucherPromo
+        ? appliedVoucherPromo.code
+          ? `[${appliedVoucherPromo.code}] ${appliedVoucherPromo.name}`
+          : appliedVoucherPromo.name
+        : undefined,
       outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
       outletName: activeOutlet?.name || "Singaraja",
       status: "NEW",
@@ -730,20 +710,17 @@ function CustomerPortalContent() {
       notes: orderNotes || undefined,
     });
 
-    if (effectiveFnbPromo) {
-      setUsedPromoIds((prev) => [...prev, effectiveFnbPromo.id]);
-    }
-    if (selectedVoucherId) {
-      setMyVouchers((prev) => prev.filter((v) => v.id !== selectedVoucherId));
-      setSelectedVoucherId("");
+    if (appliedVoucherPromo) {
+      setUsedPromoIds((prev) => [...prev, appliedVoucherPromo.id]);
     }
 
-    // 2. Clear cart & close drawer
+    // 2. Clear cart & reset all promo state completely
     setCart([]);
     setOrderNotes("");
     setVoucherInputCode("");
     setAppliedVoucherPromo(null);
     setVoucherValidationMsg(null);
+    setSelectedVoucherId("");
     setIsCheckoutOpen(false);
 
     // 3. Open Waiting for Payment modal
@@ -841,16 +818,17 @@ function CustomerPortalContent() {
     showToast(`Pesanan #${targetOrder.orderNumber} telah dibatalkan.`);
   };
 
-  // Check availability considering space + date + time range overlap
+  // Check availability considering space + date + time range overlap (minute-accurate)
   const checkSlotAvailability = (
     spaceId: string,
     targetDate: string,
-    startHour: number,
+    startTimeInput: string | number,
     durationHours: number
   ): { isAvailable: boolean; reason?: string; conflictingBooking?: any } => {
     const space = spaces.find((s) => s.id === spaceId);
     const maxCapacity = space?.type === "HOT_DESK" ? (space.capacity || 8) : 1;
-    const targetEndHour = startHour + durationHours;
+    const startMins = typeof startTimeInput === "number" ? startTimeInput * 60 : parseTimeToMinutes(startTimeInput);
+    const targetEndMins = startMins + durationHours * 60;
 
     const activeBookings = bookings.filter(
       (b) =>
@@ -860,20 +838,18 @@ function CustomerPortalContent() {
         b.checkInStatus !== "COMPLETED"
     );
 
-    for (let h = startHour; h < targetEndHour; h++) {
-      const overlapping = activeBookings.filter((b) => {
-        const bStart = parseHour(b.startTime);
-        const bEnd = bStart + (b.duration || 1);
-        return h >= bStart && h < bEnd;
-      });
+    const overlappingBookings = activeBookings.filter((b) => {
+      const bStartMins = parseTimeToMinutes(b.startTime);
+      const bEndMins = bStartMins + (b.duration || 1) * 60;
+      return startMins < bEndMins && targetEndMins > bStartMins;
+    });
 
-      if (overlapping.length >= maxCapacity) {
-        return {
-          isAvailable: false,
-          reason: "Sudah dibooking",
-          conflictingBooking: overlapping[0],
-        };
-      }
+    if (overlappingBookings.length >= maxCapacity) {
+      return {
+        isAvailable: false,
+        reason: "Sudah dibooking pada jam tersebut",
+        conflictingBooking: overlappingBookings[0],
+      };
     }
 
     return { isAvailable: true };
@@ -893,8 +869,7 @@ function CustomerPortalContent() {
 
     // Auto pick first available slot for today
     const firstAvail = COWORKING_TIME_SLOTS.find((slot) => {
-      const h = parseHour(slot);
-      return checkSlotAvailability(space.id, today, h, 2).isAvailable;
+      return checkSlotAvailability(space.id, today, slot, 2).isAvailable;
     }) || "09:00";
     setBookingStartTime(firstAvail);
 
@@ -916,12 +891,11 @@ function CustomerPortalContent() {
       return;
     }
 
-    // Availability validation guard before confirming booking
-    const startH = parseHour(bookingStartTime);
+    // Availability validation guard before confirming booking (minute-accurate)
     const availability = checkSlotAvailability(
       selectedSpaceForBooking.id,
       bookingDate,
-      startH,
+      bookingStartTime,
       bookingDuration
     );
 
@@ -2269,9 +2243,16 @@ function CustomerPortalContent() {
                               }}
                               className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-700 outline-none"
                             >
-                              <option value="">-- Pilih dari Voucher Tersedia --</option>
+                              <option value="">-- Pilih dari Voucher Saya / Tersedia --</option>
                               {settings.promos
-                                ?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "FNB") && !usedPromoIds.includes(p.id))
+                                ?.filter((p: PromoConfig) => {
+                                  if (!p.isActive) return false;
+                                  if (p.scope && p.scope !== "ALL" && p.scope !== "FNB") return false;
+                                  if (usedPromoIds.includes(p.id)) return false;
+                                  const now = new Date().toISOString();
+                                  if (p.validUntil && p.validUntil < now) return false;
+                                  return true;
+                                })
                                 .map((p: PromoConfig) => (
                                   <option key={p.id} value={p.id}>
                                     {p.code ? `[${p.code}] ` : ""}🎟️ {p.name} ({p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : formatCurrencyIDR(p.discountValue)})
@@ -2619,54 +2600,66 @@ function CustomerPortalContent() {
                           </div>
                         </div>
 
-                        {/* Interactive Time Slot Availability Grid */}
+                        {/* Interactive Time Slot Availability Grid & Time Picker */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
                               <Clock className="w-3.5 h-3.5 text-blue-600" />
-                              <span>Pilih Jam Mulai (Ketersediaan Slot)</span>
+                              <span>Pilih Jam Mulai</span>
                             </label>
                             <span className="text-[10px] text-slate-500 font-medium">
                               Sewa: <strong>{bookingStartTime} &ndash; {calculateEndTime(bookingStartTime, bookingDuration)} WITA</strong>
                             </span>
                           </div>
 
-                          <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 max-h-36 overflow-y-auto p-1.5 bg-slate-50 rounded-2xl border border-slate-200/80">
-                            {COWORKING_TIME_SLOTS.map((slot) => {
-                              const startH = parseHour(slot);
-                              const avail = checkSlotAvailability(
-                                selectedSpaceForBooking.id,
-                                bookingDate,
-                                startH,
-                                bookingDuration
-                              );
-                              const isSelected = bookingStartTime === slot;
+                          <div className="flex items-center space-x-2">
+                            <input
+                              type="time"
+                              value={bookingStartTime}
+                              onChange={(e) => setBookingStartTime(e.target.value)}
+                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                              required
+                            />
+                          </div>
 
-                              return (
-                                <button
-                                  key={slot}
-                                  type="button"
-                                  disabled={!avail.isAvailable}
-                                  onClick={() => setBookingStartTime(slot)}
-                                  className={`py-2 px-1 rounded-xl text-center transition-all flex flex-col items-center justify-center ${!avail.isAvailable
-                                    ? "bg-rose-50/70 border border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
-                                    : isSelected
-                                      ? "bg-slate-900 text-white shadow-xs font-black ring-2 ring-slate-900/20 scale-[1.02]"
-                                      : "bg-white border border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-300 font-bold"
-                                    }`}
-                                >
-                                  <span className="text-xs font-mono">{slot}</span>
-                                  <span className={`text-[8px] font-bold mt-0.5 ${!avail.isAvailable
-                                    ? "text-rose-600 font-black"
-                                    : isSelected
-                                      ? "text-blue-200"
-                                      : "text-emerald-600"
-                                    }`}>
-                                    {avail.isAvailable ? "Tersedia" : "Sudah Dibooking"}
-                                  </span>
-                                </button>
-                              );
-                            })}
+                          <div className="space-y-1">
+                            <span className="text-[10px] text-slate-400 font-semibold block">Pilihan Cepat Slot Jam:</span>
+                            <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 max-h-32 overflow-y-auto p-1.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                              {COWORKING_TIME_SLOTS.map((slot) => {
+                                const avail = checkSlotAvailability(
+                                  selectedSpaceForBooking.id,
+                                  bookingDate,
+                                  slot,
+                                  bookingDuration
+                                );
+                                const isSelected = bookingStartTime === slot;
+
+                                return (
+                                  <button
+                                    key={slot}
+                                    type="button"
+                                    disabled={!avail.isAvailable}
+                                    onClick={() => setBookingStartTime(slot)}
+                                    className={`py-1.5 px-1 rounded-xl text-center transition-all flex flex-col items-center justify-center ${!avail.isAvailable
+                                      ? "bg-rose-50/70 border border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
+                                      : isSelected
+                                        ? "bg-slate-900 text-white shadow-xs font-black ring-2 ring-slate-900/20 scale-[1.02]"
+                                        : "bg-white border border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-300 font-bold"
+                                      }`}
+                                  >
+                                    <span className="text-xs font-mono">{slot}</span>
+                                    <span className={`text-[8px] font-bold mt-0.5 ${!avail.isAvailable
+                                      ? "text-rose-600 font-black"
+                                      : isSelected
+                                        ? "text-blue-200"
+                                        : "text-emerald-600"
+                                      }`}>
+                                      {avail.isAvailable ? "Tersedia" : "Penuh"}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
 
@@ -2916,25 +2909,6 @@ function CustomerPortalContent() {
                       Pantau progres pesanan kuliner F&B dan status reservasi ruang kerja Anda.
                     </p>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      onClick={() => handleTabChange("MENU")}
-                      size="sm"
-                      className="bg-brand-orange text-white hover:bg-orange-600 text-xs font-bold h-9 px-3.5 rounded-xl shadow-xs"
-                    >
-                      <Plus className="w-3.5 h-3.5 mr-1" />
-                      <span>Menu</span>
-                    </Button>
-                    <Button
-                      onClick={() => handleTabChange("COWORKING")}
-                      size="sm"
-                      variant="outline"
-                      className="text-xs font-bold h-9 px-3.5 rounded-xl border-slate-300"
-                    >
-                      <Laptop className="w-3.5 h-3.5 mr-1" />
-                      <span>Ruang</span>
-                    </Button>
-                  </div>
                 </div>
 
                 {/* Co-working Bookings Section */}
@@ -3120,22 +3094,25 @@ function CustomerPortalContent() {
                               </div>
                             )}
 
-                            {/* Lifecycle Step Tracker */}
+                            {/* Lifecycle Step Tracker: 5 Steps */}
                             <div className="py-2">
-                              <div className="grid grid-cols-4 gap-1.5 text-center text-[10px] font-bold">
+                              <div className="grid grid-cols-5 gap-1.5 text-center text-[10px] font-bold">
                                 {[
                                   { key: "NEW", label: "Menunggu", step: 1 },
                                   { key: "KITCHEN_RECEIVED", label: "Dapur", step: 2 },
                                   { key: "COOKING", label: "Dimasak", step: 3 },
                                   { key: "READY", label: "Siap Saji", step: 4 },
+                                  { key: "SERVED", label: "Selesai", step: 5 },
                                 ].map((stepItem, idx) => {
                                   const isCurrent =
                                     ord.status === stepItem.key ||
-                                    (ord.status === "CONFIRMED" && stepItem.key === "KITCHEN_RECEIVED");
+                                    (ord.status === "CONFIRMED" && stepItem.key === "KITCHEN_RECEIVED") ||
+                                    (ord.status === "COMPLETED" && stepItem.key === "SERVED");
                                   const isPassed =
                                     (stepItem.step === 1 && ord.status !== "NEW") ||
-                                    (stepItem.step === 2 && (ord.status === "COOKING" || ord.status === "READY" || ord.status === "SERVED")) ||
-                                    (stepItem.step === 3 && (ord.status === "READY" || ord.status === "SERVED"));
+                                    (stepItem.step === 2 && (ord.status === "COOKING" || ord.status === "READY" || ord.status === "SERVED" || ord.status === "COMPLETED")) ||
+                                    (stepItem.step === 3 && (ord.status === "READY" || ord.status === "SERVED" || ord.status === "COMPLETED")) ||
+                                    (stepItem.step === 4 && (ord.status === "SERVED" || ord.status === "COMPLETED"));
 
                                   return (
                                     <div key={idx} className="space-y-1.5">
@@ -3293,7 +3270,7 @@ function CustomerPortalContent() {
                   )}
                 </div>
 
-                {/* Past Completed Orders Section */}
+                {/* Past Completed & Cancelled Orders Section */}
                 <div className="space-y-3.5 pt-4 border-t border-slate-200">
                   <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -3302,91 +3279,116 @@ function CustomerPortalContent() {
 
                   {completedOrders.length > 0 ? (
                     <div className="space-y-3">
-                      {completedOrders.map((ord) => (
-                        <div
-                          key={ord.id}
-                          className="p-5 bg-white rounded-3xl border border-slate-200/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center space-x-2">
-                              <span className="font-bold text-slate-900">{ord.orderNumber}</span>
-                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold">
-                                Lunas ({ord.paymentMethod || "QRIS"})
-                              </Badge>
-                            </div>
-                            <p className="text-[11px] text-slate-500">
-                              {ord.items.map((i) => `${i.quantity}x ${i.productName}`).join(", ")}
-                            </p>
-                          </div>
+                      {completedOrders.map((ord) => {
+                        const isCancelled = ord.status === "CANCELLED";
+                        const st = getOrderStatusLabel(ord.status, ord.paymentStatus);
+                        const primaryTenantId = ord.items[0]?.tenantId || "tenant-ks";
+                        const primaryTenantName = FNB_PARTNERS.find((p) => p.id === primaryTenantId)?.name || "Kopi Senja";
 
-                          <div className="flex items-center justify-between sm:justify-end sm:space-x-3 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
-                            <span className="font-black text-slate-900 text-sm sm:text-base">
-                              {formatCurrencyIDR(ord.total)}
-                            </span>
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setReceiptModalFnb({
-                                    orderNumber: ord.orderNumber,
-                                    date: new Date(ord.createdAt).toLocaleDateString("id-ID", {
-                                      day: "numeric",
-                                      month: "short",
-                                      year: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    }),
-                                    cashierName: "Kasir / Self-Order Online",
-                                    outletName: ord.outletName ? `Kopi Senja — ${ord.outletName}` : "Dago Creative Hub",
-                                    outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
-                                    outletPhone: "(0362) 23456",
-                                    tableNumber: ord.tableNumber,
-                                    customerName: ord.customerName,
-                                    orderType: (ord.orderType as any) || "DINE_IN",
-                                    items: ord.items.map((i) => ({
-                                      name: i.productName,
-                                      quantity: i.quantity,
-                                      unitPrice: i.unitPrice,
-                                      subtotal: i.quantity * i.unitPrice,
-                                      modifiers: i.modifiers,
-                                      notes: i.notes,
-                                      tenantId: i.tenantId,
-                                      tenantName: i.tenantId ? FNB_PARTNERS.find((p) => p.id === i.tenantId)?.name : undefined,
-                                    })),
-                                    subtotal: ord.subtotal,
-                                    tax: ord.tax || 0,
-                                    serviceCharge: 0,
-                                    promoName: ord.promoId,
-                                    discount: ord.discount || 0,
-                                    grandTotal: ord.total,
-                                    paymentMethod: (ord.paymentMethod as any) || "QRIS",
-                                    amountPaid: ord.total,
-                                    changeDue: 0,
-                                  });
-                                  setIsReceiptModalFnbOpen(true);
-                                }}
-                                className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50 rounded-xl flex items-center space-x-1"
-                              >
-                                <Receipt className="w-3.5 h-3.5 text-slate-500" />
-                                <span>Nota</span>
-                              </Button>
-                              <Button
-                                onClick={() => {
-                                  handleTabChange("MENU");
-                                  showToast("Silakan pilih menu untuk memesan ulang");
-                                }}
-                                size="sm"
-                                variant="outline"
-                                className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50 rounded-xl"
-                              >
-                                Pesan Lagi
-                              </Button>
+                        return (
+                          <div
+                            key={ord.id}
+                            className={`p-5 rounded-3xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-xs ${
+                              isCancelled ? "bg-rose-50/40 border-rose-200/80" : "bg-white border-slate-200/90"
+                            }`}
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center space-x-2">
+                                <span className="font-bold text-slate-900">{ord.orderNumber}</span>
+                                <Badge variant="outline" className={`${st.color} text-[10px] font-bold`}>
+                                  {isCancelled ? "Dibatalkan" : `Selesai (${ord.paymentMethod || "QRIS"})`}
+                                </Badge>
+                                <span className="text-[10px] text-slate-400 font-semibold">
+                                  {primaryTenantName}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500">
+                                {new Date(ord.createdAt).toLocaleDateString("id-ID", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })} &bull; Meja {ord.tableNumber} &bull; {ord.items.map((i) => `${i.quantity}x ${i.productName}`).join(", ")}
+                              </p>
+                              {ord.promoId && (
+                                <p className="text-[10px] text-emerald-600 font-medium">
+                                  🎟️ Promo: {ord.promoId} {ord.discount ? `(-${formatCurrencyIDR(ord.discount)})` : ""}
+                                </p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-between sm:justify-end sm:space-x-3 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
+                              <span className={`font-black text-sm sm:text-base ${isCancelled ? "text-slate-500 line-through" : "text-slate-900"}`}>
+                                {formatCurrencyIDR(ord.total)}
+                              </span>
+                              <div className="flex items-center space-x-2">
+                                {!isCancelled && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setReceiptModalFnb({
+                                        orderNumber: ord.orderNumber,
+                                        date: new Date(ord.createdAt).toLocaleDateString("id-ID", {
+                                          day: "numeric",
+                                          month: "short",
+                                          year: "numeric",
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        }),
+                                        cashierName: "Kasir / Self-Order Online",
+                                        outletName: ord.outletName ? `${primaryTenantName} — ${ord.outletName}` : "Dago Creative Hub",
+                                        outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
+                                        outletPhone: "(0362) 23456",
+                                        tableNumber: ord.tableNumber,
+                                        customerName: ord.customerName,
+                                        orderType: (ord.orderType as any) || "DINE_IN",
+                                        items: ord.items.map((i) => ({
+                                          name: i.productName,
+                                          quantity: i.quantity,
+                                          unitPrice: i.unitPrice,
+                                          subtotal: i.quantity * i.unitPrice,
+                                          modifiers: i.modifiers,
+                                          notes: i.notes,
+                                          tenantId: i.tenantId,
+                                          tenantName: i.tenantId ? FNB_PARTNERS.find((p) => p.id === i.tenantId)?.name : undefined,
+                                        })),
+                                        subtotal: ord.subtotal,
+                                        tax: ord.tax || 0,
+                                        serviceCharge: 0,
+                                        promoName: ord.promoId,
+                                        discount: ord.discount || 0,
+                                        grandTotal: ord.total,
+                                        paymentMethod: (ord.paymentMethod as any) || "QRIS",
+                                        amountPaid: ord.total,
+                                        changeDue: 0,
+                                      });
+                                      setIsReceiptModalFnbOpen(true);
+                                    }}
+                                    className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50 rounded-xl flex items-center space-x-1"
+                                  >
+                                    <Receipt className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>Nota</span>
+                                  </Button>
+                                )}
+                                <Button
+                                  onClick={() => {
+                                    handleTabChange("MENU");
+                                    showToast("Silakan pilih menu untuk memesan ulang");
+                                  }}
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 text-xs font-bold border-slate-300 hover:bg-slate-50 rounded-xl"
+                                >
+                                  Pesan Lagi
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="p-6 text-center bg-white rounded-3xl border border-slate-200 text-xs text-slate-500">
@@ -3472,15 +3474,205 @@ function CustomerPortalContent() {
                   </div>
                 )}
 
-                {/* Redeem Vouchers Grid */}
+                {/* Section: Voucher Saya (Claimed / Owned Promos) */}
                 <div className="space-y-3.5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="font-black text-base text-slate-900">Katalog Voucher & Reward Poin</h3>
-                      <p className="text-xs text-slate-500">Tukarkan poin Anda dengan voucher diskon dan benefit F&B.</p>
+                      <h3 className="font-black text-base text-slate-900 flex items-center space-x-2">
+                        <Tag className="w-4 h-4 text-emerald-600" />
+                        <span>Voucher Saya</span>
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Koleksi voucher & promo yang siap digunakan saat checkout pemesanan.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-emerald-700 bg-emerald-50 border-emerald-200 font-bold text-xs">
+                      {settings.promos?.filter((p) => claimedPromoIds.includes(p.id) && !usedPromoIds.includes(p.id)).length || 0} Tersedia
+                    </Badge>
+                  </div>
+
+                  {(() => {
+                    const myClaimedPromos = (settings.promos || []).filter(
+                      (p) => claimedPromoIds.includes(p.id) || !p.requiresClaim
+                    );
+                    const now = new Date().toISOString();
+
+                    if (myClaimedPromos.length === 0) {
+                      return (
+                        <div className="p-6 text-center bg-white rounded-3xl border border-slate-200 text-xs text-slate-500 space-y-2">
+                          <p>Belum ada voucher yang diklaim di akun Anda.</p>
+                          <p className="text-[11px] text-slate-400">Silakan klaim voucher promo yang tersedia di bawah.</p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {myClaimedPromos.map((p) => {
+                          const isUsed = usedPromoIds.includes(p.id);
+                          const isExpired = !!p.validUntil && p.validUntil < now;
+                          const isAvailable = !isUsed && !isExpired && p.isActive;
+
+                          return (
+                            <Card
+                              key={p.id}
+                              className={`p-5 rounded-3xl border flex flex-col justify-between space-y-3.5 shadow-xs transition-all ${
+                                isUsed
+                                  ? "bg-slate-50/80 border-slate-200 opacity-60"
+                                  : isExpired
+                                    ? "bg-rose-50/40 border-rose-200 opacity-70"
+                                    : "bg-white border-emerald-200 hover:border-emerald-400 hover:shadow-md"
+                              }`}
+                            >
+                              <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                  <Badge
+                                    className={`text-[10px] font-black uppercase ${
+                                      isUsed
+                                        ? "bg-slate-200 text-slate-600"
+                                        : isExpired
+                                          ? "bg-rose-100 text-rose-800 border-rose-300"
+                                          : "bg-emerald-100 text-emerald-900 border-emerald-300"
+                                    }`}
+                                  >
+                                    {isUsed
+                                      ? "Sudah Digunakan (USED)"
+                                      : isExpired
+                                        ? "Kadaluarsa (EXPIRED)"
+                                        : "Siap Pakai (AVAILABLE)"}
+                                  </Badge>
+
+                                  {p.code && (
+                                    <span className="font-mono text-xs font-black bg-slate-100 px-2.5 py-0.5 rounded-lg text-slate-800 border border-slate-200">
+                                      {p.code}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <h4 className="font-black text-base text-slate-900">{p.name}</h4>
+                                <p className="text-[11px] text-slate-500 leading-relaxed">
+                                  {p.description || `Diskon ${p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : formatCurrencyIDR(p.discountValue)} untuk layanan ${p.scope || "Semua Layanan"}.`}
+                                </p>
+                                <div className="text-[10px] text-slate-400 space-y-0.5 pt-1">
+                                  {p.minimumAmount && (
+                                    <p>• Min. Transaksi: <strong>{formatCurrencyIDR(p.minimumAmount)}</strong></p>
+                                  )}
+                                  {p.validUntil && (
+                                    <p>• Berlaku s/d: <strong>{new Date(p.validUntil).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</strong></p>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                                <span className="text-xs font-black text-emerald-700">
+                                  {p.discountType === "PERCENTAGE"
+                                    ? `Diskon ${p.discountValue}%`
+                                    : `Potongan ${formatCurrencyIDR(p.discountValue)}`}
+                                </span>
+
+                                {isAvailable ? (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      setAppliedVoucherPromo(p);
+                                      setVoucherInputCode(p.code || "");
+                                      handleTabChange("MENU");
+                                      showToast(`Voucher "${p.name}" dipilih! Silakan pilih menu dan checkout.`);
+                                    }}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold h-8 px-3.5 rounded-xl shadow-xs"
+                                  >
+                                    Pakai Voucher
+                                  </Button>
+                                ) : (
+                                  <span className="text-[11px] font-bold text-slate-400">
+                                    {isUsed ? "Terpakai" : "Tidak Aktif"}
+                                  </span>
+                                )}
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Section: Promo Tersedia untuk Diklaim */}
+                <div className="space-y-3.5 pt-4 border-t border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-black text-base text-slate-900 flex items-center space-x-2">
+                        <Sparkles className="w-4 h-4 text-brand-orange" />
+                        <span>Katalog Promo & Voucher Tersedia</span>
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Klaim voucher resmi dari Dago & Mitra untuk disimpan ke Voucher Saya.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {(settings.promos || [])
+                      .filter((p) => p.isActive && (!p.validUntil || p.validUntil >= new Date().toISOString()))
+                      .map((p) => {
+                        const isClaimed = claimedPromoIds.includes(p.id);
+                        return (
+                          <Card
+                            key={p.id}
+                            className="p-5 rounded-3xl border border-slate-200/90 bg-white flex flex-col justify-between space-y-3.5 shadow-xs hover:border-brand-orange/40 transition-all"
+                          >
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <Badge variant="outline" className="text-[10px] font-bold text-brand-orange bg-orange-50 border-orange-200">
+                                  {p.scope === "COWORKING" ? "Khusus Co-Working" : p.scope === "FNB" ? "Khusus F&B" : "Semua Layanan"}
+                                </Badge>
+                                {p.code && (
+                                  <span className="font-mono text-[11px] font-bold text-slate-500">
+                                    [{p.code}]
+                                  </span>
+                                )}
+                              </div>
+                              <h4 className="font-bold text-base text-slate-900 pt-1">{p.name}</h4>
+                              <p className="text-[11px] text-slate-500 leading-relaxed">
+                                {p.description || `Hemat ${p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : formatCurrencyIDR(p.discountValue)}`}
+                              </p>
+                            </div>
+
+                            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                              <span className="text-xs font-black text-slate-900">
+                                {p.discountType === "PERCENTAGE"
+                                  ? `Diskon ${p.discountValue}%`
+                                  : `Potongan ${formatCurrencyIDR(p.discountValue)}`}
+                              </span>
+
+                              <Button
+                                size="sm"
+                                disabled={isClaimed}
+                                onClick={() => handleClaimPromo(p)}
+                                className={`text-xs font-bold h-8 px-4 rounded-xl ${
+                                  isClaimed
+                                    ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                                    : "bg-brand-orange hover:bg-orange-600 text-white shadow-xs"
+                                }`}
+                              >
+                                {isClaimed ? "Sudah Diklaim" : "Klaim Voucher"}
+                              </Button>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* Redeem Vouchers Grid */}
+                <div className="space-y-3.5 pt-4 border-t border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-black text-base text-slate-900">Katalog Voucher Reward Poin</h3>
+                      <p className="text-xs text-slate-500">Tukarkan poin loyalty Anda dengan voucher diskon eksklusif.</p>
                     </div>
                     <Badge variant="outline" className="text-slate-600 bg-white font-bold">
-                      {LOYALTY_VOUCHERS.length} Voucher Tersedia
+                      {LOYALTY_VOUCHERS.length} Reward Poin
                     </Badge>
                   </div>
 

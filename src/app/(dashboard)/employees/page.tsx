@@ -17,6 +17,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ShieldAlert,
+  ShieldCheck,
   ArrowRight,
   Receipt,
   Users,
@@ -24,12 +25,41 @@ import {
   Download,
   FileSpreadsheet,
   FileText,
+  Edit2,
+  Lock,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { DailyClosingPDFModal } from "@/features/pos/DailyClosingPDFModal";
 import { EmployeesReportPDFModal } from "@/features/employees/EmployeesReportPDFModal";
+import { EmployeeProfile } from "@/types/shift";
 
 type EmployeeDepartment = "Management" | "Service" | "Kitchen" | "Barista" | "Cashier" | "Inventory";
+
+const ALL_PERMISSIONS = [
+  { id: "pos_access", label: "Operasional Kasir (POS)", desc: "Buka kasir, proses pesanan, input bayar, & cetak struk", category: "POS Kasir" },
+  { id: "pos_discount", label: "Otoritas Diskon & Promo", desc: "Terapkan kode kupon atau diskon manual transaksi", category: "POS Kasir" },
+  { id: "pos_void", label: "Otoritas Void & Batal Order", desc: "Batalkan pesanan / void bill yang sudah diproses", category: "POS Kasir" },
+  { id: "pos_shift_close", label: "Buka & Tutup Shift (Rekonsiliasi Kas)", desc: "Input kas awal dan pencocokan uang fisik di laci kas", category: "Kas & Shift" },
+  { id: "inventory_access", label: "Manajemen Stok & Bahan Baku", desc: "Mutasi stok, input barang masuk, & opname gudang", category: "Inventori" },
+  { id: "menu_master_edit", label: "Manajemen Master Menu & Harga", desc: "Tambah/edit produk menu F&B, harga, dan HPP", category: "Master Data" },
+  { id: "financial_reports", label: "Laporan Omzet & Finansial", desc: "Melihat laporan omzet harian, bagi hasil, & export", category: "Keuangan" },
+  { id: "coworking_manage", label: "Manajemen Co-Working Space", desc: "Check-in tamu, booking ruangan & event space", category: "Co-Working" },
+  { id: "staff_management", label: "Kelola Karyawan & Hak Akses", desc: "Tambah staf baru dan kelola hak izin staf lain", category: "SDM & Akses" },
+];
+
+const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
+  "Store Manager": ["pos_access", "pos_discount", "pos_void", "pos_shift_close", "inventory_access", "menu_master_edit", "financial_reports", "coworking_manage", "staff_management"],
+  "Outlet Supervisor": ["pos_access", "pos_discount", "pos_void", "pos_shift_close", "inventory_access", "financial_reports", "coworking_manage"],
+  "Head Cashier": ["pos_access", "pos_discount", "pos_shift_close"],
+  "Cashier": ["pos_access", "pos_discount", "pos_shift_close"],
+  "Head Chef": ["pos_access", "inventory_access"],
+  "Kitchen": ["pos_access", "inventory_access"],
+  "Barista": ["pos_access", "inventory_access"],
+  "Inventory Specialist": ["inventory_access"],
+  "Floor Waiter": ["pos_access"],
+};
 
 export default function EmployeesPage() {
   const { activeOutlet, activeOutletId } = useOutlet();
@@ -39,6 +69,7 @@ export default function EmployeesPage() {
     filteredShifts,
     activeShift,
     createEmployee,
+    updateEmployee,
     toggleEmployeeStatus,
     deleteEmployee,
     openShift,
@@ -96,6 +127,7 @@ export default function EmployeesPage() {
         "Email",
         "Shift Ditugaskan",
         "Status Kepegawaian",
+        "Jumlah Hak Akses",
         "Tanggal Bergabung",
       ];
       const rows = filteredEmployees.map((e) => [
@@ -107,6 +139,7 @@ export default function EmployeesPage() {
         e.email,
         e.assignedShift,
         e.status,
+        `${(e.permissions || ROLE_DEFAULT_PERMISSIONS[e.role] || ["pos_access"]).length} Izin`,
         e.joinedDate,
       ]);
       return { filename: `Daftar_Karyawan_${activeOutlet?.name || "All"}`, sheet: "Direktori Staf", headers, rows };
@@ -133,6 +166,19 @@ export default function EmployeesPage() {
   const [newContact, setNewContact] = useState("+62 812-");
   const [newEmail, setNewEmail] = useState("");
   const [newAssignedShift, setNewAssignedShift] = useState("Shift Pagi (08:00 - 16:00)");
+  const [newPermissions, setNewPermissions] = useState<string[]>(ROLE_DEFAULT_PERMISSIONS["Floor Waiter"] || ["pos_access"]);
+
+  // Modal State: Edit Employee & Hak Akses
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingEmp, setEditingEmp] = useState<EmployeeProfile | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editRole, setEditRole] = useState("");
+  const [editDept, setEditDept] = useState<EmployeeDepartment>("Service");
+  const [editContact, setEditContact] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editAssignedShift, setEditAssignedShift] = useState("");
+  const [editStatus, setEditStatus] = useState<"AKTIF" | "CUTI" | "NON-AKTIF">("AKTIF");
+  const [editPermissions, setEditPermissions] = useState<string[]>([]);
 
   // Modal State: Open Shift
   const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState(false);
@@ -157,6 +203,49 @@ export default function EmployeesPage() {
     );
   });
 
+  const handleOpenAddModal = () => {
+    setNewName("");
+    setNewRole("Floor Waiter");
+    setNewDept("Service");
+    setNewContact("+62 812-");
+    setNewEmail("");
+    setNewAssignedShift("Shift Pagi (08:00 - 16:00)");
+    setNewPermissions(ROLE_DEFAULT_PERMISSIONS["Floor Waiter"] || ["pos_access"]);
+    setIsAddModalOpen(true);
+  };
+
+  const handleRoleChangeForNew = (role: string) => {
+    setNewRole(role);
+    if (ROLE_DEFAULT_PERMISSIONS[role]) {
+      setNewPermissions(ROLE_DEFAULT_PERMISSIONS[role]);
+    }
+  };
+
+  const toggleNewPermission = (permId: string) => {
+    setNewPermissions((prev) =>
+      prev.includes(permId) ? prev.filter((p) => p !== permId) : [...prev, permId]
+    );
+  };
+
+  const handleOpenEditModal = (emp: EmployeeProfile) => {
+    setEditingEmp(emp);
+    setEditName(emp.name);
+    setEditRole(emp.role);
+    setEditDept(emp.department);
+    setEditContact(emp.contact);
+    setEditEmail(emp.email);
+    setEditAssignedShift(emp.assignedShift);
+    setEditStatus(emp.status);
+    setEditPermissions(emp.permissions || ROLE_DEFAULT_PERMISSIONS[emp.role] || ["pos_access"]);
+    setIsEditModalOpen(true);
+  };
+
+  const toggleEditPermission = (permId: string) => {
+    setEditPermissions((prev) =>
+      prev.includes(permId) ? prev.filter((p) => p !== permId) : [...prev, permId]
+    );
+  };
+
   const handleAddEmployee = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
@@ -172,12 +261,30 @@ export default function EmployeesPage() {
       status: "AKTIF",
       assignedShift: newAssignedShift,
       joinedDate: new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }),
+      permissions: newPermissions,
     });
 
     setIsAddModalOpen(false);
-    setNewName("");
-    setNewContact("+62 812-");
-    setNewEmail("");
+    showToast(`Karyawan ${newName.trim()} berhasil ditambahkan dengan ${newPermissions.length} hak akses!`);
+  };
+
+  const handleSaveEditEmployee = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEmp) return;
+
+    updateEmployee(editingEmp.id, {
+      name: editName.trim(),
+      role: editRole.trim(),
+      department: editDept,
+      contact: editContact.trim(),
+      email: editEmail.trim(),
+      assignedShift: editAssignedShift,
+      status: editStatus,
+      permissions: editPermissions,
+    });
+
+    setIsEditModalOpen(false);
+    showToast(`Profil & Hak Akses ${editName.trim()} berhasil diperbarui!`);
   };
 
   const handleOpenShiftSubmit = (e: React.FormEvent) => {
@@ -281,7 +388,7 @@ export default function EmployeesPage() {
 
           <Button
             size="sm"
-            onClick={() => setIsAddModalOpen(true)}
+            onClick={handleOpenAddModal}
             className="text-xs font-bold space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -291,10 +398,10 @@ export default function EmployeesPage() {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center space-x-2 border-b border-slate-200">
+      <div className="flex items-center space-x-2 border-b border-slate-200 overflow-x-auto">
         <button
           onClick={() => setActiveTab("SHIFTS")}
-          className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center space-x-1.5 ${
+          className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center space-x-1.5 whitespace-nowrap ${
             activeTab === "SHIFTS"
               ? "border-brand-orange text-brand-orange"
               : "border-transparent text-slate-500 hover:text-slate-700"
@@ -305,7 +412,7 @@ export default function EmployeesPage() {
         </button>
         <button
           onClick={() => setActiveTab("EMPLOYEES")}
-          className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center space-x-1.5 ${
+          className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center space-x-1.5 whitespace-nowrap ${
             activeTab === "EMPLOYEES"
               ? "border-brand-orange text-brand-orange"
               : "border-transparent text-slate-500 hover:text-slate-700"
@@ -406,7 +513,7 @@ export default function EmployeesPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-600">
+                <table className="w-full text-left text-xs text-slate-600 min-w-[720px]">
                   <thead className="bg-slate-50 text-slate-700 uppercase font-semibold text-[11px] border-b border-slate-200">
                     <tr>
                       <th className="px-4 py-3">Nama Shift</th>
@@ -475,7 +582,7 @@ export default function EmployeesPage() {
       {activeTab === "EMPLOYEES" && (
         <div className="space-y-4">
           {/* Search Bar */}
-          <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
               <input
@@ -495,61 +602,85 @@ export default function EmployeesPage() {
           <Card className="shadow-xs border border-slate-200 overflow-hidden">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-600">
+                <table className="w-full text-left text-xs text-slate-600 min-w-[760px]">
                   <thead className="bg-slate-50 text-slate-700 uppercase font-semibold text-[11px] border-b border-slate-200">
                     <tr>
                       <th className="px-4 py-3">Nama & No Pegawai</th>
                       <th className="px-4 py-3">Departemen & Role</th>
                       <th className="px-4 py-3">Jadwal Shift Roster</th>
+                      <th className="px-4 py-3">Hak Akses & Izin</th>
                       <th className="px-4 py-3">Kontrak & Kontak</th>
                       <th className="px-4 py-3 text-center">Status Kerja</th>
                       <th className="px-4 py-3 text-right">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {displayedEmployees.map((emp) => (
-                      <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-4 py-3">
-                          <div className="font-bold text-slate-900">{emp.name}</div>
-                          <div className="text-[11px] font-mono text-brand-orange">{emp.employeeNumber}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="font-semibold text-slate-800">{emp.role}</div>
-                          <div className="text-[10px] text-slate-500 uppercase">{emp.department}</div>
-                        </td>
-                        <td className="px-4 py-3">{emp.assignedShift}</td>
-                        <td className="px-4 py-3">
-                          <div className="text-slate-800">{emp.contact}</div>
-                          <div className="text-[10px] text-slate-400">{emp.email}</div>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <button
-                            onClick={() => toggleEmployeeStatus(emp.id)}
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
-                              emp.status === "AKTIF"
-                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
-                                : emp.status === "CUTI"
-                                ? "bg-amber-100 text-amber-800 hover:bg-amber-200"
-                                : "bg-red-100 text-red-800 hover:bg-red-200"
-                            }`}
-                            title="Klik untuk ubah status"
-                          >
-                            {emp.status}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => deleteEmployee(emp.id)}
-                            className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
-                            title="Hapus Staf"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
+                    {displayedEmployees.map((emp) => {
+                      const userPerms = emp.permissions || ROLE_DEFAULT_PERMISSIONS[emp.role] || ["pos_access"];
+                      return (
+                        <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="font-bold text-slate-900">{emp.name}</div>
+                            <div className="text-[11px] font-mono text-brand-orange">{emp.employeeNumber}</div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-semibold text-slate-800">{emp.role}</div>
+                            <div className="text-[10px] text-slate-500 uppercase">{emp.department}</div>
+                          </td>
+                          <td className="px-4 py-3">{emp.assignedShift}</td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => handleOpenEditModal(emp)}
+                              className="flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-slate-50 hover:bg-orange-50 hover:border-brand-orange/40 hover:text-brand-orange transition-all text-[11px] font-bold text-slate-700 cursor-pointer"
+                              title="Klik untuk lihat & atur hak akses"
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>{userPerms.length} Izin Aktif</span>
+                              <Edit2 className="w-3 h-3 text-slate-400" />
+                            </button>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="text-slate-800">{emp.contact}</div>
+                            <div className="text-[10px] text-slate-400">{emp.email}</div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => toggleEmployeeStatus(emp.id)}
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
+                                emp.status === "AKTIF"
+                                  ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+                                  : emp.status === "CUTI"
+                                  ? "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                                  : "bg-red-100 text-red-800 hover:bg-red-200"
+                              }`}
+                              title="Klik untuk ubah status"
+                            >
+                              {emp.status}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-right space-x-1 whitespace-nowrap">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleOpenEditModal(emp)}
+                              className="h-7 w-7 p-0 text-slate-600 hover:text-brand-orange hover:bg-orange-50"
+                              title="Edit Profil & Hak Akses"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => deleteEmployee(emp.id)}
+                              className="h-7 w-7 p-0 text-red-500 hover:bg-red-50"
+                              title="Hapus Staf"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -560,82 +691,174 @@ export default function EmployeesPage() {
 
       {/* Modal Add Employee */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-              <h3 className="text-base font-bold text-slate-900">Tambah Karyawan Baru</h3>
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white shrink-0">
+              <div className="flex items-center space-x-2">
+                <UserCheck className="w-5 h-5 text-brand-orange" />
+                <h3 className="text-sm font-bold">Tambah Karyawan & Konfigurasi Hak Akses</h3>
+              </div>
               <button
                 onClick={() => setIsAddModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddEmployee} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">Nama Lengkap *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="cth. Wayan Suastika"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-1 focus:ring-brand-orange"
-                />
-              </div>
+            <form onSubmit={handleAddEmployee} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+              {/* Basic Info */}
+              <div className="space-y-3">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-1">
+                  1. Informasi Profil Staf
+                </h4>
 
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Departemen</label>
-                  <select
-                    value={newDept}
-                    onChange={(e) => setNewDept(e.target.value as EmployeeDepartment)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
-                  >
-                    <option value="Service">Service / Waiter</option>
-                    <option value="Cashier">Cashier</option>
-                    <option value="Kitchen">Kitchen</option>
-                    <option value="Barista">Barista</option>
-                    <option value="Inventory">Inventory</option>
-                    <option value="Management">Management</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Role Jabatan</label>
+                  <label className="block text-slate-700 font-bold mb-1">Nama Lengkap Karyawan *</label>
                   <input
                     type="text"
                     required
-                    value={newRole}
-                    onChange={(e) => setNewRole(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg"
+                    placeholder="Contoh: Wayan Suastika"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-brand-orange/20 font-semibold text-slate-800"
                   />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">Departemen</label>
+                    <select
+                      value={newDept}
+                      onChange={(e) => setNewDept(e.target.value as EmployeeDepartment)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-medium"
+                    >
+                      <option value="Service">Service / Floor Waiter</option>
+                      <option value="Cashier">Cashier</option>
+                      <option value="Kitchen">Kitchen</option>
+                      <option value="Barista">Barista</option>
+                      <option value="Inventory">Inventory</option>
+                      <option value="Management">Management</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">Role Jabatan</label>
+                    <select
+                      value={newRole}
+                      onChange={(e) => handleRoleChangeForNew(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-bold text-slate-800"
+                    >
+                      <option value="Floor Waiter">Floor Waiter</option>
+                      <option value="Head Cashier">Head Cashier</option>
+                      <option value="Cashier">Cashier</option>
+                      <option value="Head Chef">Head Chef</option>
+                      <option value="Barista">Barista</option>
+                      <option value="Inventory Specialist">Inventory Specialist</option>
+                      <option value="Outlet Supervisor">Outlet Supervisor</option>
+                      <option value="Store Manager">Store Manager</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">Nomor WhatsApp *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="+62 812-xxxx-xxxx"
+                      value={newContact}
+                      onChange={(e) => setNewContact(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">Email Karyawan</label>
+                    <input
+                      type="email"
+                      placeholder="nama@dagoeng.com"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">Jadwal Shift Roster</label>
+                  <select
+                    value={newAssignedShift}
+                    onChange={(e) => setNewAssignedShift(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                  >
+                    <option value="Shift Pagi (08:00 - 16:00)">Shift Pagi (08:00 - 16:00)</option>
+                    <option value="Shift Sore (14:00 - 22:00)">Shift Sore (14:00 - 22:00)</option>
+                    <option value="Shift Malam (16:00 - 23:00)">Shift Malam (16:00 - 23:00)</option>
+                    <option value="Reguler (09:00 - 17:00)">Reguler (09:00 - 17:00)</option>
+                  </select>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">Nomor Kontak WhatsApp *</label>
-                <input
-                  type="text"
-                  required
-                  value={newContact}
-                  onChange={(e) => setNewContact(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg"
-                />
-              </div>
+              {/* Permissions Checklist Section */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <div>
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-900 flex items-center space-x-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>2. Hak Akses & Kemampuan Sistem ({newPermissions.length} Izin Dipilih)</span>
+                    </h4>
+                    <p className="text-[10px] text-slate-500">Centang fitur yang diizinkan untuk staf ini.</p>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setNewPermissions(ALL_PERMISSIONS.map((p) => p.id))}
+                      className="text-[10px] text-brand-orange hover:underline font-bold"
+                    >
+                      Pilih Semua
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => setNewPermissions([])}
+                      className="text-[10px] text-slate-500 hover:underline"
+                    >
+                      Hapus Semua
+                    </button>
+                  </div>
+                </div>
 
-              <div>
-                <label className="block text-slate-700 font-semibold mb-1">Shift Roster</label>
-                <select
-                  value={newAssignedShift}
-                  onChange={(e) => setNewAssignedShift(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"
-                >
-                  <option value="Shift Pagi (08:00 - 16:00)">Shift Pagi (08:00 - 16:00)</option>
-                  <option value="Shift Sore (14:00 - 22:00)">Shift Sore (14:00 - 22:00)</option>
-                  <option value="Shift Malam (16:00 - 23:00)">Shift Malam (16:00 - 23:00)</option>
-                  <option value="Reguler (09:00 - 17:00)">Reguler (09:00 - 17:00)</option>
-                </select>
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {ALL_PERMISSIONS.map((perm) => {
+                    const isChecked = newPermissions.includes(perm.id);
+                    return (
+                      <label
+                        key={perm.id}
+                        className={`flex items-start space-x-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                          isChecked
+                            ? "bg-orange-50/50 border-brand-orange/40 text-slate-900"
+                            : "bg-slate-50/50 border-slate-200 text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleNewPermission(perm.id)}
+                          className="mt-0.5 rounded text-brand-orange focus:ring-brand-orange"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs">{perm.label}</span>
+                            <span className="text-[9px] font-mono px-1.5 py-0.2 bg-white border border-slate-200 rounded text-slate-500">
+                              {perm.category}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5">{perm.desc}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200">
@@ -644,15 +867,220 @@ export default function EmployeesPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setIsAddModalOpen(false)}
+                  className="rounded-xl"
                 >
                   Batal
                 </Button>
                 <Button
                   type="submit"
                   size="sm"
-                  className="bg-brand-orange hover:bg-orange-600 text-white font-semibold"
+                  className="bg-brand-orange hover:bg-orange-600 text-white font-bold rounded-xl shadow-xs"
                 >
-                  Simpan Karyawan
+                  Simpan & Daftarkan Karyawan
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Employee & Hak Akses */}
+      {isEditModalOpen && editingEmp && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white shrink-0">
+              <div className="flex items-center space-x-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="text-sm font-bold">Edit Staf & Hak Akses: {editingEmp.name}</h3>
+                  <p className="text-[10px] text-slate-400 font-mono">{editingEmp.employeeNumber}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditEmployee} className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+              {/* Basic Info */}
+              <div className="space-y-3">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-1">
+                  1. Informasi Profil Staf
+                </h4>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">Nama Lengkap Karyawan *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-semibold text-slate-800"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">Departemen</label>
+                    <select
+                      value={editDept}
+                      onChange={(e) => setEditDept(e.target.value as EmployeeDepartment)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-medium"
+                    >
+                      <option value="Service">Service / Floor Waiter</option>
+                      <option value="Cashier">Cashier</option>
+                      <option value="Kitchen">Kitchen</option>
+                      <option value="Barista">Barista</option>
+                      <option value="Inventory">Inventory</option>
+                      <option value="Management">Management</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">Role Jabatan</label>
+                    <input
+                      type="text"
+                      required
+                      value={editRole}
+                      onChange={(e) => setEditRole(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">Nomor WhatsApp *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editContact}
+                      onChange={(e) => setEditContact(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">Status Kerja</label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value as any)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-bold"
+                    >
+                      <option value="AKTIF">AKTIF</option>
+                      <option value="CUTI">CUTI</option>
+                      <option value="NON-AKTIF">NON-AKTIF</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">Jadwal Shift Roster</label>
+                  <select
+                    value={editAssignedShift}
+                    onChange={(e) => setEditAssignedShift(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+                  >
+                    <option value="Shift Pagi (08:00 - 16:00)">Shift Pagi (08:00 - 16:00)</option>
+                    <option value="Shift Sore (14:00 - 22:00)">Shift Sore (14:00 - 22:00)</option>
+                    <option value="Shift Malam (16:00 - 23:00)">Shift Malam (16:00 - 23:00)</option>
+                    <option value="Reguler (09:00 - 17:00)">Reguler (09:00 - 17:00)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Permissions Checklist Section */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1">
+                  <div>
+                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-900 flex items-center space-x-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>2. Hak Akses & Kemampuan Sistem ({editPermissions.length} Izin Aktif)</span>
+                    </h4>
+                    <p className="text-[10px] text-slate-500">Sesuaikan kemampuan spesifik staf di sistem.</p>
+                  </div>
+                  <div className="flex items-center space-x-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditPermissions(ALL_PERMISSIONS.map((p) => p.id))}
+                      className="text-[10px] text-brand-orange hover:underline font-bold"
+                    >
+                      Pilih Semua
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (ROLE_DEFAULT_PERMISSIONS[editRole]) {
+                          setEditPermissions(ROLE_DEFAULT_PERMISSIONS[editRole]);
+                        }
+                      }}
+                      className="text-[10px] text-slate-500 hover:underline"
+                    >
+                      Reset Role
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {ALL_PERMISSIONS.map((perm) => {
+                    const isChecked = editPermissions.includes(perm.id);
+                    return (
+                      <label
+                        key={perm.id}
+                        className={`flex items-start space-x-2.5 p-2.5 rounded-xl border cursor-pointer transition-all ${
+                          isChecked
+                            ? "bg-emerald-50/50 border-emerald-500/40 text-slate-900"
+                            : "bg-slate-50/50 border-slate-200 text-slate-600 hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleEditPermission(perm.id)}
+                          className="mt-0.5 rounded text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs">{perm.label}</span>
+                            <span className="text-[9px] font-mono px-1.5 py-0.2 bg-white border border-slate-200 rounded text-slate-500">
+                              {perm.category}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5">{perm.desc}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="rounded-xl"
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="bg-brand-orange hover:bg-orange-600 text-white font-bold rounded-xl shadow-xs"
+                >
+                  Simpan Perubahan Staf
                 </Button>
               </div>
             </form>

@@ -249,7 +249,7 @@ export const DEFAULT_TENANT_PROFILES: Record<string, Partial<TenantProfileData>>
 export function getTenantProfile(tenantId: string): TenantProfileData {
   const map = getAllStoredTenantSettings();
   const stored = map[tenantId];
-  const defInfo = DEFAULT_FNB_TENANTS.find((t) => t.id === tenantId) || {
+  const defInfo = getAllFnbTenants().find((t) => t.id === tenantId) || {
     id: tenantId,
     code: tenantId.toUpperCase(),
     name: tenantId,
@@ -309,11 +309,62 @@ export function getTenantProfile(tenantId: string): TenantProfileData {
   };
 }
 
+const CUSTOM_TENANTS_STORAGE_KEY = "dago_custom_tenants";
+
+/**
+ * Returns all custom tenants stored in localStorage.
+ */
+export function getCustomTenants(): FnbPartnerInfo[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(CUSTOM_TENANTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+  } catch (e) {
+    console.error("Failed to read custom tenants from localStorage", e);
+  }
+  return [];
+}
+
+/**
+ * Saves or updates a custom tenant in localStorage.
+ */
+export function saveCustomTenant(tenant: FnbPartnerInfo): void {
+  if (typeof window === "undefined") return;
+  try {
+    const list = getCustomTenants();
+    const existingIdx = list.findIndex((t) => t.id === tenant.id);
+    if (existingIdx >= 0) {
+      list[existingIdx] = tenant;
+    } else {
+      list.push(tenant);
+    }
+    localStorage.setItem(CUSTOM_TENANTS_STORAGE_KEY, JSON.stringify(list));
+    window.dispatchEvent(new Event("tenant_settings_updated"));
+  } catch (e) {
+    console.error("Failed to save custom tenant to localStorage", e);
+  }
+}
+
+/**
+ * Returns all registered F&B tenants (default + custom).
+ */
+export function getAllFnbTenants(): FnbPartnerInfo[] {
+  const custom = getCustomTenants();
+  const map = new Map<string, FnbPartnerInfo>();
+  DEFAULT_FNB_TENANTS.forEach((t) => map.set(t.id, t));
+  custom.forEach((t) => map.set(t.id, t));
+  return Array.from(map.values());
+}
+
 /**
  * Helper to get readable tenant name by tenantId
  */
 export function getTenantName(tenantId?: string): string | undefined {
-  const match = DEFAULT_FNB_TENANTS.find((t) => t.id === tenantId);
+  if (!tenantId) return undefined;
+  const all = getAllFnbTenants();
+  const match = all.find((t) => t.id === tenantId);
   return match ? match.name : tenantId;
 }
 

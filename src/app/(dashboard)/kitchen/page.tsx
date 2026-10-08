@@ -187,23 +187,12 @@ export default function KitchenKDSPage() {
 
         {/* Action Toolbar */}
         <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-          {/* Quick Demo Order Spawn */}
-          <Button
-            size="sm"
-            onClick={handleQuickDemoOrder}
-            className="h-8 px-3 text-xs font-bold bg-brand-orange hover:bg-orange-600 text-white shadow-xs space-x-1.5"
-            title="Kirim pesanan simulasi baru langsung ke antrean dapur"
-          >
-            <PlusCircle className="w-3.5 h-3.5" />
-            <span>+ Simulasi Pesanan Baru</span>
-          </Button>
-
           {/* Sound Toggle */}
           <Button
             size="sm"
             variant="outline"
             onClick={() => setIsSoundEnabled(!isSoundEnabled)}
-            className={`h-8 px-2.5 text-xs font-bold space-x-1 border ${
+            className={`h-8 px-2.5 text-xs font-bold space-x-1 border rounded-xl ${
               isSoundEnabled
                 ? "bg-amber-50 text-amber-900 border-amber-300"
                 : "bg-slate-100 text-slate-500 border-slate-200"
@@ -218,14 +207,14 @@ export default function KitchenKDSPage() {
             size="sm"
             variant="ghost"
             onClick={handleTestChime}
-            className="h-8 px-2 text-xs text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200"
-            title="Klik untuk uji coba suara bell dapur"
+            className="h-8 px-2.5 text-xs text-slate-500 hover:text-slate-800 rounded-xl"
+            title="Tes bunyi bel pesanan dapur"
           >
             <Bell className="w-3.5 h-3.5 mr-1 text-slate-500" />
             <span>Tes Bell</span>
           </Button>
 
-          <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg">
+          <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl font-bold">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
             <span>{activeOrders.length} Tiket Aktif</span>
           </div>

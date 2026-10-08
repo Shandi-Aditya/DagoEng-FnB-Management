@@ -36,36 +36,37 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       <div className="flex-1 flex overflow-hidden">
-        {/* Desktop Sidebar */}
-        <div className="hidden md:flex flex-shrink-0">
+        {/* Desktop Sidebar (visible on large screens >= 1024px) */}
+        <div className="hidden lg:flex flex-shrink-0">
           <Sidebar />
         </div>
 
-        {/* Mobile Slide-over Drawer */}
+        {/* Mobile & Tablet Slide-over Drawer (< 1024px) */}
         {isMobileMenuOpen && (
-          <div className="fixed inset-0 z-50 md:hidden flex">
+          <div className="fixed inset-0 z-50 lg:hidden flex animate-in fade-in duration-150">
             <div
-              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
               onClick={() => setIsMobileMenuOpen(false)}
             />
-            <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white z-10 shadow-2xl">
-              <div className="absolute top-3 right-3">
+            <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white z-10 shadow-2xl animate-in slide-in-from-left duration-200">
+              <div className="absolute top-3 right-3 z-20">
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100"
+                  className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                  aria-label="Tutup Menu"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <Sidebar />
+              <Sidebar onNavigate={() => setIsMobileMenuOpen(false)} />
             </div>
           </div>
         )}
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-          <Header />
-          <main className="flex-1 p-6 max-w-7xl w-full mx-auto animate-in fade-in duration-200">
+          <Header onOpenMobileMenu={() => setIsMobileMenuOpen(true)} />
+          <main className="flex-1 p-3 sm:p-5 lg:p-6 max-w-7xl w-full mx-auto animate-in fade-in duration-200">
             {children}
           </main>
         </div>

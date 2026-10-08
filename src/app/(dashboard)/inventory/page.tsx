@@ -277,30 +277,29 @@ export default function InventoryPage() {
             onClick={handleExportStockCSV}
           >
             <Download className="w-3.5 h-3.5 mr-1.5 text-purple-600" />
-            Export CSV Stok
+            Export CSV
           </Button>
           <Button
             size="sm"
-            variant="outline"
-            className="text-xs border-purple-300 text-purple-700 hover:bg-purple-50 font-bold"
+            className="text-xs bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-xs"
             onClick={() => setIsPDFModalOpen(true)}
           >
-            <FileText className="w-3.5 h-3.5 mr-1.5 text-purple-600" />
+            <FileText className="w-3.5 h-3.5 mr-1.5" />
             Cetak PDF Valuasi
           </Button>
           <Button
             size="sm"
             variant="outline"
-            className="text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
+            className="text-xs border-purple-200 text-purple-700 hover:bg-purple-50 font-bold rounded-xl"
             onClick={() => setIsBOMSimulatorModalOpen(true)}
           >
             <Sparkles className="w-3.5 h-3.5 mr-1.5 text-purple-600" />
-            Simulasi Resep BOM
+            Kalkulasi Resep Menu
           </Button>
           <Button
             size="sm"
             variant="outline"
-            className="text-xs"
+            className="text-xs border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold rounded-xl"
             onClick={() => setIsStockAdjModalOpen(true)}
           >
             <ArrowUpDown className="w-3.5 h-3.5 mr-1.5 text-slate-600" />
@@ -308,7 +307,7 @@ export default function InventoryPage() {
           </Button>
           <Button
             size="sm"
-            className="text-xs bg-purple-600 hover:bg-purple-700 text-white"
+            className="text-xs bg-brand-orange hover:bg-orange-600 text-white font-bold rounded-xl shadow-xs"
             onClick={() => setIsPOModalOpen(true)}
           >
             <Truck className="w-3.5 h-3.5 mr-1.5" />

@@ -475,7 +475,7 @@ export function PaymentWaitingModal({
                 <Button
                   onClick={handleSimulateWebhookSuccess}
                   disabled={isVerifying}
-                  className="w-full h-12 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs rounded-2xl shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] active:scale-98 border border-emerald-400/40"
+                  className="w-full h-12 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 transition-all hover:scale-[1.01] active:scale-98 border border-emerald-400/40"
                 >
                   {isVerifying ? (
                     <>
@@ -484,14 +484,13 @@ export function PaymentWaitingModal({
                     </>
                   ) : (
                     <>
-                      <Zap className="w-4 h-4 text-amber-300 fill-amber-300 animate-pulse mr-1" />
-                      <span>SIMULASI BAYAR QRIS BERHASIL (KLIK DISINI)</span>
-                      <CheckCircle2 className="w-4 h-4 ml-1" />
+                      <CheckCircle2 className="w-4 h-4 text-white mr-1" />
+                      <span>Konfirmasi Pembayaran QRIS Berhasil</span>
                     </>
                   )}
                 </Button>
                 <p className="text-[10px] text-slate-400 text-center">
-                  *Klik tombol hijau di atas untuk mensimulasikan pembayaran lunas dari gateway/m-Banking.
+                  *Sistem secara otomatis memverifikasi pembayaran dari m-Banking / e-Wallet.
                 </p>
 
                 {/* 2. Cancellation Action */}

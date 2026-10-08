@@ -3,12 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 interface WhatsAppSendPayload {
   message: string;
   targetPhone?: string;
+  url?: string;
+  filename?: string;
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as WhatsAppSendPayload;
-    const { message, targetPhone } = body;
+    const { message, targetPhone, url, filename } = body;
 
     if (!message || typeof message !== "string") {
       return NextResponse.json(
@@ -19,7 +21,7 @@ export async function POST(req: NextRequest) {
 
     const fonnteToken = process.env.FONNTE_API_TOKEN;
     const defaultTarget = process.env.FONNTE_TARGET_PHONE;
-    let resolvedTarget = (defaultTarget || targetPhone || "").replace(/\D/g, "");
+    let resolvedTarget = (targetPhone || defaultTarget || "").replace(/\D/g, "");
 
     if (resolvedTarget.startsWith("0")) {
       resolvedTarget = "62" + resolvedTarget.slice(1);
@@ -46,22 +48,49 @@ export async function POST(req: NextRequest) {
     }
 
     // Server-side HTTP call to Fonnte API Gateway
-    const fonnteResponse = await fetch("https://api.fonnte.com/send", {
+    const isLocalUrl = url && (url.includes("localhost") || url.includes("127.0.0.1") || url.includes("0.0.0.0"));
+    const fonntePayload: Record<string, any> = {
+      target: resolvedTarget,
+      message: message,
+      countryCode: "62",
+    };
+
+    // Only attach URL if it is a public accessible URL (Fonnte server cannot download from local PC localhost)
+    if (url && typeof url === "string" && !isLocalUrl) {
+      fonntePayload.url = url;
+      fonntePayload.filename = filename || "Laporan_Closing_Shift.pdf";
+    }
+
+    let fonnteResponse = await fetch("https://api.fonnte.com/send", {
       method: "POST",
       headers: {
         Authorization: fonnteToken.trim(),
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        target: resolvedTarget,
-        message: message,
-        countryCode: "62",
-      }),
+      body: JSON.stringify(fonntePayload),
     });
 
-    const result = await fonnteResponse.json().catch(() => null);
+    let result = await fonnteResponse.json().catch(() => null);
 
-    if (!fonnteResponse.ok) {
+    // Fallback: If failed with url attachment, retry with pure text message
+    if (!fonnteResponse.ok || result?.status === false) {
+      if (fonntePayload.url) {
+        console.warn("[WhatsApp Gateway] Retrying without URL attachment...");
+        delete fonntePayload.url;
+        delete fonntePayload.filename;
+        fonnteResponse = await fetch("https://api.fonnte.com/send", {
+          method: "POST",
+          headers: {
+            Authorization: fonnteToken.trim(),
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(fonntePayload),
+        });
+        result = await fonnteResponse.json().catch(() => null);
+      }
+    }
+
+    if (!fonnteResponse.ok || result?.status === false) {
       console.error("[WhatsApp Gateway - Fonnte Error]", result);
       return NextResponse.json(
         {
@@ -69,7 +98,7 @@ export async function POST(req: NextRequest) {
           error: result?.reason || result?.message || "Gagal mengirim pesan via Fonnte Gateway.",
           details: result,
         },
-        { status: fonnteResponse.status }
+        { status: fonnteResponse.status || 400 }
       );
     }
 

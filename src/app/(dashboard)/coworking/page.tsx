@@ -432,14 +432,7 @@ export default function CoworkingPage() {
             <span>Cetak PDF Resmi</span>
           </Button>
 
-          <Button
-            size="sm"
-            onClick={() => setIsAddSpaceModalOpen(true)}
-            className="text-xs font-bold space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
-          >
-            <Plus className="w-4 h-4 text-amber-400" />
-            <span>Tambah Workspace</span>
-          </Button>
+
 
           <Button
             size="sm"

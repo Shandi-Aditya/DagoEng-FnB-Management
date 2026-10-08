@@ -125,15 +125,15 @@ describe("Multi-Business & 3-Dimensional Authorization (Role + Scope + Module)",
     expect(dagoNavNames).toContain("Dashboard");
     expect(dagoNavNames).toContain("POS Kasir");
     expect(dagoNavNames).toContain("Co-working Space");
-    expect(dagoNavNames).toContain("Pengaturan Platform");
+    expect(dagoNavNames).toContain("Master Data & Pengaturan");
     expect(dagoNavNames).not.toContain("Commercial Leases"); // Commercial is inactive
 
-    // Tenant Owner sees F&B items only, sees Tenant Settings (Pengaturan Mitra), and CANNOT see Organization-level Settings (Pengaturan Platform)
+    // Tenant Owner sees F&B items only, sees Tenant Settings (Master Data Mitra), and CANNOT see Organization-level Settings (Master Data & Pengaturan)
     expect(tenantNavNames).toContain("POS Kasir");
     expect(tenantNavNames).toContain("Smart Inventory");
-    expect(tenantNavNames).toContain("Pengaturan Mitra");
+    expect(tenantNavNames).toContain("Master Data Mitra");
     expect(tenantNavNames).not.toContain("Co-working Space");
     expect(tenantNavNames).not.toContain("Commercial Leases");
-    expect(tenantNavNames).not.toContain("Pengaturan Platform");
+    expect(tenantNavNames).not.toContain("Master Data & Pengaturan");
   });
 });

@@ -48,7 +48,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Building2: <Building2 className="w-4 h-4 text-purple-600" />,
 };
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, activeOrgModules, logout } = useAuth();
@@ -141,6 +141,7 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={onNavigate}
                 className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all group ${
                   isActive
                     ? "bg-brand-orange/10 text-brand-orange font-bold border-l-4 border-brand-orange pl-2.5"
@@ -185,7 +186,7 @@ export function Sidebar() {
           className="w-full flex items-center justify-center space-x-2 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
         >
           <LogOut className="w-3.5 h-3.5" />
-          <span>Keluar Sesi</span>
+          <span>{isCashier ? "Tutup Sesi / Keluar" : "Keluar Sesi"}</span>
         </button>
       </div>
 

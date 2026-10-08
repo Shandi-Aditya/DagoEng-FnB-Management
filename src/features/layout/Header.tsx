@@ -19,9 +19,10 @@ import {
   UserCheck,
   Check,
   ExternalLink,
+  Menu,
 } from "lucide-react";
 
-export function Header() {
+export function Header({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void } = {}) {
   const router = useRouter();
   const { user } = useAuth();
   const { activeOutletId, outlets, isAllOutlets, setOutlet } = useOutlet();
@@ -48,11 +49,20 @@ export function Header() {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-30">
-      {/* Left: Organization Title & Scope Context */}
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2">
-          <span className="font-bold text-sm text-slate-800 flex items-center space-x-1.5">
+    <header className="h-16 bg-white border-b border-slate-200 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30 gap-2">
+      {/* Left: Hamburger & Organization Title & Scope Context */}
+      <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
+        <button
+          onClick={onOpenMobileMenu}
+          className="lg:hidden p-2 -ml-1 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors shrink-0"
+          title="Buka Menu Navigasi"
+          aria-label="Buka Menu"
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        <div className="flex items-center space-x-2 truncate">
+          <span className="font-bold text-xs sm:text-sm text-slate-800 flex items-center space-x-1.5 truncate">
             {user?.scopeLevel === "ORGANIZATION" ? (
               <>
                 <Building className="w-4 h-4 text-brand-orange" />
@@ -138,12 +148,14 @@ export function Header() {
       </div>
 
       {/* Right: Scope Status Pill, Date, and Interactive Notification Center */}
-      <div className="flex items-center space-x-4">
-        <RoleAwareStatusPill />
+      <div className="flex items-center space-x-2 sm:space-x-4 shrink-0">
+        <div className="hidden md:block">
+          <RoleAwareStatusPill />
+        </div>
 
-        <div className="h-4 w-px bg-slate-200" />
+        <div className="hidden sm:block h-4 w-px bg-slate-200" />
 
-        <div className="flex items-center space-x-2 text-xs text-slate-500 font-medium">
+        <div className="hidden sm:flex items-center space-x-1.5 text-xs text-slate-500 font-medium">
           <Calendar className="w-3.5 h-3.5 text-slate-400" />
           <span>17 Sep 2026</span>
         </div>
