@@ -22,6 +22,7 @@ interface CashDrawerShiftModalProps {
   taxRatePercent?: number;
   tenantName?: string;
   tenantPhone?: string;
+  onConfirmClose?: (actualCash: number, notes?: string) => void;
 }
 
 export function CashDrawerShiftModal({
@@ -40,6 +41,7 @@ export function CashDrawerShiftModal({
   taxRatePercent = 10,
   tenantName = "Kopi Senja (Mitra Utama)",
   tenantPhone = "085737654572",
+  onConfirmClose,
 }: CashDrawerShiftModalProps) {
   const router = useRouter();
   const { user, logout } = useAuth();
@@ -163,7 +165,12 @@ _Sent via POS DagoEng Platform_`;
       docNo
     )}`;
 
-    // 1. Lock shift via backend API
+    // 1. Trigger local Shift state & closing calculation
+    if (onConfirmClose) {
+      onConfirmClose(cashInDrawer, `Tutup Sesi Kasir (${docNo})`);
+    }
+
+    // 2. Lock shift via backend API
     try {
       await fetch("/api/shifts", {
         method: "POST",

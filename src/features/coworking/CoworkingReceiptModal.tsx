@@ -19,6 +19,7 @@ export interface CoworkingReceiptData {
   outletAddress?: string;
   outletPhone?: string;
   bookingDate: string;
+  endDate?: string;
   startTime: string;
   endTime: string;
   duration: number;
@@ -186,7 +187,11 @@ export function CoworkingReceiptModal({
                 <div className="text-[11px] bg-slate-50 p-2 rounded border border-slate-100 space-y-1">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Tanggal Sesi:</span>
-                    <span className="font-bold text-slate-800">{receiptData.bookingDate}</span>
+                    <span className="font-bold text-slate-800">
+                      {receiptData.endDate && receiptData.endDate !== receiptData.bookingDate
+                        ? `${receiptData.bookingDate} s/d ${receiptData.endDate}`
+                        : receiptData.bookingDate}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Waktu / Jam:</span>

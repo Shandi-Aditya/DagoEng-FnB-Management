@@ -79,6 +79,8 @@ export default function PublicLandingPage() {
   const [activeSection, setActiveSection] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const isManualScrollingRef = React.useRef(false);
+  const scrollTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Hero Carousel State (Snappy 3-second transition)
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -93,12 +95,14 @@ export default function PublicLandingPage() {
       const scrollPos = window.scrollY;
       setIsScrolled(scrollPos > 20);
 
-      const sectionIds = ["about", "services", "outlets", "contact"];
+      if (isManualScrollingRef.current) return;
+
+      const sectionIds = ["services", "about", "outlets", "contact"];
       let current = "";
       for (const id of sectionIds) {
         const el = document.getElementById(id);
         if (el) {
-          const top = el.offsetTop - 140;
+          const top = el.offsetTop - 120;
           const height = el.offsetHeight;
           if (scrollPos >= top && scrollPos < top + height) {
             current = id;
@@ -111,7 +115,10 @@ export default function PublicLandingPage() {
 
     window.addEventListener("scroll", handleScroll, { passive: true });
     handleScroll();
-    return () => window.removeEventListener("scroll", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    };
   }, []);
 
   // Auto-advance hero carousel
@@ -139,14 +146,21 @@ export default function PublicLandingPage() {
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
     if (el) {
-      const navbarOffset = 80;
+      if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+      isManualScrollingRef.current = true;
+      setActiveSection(id);
+
+      const navbarOffset = 72;
       const elementPosition = el.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.pageYOffset - navbarOffset;
       window.scrollTo({
-        top: offsetPosition,
+        top: Math.max(0, offsetPosition),
         behavior: "smooth",
       });
-      setActiveSection(id);
+
+      scrollTimeoutRef.current = setTimeout(() => {
+        isManualScrollingRef.current = false;
+      }, 700);
     }
   };
 
@@ -155,8 +169,8 @@ export default function PublicLandingPage() {
 
       {/* 1. CLEAN & SPACIOUS GLASSMORPHISM NAVBAR */}
       <header
-        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ease-in-out animate-in fade-in slide-in-from-top-3 ${isScrolled
-          ? "bg-slate-950/80 backdrop-blur-2xl shadow-lg shadow-black/30 py-3"
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out ${isScrolled
+          ? "bg-slate-950/85 backdrop-blur-2xl shadow-lg shadow-black/30 py-3"
           : "bg-transparent py-4 sm:py-5"
           }`}
       >
@@ -187,11 +201,11 @@ export default function PublicLandingPage() {
             </div>
           </Link>
 
-          {/* Clean Desktop Nav Links */}
-          <nav className="hidden lg:flex items-center space-x-1.5 p-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 text-xs font-semibold text-slate-300">
+          {/* Clean Desktop Nav Links - Ordered matching page DOM flow */}
+          <nav className="hidden lg:flex items-center space-x-1 p-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 text-xs font-semibold text-slate-300">
             {[
-              { id: "about", label: "Tentang" },
               { id: "services", label: "Layanan" },
+              { id: "about", label: "Tentang" },
               { id: "outlets", label: "Cabang" },
               { id: "contact", label: "Kontak" },
             ].map((item) => {
@@ -200,9 +214,9 @@ export default function PublicLandingPage() {
                 <button
                   key={item.id}
                   onClick={() => scrollToSection(item.id)}
-                  className={`px-4 py-2 rounded-full transition-all duration-300 ease-out relative ${isActive
-                    ? "bg-gradient-to-r from-brand-orange to-orange-500 text-white shadow-md shadow-orange-500/30 font-bold scale-[1.03]"
-                    : "text-slate-300 hover:text-white hover:bg-white/10 active:scale-95"
+                  className={`px-4 py-2 rounded-full transition-all duration-200 ease-out select-none ${isActive
+                    ? "bg-brand-orange text-white font-bold shadow-md shadow-orange-500/25"
+                    : "text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/15"
                     }`}
                 >
                   {item.label}
@@ -258,8 +272,8 @@ export default function PublicLandingPage() {
           <div className="sm:hidden px-4 pt-3 pb-6 bg-slate-950/95 backdrop-blur-2xl border-b border-white/10 space-y-3 animate-in fade-in slide-in-from-top-3 duration-300">
             <div className="flex flex-col space-y-1.5 text-sm font-semibold text-slate-300">
               {[
-                { id: "about", label: "Tentang" },
                 { id: "services", label: "Layanan (F&B & Coworking)" },
+                { id: "about", label: "Tentang Dago" },
                 { id: "outlets", label: "Cabang Outlet" },
                 { id: "contact", label: "Kontak & Medsos" },
               ].map((item) => {
@@ -456,7 +470,7 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 4. SECTION: LAYANAN UTAMA DAGO (INFORM & DIRECT: F&B & COWORKING) */}
-      <section id="services" className="py-24 bg-[#0B0F17] relative">
+      <section id="services" className="py-24 bg-[#0B0F17] relative scroll-mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
 
           <div className="text-center max-w-2xl mx-auto space-y-2">
@@ -568,7 +582,7 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 5. SECTION: TENTANG DAGO (INFORM: EKOSISTEM TERPADU) */}
-      <section id="about" className="py-24 bg-[#0E131F] relative">
+      <section id="about" className="py-24 bg-[#0E131F] relative scroll-mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
 
@@ -668,7 +682,7 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 6. SECTION: CABANG OUTLET (OVERVIEW DENGAN VIEW BRANCHES) */}
-      <section id="outlets" className="py-24 bg-[#0B0F17] relative">
+      <section id="outlets" className="py-24 bg-[#0B0F17] relative scroll-mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
 
           <div className="text-center max-w-2xl mx-auto space-y-2">
@@ -794,7 +808,7 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 8. SECTION: KONTAK & FOOTER */}
-      <section id="contact" className="py-20 bg-[#0B0F17] border-t border-white/10 text-slate-300 relative">
+      <section id="contact" className="py-20 bg-[#0B0F17] border-t border-white/10 text-slate-300 relative scroll-mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-12 border-b border-white/10">
 

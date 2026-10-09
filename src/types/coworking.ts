@@ -50,7 +50,9 @@ export interface CoworkingBooking {
   spaceType: SpaceType;
   bookingType: "HOURLY" | "DAILY" | "MONTHLY";
   date: string;
+  endDate?: string;
   startTime: string;
+  endTime?: string;
   duration: number; // in hours or days
   totalAmount: number;
   paymentStatus: "PAID" | "PENDING";

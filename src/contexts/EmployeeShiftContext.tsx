@@ -131,7 +131,8 @@ interface EmployeeShiftContextType {
   toggleEmployeeStatus: (id: string) => void;
   deleteEmployee: (id: string) => void;
   openShift: (shiftName: string, openingCash: number, cashierName?: string) => ShiftRecord;
-  closeShift: (shiftId: string, actualCash: number, closingNotes?: string) => void;
+  recordShiftTransaction: (cashAmount: number, nonCashAmount: number, outletId?: string) => void;
+  closeShift: (shiftId: string, actualCash: number, closingNotes?: string, metrics?: { cashSales?: number; nonCashSales?: number }) => void;
   resetEmployeeShiftData: () => void;
 }
 
@@ -154,7 +155,16 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       const savedEmp = localStorage.getItem(STORAGE_KEY_EMPLOYEES);
       const savedShf = localStorage.getItem(STORAGE_KEY_SHIFTS);
       if (savedEmp) setEmployees(JSON.parse(savedEmp));
-      if (savedShf) setShifts(JSON.parse(savedShf));
+      if (savedShf) {
+        const parsed = JSON.parse(savedShf);
+        if (Array.isArray(parsed)) {
+          setShifts(parsed);
+        } else {
+          setShifts([]);
+        }
+      } else {
+        setShifts([]);
+      }
     } catch (e) {
       console.error("Failed to load employee & shift data", e);
     } finally {
@@ -308,12 +318,44 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     return newShift;
   };
 
-  const closeShift = (shiftId: string, actualCash: number, closingNotes?: string) => {
+  const recordShiftTransaction = (cashAmount: number, nonCashAmount: number, outletId?: string) => {
+    setShifts((prev) => {
+      const activeIdx = prev.findIndex(
+        (s) => (s.status === "ACTIVE" || s.status === "OPEN") && (!outletId || outletId === "ALL" || s.outletId === outletId)
+      );
+      if (activeIdx === -1) return prev;
+
+      const current = prev[activeIdx];
+      const newCashSales = (current.cashSales || 0) + (cashAmount || 0);
+      const newNonCashSales = (current.nonCashSales || 0) + (nonCashAmount || 0);
+      const newExpected = current.openingCash + newCashSales - (current.refundAmount || 0);
+
+      const updated = {
+        ...current,
+        cashSales: newCashSales,
+        nonCashSales: newNonCashSales,
+        expectedCash: newExpected,
+      };
+
+      const next = [...prev];
+      next[activeIdx] = updated;
+      return next;
+    });
+  };
+
+  const closeShift = (
+    shiftId: string,
+    actualCash: number,
+    closingNotes?: string,
+    metrics?: { cashSales?: number; nonCashSales?: number }
+  ) => {
     const shift = shifts.find((s) => s.id === shiftId);
     if (!shift) return;
 
     const nowFormatted = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) + " WITA";
-    const expected = shift.openingCash + shift.cashSales - shift.refundAmount;
+    const finalCashSales = metrics?.cashSales !== undefined ? metrics.cashSales : (shift.cashSales || 0);
+    const finalNonCashSales = metrics?.nonCashSales !== undefined ? metrics.nonCashSales : (shift.nonCashSales || 0);
+    const expected = shift.openingCash + finalCashSales - (shift.refundAmount || 0);
     const variance = actualCash - expected;
 
     setShifts((prev) =>
@@ -322,12 +364,15 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
           ? {
               ...s,
               status: "CLOSED",
+              cashSales: finalCashSales,
+              nonCashSales: finalNonCashSales,
+              expectedCash: expected,
               endTime: nowFormatted,
               actualCash,
               cashVariance: variance,
               closingNotes,
               closedAt: nowFormatted,
-              closedBy: user?.name || "Ni Kadek Sri",
+              closedBy: user?.name || s.assignedCashierName || "Ni Kadek Sri",
             }
           : s
       )
@@ -381,6 +426,7 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
         toggleEmployeeStatus,
         deleteEmployee,
         openShift,
+        recordShiftTransaction,
         closeShift,
         resetEmployeeShiftData,
       }}

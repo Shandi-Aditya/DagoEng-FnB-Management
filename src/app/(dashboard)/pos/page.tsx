@@ -13,6 +13,7 @@ import { useSettings } from "@/contexts/SettingsContext";
 import { calculateOrderPricing, calculateCoworkingPricing, validateVoucherCode, PromoConfig } from "@/lib/promo";
 import { LOYALTY_VOUCHERS } from "@/features/pos/mock-data";
 import { useCoworking } from "@/contexts/CoworkingContext";
+import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
 import { CoworkingSpaceItem, SpaceType } from "@/types/coworking";
 import {
@@ -63,7 +64,6 @@ import {
 import { Button } from "@/components/ui/button";
 
 const COWORKING_TIME_SLOTS = [
-  "08:00",
   "09:00",
   "10:00",
   "11:00",
@@ -74,8 +74,6 @@ const COWORKING_TIME_SLOTS = [
   "16:00",
   "17:00",
   "18:00",
-  "19:00",
-  "20:00",
 ];
 
 function parseHour(timeStr: string): number {
@@ -119,6 +117,7 @@ export default function POSPage() {
   const { logActivity } = useActivityLog();
   const { settings } = useSettings();
   const { spaces: cwSpaces, bookings: cwBookings, bookSpace: cwBookSpace } = useCoworking();
+  const { activeShift, openShift, closeShift, recordShiftTransaction } = useEmployeeShift();
 
   // Mode: FNB vs COWORKING
   const [posMode, setPosMode] = useState<"FNB" | "COWORKING">("FNB");
@@ -128,7 +127,7 @@ export default function POSPage() {
   const [cwSpaceTypeFilter, setCwSpaceTypeFilter] = useState<string>("ALL");
   const [cwSearchQuery, setCwSearchQuery] = useState<string>("");
   const [cwDate, setCwDate] = useState<string>(new Date().toISOString().split("T")[0]);
-  const [cwStartTime, setCwStartTime] = useState<string>(() => getCurrentTimeFormatted());
+  const [cwStartTime, setCwStartTime] = useState<string>("09:00");
   const [cwDuration, setCwDuration] = useState<number>(2); // hours
   const [cwUsageType, setCwUsageType] = useState<"PERSONAL" | "GROUP">("PERSONAL");
   const [cwCompanyName, setCwCompanyName] = useState<string>("");
@@ -145,12 +144,17 @@ export default function POSPage() {
   const [lastCoworkReceiptData, setLastCoworkReceiptData] = useState<CoworkingReceiptData | null>(null);
   const [isCoworkReceiptModalOpen, setIsCoworkReceiptModalOpen] = useState<boolean>(false);
 
+  // Shift & Cash Drawer Quick Controls
+  const [isPosOpenShiftModalOpen, setIsPosOpenShiftModalOpen] = useState<boolean>(false);
+  const [posOpenShiftName, setPosOpenShiftName] = useState<string>("Shift Pagi (08:00 - 16:00)");
+  const [posOpeningCashInput, setPosOpeningCashInput] = useState<number>(500000);
+
   // Mount state for SSR Hydration safety
   const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
-    setCwStartTime(getCurrentTimeFormatted());
+    setCwStartTime("09:00");
   }, []);
 
   const [tenantSettingsVersion, setTenantSettingsVersion] = useState(0);
@@ -578,6 +582,13 @@ export default function POSPage() {
       };
     }
 
+    // 5. Cross-Module: Record shift cash and non-cash sales metrics
+    recordShiftTransaction(
+      paymentData.method === "CASH" ? grandTotal : 0,
+      paymentData.method !== "CASH" ? grandTotal : 0,
+      activeOutletId
+    );
+
     // 6. Audit Trail Logging
     logActivity({
       module: "POS",
@@ -717,6 +728,9 @@ export default function POSPage() {
 
   const cwBaseAmount = useMemo(() => {
     if (!selectedSpace) return 0;
+    if (cwDuration >= 8 && selectedSpace.dailyRate) {
+      return selectedSpace.dailyRate;
+    }
     return (selectedSpace.hourlyRate || 15000) * cwDuration;
   }, [selectedSpace, cwDuration]);
 
@@ -819,6 +833,13 @@ export default function POSPage() {
       }
     }
 
+    // Record Shift Transaction for Co-Working Payment
+    recordShiftTransaction(
+      cwPaymentMethod === "CASH" ? cwPricing.total : 0,
+      cwPaymentMethod !== "CASH" ? cwPricing.total : 0,
+      activeOutletId
+    );
+
     logActivity({
       module: "COWORKING",
       action: "PAYMENT_SUCCESS",
@@ -894,8 +915,40 @@ export default function POSPage() {
           </p>
         </div>
 
-        {/* Mode Switcher & Tax Controls */}
+        {/* Mode Switcher, Shift Status & Tax Controls */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Shift Status Indicator / Quick Action for Cashier */}
+          {activeShift ? (
+            <div className="flex items-center space-x-2 bg-emerald-50 border border-emerald-300 px-3 py-1 rounded-xl text-xs shadow-2xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <div className="flex flex-col">
+                <span className="font-bold text-emerald-900 leading-tight">{activeShift.shiftName}</span>
+                <span className="text-[10px] text-emerald-700 font-mono">Modal: {formatCurrencyIDR(activeShift.openingCash)}</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                type="button"
+                onClick={() => setIsClosingShiftModalOpen(true)}
+                className="h-6 text-[10px] font-bold px-2 border-emerald-400 text-emerald-800 hover:bg-emerald-100 rounded-lg ml-1 shadow-2xs"
+                title="Tutup Shift & Rekonsiliasi Kasir"
+              >
+                Tutup Shift
+              </Button>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              type="button"
+              onClick={() => setIsPosOpenShiftModalOpen(true)}
+              className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-1.5"
+              title="Buka Shift Kasir Baru di POS"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>+ Buka Shift Kasir</span>
+            </Button>
+          )}
+
           {/* POS Mode Switcher */}
           <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200">
             <button
@@ -1589,17 +1642,28 @@ export default function POSPage() {
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                    <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
                       <div className="flex items-center space-x-1 text-slate-600">
                         <Users className="w-3.5 h-3.5 text-slate-400" />
                         <span className="font-medium text-[11px]">{space.capacity} Tamu</span>
                       </div>
 
-                      <div className="text-right">
-                        <span className="font-mono font-black text-xs text-blue-600">
-                          {formatCurrencyIDR(space.hourlyRate)}
+                      <div className="flex items-center space-x-2">
+                        <div className="text-right">
+                          <span className="font-mono font-black text-xs text-blue-600">
+                            {formatCurrencyIDR(space.hourlyRate)}
+                          </span>
+                          <span className="text-[10px] text-slate-400">/jam</span>
+                        </div>
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                            isSelected
+                              ? "bg-slate-900 text-white shadow-2xs"
+                              : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                          }`}
+                        >
+                          {isSelected ? "Dipilih ✓" : "Lihat Paket →"}
                         </span>
-                        <span className="text-[10px] text-slate-400">/jam</span>
                       </div>
                     </div>
                   </div>
@@ -1639,37 +1703,119 @@ export default function POSPage() {
                 </div>
               )}
 
-              {/* Date & Duration */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="space-y-1">
+              {/* Date Input */}
+              <div className="space-y-1 text-xs">
+                <label className="font-bold text-slate-700 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Tanggal Booking</span>
+                </label>
+                <input
+                  type="date"
+                  value={cwDate}
+                  min={new Date().toISOString().split("T")[0]}
+                  onChange={(e) => setCwDate(e.target.value)}
+                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                />
+              </div>
+
+              {/* Pilihan Paket Durasi Sewa (Min. 2 Jam) */}
+              <div className="space-y-2 pt-1 text-xs">
+                <div className="flex items-center justify-between">
                   <label className="font-bold text-slate-700 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Tanggal</span>
+                    <Clock className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Pilihan Paket Durasi Sewa</span>
                   </label>
-                  <input
-                    type="date"
-                    value={cwDate}
-                    min={new Date().toISOString().split("T")[0]}
-                    onChange={(e) => setCwDate(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
-                  />
+                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    Min. 2 Jam
+                  </span>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Durasi</span>
-                  </label>
+                {/* 4 Quick Package Cards */}
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    {
+                      hours: 2,
+                      title: "Paket 2 Jam",
+                      tag: "Minimal",
+                      icon: "⚡",
+                      price: (selectedSpace?.hourlyRate || 15000) * 2,
+                    },
+                    {
+                      hours: 3,
+                      title: "Paket 3 Jam",
+                      tag: "Fokus Kerja",
+                      icon: "💼",
+                      price: (selectedSpace?.hourlyRate || 15000) * 3,
+                    },
+                    {
+                      hours: 4,
+                      title: "Paket 4 Jam",
+                      tag: "Setengah Hari",
+                      icon: "☕",
+                      price: (selectedSpace?.hourlyRate || 15000) * 4,
+                    },
+                    {
+                      hours: 8,
+                      title: "Paket 8 Jam",
+                      tag: "Full Day",
+                      icon: "🚀",
+                      price: selectedSpace?.dailyRate || (selectedSpace?.hourlyRate || 15000) * 8,
+                    },
+                  ].map((pkg) => {
+                    const isPkgActive = cwDuration === pkg.hours;
+                    return (
+                      <button
+                        key={pkg.hours}
+                        type="button"
+                        onClick={() => setCwDuration(pkg.hours)}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          isPkgActive
+                            ? "bg-slate-900 text-white border-slate-900 shadow-sm ring-2 ring-slate-900/20"
+                            : "bg-slate-50 hover:bg-slate-100/80 border-slate-200 text-slate-800"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[11px] flex items-center gap-1">
+                            <span>{pkg.icon}</span>
+                            <span>{pkg.title}</span>
+                          </span>
+                          <span
+                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                              isPkgActive ? "bg-white/20 text-white" : "bg-slate-200/80 text-slate-600"
+                            }`}
+                          >
+                            {pkg.tag}
+                          </span>
+                        </div>
+                        <div
+                          className={`text-xs font-mono font-black mt-1 ${
+                            isPkgActive ? "text-amber-300" : "text-blue-700"
+                          }`}
+                        >
+                          {formatCurrencyIDR(pkg.price)}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Custom / Ubah Durasi Lainnya */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-500 font-medium">Ubah / Durasi Kustom:</span>
                   <select
                     value={cwDuration}
                     onChange={(e) => setCwDuration(Number(e.target.value))}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                    className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 outline-none"
                   >
-                    <option value={1}>1 Jam</option>
-                    <option value={2}>2 Jam</option>
+                    <option value={2}>2 Jam (Minimal Booking)</option>
                     <option value={3}>3 Jam</option>
                     <option value={4}>4 Jam (Setengah Hari)</option>
+                    <option value={5}>5 Jam</option>
+                    <option value={6}>6 Jam</option>
+                    <option value={7}>7 Jam</option>
                     <option value={8}>8 Jam (Seharian Penuh)</option>
+                    <option value={10}>10 Jam</option>
+                    <option value={12}>12 Jam (Maksimal)</option>
                   </select>
                 </div>
               </div>
@@ -1679,14 +1825,14 @@ export default function POSPage() {
                 <div className="flex items-center justify-between text-xs">
                   <label className="font-bold text-slate-700 flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Waktu Mulai & Selesai (Otomatis)</span>
+                    <span>Jam Sewa (Operasional 09:00 - 18:00)</span>
                   </label>
                   <button
                     type="button"
-                    onClick={() => setCwStartTime(getCurrentTimeFormatted())}
+                    onClick={() => setCwStartTime("09:00")}
                     className="text-[10px] text-blue-600 font-bold hover:underline"
                   >
-                    Set Waktu Sekarang
+                    Set Jam Buka (09:00)
                   </button>
                 </div>
 
@@ -1696,6 +1842,8 @@ export default function POSPage() {
                     <input
                       type="time"
                       value={cwStartTime}
+                      min="09:00"
+                      max="18:00"
                       onChange={(e) => setCwStartTime(e.target.value)}
                       className="px-2 py-0.5 bg-white border border-blue-300 rounded font-mono font-bold text-xs text-slate-900 outline-none"
                     />
@@ -2100,7 +2248,7 @@ export default function POSPage() {
           onClose={() => setIsClosingShiftModalOpen(false)}
           cashierName={user?.name || "Kasir Bertugas"}
           outletName={activeOutlet?.name || "Singaraja"}
-          initialCash={0}
+          initialCash={activeShift ? activeShift.openingCash : 500000}
           totalCashSales={liveCashSales}
           totalNonCashSales={liveNonCashSales}
           totalTransactionsCount={liveTransactionsCount}
@@ -2109,7 +2257,93 @@ export default function POSPage() {
           totalDiscounts={liveDiscounts}
           isTaxEnabled={isTaxEnabled}
           taxRatePercent={taxRatePercent}
+          onConfirmClose={(actualCash, notes) => {
+            if (activeShift) {
+              closeShift(activeShift.id, actualCash, notes, {
+                cashSales: liveCashSales,
+                nonCashSales: liveNonCashSales,
+              });
+            }
+          }}
         />
+      )}
+
+      {/* 7. Quick Open Shift Modal for POS Cashier */}
+      {isPosOpenShiftModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+              <div className="flex items-center space-x-2">
+                <Clock className="w-5 h-5 text-emerald-600" />
+                <h3 className="text-base font-bold text-slate-900">Buka Shift Kasir Baru (POS)</h3>
+              </div>
+              <button
+                onClick={() => setIsPosOpenShiftModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                openShift(posOpenShiftName, Number(posOpeningCashInput), user?.name || "Kasir Bertugas");
+                setIsPosOpenShiftModalOpen(false);
+                setPosToast(`Shift "${posOpenShiftName}" berhasil dibuka dengan Modal Kas ${formatCurrencyIDR(Number(posOpeningCashInput))}. Selamat bertugas!`);
+                setTimeout(() => setPosToast(""), 4000);
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Nama Sesi Shift</label>
+                <select
+                  value={posOpenShiftName}
+                  onChange={(e) => setPosOpenShiftName(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white text-xs font-semibold"
+                >
+                  <option value="Shift Pagi (08:00 - 16:00)">Shift Pagi (08:00 - 16:00)</option>
+                  <option value="Shift Sore (14:00 - 22:00)">Shift Sore (14:00 - 22:00)</option>
+                  <option value="Shift Malam (16:00 - 23:00)">Shift Malam (16:00 - 23:00)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">Modal Kas Awal di Laci / Cash Drawer (Rp) *</label>
+                <input
+                  type="number"
+                  required
+                  min={0}
+                  step={10000}
+                  value={posOpeningCashInput}
+                  onChange={(e) => setPosOpeningCashInput(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-800"
+                  placeholder="Contoh: 500000"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Uang pecahan fisik di laci kasir untuk modal uang kembalian.</p>
+              </div>
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsPosOpenShiftModalOpen(false)}
+                  className="rounded-xl"
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs"
+                >
+                  Buka Shift & Mulai Transaksi
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

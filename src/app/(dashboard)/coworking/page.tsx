@@ -255,15 +255,50 @@ export default function CoworkingPage() {
     showToast(`Data Co-working (${activeTab === "MEMBERS" ? "Member" : "Booking"}) berhasil diexport ke Excel (.xls)!`);
   };
 
-  // New Booking Form States
+  // New Booking Form States (Unified & Consistent with Customer Portal)
+  const todayStr = new Date().toISOString().split("T")[0];
   const [bookGuestName, setBookGuestName] = useState("");
   const [bookPhone, setBookPhone] = useState("");
   const [bookEmail, setBookEmail] = useState("");
   const [bookCompany, setBookCompany] = useState("");
   const [bookSpaceId, setBookSpaceId] = useState(spaces[0]?.id || "");
-  const [bookType, setBookType] = useState<"HOURLY" | "DAILY" | "MONTHLY">("DAILY");
-  const [bookDuration, setBookDuration] = useState<number>(1);
+  const [bookType, setBookType] = useState<"HOURLY" | "DAILY" | "MONTHLY">("HOURLY");
+  const [bookDurationHours, setBookDurationHours] = useState<number>(2); // Min 2 hours
+  const [bookDailyPreset, setBookDailyPreset] = useState<"1_DAY" | "3_DAYS" | "7_DAYS" | "14_DAYS" | "CUSTOM_RANGE">("1_DAY");
+  const [bookStartDate, setBookStartDate] = useState(todayStr);
+  const [bookEndDate, setBookEndDate] = useState(todayStr);
+  const [bookStartTime, setBookStartTime] = useState("09:00");
   const [bookPaymentMethod, setBookPaymentMethod] = useState<string>("QRIS DagoPay");
+  const [bookIsImmediateCheckIn, setBookIsImmediateCheckIn] = useState<boolean>(true);
+  const [isMasterManageMode, setIsMasterManageMode] = useState(false);
+
+  const OPERATIONAL_TIME_SLOTS = [
+    "09:00",
+    "10:00",
+    "11:00",
+    "12:00",
+    "13:00",
+    "14:00",
+    "15:00",
+    "16:00",
+    "17:00",
+    "18:00",
+  ];
+
+  const calculateDaysCount = (start: string, end: string) => {
+    if (!start || !end) return 1;
+    const s = new Date(start);
+    const e = new Date(end);
+    const diffTime = e.getTime() - s.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return Math.max(1, isNaN(diffDays) ? 1 : diffDays);
+  };
+
+  const calculateHourlyEndTime = (startTime: string, hours: number) => {
+    const [h, m] = (startTime || "09:00").split(":").map(Number);
+    const endH = Math.min(23, (h || 9) + (hours || 2));
+    return `${endH.toString().padStart(2, "0")}:${(m || 0).toString().padStart(2, "0")}`;
+  };
 
   // New Member Form States
   const [newMemName, setNewMemName] = useState("");
@@ -288,16 +323,56 @@ export default function CoworkingPage() {
     const selectedSpace = spaces.find((s) => s.id === bookSpaceId);
     if (!selectedSpace) return;
 
-    const rate =
-      bookType === "HOURLY"
-        ? selectedSpace.hourlyRate
-        : bookType === "DAILY"
-          ? selectedSpace.dailyRate
-          : selectedSpace.monthlyRate || selectedSpace.dailyRate * 20;
+    let computedDuration = 1;
+    let computedTotal = 0;
+    let computedEndDate: string | undefined = undefined;
+    let computedEndTime: string | undefined = undefined;
 
-    const total = rate * bookDuration;
+    if (bookType === "HOURLY") {
+      computedDuration = Math.max(2, Number(bookDurationHours));
+      computedTotal = selectedSpace.hourlyRate * computedDuration;
+      computedEndTime = `${calculateHourlyEndTime(bookStartTime, computedDuration)} WITA`;
+    } else if (bookType === "DAILY") {
+      if (bookDailyPreset === "1_DAY") {
+        computedDuration = 1;
+        computedEndDate = bookStartDate;
+      } else if (bookDailyPreset === "3_DAYS") {
+        computedDuration = 3;
+        const d = new Date(bookStartDate);
+        d.setDate(d.getDate() + 2);
+        computedEndDate = d.toISOString().split("T")[0];
+      } else if (bookDailyPreset === "7_DAYS") {
+        computedDuration = 7;
+        const d = new Date(bookStartDate);
+        d.setDate(d.getDate() + 6);
+        computedEndDate = d.toISOString().split("T")[0];
+      } else if (bookDailyPreset === "14_DAYS") {
+        computedDuration = 14;
+        const d = new Date(bookStartDate);
+        d.setDate(d.getDate() + 13);
+        computedEndDate = d.toISOString().split("T")[0];
+      } else {
+        // CUSTOM_RANGE
+        computedDuration = calculateDaysCount(bookStartDate, bookEndDate);
+        computedEndDate = bookEndDate;
+      }
+      computedTotal = selectedSpace.dailyRate * computedDuration;
+      computedEndTime = "18:00 WITA";
+    } else {
+      // MONTHLY
+      computedDuration = 30;
+      const d = new Date(bookStartDate);
+      d.setDate(d.getDate() + 29);
+      computedEndDate = d.toISOString().split("T")[0];
+      computedTotal = selectedSpace.monthlyRate || selectedSpace.dailyRate * 20;
+      computedEndTime = "Akses Penuh 30 Hari";
+    }
+
     const nowTime = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA";
-    const dateFormatted = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+    const dateFormatted = new Date(bookStartDate).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+    const endDateFormatted = computedEndDate
+      ? new Date(computedEndDate).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
+      : undefined;
 
     bookSpace({
       guestName: bookGuestName.trim(),
@@ -309,17 +384,20 @@ export default function CoworkingPage() {
       spaceType: selectedSpace.type,
       bookingType: bookType,
       date: dateFormatted,
-      startTime: nowTime,
-      duration: bookDuration,
-      price: total,
+      endDate: endDateFormatted,
+      startTime: bookType === "HOURLY" ? `${bookStartTime} WITA` : "09:00 WITA",
+      endTime: computedEndTime,
+      duration: computedDuration,
+      price: computedTotal,
       discount: 0,
-      totalAmount: total,
-      paidAmount: total,
+      totalAmount: computedTotal,
+      paidAmount: computedTotal,
       remainingAmount: 0,
       paymentStatus: "PAID",
       paymentMethod: bookPaymentMethod,
       paymentRef: `PAY-CWK-${Date.now().toString().slice(-6)}`,
       paymentTimestamp: `${dateFormatted} ${nowTime}`,
+      checkInStatus: bookIsImmediateCheckIn ? "CHECKED_IN" : "RESERVED",
     });
 
     setIsNewBookingModalOpen(false);
@@ -327,7 +405,9 @@ export default function CoworkingPage() {
     setBookPhone("");
     setBookEmail("");
     setBookCompany("");
-    showToast(`Booking ${selectedSpace.name} atas nama ${bookGuestName} berhasil dan berstatus CHECKED_IN!`);
+    showToast(
+      `Booking ${selectedSpace.name} (${bookGuestName}) berhasil disimpan [${bookIsImmediateCheckIn ? "CHECKED_IN - SEDANG AKTIF" : "RESERVED - TERJADWAL"}]!`
+    );
   };
 
   const handleCreateMember = (e: React.FormEvent) => {
@@ -434,6 +514,34 @@ export default function CoworkingPage() {
 
 
 
+          {(user?.role === "OWNER" || user?.role === "ADMIN") && (
+            <>
+              <Button
+                size="sm"
+                variant={isMasterManageMode ? "default" : "outline"}
+                onClick={() => setIsMasterManageMode(!isMasterManageMode)}
+                className={`text-xs space-x-1.5 font-bold transition-all ${isMasterManageMode
+                    ? "bg-purple-700 hover:bg-purple-800 text-white shadow-xs"
+                    : "border-purple-300 text-purple-700 hover:bg-purple-50"
+                  }`}
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                <span>{isMasterManageMode ? "Tutup Mode Master" : "Kelola Master Ruang"}</span>
+              </Button>
+
+              {isMasterManageMode && (
+                <Button
+                  size="sm"
+                  onClick={() => setIsAddSpaceModalOpen(true)}
+                  className="text-xs font-bold space-x-1 bg-purple-600 hover:bg-purple-700 text-white shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Ruangan</span>
+                </Button>
+              )}
+            </>
+          )}
+
           <Button
             size="sm"
             variant="outline"
@@ -507,6 +615,23 @@ export default function CoworkingPage() {
       {/* TAB 1: DENAH RUANG & MEJA */}
       {activeTab === "SPACES" && (
         <div className="space-y-4 animate-in fade-in">
+          {isMasterManageMode && (
+            <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex items-center justify-between text-xs text-purple-900 font-medium animate-in fade-in">
+              <div className="flex items-center space-x-2">
+                <ShieldCheck className="w-4 h-4 text-purple-600" />
+                <span><strong>Mode Kelola Master Ruangan Aktif:</strong> Anda dapat mengubah data teknis tarif, fasilitas, dan foto ruang atau menambah unit baru.</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsAddSpaceModalOpen(true)}
+                className="text-xs h-7 border-purple-300 text-purple-700 bg-white hover:bg-purple-100 font-bold"
+              >
+                + Tambah Ruang Baru
+              </Button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {spaces.map((sp) => {
               const isOccupied = sp.status === "OCCUPIED";
@@ -528,42 +653,46 @@ export default function CoworkingPage() {
                           alt={sp.name}
                           className="w-full h-full object-cover"
                         />
-                        <div className="absolute top-2 right-2 flex items-center space-x-1">
-                          <button
-                            onClick={() => handleOpenEditSpace(sp)}
-                            className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-blue-600 shadow-xs transition-all"
-                            title="Edit Workspace"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteSpace(sp.id)}
-                            className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-rose-600 shadow-xs transition-all"
-                            title="Hapus Workspace"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        {isMasterManageMode && (
+                          <div className="absolute top-2 right-2 flex items-center space-x-1">
+                            <button
+                              onClick={() => handleOpenEditSpace(sp)}
+                              className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-blue-600 shadow-xs transition-all"
+                              title="Edit Workspace"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSpace(sp.id)}
+                              className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-rose-600 shadow-xs transition-all"
+                              title="Hapus Workspace"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="relative w-full h-24 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-200 flex items-center justify-center text-slate-400">
                         <Laptop className="w-8 h-8 opacity-30" />
-                        <div className="absolute top-2 right-2 flex items-center space-x-1">
-                          <button
-                            onClick={() => handleOpenEditSpace(sp)}
-                            className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-blue-600 shadow-xs transition-all"
-                            title="Edit Workspace"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteSpace(sp.id)}
-                            className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-rose-600 shadow-xs transition-all"
-                            title="Hapus Workspace"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        {isMasterManageMode && (
+                          <div className="absolute top-2 right-2 flex items-center space-x-1">
+                            <button
+                              onClick={() => handleOpenEditSpace(sp)}
+                              className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-blue-600 shadow-xs transition-all"
+                              title="Edit Workspace"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteSpace(sp.id)}
+                              className="p-1.5 rounded-lg bg-white/90 text-slate-700 hover:bg-white hover:text-rose-600 shadow-xs transition-all"
+                              title="Hapus Workspace"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -682,8 +811,14 @@ export default function CoworkingPage() {
                         <span className="text-[10px] text-slate-400 block">{b.spaceType}</span>
                       </td>
                       <td className="p-3">
-                        <p className="font-semibold">{b.date}</p>
-                        <p className="text-[10px] text-slate-500">Mulai: {b.startTime} ({b.duration} {b.bookingType === "HOURLY" ? "Jam" : "Hari"})</p>
+                        <p className="font-semibold text-slate-900">
+                          {b.endDate && b.endDate !== b.date ? `${b.date} s/d ${b.endDate}` : b.date}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          {b.bookingType === "HOURLY"
+                            ? `Jam: ${b.startTime} ${b.endTime ? `– ${b.endTime}` : ""} (${b.duration} Jam)`
+                            : `Durasi: ${b.duration} Hari ${b.endTime ? `(${b.startTime} – ${b.endTime})` : ""}`}
+                        </p>
                       </td>
                       <td className="p-3">
                         <p className="font-bold font-mono text-slate-900">{formatCurrencyIDR(b.totalAmount)}</p>
@@ -730,6 +865,7 @@ export default function CoworkingPage() {
                                 outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
                                 outletPhone: "(0362) 23456",
                                 bookingDate: b.date,
+                                endDate: b.endDate,
                                 startTime: b.startTime,
                                 endTime,
                                 duration: b.duration,
@@ -923,122 +1059,480 @@ export default function CoworkingPage() {
         </Card>
       )}
 
-      {/* MODAL 1: BUAT BOOKING & CHECK-IN */}
+      {/* MODAL 1: BUAT BOOKING & CHECK-IN (HARMONIZED & CONSISTENT WITH PACKAGES & DATE RANGE) */}
       {isNewBookingModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 border border-slate-200 space-y-4 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-sm text-slate-900">Buat Booking & Check-In Co-working</h3>
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center font-bold">
+                  <Laptop className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">Buat Booking & Check-In Co-working</h3>
+                  <p className="text-[11px] text-slate-500">Pilih paket durasi, slot jam operasional, atau rentang tanggal sewa</p>
+                </div>
+              </div>
               <button
                 onClick={() => setIsNewBookingModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center font-bold transition-all"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateBooking} className="space-y-3 text-xs">
-              <div className="space-y-1">
-                <label className="font-bold text-slate-700">Nama Tamu / Penyewa *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Contoh: Sarah Jenkins"
-                  value={bookGuestName}
-                  onChange={(e) => setBookGuestName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Nomor WhatsApp *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="+62 812-xxxx-xxxx"
-                    value={bookPhone}
-                    onChange={(e) => setBookPhone(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl font-mono"
-                  />
+            {/* Selected Workspace Card Preview */}
+            {(() => {
+              const currentSelectedSpace = spaces.find((s) => s.id === bookSpaceId) || spaces[0];
+              return (
+                <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-white text-slate-700 border border-slate-200">
+                        {currentSelectedSpace?.type.replace("_", " ")}
+                      </span>
+                      <h4 className="font-black text-sm text-slate-900 mt-1">{currentSelectedSpace?.name}</h4>
+                      <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <MapPin className="w-3 h-3 text-slate-400" />
+                        <span>{currentSelectedSpace?.area} &bull; Kapasitas: {currentSelectedSpace?.capacity} Orang</span>
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 font-bold block">Tarif Sewa</span>
+                      <p className="font-black text-xs text-blue-600 font-mono">
+                        {formatCurrencyIDR(currentSelectedSpace?.hourlyRate || 0)} <span className="text-[10px] font-normal text-slate-500">/ jam</span>
+                      </p>
+                      <p className="font-bold text-[11px] text-slate-700 font-mono">
+                        {formatCurrencyIDR(currentSelectedSpace?.dailyRate || 0)} <span className="text-[10px] font-normal text-slate-500">/ hari</span>
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Perusahaan / Afiliasi</label>
-                  <input
-                    type="text"
-                    placeholder="Contoh: Remote Nomad Tech"
-                    value={bookCompany}
-                    onChange={(e) => setBookCompany(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl"
-                  />
-                </div>
-              </div>
+              );
+            })()}
 
+            <form onSubmit={handleCreateBooking} className="space-y-4 text-xs">
+              {/* Workspace Selection */}
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">Pilih Ruang / Meja</label>
+                <label className="font-bold text-slate-700">Pilih Ruang / Meja Kerja</label>
                 <select
                   value={bookSpaceId}
                   onChange={(e) => setBookSpaceId(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl bg-white font-bold"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
                   {spaces.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} ({s.status === "AVAILABLE" ? "Tersedia" : "Terisi"})
+                      {s.name} ({s.type.replace("_", " ")} &bull; {s.status === "AVAILABLE" ? "🟢 Tersedia" : "🔴 Terisi"})
                     </option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Tipe Sewa</label>
-                  <select
-                    value={bookType}
-                    onChange={(e) => setBookType(e.target.value as any)}
-                    className="w-full px-2 py-2 border rounded-xl bg-white text-xs"
+              {/* Booking Mode Switcher Tabs */}
+              <div className="space-y-1.5">
+                <label className="font-bold text-slate-700">Tipe Sewa & Paket</label>
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBookType("HOURLY");
+                      setBookDurationHours(2);
+                    }}
+                    className={`py-2 px-2 rounded-xl text-center font-bold text-xs transition-all ${bookType === "HOURLY"
+                        ? "bg-white text-blue-700 shadow-xs border border-blue-200"
+                        : "text-slate-600 hover:text-slate-900"
+                      }`}
                   >
-                    <option value="HOURLY">Per Jam</option>
-                    <option value="DAILY">Harian</option>
-                    <option value="MONTHLY">Bulanan</option>
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Durasi ({bookType === "HOURLY" ? "Jam" : "Hari"})</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={bookDuration}
-                    onChange={(e) => setBookDuration(Math.max(1, Number(e.target.value)))}
-                    className="w-full px-2 py-2 border rounded-xl bg-white font-bold text-xs"
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Metode Bayar</label>
-                  <select
-                    value={bookPaymentMethod}
-                    onChange={(e) => setBookPaymentMethod(e.target.value)}
-                    className="w-full px-2 py-2 border rounded-xl bg-white font-medium text-xs"
+                    ⏱️ Paket Jam
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBookType("DAILY");
+                      setBookDailyPreset("1_DAY");
+                    }}
+                    className={`py-2 px-2 rounded-xl text-center font-bold text-xs transition-all ${bookType === "DAILY"
+                        ? "bg-white text-blue-700 shadow-xs border border-blue-200"
+                        : "text-slate-600 hover:text-slate-900"
+                      }`}
                   >
-                    <option value="QRIS DagoPay">QRIS DagoPay</option>
-                    <option value="CASH">Tunai (Cash)</option>
-                    <option value="Bank Transfer">Bank Transfer</option>
-                    <option value="Credit Card">Credit Card</option>
-                  </select>
+                    📅 Sewa Harian / Multi-Hari
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBookType("MONTHLY")}
+                    className={`py-2 px-2 rounded-xl text-center font-bold text-xs transition-all ${bookType === "MONTHLY"
+                        ? "bg-white text-blue-700 shadow-xs border border-blue-200"
+                        : "text-slate-600 hover:text-slate-900"
+                      }`}
+                  >
+                    🏢 Bulanan (30 Hari)
+                  </button>
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t">
+              {/* 1. HOURLY PACKAGE MODE */}
+              {bookType === "HOURLY" && (
+                <div className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-200/80 space-y-3">
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700 flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Tanggal Pemakaian</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={bookStartDate}
+                        onChange={(e) => {
+                          setBookStartDate(e.target.value);
+                          setBookEndDate(e.target.value);
+                        }}
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700 flex items-center justify-between">
+                        <span>Durasi Jam</span>
+                        <span className="text-[9px] font-bold text-amber-700 bg-amber-100 px-1 rounded">Min. 2 Jam</span>
+                      </label>
+                      <input
+                        type="number"
+                        min={2}
+                        max={12}
+                        value={bookDurationHours}
+                        onChange={(e) => setBookDurationHours(Math.max(2, Number(e.target.value)))}
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Hourly Preset Pills */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-500 font-semibold block">Pilihan Cepat Paket Durasi:</span>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { hours: 2, label: "Paket 2 Jam (Min)" },
+                        { hours: 3, label: "Paket 3 Jam" },
+                        { hours: 4, label: "Paket 4 Jam (1/2 Hari)" },
+                        { hours: 8, label: "Paket 8 Jam (Full)" },
+                      ].map((item) => (
+                        <button
+                          key={item.hours}
+                          type="button"
+                          onClick={() => setBookDurationHours(item.hours)}
+                          className={`py-1.5 px-1 rounded-xl text-center text-[10px] font-bold border transition-all ${bookDurationHours === item.hours
+                              ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                            }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Operational Time Slots (09:00 - 18:00) */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="font-bold text-slate-700 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Pilih Jam Mulai (Operasional 09:00 - 18:00)</span>
+                      </label>
+                      <span className="text-[10px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-full font-mono">
+                        Sewa: {bookStartTime} &ndash; {calculateHourlyEndTime(bookStartTime, bookDurationHours)} WITA
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-5 gap-1.5 p-1.5 bg-white rounded-xl border border-slate-200">
+                      {OPERATIONAL_TIME_SLOTS.map((slot) => {
+                        const isSelected = bookStartTime === slot;
+                        return (
+                          <button
+                            key={slot}
+                            type="button"
+                            onClick={() => setBookStartTime(slot)}
+                            className={`py-1 rounded-lg text-center font-mono font-bold text-xs transition-all ${isSelected
+                                ? "bg-blue-600 text-white shadow-xs ring-2 ring-blue-600/30"
+                                : "bg-slate-50 text-slate-700 hover:bg-blue-50 hover:text-blue-600"
+                              }`}
+                          >
+                            {slot}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. DAILY & MULTI-DAY DATE RANGE MODE */}
+              {bookType === "DAILY" && (
+                <div className="p-3.5 bg-amber-50/50 rounded-2xl border border-amber-200/80 space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="font-bold text-slate-700">Pilihan Paket Harian atau Rentang Tanggal</label>
+                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                      {[
+                        { key: "1_DAY", label: "1 Hari Pass" },
+                        { key: "3_DAYS", label: "3 Hari Pass" },
+                        { key: "7_DAYS", label: "7 Hari (Weekly)" },
+                        { key: "14_DAYS", label: "14 Hari Pass" },
+                        { key: "CUSTOM_RANGE", label: "Rentang Tanggal" },
+                      ].map((item) => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => setBookDailyPreset(item.key as any)}
+                          className={`py-1.5 px-1 rounded-xl text-center text-[10px] font-bold border transition-all ${bookDailyPreset === item.key
+                              ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                            }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Date Pickers for Range */}
+                  <div className="grid grid-cols-2 gap-2.5 pt-1">
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700 flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Tanggal Mulai *</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={bookStartDate}
+                        onChange={(e) => setBookStartDate(e.target.value)}
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-amber-500/20"
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700 flex items-center gap-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Tanggal Selesai *</span>
+                      </label>
+                      <input
+                        type="date"
+                        min={bookStartDate}
+                        disabled={bookDailyPreset !== "CUSTOM_RANGE"}
+                        value={
+                          bookDailyPreset === "1_DAY"
+                            ? bookStartDate
+                            : bookDailyPreset === "3_DAYS"
+                              ? (() => {
+                                const d = new Date(bookStartDate);
+                                d.setDate(d.getDate() + 2);
+                                return d.toISOString().split("T")[0];
+                              })()
+                              : bookDailyPreset === "7_DAYS"
+                                ? (() => {
+                                  const d = new Date(bookStartDate);
+                                  d.setDate(d.getDate() + 6);
+                                  return d.toISOString().split("T")[0];
+                                })()
+                                : bookDailyPreset === "14_DAYS"
+                                  ? (() => {
+                                    const d = new Date(bookStartDate);
+                                    d.setDate(d.getDate() + 13);
+                                    return d.toISOString().split("T")[0];
+                                  })()
+                                  : bookEndDate
+                        }
+                        onChange={(e) => setBookEndDate(e.target.value)}
+                        className={`w-full p-2 border rounded-xl font-bold text-xs outline-none ${bookDailyPreset === "CUSTOM_RANGE"
+                            ? "bg-white border-amber-300 focus:ring-2 focus:ring-amber-500/20 text-slate-900"
+                            : "bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed"
+                          }`}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="p-2 bg-white rounded-xl border border-amber-200 text-[11px] text-amber-900 flex items-center justify-between font-bold">
+                    <span>
+                      📅 Total:{" "}
+                      {bookDailyPreset === "1_DAY"
+                        ? "1 Hari"
+                        : bookDailyPreset === "3_DAYS"
+                          ? "3 Hari"
+                          : bookDailyPreset === "7_DAYS"
+                            ? "7 Hari (1 Minggu Penuh)"
+                            : bookDailyPreset === "14_DAYS"
+                              ? "14 Hari (2 Minggu)"
+                              : `${calculateDaysCount(bookStartDate, bookEndDate)} Hari`}
+                    </span>
+                    <span className="text-slate-500 font-normal">Akses 09:00 &ndash; 18:00 WITA setiap hari</span>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. MONTHLY PACKAGE MODE */}
+              {bookType === "MONTHLY" && (
+                <div className="p-3.5 bg-purple-50/50 rounded-2xl border border-purple-200/80 space-y-2">
+                  <label className="font-bold text-slate-700 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Tanggal Mulai Keanggotaan Bulanan (30 Hari Akses Penuh)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={bookStartDate}
+                    onChange={(e) => setBookStartDate(e.target.value)}
+                    className="w-full p-2 bg-white border border-purple-200 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-purple-500/20"
+                    required
+                  />
+                  <p className="text-[11px] text-purple-800">
+                    Akses meja khusus / dedicated workspace selama 30 hari kalender, termasuk locker dan kuota meeting room.
+                  </p>
+                </div>
+              )}
+
+              {/* Customer Information Form */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Nama Tamu / Penyewa *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Contoh: Sarah Jenkins / PT Nomad Tech"
+                    value={bookGuestName}
+                    onChange={(e) => setBookGuestName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700">Nomor WhatsApp *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="+62 812-xxxx-xxxx"
+                      value={bookPhone}
+                      onChange={(e) => setBookPhone(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700">Email (Opsional)</label>
+                    <input
+                      type="email"
+                      placeholder="nomad@example.com"
+                      value={bookEmail}
+                      onChange={(e) => setBookEmail(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-700">Perusahaan / Catatan Khusus</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Tim IT Remote, butuh stopkontak tambahan"
+                    value={bookCompany}
+                    onChange={(e) => setBookCompany(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              {/* Payment & Check-In Action Mode */}
+              <div className="space-y-3 pt-2 border-t border-slate-100">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700">Metode Pembayaran</label>
+                    <select
+                      value={bookPaymentMethod}
+                      onChange={(e) => setBookPaymentMethod(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-medium text-xs outline-none"
+                    >
+                      <option value="QRIS DagoPay">QRIS DagoPay (Instant)</option>
+                      <option value="CASH">Tunai (Cash Meja Kasir)</option>
+                      <option value="EDC / Debit Card">EDC / Kartu Debit Bank</option>
+                      <option value="Bank Transfer">Bank Transfer (BCA/Mandiri)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700">Status Aksi Sesi</label>
+                    <div className="flex items-center space-x-2 pt-1.5">
+                      <label className="flex items-center space-x-1.5 cursor-pointer text-xs font-bold text-slate-800">
+                        <input
+                          type="checkbox"
+                          checked={bookIsImmediateCheckIn}
+                          onChange={(e) => setBookIsImmediateCheckIn(e.target.checked)}
+                          className="w-4 h-4 text-blue-600 rounded"
+                        />
+                        <span>Langsung Check-In Tamu (Walk-In)</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bill Breakdown Summary Card */}
+                {(() => {
+                  const selSpace = spaces.find((s) => s.id === bookSpaceId) || spaces[0];
+                  let calcDur = 1;
+                  let calcPrice = 0;
+                  if (bookType === "HOURLY") {
+                    calcDur = Math.max(2, Number(bookDurationHours));
+                    calcPrice = (selSpace?.hourlyRate || 0) * calcDur;
+                  } else if (bookType === "DAILY") {
+                    if (bookDailyPreset === "1_DAY") calcDur = 1;
+                    else if (bookDailyPreset === "3_DAYS") calcDur = 3;
+                    else if (bookDailyPreset === "7_DAYS") calcDur = 7;
+                    else if (bookDailyPreset === "14_DAYS") calcDur = 14;
+                    else calcDur = calculateDaysCount(bookStartDate, bookEndDate);
+                    calcPrice = (selSpace?.dailyRate || 0) * calcDur;
+                  } else {
+                    calcDur = 30;
+                    calcPrice = selSpace?.monthlyRate || (selSpace?.dailyRate || 0) * 20;
+                  }
+
+                  return (
+                    <div className="p-3 bg-slate-900 text-white rounded-2xl flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Tagihan Lunas</span>
+                        <span className="text-xs text-slate-300">
+                          {bookType === "HOURLY"
+                            ? `${calcDur} Jam (${bookStartTime} - ${calculateHourlyEndTime(bookStartTime, calcDur)})`
+                            : bookType === "DAILY"
+                              ? `${calcDur} Hari (${bookStartDate} ${bookDailyPreset === "CUSTOM_RANGE" ? `s/d ${bookEndDate}` : ""})`
+                              : "Paket Bulanan 30 Hari"}
+                        </span>
+                      </div>
+                      <span className="text-base font-black text-emerald-400 font-mono">
+                        {formatCurrencyIDR(calcPrice)}
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setIsNewBookingModalOpen(false)}
+                  className="rounded-xl font-bold"
                 >
                   Batal
                 </Button>
-                <Button type="submit" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
-                  Simpan, Bayar & Check-In
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-sm px-4"
+                >
+                  {bookIsImmediateCheckIn ? "Simpan, Bayar & Check-In Tamu" : "Simpan Reservasi Terjadwal"}
                 </Button>
               </div>
             </form>

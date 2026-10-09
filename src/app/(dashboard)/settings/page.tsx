@@ -967,55 +967,31 @@ export default function SettingsPage() {
                             <td className="py-3 font-mono font-bold text-slate-900">{formatCurrencyIDR(p.basePrice)}</td>
                             <td className="py-3 font-mono text-slate-500">{formatCurrencyIDR(p.cogsEstimate || 0)}</td>
                             <td className="py-3">
-                              <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isAct
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                  : "bg-rose-100 text-rose-800 border-rose-300"
-                                  }`}
+                              <button
+                                type="button"
+                                onClick={() => toggleProductStatus(p.id)}
+                                className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer select-none ${
+                                  isAct
+                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
+                                    : "bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200"
+                                }`}
+                                title={`Klik untuk ${isAct ? "menonaktifkan (Matikan)" : "mengaktifkan"} produk`}
                               >
-                                {isAct ? "AKTIF" : "NON-AKTIF"}
-                              </span>
+                                <Power className={`w-3 h-3 ${isAct ? "text-emerald-700" : "text-slate-400"}`} />
+                                <span>{isAct ? "AKTIF" : "NON-AKTIF"}</span>
+                              </button>
                             </td>
-                            <td className="py-3 text-right space-x-1.5">
+                            <td className="py-3 text-right">
                               <Button
                                 size="sm"
                                 type="button"
                                 variant="outline"
                                 onClick={() => handleOpenEditProduct(p)}
-                                className="h-7 text-xs font-bold px-2 border-slate-200 hover:bg-slate-100 text-slate-700 rounded-lg"
-                                title="Edit data master produk"
+                                className="h-7 text-xs font-bold px-3 border-slate-200 hover:bg-orange-50 hover:text-brand-orange hover:border-brand-orange/40 text-slate-700 rounded-lg shadow-2xs"
+                                title="Edit data master produk & opsi hapus"
                               >
-                                <Edit2 className="w-3 h-3 mr-1 text-slate-600" />
+                                <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-500 group-hover:text-brand-orange" />
                                 <span>Edit</span>
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                type="button"
-                                variant="outline"
-                                onClick={() => toggleProductStatus(p.id)}
-                                className={`h-7 text-xs font-bold px-2 rounded-lg ${isAct
-                                  ? "border-amber-200 text-amber-700 hover:bg-amber-50"
-                                  : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                  }`}
-                                title="Ubah status ketersediaan"
-                              >
-                                <Power className="w-3 h-3 mr-1" />
-                                <span>{isAct ? "Matikan" : "Aktifkan"}</span>
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                type="button"
-                                variant="outline"
-                                onClick={() => {
-                                  setDeletingProd(p);
-                                  setIsDeleteProdModalOpen(true);
-                                }}
-                                className="h-7 text-xs font-bold px-2 border-rose-200 text-rose-700 hover:bg-rose-50 rounded-lg"
-                                title="Hapus produk dari master data"
-                              >
-                                <Trash2 className="w-3 h-3" />
                               </Button>
                             </td>
                           </tr>
@@ -1651,55 +1627,31 @@ export default function SettingsPage() {
                               <td className="py-3 font-mono font-bold text-slate-900">{formatCurrencyIDR(p.basePrice)}</td>
                               <td className="py-3 font-mono text-slate-500">{formatCurrencyIDR(p.cogsEstimate || 0)}</td>
                               <td className="py-3">
-                                <span
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isAct
-                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                    : "bg-rose-100 text-rose-800 border-rose-300"
-                                    }`}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleProductStatus(p.id)}
+                                  className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer select-none ${
+                                    isAct
+                                      ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
+                                      : "bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200"
+                                  }`}
+                                  title={`Klik untuk ${isAct ? "menonaktifkan (Matikan)" : "mengaktifkan"} produk`}
                                 >
-                                  {isAct ? "AKTIF" : "NON-AKTIF"}
-                                </span>
+                                  <Power className={`w-3 h-3 ${isAct ? "text-emerald-700" : "text-slate-400"}`} />
+                                  <span>{isAct ? "AKTIF" : "NON-AKTIF"}</span>
+                                </button>
                               </td>
-                              <td className="py-3 text-right space-x-1.5">
+                              <td className="py-3 text-right">
                                 <Button
                                   size="sm"
                                   type="button"
                                   variant="outline"
                                   onClick={() => handleOpenEditProduct(p)}
-                                  className="h-7 text-xs font-bold px-2 border-slate-200 hover:bg-slate-100 text-slate-700 rounded-lg"
-                                  title="Edit data master produk"
+                                  className="h-7 text-xs font-bold px-3 border-slate-200 hover:bg-orange-50 hover:text-brand-orange hover:border-brand-orange/40 text-slate-700 rounded-lg shadow-2xs"
+                                  title="Edit data master produk & opsi hapus"
                                 >
-                                  <Edit2 className="w-3 h-3 mr-1 text-slate-600" />
+                                  <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-500 group-hover:text-brand-orange" />
                                   <span>Edit</span>
-                                </Button>
-
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => toggleProductStatus(p.id)}
-                                  className={`h-7 text-xs font-bold px-2 rounded-lg ${isAct
-                                    ? "border-amber-200 text-amber-700 hover:bg-amber-50"
-                                    : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                    }`}
-                                  title="Ubah status ketersediaan"
-                                >
-                                  <Power className="w-3 h-3 mr-1" />
-                                  <span>{isAct ? "Matikan" : "Aktifkan"}</span>
-                                </Button>
-
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setDeletingProd(p);
-                                    setIsDeleteProdModalOpen(true);
-                                  }}
-                                  className="h-7 text-xs font-bold px-2 border-rose-200 text-rose-700 hover:bg-rose-50 rounded-lg"
-                                  title="Hapus produk dari master data"
-                                >
-                                  <Trash2 className="w-3 h-3" />
                                 </Button>
                               </td>
                             </tr>
@@ -2971,13 +2923,29 @@ export default function SettingsPage() {
                     )}
                   </div>
 
-                  <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
-                    <Button type="button" variant="outline" onClick={() => setIsEditProdModalOpen(false)} className="rounded-xl">
-                      Batal
+                  <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setDeletingProd(editingProd);
+                        setIsEditProdModalOpen(false);
+                        setIsDeleteProdModalOpen(true);
+                      }}
+                      className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 border-rose-200 rounded-xl font-bold flex items-center space-x-1.5 h-9 px-3 text-xs"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Hapus Produk</span>
                     </Button>
-                    <Button type="submit" className="bg-brand-orange hover:bg-orange-600 text-white font-bold rounded-xl shadow-xs">
-                      Simpan Perubahan
-                    </Button>
+
+                    <div className="flex items-center space-x-2">
+                      <Button type="button" variant="outline" onClick={() => setIsEditProdModalOpen(false)} className="rounded-xl h-9 text-xs">
+                        Batal
+                      </Button>
+                      <Button type="submit" className="bg-brand-orange hover:bg-orange-600 text-white font-bold rounded-xl shadow-xs h-9 text-xs">
+                        Simpan Perubahan
+                      </Button>
+                    </div>
                   </div>
                 </form>
               </div>

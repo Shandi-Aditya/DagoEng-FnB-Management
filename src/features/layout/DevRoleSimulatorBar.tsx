@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth, PersonaKey, DEMO_PERSONAS } from "@/contexts/AuthContext";
-import { ShieldAlert, Users, ChevronDown, Check, Building, Laptop, Coffee, Briefcase, ExternalLink, Zap } from "lucide-react";
+import { ShieldAlert, Users, ChevronDown, Check, Building, Laptop, Coffee, Briefcase, ExternalLink, Zap, RotateCcw } from "lucide-react";
 
 interface PersonaOption {
   key: PersonaKey;
@@ -157,6 +157,26 @@ export function DevRoleSimulatorBar() {
 
       {/* Right: Full Dropdown & Quick Route Links */}
       <div className="flex items-center space-x-2">
+        {/* Master 1-Click Demo Reset Button */}
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm("Reset seluruh data transaksi, pesanan, booking, dan shift demo ke kondisi bersih awal?")) {
+              Object.keys(localStorage).forEach((k) => {
+                if (k.startsWith("dagoeng_")) {
+                  localStorage.removeItem(k);
+                }
+              });
+              window.location.reload();
+            }
+          }}
+          className="flex items-center space-x-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-200 border border-rose-800/80 px-2.5 py-1 rounded transition-all font-bold text-xs shadow-xs hover:scale-105 active:scale-95"
+          title="Reset semua data transaksi & simulasi ke kondisi awal bersih"
+        >
+          <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+          <span>Reset Data Demo</span>
+        </button>
+
         <div className="relative">
           <button
             onClick={() => setIsOpen(!isOpen)}

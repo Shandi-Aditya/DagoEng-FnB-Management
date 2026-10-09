@@ -77,9 +77,6 @@ export function RevenueChartPreview() {
       ...d,
       netProfit: d.revenue - d.cogs,
       marginPercent: d.revenue > 0 ? Math.round(((d.revenue - d.cogs) / d.revenue) * 100) : 0,
-      revJuta: +(d.revenue / 1000000).toFixed(2),
-      cogsJuta: +(d.cogs / 1000000).toFixed(2),
-      discJuta: +(d.discount / 1000000).toFixed(2),
     }));
   }, [filteredOrders]);
 
@@ -110,9 +107,8 @@ export function RevenueChartPreview() {
     return hourSlots.map((h) => ({
       hour: h,
       orders: slotMap[h].orders,
-      rev: slotMap[h].rev,
+      revenue: slotMap[h].rev,
       traffic: slotMap[h].orders > 10 ? "Peak" : slotMap[h].orders > 0 ? "Normal" : "Tenang",
-      revJuta: +(slotMap[h].rev / 1000000).toFixed(2),
     }));
   }, [filteredOrders]);
 
@@ -126,10 +122,28 @@ export function RevenueChartPreview() {
     const regularRev = regularOrders.reduce((sum, o) => sum + o.total, 0);
 
     return [
-      { name: "Transaksi Promo (Diskon)", revenue: promoRev, discount: promoDisc, orders: ordersWithPromo.length },
+      { name: "Transaksi Promo", revenue: promoRev, discount: promoDisc, orders: ordersWithPromo.length },
       { name: "Transaksi Reguler", revenue: regularRev, discount: 0, orders: regularOrders.length },
     ];
   }, [filteredOrders]);
+
+  // Smart Adaptive Y-Axis Currency Formatter
+  const formatYAxisValue = (val: number) => {
+    if (!val || val === 0) return "Rp 0";
+    if (val >= 1_000_000_000) {
+      const v = val / 1_000_000_000;
+      return `Rp ${v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)} M`;
+    }
+    if (val >= 1_000_000) {
+      const v = val / 1_000_000;
+      return `Rp ${v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)} jt`;
+    }
+    if (val >= 1_000) {
+      const v = val / 1_000;
+      return `Rp ${v % 1 === 0 ? v.toFixed(0) : v.toFixed(0)} rb`;
+    }
+    return `Rp ${val.toLocaleString("id-ID")}`;
+  };
 
   // Aggregate stats
   const totalWeeklyRev = weeklyData.reduce((sum, d) => sum + d.revenue, 0);
@@ -198,31 +212,28 @@ export function RevenueChartPreview() {
         <div className="h-64 w-full">
           {viewMode === "weekly" && (
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={weeklyData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+              <ComposedChart data={weeklyData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={{ stroke: "#e2e8f0" }} />
-                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(val) => `Rp${val}jt`} axisLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={formatYAxisValue} axisLine={false} />
                 <Tooltip
                   formatter={(value: any, name: string) => {
                     const num = Number(value) || 0;
-                    if (name === "Revenue (Rp)") return [formatCurrencyIDR(num * 1000000), "Omzet Bruto"];
-                    if (name === "COGS HPP (Rp)") return [formatCurrencyIDR(num * 1000000), "Beban COGS"];
-                    if (name === "Promo Diskon (Rp)") return [formatCurrencyIDR(num * 1000000), "Potongan Promo"];
-                    return [value, name];
+                    return [formatCurrencyIDR(num), name];
                   }}
                   contentStyle={{ backgroundColor: "#ffffff", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
                 />
                 <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                <Bar dataKey="revJuta" name="Revenue (Rp)" fill="#F97316" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                <Bar dataKey="cogsJuta" name="COGS HPP (Rp)" fill="#94A3B8" radius={[4, 4, 0, 0]} maxBarSize={36} />
-                <Line type="monotone" dataKey="discJuta" name="Promo Diskon (Rp)" stroke="#10B981" strokeWidth={2.5} dot={{ r: 3, fill: "#10B981" }} />
+                <Bar dataKey="revenue" name="Omzet Bruto" fill="#F97316" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                <Bar dataKey="cogs" name="Beban HPP (COGS)" fill="#94A3B8" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                <Line type="monotone" dataKey="discount" name="Potongan Promo" stroke="#10B981" strokeWidth={2.5} dot={{ r: 3, fill: "#10B981" }} />
               </ComposedChart>
             </ResponsiveContainer>
           )}
 
           {viewMode === "hourly" && (
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={hourlyData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+              <ComposedChart data={hourlyData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.4}/>
@@ -231,35 +242,34 @@ export function RevenueChartPreview() {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="hour" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={{ stroke: "#e2e8f0" }} />
-                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(val) => `Rp${val}jt`} axisLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={formatYAxisValue} axisLine={false} />
                 <Tooltip
                   formatter={(value: any, name: string) => {
                     const num = Number(value) || 0;
-                    if (name === "Omzet per Jam") return [formatCurrencyIDR(num * 1000000), "Omzet"];
+                    if (name === "Omzet per Jam") return [formatCurrencyIDR(num), name];
                     return [value, name];
                   }}
                   contentStyle={{ backgroundColor: "#ffffff", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
                 />
                 <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                <Area type="monotone" dataKey="revJuta" name="Omzet per Jam" stroke="#2563EB" fillOpacity={1} fill="url(#colorRev)" />
-                <Line type="monotone" dataKey="orders" name="Volume Pesanan" stroke="#F97316" strokeWidth={2} yAxisId={0} dot={{ r: 3 }} />
+                <Area type="monotone" dataKey="revenue" name="Omzet per Jam" stroke="#2563EB" fillOpacity={1} fill="url(#colorRev)" />
               </ComposedChart>
             </ResponsiveContainer>
           )}
 
           {viewMode === "promo_impact" && (
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={promoData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+              <ComposedChart data={promoData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={{ stroke: "#e2e8f0" }} />
-                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={(val) => `Rp${+(val / 1000000).toFixed(0)}jt`} axisLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={formatYAxisValue} axisLine={false} />
                 <Tooltip
-                  formatter={(value: any) => [formatCurrencyIDR(Number(value) || 0), "Total"]}
+                  formatter={(value: any, name: string) => [formatCurrencyIDR(Number(value) || 0), name]}
                   contentStyle={{ backgroundColor: "#ffffff", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12px" }}
                 />
                 <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                <Bar dataKey="revenue" name="Total Omzet (Rp)" fill="#F97316" radius={[6, 6, 0, 0]} maxBarSize={60} />
-                <Bar dataKey="discount" name="Total Diskon Promo (Rp)" fill="#10B981" radius={[6, 6, 0, 0]} maxBarSize={60} />
+                <Bar dataKey="revenue" name="Total Omzet" fill="#F97316" radius={[6, 6, 0, 0]} maxBarSize={60} />
+                <Bar dataKey="discount" name="Total Diskon Promo" fill="#10B981" radius={[6, 6, 0, 0]} maxBarSize={60} />
               </ComposedChart>
             </ResponsiveContainer>
           )}

@@ -151,7 +151,7 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     permissions: ["dashboard:view", "reports:view"],
   },
 
-  // 5. F&B Cashier Singaraja (Scope: OUTLET -> Single outlet POS)
+  // 5. F&B Cashier Singaraja (Scope: OUTLET -> Single outlet POS & Coworking Frontdesk)
   CASHIER_SGR: {
     id: "user-cashier-sgr",
     email: "cashier.sgr@kopisenja.com",
@@ -159,7 +159,7 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     phone: "+62 812-3456-7892",
     role: { id: "role-cashier", slug: "CASHIER", name: "Cashier" },
     scopeLevel: "OUTLET",
-    allowedModules: ["FNB"],
+    allowedModules: ["FNB", "CO_WORKING"],
     organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
     tenant: { id: "tenant-ks", name: "Kopi Senja", code: "KOPI-SENJA", businessModule: "FNB" },
     outlet: { id: "outlet-sgr", name: "Singaraja", code: "KS-SGR" },

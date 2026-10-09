@@ -124,21 +124,16 @@ const FNB_PARTNERS: FnbPartner[] = [
 type CustomerTab = "HOME" | "MENU" | "COWORKING" | "ORDERS" | "LOYALTY" | "PROFILE";
 
 const COWORKING_TIME_SLOTS = [
-  "08:00",
   "09:00",
   "10:00",
-  "10:30",
   "11:00",
   "12:00",
   "13:00",
   "14:00",
-  "14:30",
   "15:00",
   "16:00",
   "17:00",
   "18:00",
-  "19:00",
-  "20:00",
 ];
 
 function parseTimeToMinutes(timeStr: string): number {
@@ -280,7 +275,10 @@ function CustomerPortalContent() {
   // Co-working Booking Modal State
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
   const [selectedSpaceForBooking, setSelectedSpaceForBooking] = useState<CoworkingSpaceItem | null>(null);
+  const [customerCoworkBookingMode, setCustomerCoworkBookingMode] = useState<"HOURLY" | "DAILY">("HOURLY");
+  const [customerCoworkDailyPreset, setCustomerCoworkDailyPreset] = useState<"1_DAY" | "3_DAYS" | "7_DAYS" | "14_DAYS" | "CUSTOM_RANGE">("1_DAY");
   const [bookingDate, setBookingDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [customerCoworkEndDate, setCustomerCoworkEndDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [bookingStartTime, setBookingStartTime] = useState<string>("09:00");
   const [bookingDuration, setBookingDuration] = useState<number>(2); // hours
   const [bookingGuests, setBookingGuests] = useState<number>(1);
@@ -860,6 +858,9 @@ function CustomerPortalContent() {
     setSelectedSpaceForBooking(space);
     const today = new Date().toISOString().split("T")[0];
     setBookingDate(today);
+    setCustomerCoworkEndDate(today);
+    setCustomerCoworkBookingMode("HOURLY");
+    setCustomerCoworkDailyPreset("1_DAY");
     setBookingDuration(2);
     setBookingGuests(1);
     setBookingUsageType("PERSONAL");
@@ -891,21 +892,63 @@ function CustomerPortalContent() {
       return;
     }
 
-    // Availability validation guard before confirming booking (minute-accurate)
-    const availability = checkSlotAvailability(
-      selectedSpaceForBooking.id,
-      bookingDate,
-      bookingStartTime,
-      bookingDuration
-    );
+    let calculatedDuration = bookingDuration;
+    let computedEndDate: string | undefined = undefined;
+    let computedEndTime: string | undefined = undefined;
+    let subtotal = 0;
 
-    if (!availability.isAvailable) {
-      showToast(`Slot waktu ${bookingStartTime} pada ${bookingDate} sudah terisi. Silakan pilih jam lain.`);
-      return;
+    if (customerCoworkBookingMode === "HOURLY") {
+      // Availability validation guard before confirming booking (minute-accurate)
+      const availability = checkSlotAvailability(
+        selectedSpaceForBooking.id,
+        bookingDate,
+        bookingStartTime,
+        bookingDuration
+      );
+
+      if (!availability.isAvailable) {
+        showToast(`Slot waktu ${bookingStartTime} pada ${bookingDate} sudah terisi. Silakan pilih jam lain.`);
+        return;
+      }
+
+      calculatedDuration = Math.max(2, bookingDuration);
+      const rate = selectedSpaceForBooking.hourlyRate || 15000;
+      subtotal = rate * calculatedDuration;
+      computedEndTime = `${calculateEndTime(bookingStartTime, calculatedDuration)} WITA`;
+    } else {
+      // DAILY / DATE RANGE
+      if (customerCoworkDailyPreset === "1_DAY") {
+        calculatedDuration = 1;
+        computedEndDate = bookingDate;
+      } else if (customerCoworkDailyPreset === "3_DAYS") {
+        calculatedDuration = 3;
+        const d = new Date(bookingDate);
+        d.setDate(d.getDate() + 2);
+        computedEndDate = d.toISOString().split("T")[0];
+      } else if (customerCoworkDailyPreset === "7_DAYS") {
+        calculatedDuration = 7;
+        const d = new Date(bookingDate);
+        d.setDate(d.getDate() + 6);
+        computedEndDate = d.toISOString().split("T")[0];
+      } else if (customerCoworkDailyPreset === "14_DAYS") {
+        calculatedDuration = 14;
+        const d = new Date(bookingDate);
+        d.setDate(d.getDate() + 13);
+        computedEndDate = d.toISOString().split("T")[0];
+      } else {
+        // CUSTOM_RANGE
+        const s = new Date(bookingDate);
+        const e = new Date(customerCoworkEndDate);
+        const diffTime = e.getTime() - s.getTime();
+        calculatedDuration = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1);
+        computedEndDate = customerCoworkEndDate;
+      }
+
+      const dailyRate = selectedSpaceForBooking.dailyRate || 75000;
+      subtotal = dailyRate * calculatedDuration;
+      computedEndTime = "18:00 WITA";
     }
 
-    const rate = selectedSpaceForBooking.hourlyRate || 15000;
-    const subtotal = rate * bookingDuration;
     const taxRate = (settings?.taxRatePercent !== undefined ? settings.taxRatePercent : 10) / 100;
     const calc = calculateCoworkingPricing(subtotal, appliedCoworkPromo || undefined, taxRate);
 
@@ -918,10 +961,12 @@ function CustomerPortalContent() {
       guestPhone: resolvedPhone,
       guestEmail: resolvedEmail,
       company: bookingUsageType === "GROUP" ? (bookingCompanyName.trim() || "Group / Company") : "Personal",
-      bookingType: "HOURLY",
+      bookingType: customerCoworkBookingMode,
       date: bookingDate,
-      startTime: `${bookingStartTime} WITA`,
-      duration: bookingDuration,
+      endDate: computedEndDate,
+      startTime: customerCoworkBookingMode === "HOURLY" ? `${bookingStartTime} WITA` : "09:00 WITA",
+      endTime: computedEndTime,
+      duration: calculatedDuration,
       price: subtotal,
       discount: calc.discountAmount,
       totalAmount: calc.total,
@@ -2564,104 +2609,250 @@ function CustomerPortalContent() {
                       </div>
 
                       <form onSubmit={handleCoworkingBookingSubmit} className="space-y-3.5 pt-1 border-t border-slate-100">
-                        {/* Tanggal & Durasi */}
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Pilih Tanggal</span>
-                            </label>
-                            <input
-                              type="date"
-                              min={new Date().toISOString().split("T")[0]}
-                              value={bookingDate}
-                              onChange={(e) => setBookingDate(e.target.value)}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
-                              required
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Durasi Booking</span>
-                            </label>
-                            <select
-                              value={bookingDuration}
-                              onChange={(e) => setBookingDuration(Number(e.target.value))}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
-                            >
-                              <option value={1}>1 Jam</option>
-                              <option value={2}>2 Jam</option>
-                              <option value={3}>3 Jam</option>
-                              <option value={4}>4 Jam (Setengah Hari)</option>
-                              <option value={8}>8 Jam (Seharian Penuh)</option>
-                            </select>
-                          </div>
+                        {/* Booking Mode Switcher */}
+                        <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => setCustomerCoworkBookingMode("HOURLY")}
+                            className={`py-2 px-2 rounded-xl text-center font-bold text-xs transition-all ${
+                              customerCoworkBookingMode === "HOURLY"
+                                ? "bg-white text-blue-700 shadow-xs border border-blue-200"
+                                : "text-slate-600 hover:text-slate-900"
+                            }`}
+                          >
+                            ⏱️ Paket Jam (Min. 2 Jam)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustomerCoworkBookingMode("DAILY");
+                              setCustomerCoworkDailyPreset("1_DAY");
+                            }}
+                            className={`py-2 px-2 rounded-xl text-center font-bold text-xs transition-all ${
+                              customerCoworkBookingMode === "DAILY"
+                                ? "bg-white text-blue-700 shadow-xs border border-blue-200"
+                                : "text-slate-600 hover:text-slate-900"
+                            }`}
+                          >
+                            📅 Sewa Harian / Rentang Tgl
+                          </button>
                         </div>
 
-                        {/* Interactive Time Slot Availability Grid & Time Picker */}
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5 text-blue-600" />
-                              <span>Pilih Jam Mulai</span>
-                            </label>
-                            <span className="text-[10px] text-slate-500 font-medium">
-                              Sewa: <strong>{bookingStartTime} &ndash; {calculateEndTime(bookingStartTime, bookingDuration)} WITA</strong>
-                            </span>
-                          </div>
+                        {/* HOURLY MODE */}
+                        {customerCoworkBookingMode === "HOURLY" ? (
+                          <>
+                            {/* Tanggal & Durasi */}
+                            <div className="grid grid-cols-2 gap-2.5">
+                              <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>Pilih Tanggal</span>
+                                </label>
+                                <input
+                                  type="date"
+                                  min={new Date().toISOString().split("T")[0]}
+                                  value={bookingDate}
+                                  onChange={(e) => setBookingDate(e.target.value)}
+                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                  required
+                                />
+                              </div>
 
-                          <div className="flex items-center space-x-2">
-                            <input
-                              type="time"
-                              value={bookingStartTime}
-                              onChange={(e) => setBookingStartTime(e.target.value)}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
-                              required
-                            />
-                          </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                    <span>Durasi Booking</span>
+                                  </label>
+                                  <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
+                                    Min. 2 Jam
+                                  </span>
+                                </div>
+                                <select
+                                  value={bookingDuration}
+                                  onChange={(e) => setBookingDuration(Number(e.target.value))}
+                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                >
+                                  <option value={2}>Paket 2 Jam (Minimal Booking)</option>
+                                  <option value={3}>Paket 3 Jam (Fokus Kerja)</option>
+                                  <option value={4}>Paket 4 Jam (Setengah Hari)</option>
+                                  <option value={8}>Paket 8 Jam (Seharian Penuh)</option>
+                                </select>
+                              </div>
+                            </div>
 
-                          <div className="space-y-1">
-                            <span className="text-[10px] text-slate-400 font-semibold block">Pilihan Cepat Slot Jam:</span>
-                            <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 max-h-32 overflow-y-auto p-1.5 bg-slate-50 rounded-2xl border border-slate-200/80">
-                              {COWORKING_TIME_SLOTS.map((slot) => {
-                                const avail = checkSlotAvailability(
-                                  selectedSpaceForBooking.id,
-                                  bookingDate,
-                                  slot,
-                                  bookingDuration
-                                );
-                                const isSelected = bookingStartTime === slot;
+                            {/* Interactive Time Slot Availability Grid & Time Picker */}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                                  <Clock className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Pilih Jam Mulai</span>
+                                </label>
+                                <span className="text-[10px] text-slate-500 font-medium">
+                                  Sewa: <strong>{bookingStartTime} &ndash; {calculateEndTime(bookingStartTime, bookingDuration)} WITA</strong>
+                                </span>
+                              </div>
 
-                                return (
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="time"
+                                  value={bookingStartTime}
+                                  onChange={(e) => setBookingStartTime(e.target.value)}
+                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                  required
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <span className="text-[10px] text-slate-400 font-semibold block">Pilihan Cepat Slot Jam:</span>
+                                <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 max-h-32 overflow-y-auto p-1.5 bg-slate-50 rounded-2xl border border-slate-200/80">
+                                  {COWORKING_TIME_SLOTS.map((slot) => {
+                                    const avail = checkSlotAvailability(
+                                      selectedSpaceForBooking.id,
+                                      bookingDate,
+                                      slot,
+                                      bookingDuration
+                                    );
+                                    const isSelected = bookingStartTime === slot;
+
+                                    return (
+                                      <button
+                                        key={slot}
+                                        type="button"
+                                        disabled={!avail.isAvailable}
+                                        onClick={() => setBookingStartTime(slot)}
+                                        className={`py-1.5 px-1 rounded-xl text-center transition-all flex flex-col items-center justify-center ${
+                                          !avail.isAvailable
+                                            ? "bg-rose-50/70 border border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
+                                            : isSelected
+                                              ? "bg-slate-900 text-white shadow-xs font-black ring-2 ring-slate-900/20 scale-[1.02]"
+                                              : "bg-white border border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-300 font-bold"
+                                        }`}
+                                      >
+                                        <span className="text-xs font-mono">{slot}</span>
+                                        <span
+                                          className={`text-[8px] font-bold mt-0.5 ${
+                                            !avail.isAvailable
+                                              ? "text-rose-600 font-black"
+                                              : isSelected
+                                                ? "text-blue-200"
+                                                : "text-emerald-600"
+                                          }`}
+                                        >
+                                          {avail.isAvailable ? "Tersedia" : "Penuh"}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          /* DAILY / DATE RANGE MODE */
+                          <div className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200/80 space-y-3">
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-700 block">Pilihan Paket Harian:</label>
+                              <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                                {[
+                                  { key: "1_DAY", label: "1 Hari" },
+                                  { key: "3_DAYS", label: "3 Hari Pass" },
+                                  { key: "7_DAYS", label: "7 Hari (Weekly)" },
+                                  { key: "14_DAYS", label: "14 Hari" },
+                                  { key: "CUSTOM_RANGE", label: "Rentang Tgl" },
+                                ].map((item) => (
                                   <button
-                                    key={slot}
+                                    key={item.key}
                                     type="button"
-                                    disabled={!avail.isAvailable}
-                                    onClick={() => setBookingStartTime(slot)}
-                                    className={`py-1.5 px-1 rounded-xl text-center transition-all flex flex-col items-center justify-center ${!avail.isAvailable
-                                      ? "bg-rose-50/70 border border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
-                                      : isSelected
-                                        ? "bg-slate-900 text-white shadow-xs font-black ring-2 ring-slate-900/20 scale-[1.02]"
-                                        : "bg-white border border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-300 font-bold"
-                                      }`}
+                                    onClick={() => setCustomerCoworkDailyPreset(item.key as any)}
+                                    className={`py-1.5 px-1 rounded-xl text-center text-[10px] font-bold border transition-all ${
+                                      customerCoworkDailyPreset === item.key
+                                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
+                                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                                    }`}
                                   >
-                                    <span className="text-xs font-mono">{slot}</span>
-                                    <span className={`text-[8px] font-bold mt-0.5 ${!avail.isAvailable
-                                      ? "text-rose-600 font-black"
-                                      : isSelected
-                                        ? "text-blue-200"
-                                        : "text-emerald-600"
-                                      }`}>
-                                      {avail.isAvailable ? "Tersedia" : "Penuh"}
-                                    </span>
+                                    {item.label}
                                   </button>
-                                );
-                              })}
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2.5">
+                              <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>Tanggal Mulai</span>
+                                </label>
+                                <input
+                                  type="date"
+                                  min={new Date().toISOString().split("T")[0]}
+                                  value={bookingDate}
+                                  onChange={(e) => setBookingDate(e.target.value)}
+                                  className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-amber-500/20"
+                                  required
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>Tanggal Selesai</span>
+                                </label>
+                                <input
+                                  type="date"
+                                  min={bookingDate}
+                                  disabled={customerCoworkDailyPreset !== "CUSTOM_RANGE"}
+                                  value={
+                                    customerCoworkDailyPreset === "1_DAY"
+                                      ? bookingDate
+                                      : customerCoworkDailyPreset === "3_DAYS"
+                                        ? (() => {
+                                            const d = new Date(bookingDate);
+                                            d.setDate(d.getDate() + 2);
+                                            return d.toISOString().split("T")[0];
+                                          })()
+                                        : customerCoworkDailyPreset === "7_DAYS"
+                                          ? (() => {
+                                              const d = new Date(bookingDate);
+                                              d.setDate(d.getDate() + 6);
+                                              return d.toISOString().split("T")[0];
+                                            })()
+                                          : customerCoworkDailyPreset === "14_DAYS"
+                                            ? (() => {
+                                                const d = new Date(bookingDate);
+                                                d.setDate(d.getDate() + 13);
+                                                return d.toISOString().split("T")[0];
+                                              })()
+                                            : customerCoworkEndDate
+                                  }
+                                  onChange={(e) => setCustomerCoworkEndDate(e.target.value)}
+                                  className={`w-full p-2 border rounded-xl text-xs font-bold outline-none ${
+                                    customerCoworkDailyPreset === "CUSTOM_RANGE"
+                                      ? "bg-white border-amber-300 text-slate-900"
+                                      : "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
+                                  }`}
+                                  required
+                                />
+                              </div>
+                            </div>
+
+                            <div className="p-2 bg-white rounded-xl border border-amber-200 text-[11px] text-amber-900 font-bold flex items-center justify-between">
+                              <span>
+                                📅 Total Durasi:{" "}
+                                {customerCoworkDailyPreset === "1_DAY"
+                                  ? "1 Hari"
+                                  : customerCoworkDailyPreset === "3_DAYS"
+                                    ? "3 Hari"
+                                    : customerCoworkDailyPreset === "7_DAYS"
+                                      ? "7 Hari (1 Minggu)"
+                                      : customerCoworkDailyPreset === "14_DAYS"
+                                        ? "14 Hari"
+                                        : `${Math.max(1, Math.ceil((new Date(customerCoworkEndDate).getTime() - new Date(bookingDate).getTime()) / (1000 * 60 * 60 * 24)) + 1)} Hari`}
+                              </span>
+                              <span className="text-slate-500 font-normal">Akses 09:00 &ndash; 18:00 WITA</span>
                             </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* Tipe Penggunaan (Personal vs Group / Company) */}
                         <div className="space-y-1.5 p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
@@ -2844,18 +3035,50 @@ function CustomerPortalContent() {
 
                         {/* Price Breakdown Card (Harmonized with F&B) */}
                         {(() => {
-                          const baseRate = (selectedSpaceForBooking?.hourlyRate || 15000) * bookingDuration;
+                          let effectiveDuration = bookingDuration;
+                          let baseRate = 0;
+                          if (customerCoworkBookingMode === "HOURLY") {
+                            effectiveDuration = Math.max(2, bookingDuration);
+                            baseRate = (selectedSpaceForBooking?.hourlyRate || 15000) * effectiveDuration;
+                          } else {
+                            if (customerCoworkDailyPreset === "1_DAY") effectiveDuration = 1;
+                            else if (customerCoworkDailyPreset === "3_DAYS") effectiveDuration = 3;
+                            else if (customerCoworkDailyPreset === "7_DAYS") effectiveDuration = 7;
+                            else if (customerCoworkDailyPreset === "14_DAYS") effectiveDuration = 14;
+                            else {
+                              effectiveDuration = Math.max(
+                                1,
+                                Math.ceil(
+                                  (new Date(customerCoworkEndDate).getTime() - new Date(bookingDate).getTime()) /
+                                    (1000 * 60 * 60 * 24)
+                                ) + 1
+                              );
+                            }
+                            baseRate = (selectedSpaceForBooking?.dailyRate || 75000) * effectiveDuration;
+                          }
+
                           const taxRate = (settings?.taxRatePercent !== undefined ? settings.taxRatePercent : 10) / 100;
                           const calc = calculateCoworkingPricing(baseRate, appliedCoworkPromo || undefined, taxRate);
                           return (
                             <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1.5 text-xs">
                               <div className="flex justify-between text-slate-600">
-                                <span>Sewa {selectedSpaceForBooking.name} ({bookingDuration} Jam)</span>
+                                <span>
+                                  Sewa {selectedSpaceForBooking.name} (
+                                  {customerCoworkBookingMode === "HOURLY"
+                                    ? `${effectiveDuration} Jam`
+                                    : `${effectiveDuration} Hari`}
+                                  )
+                                </span>
                                 <span>{formatCurrencyIDR(calc.originalSubtotal)}</span>
                               </div>
                               {calc.discountAmount > 0 && (
                                 <div className="flex justify-between text-emerald-600 font-bold">
-                                  <span>Diskon Promo {appliedCoworkPromo ? `(${appliedCoworkPromo.code || appliedCoworkPromo.name})` : ""}</span>
+                                  <span>
+                                    Diskon Promo{" "}
+                                    {appliedCoworkPromo
+                                      ? `(${appliedCoworkPromo.code || appliedCoworkPromo.name})`
+                                      : ""}
+                                  </span>
                                   <span>-{formatCurrencyIDR(calc.discountAmount)}</span>
                                 </div>
                               )}
