@@ -24,23 +24,28 @@ import {
   BellRing,
   Ban,
   FileSpreadsheet,
+  ClipboardCheck,
+  Scale,
+  History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
-import { PurchaseOrder, StockAdjustmentLog, RecipeBOM } from "@/types/inventory";
+import { PurchaseOrder, StockAdjustmentLog, RecipeBOM, StockOpnameRecord, StockOpnameReason } from "@/types/inventory";
 import { useProducts } from "@/contexts/ProductContext";
 import { InventoryReportPDFModal } from "@/features/inventory/InventoryReportPDFModal";
 import { BOMRecipeModal } from "@/features/inventory/BOMRecipeModal";
 
 export default function InventoryPage() {
-  const { activeOutlet } = useOutlet();
+  const { activeOutlet, activeOutletId } = useOutlet();
   const { products } = useProducts();
   const {
     filteredIngredients,
     recipes,
     filteredPurchaseOrders,
     logs,
+    stockOpnames,
+    recordStockOpname,
     adjustStock,
     simulateBOMDeduction,
     upsertRecipe,
@@ -49,7 +54,7 @@ export default function InventoryPage() {
     receivePurchaseOrder,
   } = useInventory();
 
-  const [activeTab, setActiveTab] = useState<"STOCK" | "BOM" | "PO">("STOCK");
+  const [activeTab, setActiveTab] = useState<"STOCK" | "BOM" | "PO" | "OPNAME">("STOCK");
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -65,6 +70,16 @@ export default function InventoryPage() {
   const [isRecipeModalOpen, setIsRecipeModalOpen] = useState(false);
   const [selectedRecipeForEdit, setSelectedRecipeForEdit] = useState<RecipeBOM | null>(null);
   const [selectedPOPreview, setSelectedPOPreview] = useState<PurchaseOrder | null>(null);
+
+  // Stock Opname State (Revisi 8)
+  const [isOpnameModalOpen, setIsOpnameModalOpen] = useState(false);
+  const [opnameItemId, setOpnameItemId] = useState(filteredIngredients[0]?.id || "ing-1");
+  const [opnamePhysicalStock, setOpnamePhysicalStock] = useState<number>(0);
+  const [opnameReason, setOpnameReason] = useState<StockOpnameReason>("RECORDING_ERROR");
+  const [opnameNotes, setOpnameNotes] = useState("");
+  const [opnameAuditor, setOpnameAuditor] = useState("Staff Auditor Gudang");
+  const [opnameSearchQuery, setOpnameSearchQuery] = useState("");
+  const [opnameReasonFilter, setOpnameReasonFilter] = useState<string>("ALL");
 
   // Stock Adj Form
   const [adjItemId, setAdjItemId] = useState(filteredIngredients[0]?.id || "ing-1");
@@ -206,6 +221,88 @@ export default function InventoryPage() {
     setTimeout(() => setSuccessToast(""), 4000);
   };
 
+  // Handlers for Stock Opname (Revisi 8)
+  const handleOpenOpnameModal = (ingredientId?: string) => {
+    const targetId = ingredientId || filteredIngredients[0]?.id || "ing-1";
+    const target = filteredIngredients.find((i) => i.id === targetId);
+    setOpnameItemId(targetId);
+    setOpnamePhysicalStock(target ? target.stockNumber : 0);
+    setOpnameReason("RECORDING_ERROR");
+    setOpnameNotes("");
+    setIsOpnameModalOpen(true);
+  };
+
+  const handleSaveStockOpname = (e: React.FormEvent) => {
+    e.preventDefault();
+    const target = filteredIngredients.find((i) => i.id === opnameItemId);
+    if (!target) return;
+
+    const physicalCount = Number(opnamePhysicalStock);
+    const sysStock = target.stockNumber;
+    const variance = physicalCount - sysStock;
+
+    const result = recordStockOpname({
+      date: new Date().toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      ingredientId: target.id,
+      ingredientName: target.name,
+      category: target.category,
+      unit: target.unit,
+      systemStock: sysStock,
+      physicalStock: physicalCount,
+      reason: opnameReason,
+      reasonNotes: opnameNotes.trim() || undefined,
+      performedBy: opnameAuditor.trim() || "Staff Auditor Gudang",
+      tenantId: activeOutletId,
+      outletId: activeOutletId,
+    });
+
+    setIsOpnameModalOpen(false);
+    setSuccessToast(
+      `Stock Opname ${result.opnameNumber} (${target.name}) berhasil disimpan! Selisih: ${variance > 0 ? `+${variance}` : variance} ${target.unit}. Stok sistem diselaraskan menjadi ${physicalCount} ${target.unit}.`
+    );
+    setTimeout(() => setSuccessToast(""), 5000);
+  };
+
+  const handleExportOpnameCSV = () => {
+    const headers = [
+      "No. Opname",
+      "Tanggal Audit",
+      "Bahan Baku",
+      "Kategori",
+      "Satuan",
+      "Stok Sistem",
+      "Stok Fisik",
+      "Selisih (Variance)",
+      "Status Selisih",
+      "Alasan Selisih",
+      "Catatan",
+      "Auditor / Pelaksana",
+    ];
+    const rows = stockOpnames.map((o) => [
+      o.opnameNumber,
+      o.date,
+      o.ingredientName,
+      o.category,
+      o.unit,
+      o.systemStock,
+      o.physicalStock,
+      o.variance,
+      o.varianceType,
+      o.reason,
+      o.reasonNotes || "-",
+      o.performedBy,
+    ]);
+    downloadCSV(`Laporan_Stock_Opname_${Date.now()}`, headers, rows);
+    setSuccessToast("Laporan histori Stock Opname berhasil diekspor ke CSV!");
+    setTimeout(() => setSuccessToast(""), 4000);
+  };
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
@@ -307,6 +404,15 @@ export default function InventoryPage() {
           </Button>
           <Button
             size="sm"
+            variant="outline"
+            className="text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold rounded-xl"
+            onClick={() => handleOpenOpnameModal()}
+          >
+            <ClipboardCheck className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
+            Catat Stock Opname
+          </Button>
+          <Button
+            size="sm"
             className="text-xs bg-brand-orange hover:bg-orange-600 text-white font-bold rounded-xl shadow-xs"
             onClick={() => setIsPOModalOpen(true)}
           >
@@ -358,10 +464,10 @@ export default function InventoryPage() {
       </div>
 
       {/* Tabs Navigation */}
-      <div className="flex items-center space-x-2 border-b border-slate-200">
+      <div className="flex items-center space-x-2 border-b border-slate-200 overflow-x-auto">
         <button
           onClick={() => setActiveTab("STOCK")}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 ${
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 shrink-0 ${
             activeTab === "STOCK"
               ? "border-purple-600 text-purple-600 bg-purple-50/50"
               : "border-transparent text-slate-500 hover:text-slate-900"
@@ -372,7 +478,7 @@ export default function InventoryPage() {
         </button>
         <button
           onClick={() => setActiveTab("BOM")}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 ${
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 shrink-0 ${
             activeTab === "BOM"
               ? "border-purple-600 text-purple-600 bg-purple-50/50"
               : "border-transparent text-slate-500 hover:text-slate-900"
@@ -383,7 +489,7 @@ export default function InventoryPage() {
         </button>
         <button
           onClick={() => setActiveTab("PO")}
-          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 ${
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 shrink-0 ${
             activeTab === "PO"
               ? "border-purple-600 text-purple-600 bg-purple-50/50"
               : "border-transparent text-slate-500 hover:text-slate-900"
@@ -391,6 +497,17 @@ export default function InventoryPage() {
         >
           <FileText className="w-4 h-4" />
           <span>Purchase Order (PO) Supplier ({filteredPurchaseOrders.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab("OPNAME")}
+          className={`px-4 py-2.5 text-xs font-bold border-b-2 transition-all flex items-center space-x-2 shrink-0 ${
+            activeTab === "OPNAME"
+              ? "border-indigo-600 text-indigo-600 bg-indigo-50/50"
+              : "border-transparent text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <ClipboardCheck className="w-4 h-4 text-indigo-600" />
+          <span>Stock Opname & Audit Fisik ({stockOpnames.length})</span>
         </button>
       </div>
 
@@ -518,6 +635,13 @@ export default function InventoryPage() {
                             className="px-2 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 rounded text-[10px] font-bold"
                           >
                             + PO
+                          </button>
+                          <button
+                            onClick={() => handleOpenOpnameModal(item.id)}
+                            className="px-2 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold"
+                            title="Audit & Hitung Fisik Bahan Ini"
+                          >
+                            Opname
                           </button>
                         </div>
                       </td>
@@ -738,6 +862,218 @@ export default function InventoryPage() {
                 ))}
               </tbody>
             </table>
+          </Card>
+        </div>
+      )}
+
+      {/* TAB 4: STOCK OPNAME & AUDIT FISIK (Revisi 8) */}
+      {activeTab === "OPNAME" && (
+        <div className="space-y-4">
+          {/* Opname Metric Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <Card className="p-3.5 bg-white border border-slate-200 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-400">Total Audit Opname</span>
+                <ClipboardCheck className="w-4 h-4 text-indigo-500" />
+              </div>
+              <p className="text-xl font-bold text-slate-900 mt-1">{stockOpnames.length} Catatan</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Histori audit stok fisik gudang</p>
+            </Card>
+
+            <Card className="p-3.5 bg-white border border-slate-200 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-400">Selisih Surplus (+)</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              </div>
+              <p className="text-xl font-bold text-emerald-600 mt-1">{stockOpnames.filter((o) => o.varianceType === "SURPLUS").length} Item</p>
+              <p className="text-[10px] text-emerald-600 font-medium mt-0.5">Stok fisik &gt; stok sistem</p>
+            </Card>
+
+            <Card className="p-3.5 bg-white border border-slate-200 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-400">Selisih Defisit (-)</span>
+                <TrendingDown className="w-4 h-4 text-rose-500" />
+              </div>
+              <p className="text-xl font-bold text-rose-600 mt-1">{stockOpnames.filter((o) => o.varianceType === "DEFICIT").length} Item</p>
+              <p className="text-[10px] text-rose-600 font-medium mt-0.5">Waste, hilang, rusak, atau selisih</p>
+            </Card>
+
+            <Card className="p-3.5 bg-white border border-slate-200 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-400">Sesuai / Balance (0)</span>
+                <Scale className="w-4 h-4 text-blue-500" />
+              </div>
+              <p className="text-xl font-bold text-blue-600 mt-1">{stockOpnames.filter((o) => o.varianceType === "MATCH").length} Item</p>
+              <p className="text-[10px] text-blue-600 font-medium mt-0.5">Stok fisik akurat 100%</p>
+            </Card>
+          </div>
+
+          {/* Controls Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+            <div className="flex items-center space-x-2 flex-1 max-w-md">
+              <Search className="w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Cari no. opname, nama bahan, auditor..."
+                value={opnameSearchQuery}
+                onChange={(e) => setOpnameSearchQuery(e.target.value)}
+                className="w-full text-xs bg-transparent border-none outline-hidden text-slate-800 placeholder-slate-400"
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <span className="text-xs text-slate-500 font-medium">Alasan:</span>
+              <select
+                value={opnameReasonFilter}
+                onChange={(e) => setOpnameReasonFilter(e.target.value)}
+                className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-medium text-slate-700 outline-hidden"
+              >
+                <option value="ALL">Semua Alasan</option>
+                <option value="RECORDING_ERROR">Kesalahan Pencatatan / Selisih Hitung</option>
+                <option value="WASTE">Waste (Terbuang saat Operasional)</option>
+                <option value="LOSS">Loss (Kehilangan)</option>
+                <option value="DAMAGED">Kerusakan Kemasan / Fisik</option>
+                <option value="EXPIRATION">Kedaluwarsa (Expired)</option>
+                <option value="SAMPLE_PROMO">Sample / Pemakaian Promo</option>
+                <option value="OTHER">Lainnya</option>
+              </select>
+
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExportOpnameCSV}
+                className="text-xs border-slate-200 text-slate-700 hover:bg-slate-50 font-bold"
+              >
+                <Download className="w-3.5 h-3.5 mr-1 text-slate-600" />
+                Export CSV
+              </Button>
+
+              <Button
+                size="sm"
+                onClick={() => handleOpenOpnameModal()}
+                className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Catat Opname Baru
+              </Button>
+            </div>
+          </div>
+
+          {/* Opname Audit Table */}
+          <Card className="shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="p-3.5">No. Opname & Tanggal</th>
+                    <th className="p-3.5">Bahan Baku & Kategori</th>
+                    <th className="p-3.5 text-right">Stok Sistem</th>
+                    <th className="p-3.5 text-right">Stok Fisik Riil</th>
+                    <th className="p-3.5 text-center">Selisih (Variance)</th>
+                    <th className="p-3.5">Alasan & Catatan</th>
+                    <th className="p-3.5">Auditor / Pelaksana</th>
+                    <th className="p-3.5 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {stockOpnames
+                    .filter((rec) => {
+                      const matchReason = opnameReasonFilter === "ALL" || rec.reason === opnameReasonFilter;
+                      const matchSearch =
+                        rec.opnameNumber.toLowerCase().includes(opnameSearchQuery.toLowerCase()) ||
+                        rec.ingredientName.toLowerCase().includes(opnameSearchQuery.toLowerCase()) ||
+                        rec.performedBy.toLowerCase().includes(opnameSearchQuery.toLowerCase());
+                      return matchReason && matchSearch;
+                    })
+                    .length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-8 text-center text-slate-400">
+                        <ClipboardCheck className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                        <p className="font-semibold text-slate-600">Belum ada riwayat stock opname fisik.</p>
+                        <p className="text-[11px] mt-0.5">Klik tombol &quot;Catat Opname Baru&quot; atau &quot;Opname&quot; pada tabel master bahan untuk memulai audit fisik.</p>
+                        <Button
+                          size="sm"
+                          onClick={() => handleOpenOpnameModal()}
+                          className="mt-3 text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-bold"
+                        >
+                          <Plus className="w-3.5 h-3.5 mr-1" />
+                          Mulai Audit Fisik Sekarang
+                        </Button>
+                      </td>
+                    </tr>
+                  ) : (
+                    stockOpnames
+                      .filter((rec) => {
+                        const matchReason = opnameReasonFilter === "ALL" || rec.reason === opnameReasonFilter;
+                        const matchSearch =
+                          rec.opnameNumber.toLowerCase().includes(opnameSearchQuery.toLowerCase()) ||
+                          rec.ingredientName.toLowerCase().includes(opnameSearchQuery.toLowerCase()) ||
+                          rec.performedBy.toLowerCase().includes(opnameSearchQuery.toLowerCase());
+                        return matchReason && matchSearch;
+                      })
+                      .map((op) => {
+                        const isSurplus = op.variance > 0;
+                        const isDeficit = op.variance < 0;
+
+                        return (
+                          <tr key={op.id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="p-3.5">
+                              <span className="font-mono font-bold text-slate-900 block">{op.opnameNumber}</span>
+                              <span className="text-[10px] text-slate-400">{op.date}</span>
+                            </td>
+                            <td className="p-3.5">
+                              <span className="font-bold text-slate-900 block">{op.ingredientName}</span>
+                              <span className="text-[10px] text-slate-400">{op.category}</span>
+                            </td>
+                            <td className="p-3.5 text-right font-mono font-semibold text-slate-600">
+                              {op.systemStock} {op.unit}
+                            </td>
+                            <td className="p-3.5 text-right font-mono font-bold text-slate-900">
+                              {op.physicalStock} {op.unit}
+                            </td>
+                            <td className="p-3.5 text-center">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full font-mono text-[11px] font-bold ${
+                                  isSurplus
+                                    ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                    : isDeficit
+                                    ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                    : "bg-slate-100 text-slate-700 border border-slate-200"
+                                }`}
+                              >
+                                {isSurplus ? `+${op.variance}` : op.variance} {op.unit}
+                              </span>
+                            </td>
+                            <td className="p-3.5">
+                              <span className="font-semibold text-slate-800 block text-[11px]">
+                                {op.reason === "RECORDING_ERROR" && "Kesalahan Pencatatan"}
+                                {op.reason === "WASTE" && "Waste (Terbuang)"}
+                                {op.reason === "LOSS" && "Loss (Kehilangan)"}
+                                {op.reason === "DAMAGED" && "Kerusakan Fisik"}
+                                {op.reason === "EXPIRATION" && "Kedaluwarsa (Expired)"}
+                                {op.reason === "SAMPLE_PROMO" && "Sample / Promo"}
+                                {op.reason === "OTHER" && "Lainnya"}
+                              </span>
+                              {op.reasonNotes && (
+                                <span className="text-[10px] text-slate-500 italic block mt-0.5 line-clamp-1">
+                                  &quot;{op.reasonNotes}&quot;
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3.5 font-medium text-slate-700">
+                              {op.performedBy}
+                            </td>
+                            <td className="p-3.5 text-center">
+                              <span className="px-2 py-0.5 rounded-full font-bold text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Selesai / Applied
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </Card>
         </div>
       )}
@@ -1072,6 +1408,180 @@ export default function InventoryPage() {
           </div>
         </div>
       )}
+
+      {/* MODAL 4: STOCK OPNAME (Revisi 8) */}
+      {isOpnameModalOpen && (() => {
+        const target = filteredIngredients.find((i) => i.id === opnameItemId) || filteredIngredients[0];
+        const sysStock = target?.stockNumber ?? 0;
+        const physical = Number(opnamePhysicalStock) || 0;
+        const variance = physical - sysStock;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4 border border-slate-200">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                <h3 className="font-bold text-slate-900 text-sm flex items-center space-x-2">
+                  <ClipboardCheck className="w-5 h-5 text-indigo-600" />
+                  <span>Formulir Stock Opname Fisik (Audit Inventori)</span>
+                </h3>
+                <button
+                  onClick={() => setIsOpnameModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 p-1"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveStockOpname} className="space-y-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Pilih Bahan Baku yang Diaudit</label>
+                  <select
+                    value={opnameItemId}
+                    onChange={(e) => {
+                      setOpnameItemId(e.target.value);
+                      const chosen = filteredIngredients.find((i) => i.id === e.target.value);
+                      if (chosen) setOpnamePhysicalStock(chosen.stockNumber);
+                    }}
+                    className="w-full border rounded-xl p-2.5 bg-white font-semibold text-slate-800"
+                  >
+                    {filteredIngredients.map((i) => (
+                      <option key={i.id} value={i.id}>
+                        {i.name} (Stok Sistem: {i.stockNumber} {i.unit}) — {i.category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Stok Sistem Saat Ini</span>
+                    <p className="text-base font-mono font-bold text-slate-800 mt-0.5">
+                      {sysStock} <span className="text-xs font-normal text-slate-500">{target?.unit}</span>
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Supplier / Vendor</span>
+                    <p className="text-xs font-semibold text-slate-700 mt-1 line-clamp-1">
+                      {target?.supplier || "-"}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Hasil Hitungan Fisik Riil (Stok Fisik di Gudang) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      value={opnamePhysicalStock}
+                      onChange={(e) => setOpnamePhysicalStock(Number(e.target.value))}
+                      className="w-full border rounded-xl p-2.5 font-bold font-mono text-base pr-16"
+                    />
+                    <span className="absolute right-3 top-3 text-slate-400 font-bold text-xs">
+                      {target?.unit}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Masukkan jumlah fisik aktual yang dihitung di tempat penyimpanan.
+                  </p>
+                </div>
+
+                {/* Real-time Variance Calculation Display */}
+                <div
+                  className={`p-3.5 rounded-xl border ${
+                    variance > 0
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                      : variance < 0
+                      ? "bg-rose-50 border-rose-200 text-rose-900"
+                      : "bg-blue-50 border-blue-200 text-blue-900"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <Scale className="w-4 h-4 shrink-0" />
+                      <span className="font-bold text-xs">
+                        Kalkulasi Selisih Otomatis (Variance):
+                      </span>
+                    </div>
+                    <span
+                      className={`font-mono font-bold text-sm px-2 py-0.5 rounded-md ${
+                        variance > 0
+                          ? "bg-emerald-200/60 text-emerald-950"
+                          : variance < 0
+                          ? "bg-rose-200/60 text-rose-950"
+                          : "bg-blue-200/60 text-blue-950"
+                      }`}
+                    >
+                      {variance > 0 ? `+${variance}` : variance} {target?.unit}
+                    </span>
+                  </div>
+                  <p className="text-[11px] mt-1.5 opacity-90">
+                    {variance === 0 && "Stok fisik cocok dengan data sistem (Sesuai / Balance)."}
+                    {variance > 0 && `Stok fisik lebih banyak +${variance} ${target?.unit} daripada catatan sistem (Surplus).`}
+                    {variance < 0 && `Stok fisik berkurang ${Math.abs(variance)} ${target?.unit} dari catatan sistem (Defisit / Kurang).`}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Kategori Alasan Selisih *</label>
+                  <select
+                    value={opnameReason}
+                    onChange={(e) => setOpnameReason(e.target.value as StockOpnameReason)}
+                    className="w-full border rounded-xl p-2.5 bg-white font-semibold text-slate-800"
+                  >
+                    <option value="RECORDING_ERROR">Kesalahan Pencatatan / Selisih Hitung</option>
+                    <option value="WASTE">Waste (Terbuang saat Operasional / Olah)</option>
+                    <option value="LOSS">Loss (Kehilangan)</option>
+                    <option value="DAMAGED">Kerusakan Kemasan / Fisik Barang</option>
+                    <option value="EXPIRATION">Kedaluwarsa (Expired)</option>
+                    <option value="SAMPLE_PROMO">Sample / Pemakaian Promo</option>
+                    <option value="OTHER">Lainnya</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Catatan Tambahan (Opsional)</label>
+                  <input
+                    type="text"
+                    value={opnameNotes}
+                    onChange={(e) => setOpnameNotes(e.target.value)}
+                    placeholder="Contoh: Kaleng penyok saat penerimaan / sisa potongan"
+                    className="w-full border rounded-xl p-2.5"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Nama Auditor / Pelaksana Opname</label>
+                  <input
+                    type="text"
+                    required
+                    value={opnameAuditor}
+                    onChange={(e) => setOpnameAuditor(e.target.value)}
+                    className="w-full border rounded-xl p-2.5 font-semibold text-slate-800"
+                  />
+                </div>
+
+                <div className="flex items-center justify-end space-x-2 pt-3 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsOpnameModalOpen(false)}
+                  >
+                    Batal
+                  </Button>
+                  <Button type="submit" size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold">
+                    Terapkan & Update Stok Sistem
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* PDF Inventory Valuation Report Modal */}
       <InventoryReportPDFModal

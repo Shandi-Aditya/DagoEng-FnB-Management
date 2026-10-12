@@ -1,11 +1,16 @@
-export type SpaceType = "HOT_DESK" | "DEDICATED_DESK" | "MEETING_ROOM" | "PRIVATE_POD";
+export type PresetSpaceType = "HOT_DESK" | "DEDICATED_DESK" | "MEETING_ROOM" | "PRIVATE_POD";
+export type SpaceType = PresetSpaceType | (string & {});
+
+export type PresetSpaceArea = "Ground Floor Main" | "Mezzanine Quiet Zone" | "VIP Meeting Wing";
+export type SpaceArea = PresetSpaceArea | (string & {});
+
 export type SpaceStatus = "AVAILABLE" | "OCCUPIED" | "RESERVED" | "MAINTENANCE";
 
 export interface CoworkingSpaceItem {
   id: string;
   name: string;
   type: SpaceType;
-  area: "Ground Floor Main" | "Mezzanine Quiet Zone" | "VIP Meeting Wing";
+  area: SpaceArea;
   capacity: number;
   hourlyRate: number;
   dailyRate: number;

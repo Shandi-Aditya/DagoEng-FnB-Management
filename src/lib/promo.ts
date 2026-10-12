@@ -11,6 +11,7 @@ export interface PromoConfig {
   discountValue: number; 
   targetType: TargetType;
   targetId?: string;
+  applicableProductIds?: string[]; // List of specific product IDs for multi-select (Revisi 5)
   scope?: PromoScope; // "ALL" | "FNB" | "COWORKING" (Defaults to "ALL" if undefined)
   minimumAmount?: number;
   maxDiscount?: number; // Capped discount amount for PERCENTAGE
@@ -47,10 +48,50 @@ export interface VoucherValidationResult {
   reason?: string;
 }
 
+export type PromoComputedStatus = "ACTIVE" | "SCHEDULED" | "EXPIRED" | "QUOTA_EXHAUSTED" | "INACTIVE";
+
+export function getPromoComputedStatus(promo: PromoConfig, atDate: Date = new Date()): PromoComputedStatus {
+  if (!promo.isActive) return "INACTIVE";
+  const nowIso = atDate.toISOString();
+  if (promo.validUntil && promo.validUntil < nowIso) return "EXPIRED";
+  if (promo.validFrom && promo.validFrom > nowIso) return "SCHEDULED";
+  if (promo.quota !== undefined && promo.quota > 0 && (promo.usageCount || 0) >= promo.quota) {
+    return "QUOTA_EXHAUSTED";
+  }
+  return "ACTIVE";
+}
+
+export function sortPromosByPriority(promos: PromoConfig[]): PromoConfig[] {
+  const statusWeight: Record<PromoComputedStatus, number> = {
+    ACTIVE: 1,
+    SCHEDULED: 2,
+    QUOTA_EXHAUSTED: 3,
+    EXPIRED: 4,
+    INACTIVE: 5,
+  };
+
+  return [...promos].sort((a, b) => {
+    const statusA = getPromoComputedStatus(a);
+    const statusB = getPromoComputedStatus(b);
+    const weightDiff = (statusWeight[statusA] || 99) - (statusWeight[statusB] || 99);
+    if (weightDiff !== 0) return weightDiff;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+}
+
 export function isPromoEligibleForItem(item: OrderItemInput, promo: PromoConfig): boolean {
   if (promo.scope === "COWORKING") return false; // F&B item is not eligible for coworking-only promo
   if (promo.targetType === "ALL") return true;
-  if (promo.targetType === "PRODUCT" && promo.targetId && item.productId === promo.targetId) return true;
+  if (promo.targetType === "PRODUCT") {
+    if (promo.applicableProductIds && promo.applicableProductIds.length > 0) {
+      return !!item.productId && promo.applicableProductIds.includes(item.productId);
+    }
+    if (promo.targetId) {
+      const ids = promo.targetId.split(",").map((s) => s.trim());
+      return !!item.productId && ids.includes(item.productId);
+    }
+    return false;
+  }
   if (promo.targetType === "CATEGORY" && promo.targetId && item.category === promo.targetId) return true;
   if (promo.targetType === "TENANT" && promo.targetId && item.tenantId === promo.targetId) return true;
   return false;

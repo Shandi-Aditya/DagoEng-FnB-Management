@@ -4,8 +4,13 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { CoworkingSpaceItem, CoworkingBooking, CoworkingMembershipPlan } from "@/types/coworking";
 import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
+import { useSettings } from "./SettingsContext";
 import { useActivityLog } from "./ActivityLogContext";
 import { useNotifications } from "./NotificationContext";
+import {
+  checkCoworkingBookingConflict,
+  validateCoworkingDateRange,
+} from "@/lib/operating-hours";
 
 export interface CoworkingMemberProfile {
   id: string;
@@ -171,6 +176,13 @@ export const INITIAL_BOOKINGS: (CoworkingBooking & {
 
 export const INITIAL_CHECK_LOGS: CheckInOutLog[] = [];
 
+export type NewBookingInput = Omit<
+  typeof INITIAL_BOOKINGS[0],
+  "id" | "bookingCode" | "checkInStatus" | "checkedInAt" | "checkedInBy"
+> & {
+  checkInStatus?: "RESERVED" | "CHECKED_IN" | "COMPLETED" | "CANCELLED";
+};
+
 interface CoworkingContextType {
   spaces: CoworkingSpaceItem[];
   bookings: typeof INITIAL_BOOKINGS;
@@ -179,9 +191,7 @@ interface CoworkingContextType {
   addSpace: (space: Omit<CoworkingSpaceItem, "id">) => CoworkingSpaceItem;
   updateSpace: (id: string, updates: Partial<CoworkingSpaceItem>) => void;
   deleteSpace: (id: string) => void;
-  bookSpace: (
-    booking: Omit<typeof INITIAL_BOOKINGS[0], "id" | "bookingCode" | "checkInStatus" | "checkedInAt" | "checkedInBy">
-  ) => typeof INITIAL_BOOKINGS[0];
+  bookSpace: (booking: NewBookingInput) => typeof INITIAL_BOOKINGS[0];
   confirmBookingPayment: (bookingId: string, paymentMethod?: string) => void;
   cancelBooking: (bookingId: string) => void;
   checkInBooking: (bookingId: string) => void;
@@ -200,6 +210,7 @@ const STORAGE_KEY_LOGS = "dagoeng_cwk_logs_v3";
 export function CoworkingProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { activeOutletId, activeOutlet } = useOutlet();
+  const { settings } = useSettings();
   const { logActivity } = useActivityLog();
   const { addNotification } = useNotifications();
 
@@ -324,9 +335,26 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const bookSpace = (
-    bookingData: Omit<typeof INITIAL_BOOKINGS[0], "id" | "bookingCode" | "checkInStatus" | "checkedInAt" | "checkedInBy">
-  ): typeof INITIAL_BOOKINGS[0] => {
+  const bookSpace = (bookingData: NewBookingInput): typeof INITIAL_BOOKINGS[0] => {
+    // 1. Holiday & Weekend Validation Guard
+    const holidayCheck = validateCoworkingDateRange(
+      bookingData.date,
+      bookingData.endDate,
+      settings?.coworkingHolidays
+    );
+    if (!holidayCheck.isValid) {
+      const firstClosed = holidayCheck.closedDates[0];
+      throw new Error(
+        `COWORKING_DATE_CLOSED: Tanggal ${firstClosed.date} tidak dapat dibooking (${firstClosed.reason}).`
+      );
+    }
+
+    // 2. Anti Double-Booking Collision Guard
+    const conflict = checkCoworkingBookingConflict(bookings, bookingData);
+    if (conflict.hasConflict) {
+      throw new Error(`DOUBLE_BOOKING_CONFLICT: ${conflict.message}`);
+    }
+
     const bookingCode = `BK-CWK-${Date.now().toString().slice(-5)}`;
     const nowFormatted = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA";
     const dateFormatted = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
@@ -337,9 +365,9 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       ...bookingData,
       id: `bk-${Date.now()}`,
       bookingCode,
-      checkInStatus: isPaid ? "CHECKED_IN" : "RESERVED",
-      checkedInAt: isPaid ? `${dateFormatted} ${nowFormatted}` : undefined,
-      checkedInBy: isPaid ? actorName : undefined,
+      checkInStatus: bookingData.checkInStatus ?? (isPaid ? "CHECKED_IN" : "RESERVED"),
+      checkedInAt: isPaid || bookingData.checkInStatus === "CHECKED_IN" ? `${dateFormatted} ${nowFormatted}` : undefined,
+      checkedInBy: isPaid || bookingData.checkInStatus === "CHECKED_IN" ? actorName : undefined,
     };
 
     // Update space status to OCCUPIED if paid, or RESERVED if pending

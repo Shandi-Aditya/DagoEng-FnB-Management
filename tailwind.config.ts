@@ -11,33 +11,33 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // DagoEng Official Brand Accents
+        // DagoEng Official Brand Accents (Revisi 10: Softer, elegant palette)
         brand: {
-          orange: "#FF6B00",
-          cyan: "#00B2FE",
-          green: "#00C853",
-          yellow: "#FFB300",
+          orange: "#EA580C", // Softer warm terracotta orange
+          cyan: "#0284C7",   // Calm ocean sky cyan
+          green: "#059669",  // Elegant emerald green
+          yellow: "#D97706", // Soft warm amber
         },
         // Semantic Tokens
         primary: {
-          DEFAULT: "#FF6B00", // Brand Orange as primary action
-          hover: "#E65A00",
-          light: "#FFF4EB",
+          DEFAULT: "#EA580C", // Softer warm terracotta
+          hover: "#C2410C",
+          light: "#FFF7ED",
           foreground: "#FFFFFF",
         },
         info: {
-          DEFAULT: "#00B2FE", // Brand Cyan as info
-          light: "#E5F7FF",
+          DEFAULT: "#0284C7", // Calm ocean sky cyan
+          light: "#F0F9FF",
           foreground: "#FFFFFF",
         },
         success: {
-          DEFAULT: "#00C853", // Brand Green as success
-          light: "#E6F9EE",
+          DEFAULT: "#059669", // Elegant emerald green
+          light: "#ECFDF5",
           foreground: "#FFFFFF",
         },
         warning: {
-          DEFAULT: "#FFB300", // Brand Yellow as warning
-          light: "#FFF8E1",
+          DEFAULT: "#D97706", // Soft warm amber
+          light: "#FFFBEB",
           foreground: "#1E293B",
         },
         danger: {

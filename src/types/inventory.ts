@@ -65,3 +65,34 @@ export interface StockAdjustmentLog {
   timestamp: string;
   user: string;
 }
+
+export type StockOpnameReason =
+  | "WASTE"
+  | "LOSS"
+  | "DAMAGED"
+  | "RECORDING_ERROR"
+  | "EXPIRATION"
+  | "SAMPLE_PROMO"
+  | "OTHER";
+
+export interface StockOpnameRecord {
+  id: string;
+  opnameNumber: string;
+  date: string;
+  ingredientId: string;
+  ingredientName: string;
+  category: string;
+  unit: string;
+  systemStock: number;
+  physicalStock: number;
+  variance: number; // physicalStock - systemStock
+  varianceType: "SURPLUS" | "DEFICIT" | "MATCH";
+  reason: StockOpnameReason;
+  reasonNotes?: string;
+  performedBy: string;
+  tenantId?: string;
+  outletId?: string;
+  status: "APPLIED";
+  createdAt: string;
+}
+

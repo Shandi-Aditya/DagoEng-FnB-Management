@@ -14,6 +14,13 @@ import { useTables } from "@/contexts/TableContext";
 import { useInventory } from "@/contexts/InventoryContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
 import { useSettings } from "@/contexts/SettingsContext";
+import {
+  isCoworkingDateOpen,
+  validateCoworkingDateRange,
+  checkCoworkingBookingConflict,
+  isTenantAcceptingOrders,
+  isServiceWithinHours,
+} from "@/lib/operating-hours";
 import { DEMO_PERSONAS } from "@/contexts/AuthContext";
 import { calculateOrderPricing, checkPromoValidity, isPromoEligibleForItem, PromoConfig, validateVoucherCode, calculateCoworkingPricing } from "@/lib/promo";
 import { LOYALTY_VOUCHERS } from "@/features/pos/mock-data";
@@ -633,6 +640,21 @@ function CustomerPortalContent() {
   const addToCart = (product: MasterProduct) => {
     if (!product.isAvailable) return;
 
+    // Tenant Operating Status Guard (Revisi 2)
+    const tId = product.tenantId || "tenant-ks";
+    const tenantStatus = isTenantAcceptingOrders(tId, settings?.tenantOperations);
+    if (!tenantStatus.isOpen) {
+      showToast(`Mitra sedang Tutup Sementara (${tenantStatus.reason}). Pesanan baru tidak dapat dibuat.`);
+      return;
+    }
+
+    // F&B Service Hours Guard (Revisi 4)
+    const fnbOpStatus = isServiceWithinHours("fnb", settings?.operationalHours);
+    if (!fnbOpStatus.isOpen) {
+      showToast(`Layanan F&B sedang tutup (${settings?.operationalHours?.fnb?.openTime} - ${settings?.operationalHours?.fnb?.closeTime}).`);
+      return;
+    }
+
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
@@ -663,6 +685,23 @@ function CustomerPortalContent() {
 
   const executeFnbOrder = (explicitCustomer?: { name: string; phone?: string; email?: string }) => {
     if (cart.length === 0) return;
+
+    // Validate tenant operating status for every cart item (Revisi 2)
+    for (const ci of cart) {
+      const tId = ci.product.tenantId || "tenant-ks";
+      const tStatus = isTenantAcceptingOrders(tId, settings?.tenantOperations);
+      if (!tStatus.isOpen) {
+        showToast(`Pesanan Gagal: Mitra [${ci.product.name}] sedang Tutup Sementara.`);
+        return;
+      }
+    }
+
+    // F&B Service Hours Guard (Revisi 4)
+    const fnbOpStatus = isServiceWithinHours("fnb", settings?.operationalHours);
+    if (!fnbOpStatus.isOpen) {
+      showToast(`Pesanan Gagal: ${fnbOpStatus.reason}.`);
+      return;
+    }
 
     // Explicit identity resolution: explicit argument > currentMember > user
     const resolvedName = explicitCustomer?.name?.trim() || currentMember?.name?.trim() || user?.name?.trim();
@@ -952,32 +991,74 @@ function CustomerPortalContent() {
     const taxRate = (settings?.taxRatePercent !== undefined ? settings.taxRatePercent : 10) / 100;
     const calc = calculateCoworkingPricing(subtotal, appliedCoworkPromo || undefined, taxRate);
 
-    // 1. Create booking with PENDING payment status (requires payment before use)
-    const newBooking = bookSpace({
+    // 1. Holiday & Closed Date Validation (Revisi 1)
+    const holidayCheck = validateCoworkingDateRange(
+      bookingDate,
+      computedEndDate,
+      settings?.coworkingHolidays
+    );
+    if (!holidayCheck.isValid) {
+      const firstClosed = holidayCheck.closedDates[0];
+      showToast(
+        `Booking Ditolak: ${firstClosed.reason} (${firstClosed.date}). Co-working tutup kecuali dibuka via Override di Settings.`
+      );
+      return;
+    }
+
+    // 2. Co-working Service Operating Hours Guard (Revisi 4)
+    const cwOpStatus = isServiceWithinHours("coworking", settings?.operationalHours);
+    if (!cwOpStatus.isOpen) {
+      showToast(`Booking Ditolak: ${cwOpStatus.reason}.`);
+      return;
+    }
+
+    // 3. Anti Double-Booking Collision Guard (Revisi 3)
+    const conflict = checkCoworkingBookingConflict(bookings, {
       spaceId: selectedSpaceForBooking.id,
       spaceName: selectedSpaceForBooking.name,
-      spaceType: selectedSpaceForBooking.type,
-      guestName: resolvedName,
-      guestPhone: resolvedPhone,
-      guestEmail: resolvedEmail,
-      company: bookingUsageType === "GROUP" ? (bookingCompanyName.trim() || "Group / Company") : "Personal",
       bookingType: customerCoworkBookingMode,
       date: bookingDate,
       endDate: computedEndDate,
       startTime: customerCoworkBookingMode === "HOURLY" ? `${bookingStartTime} WITA` : "09:00 WITA",
       endTime: computedEndTime,
-      duration: calculatedDuration,
-      price: subtotal,
-      discount: calc.discountAmount,
-      totalAmount: calc.total,
-      paidAmount: 0,
-      remainingAmount: calc.total,
-      paymentMethod: bookingPaymentMethod,
-      paymentStatus: "PENDING",
-      notes: bookingNotes
-        ? `${bookingNotes} (${bookingGuests} orang)${appliedCoworkPromo ? ` [Promo: ${appliedCoworkPromo.code || appliedCoworkPromo.name}]` : ""}`
-        : `Booking via Customer Portal (${bookingGuests} orang)${appliedCoworkPromo ? ` [Promo: ${appliedCoworkPromo.code || appliedCoworkPromo.name}]` : ""}`,
     });
+    if (conflict.hasConflict) {
+      showToast(`Booking Ditolak: ${conflict.message}`);
+      return;
+    }
+
+    let newBooking: any;
+    try {
+      // 4. Create booking with PENDING payment status (requires payment before use)
+      newBooking = bookSpace({
+        spaceId: selectedSpaceForBooking.id,
+        spaceName: selectedSpaceForBooking.name,
+        spaceType: selectedSpaceForBooking.type,
+        guestName: resolvedName,
+        guestPhone: resolvedPhone,
+        guestEmail: resolvedEmail,
+        company: bookingUsageType === "GROUP" ? (bookingCompanyName.trim() || "Group / Company") : "Personal",
+        bookingType: customerCoworkBookingMode,
+        date: bookingDate,
+        endDate: computedEndDate,
+        startTime: customerCoworkBookingMode === "HOURLY" ? `${bookingStartTime} WITA` : "09:00 WITA",
+        endTime: computedEndTime,
+        duration: calculatedDuration,
+        price: subtotal,
+        discount: calc.discountAmount,
+        totalAmount: calc.total,
+        paidAmount: 0,
+        remainingAmount: calc.total,
+        paymentMethod: bookingPaymentMethod,
+        paymentStatus: "PENDING",
+        notes: bookingNotes
+          ? `${bookingNotes} (${bookingGuests} orang)${appliedCoworkPromo ? ` [Promo: ${appliedCoworkPromo.code || appliedCoworkPromo.name}]` : ""}`
+          : `Booking via Customer Portal (${bookingGuests} orang)${appliedCoworkPromo ? ` [Promo: ${appliedCoworkPromo.code || appliedCoworkPromo.name}]` : ""}`,
+      });
+    } catch (err: any) {
+      showToast(`Gagal memproses booking: ${err.message}`);
+      return;
+    }
 
     if (appliedCoworkPromo) {
       setUsedPromoIds((prev) => [...prev, appliedCoworkPromo.id]);
@@ -1977,26 +2058,44 @@ function CustomerPortalContent() {
                             </div>
 
                             {/* Add to Cart Actions */}
-                            {isAvailable ? (
-                              inCart ? (
-                                <div className="flex items-center space-x-2 bg-slate-100/90 p-1 rounded-2xl border border-slate-200">
-                                  <button
-                                    onClick={() => updateCartQty(item.id, -1)}
-                                    className="w-7 h-7 rounded-xl bg-white text-slate-800 hover:bg-slate-200 flex items-center justify-center font-black text-xs shadow-2xs transition-all active:scale-90"
-                                  >
-                                    <Minus className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span className="font-black text-xs px-1.5 text-slate-900">
-                                    {inCart.quantity}
-                                  </span>
-                                  <button
-                                    onClick={() => updateCartQty(item.id, 1)}
-                                    className="w-7 h-7 rounded-xl bg-slate-900 text-white hover:bg-slate-800 flex items-center justify-center font-black text-xs shadow-2xs transition-all active:scale-90"
-                                  >
-                                    <Plus className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ) : (
+                            {(() => {
+                              const tenantOp = isTenantAcceptingOrders(item.tenantId || "tenant-ks", settings?.tenantOperations);
+                              if (!tenantOp.isOpen) {
+                                return (
+                                  <Button size="sm" disabled className="bg-slate-100 text-amber-700 font-bold text-[11px] h-9 px-3 rounded-xl border border-amber-200/80 cursor-not-allowed">
+                                    Tutup Sementara
+                                  </Button>
+                                );
+                              }
+                              if (!isAvailable) {
+                                return (
+                                  <Button size="sm" disabled className="text-xs h-9 px-4 rounded-xl">
+                                    Habis
+                                  </Button>
+                                );
+                              }
+                              if (inCart) {
+                                return (
+                                  <div className="flex items-center space-x-2 bg-slate-100/90 p-1 rounded-2xl border border-slate-200">
+                                    <button
+                                      onClick={() => updateCartQty(item.id, -1)}
+                                      className="w-7 h-7 rounded-xl bg-white text-slate-800 hover:bg-slate-200 flex items-center justify-center font-black text-xs shadow-2xs transition-all active:scale-90"
+                                    >
+                                      <Minus className="w-3.5 h-3.5" />
+                                    </button>
+                                    <span className="font-black text-xs px-1.5 text-slate-900">
+                                      {inCart.quantity}
+                                    </span>
+                                    <button
+                                      onClick={() => updateCartQty(item.id, 1)}
+                                      className="w-7 h-7 rounded-xl bg-slate-900 text-white hover:bg-slate-800 flex items-center justify-center font-black text-xs shadow-2xs transition-all active:scale-90"
+                                    >
+                                      <Plus className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                );
+                              }
+                              return (
                                 <Button
                                   onClick={() => addToCart(item)}
                                   size="sm"
@@ -2005,12 +2104,8 @@ function CustomerPortalContent() {
                                   <Plus className="w-3.5 h-3.5 mr-1" />
                                   <span>Pesan</span>
                                 </Button>
-                              )
-                            ) : (
-                              <Button size="sm" disabled className="text-xs h-9 px-4 rounded-xl">
-                                Habis
-                              </Button>
-                            )}
+                              );
+                            })()}
                           </div>
                         </div>
                       );

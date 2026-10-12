@@ -85,7 +85,25 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
       if (saved) {
-        setSettings({ ...DEFAULT_PLATFORM_SETTINGS, ...JSON.parse(saved) });
+        const parsed = JSON.parse(saved);
+        setSettings({
+          ...DEFAULT_PLATFORM_SETTINGS,
+          ...parsed,
+          coworkingHolidays: {
+            ...DEFAULT_PLATFORM_SETTINGS.coworkingHolidays,
+            ...(parsed.coworkingHolidays || {}),
+            nationalHolidays: parsed.coworkingHolidays?.nationalHolidays || DEFAULT_PLATFORM_SETTINGS.coworkingHolidays.nationalHolidays,
+            overrides: parsed.coworkingHolidays?.overrides || DEFAULT_PLATFORM_SETTINGS.coworkingHolidays.overrides,
+          },
+          operationalHours: {
+            ...DEFAULT_PLATFORM_SETTINGS.operationalHours,
+            ...(parsed.operationalHours || {}),
+          },
+          tenantOperations: {
+            ...DEFAULT_PLATFORM_SETTINGS.tenantOperations,
+            ...(parsed.tenantOperations || {}),
+          },
+        });
       }
     } catch (e) {
       console.error("Failed to load settings", e);
@@ -150,7 +168,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 export function useSettings() {
   const context = useContext(SettingsContext);
   if (!context) {
-    throw new Error("useSettings must be used within a SettingsProvider");
+    return {
+      settings: DEFAULT_PLATFORM_SETTINGS,
+      updateSettings: () => {},
+      t: (key: string) => key,
+    };
   }
   return context;
 }

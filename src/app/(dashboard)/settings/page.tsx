@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { PromoConfig, PromoType, TargetType } from "@/lib/promo";
+import { PromoConfig, PromoType, TargetType, getPromoComputedStatus, sortPromosByPriority } from "@/lib/promo";
 import { useProducts } from "@/contexts/ProductContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
 import { useTables } from "@/contexts/TableContext";
@@ -43,7 +43,18 @@ import {
   Grid,
   UploadCloud,
   ImageIcon,
+  Calendar,
+  CalendarDays,
+  CheckSquare,
+  Square,
+  ArrowUpDown,
 } from "lucide-react";
+import {
+  INDONESIAN_NATIONAL_HOLIDAYS_2026,
+  HolidayOverride,
+  HolidayOverrideDate,
+  TenantOperationConfig,
+} from "@/lib/operating-hours";
 import { Button } from "@/components/ui/button";
 import {
   getTenantStatus,
@@ -66,7 +77,7 @@ import {
 export default function SettingsPage() {
   const { user, activeOrgModules, toggleOrgModule } = useAuth();
   const { filteredProducts, categories, addProduct, updateProduct, deleteProduct, toggleProductStatus, addCategory } = useProducts();
-  const { spaces: cwSpaces } = useCoworking();
+  const { spaces: cwSpaces, addSpace, updateSpace, deleteSpace } = useCoworking();
   const { areas } = useTables();
   const allTables = areas.flatMap((a) => a.tables.map((t) => ({ ...t, areaName: a.name })));
   const { settings, updateSettings } = useSettings();
@@ -93,8 +104,46 @@ export default function SettingsPage() {
   const [goldPts, setGoldPts] = useState(settings.loyaltyTiers.goldMin);
   const [platPts, setPlatPts] = useState(settings.loyaltyTiers.platinumMin);
 
-  // Promos
-  const [promos, setPromos] = useState<PromoConfig[]>(settings.promos || []);
+  // Promos (Revisi 6: diurutkan berdasarkan prioritas aktif)
+  const [promos, setPromos] = useState<PromoConfig[]>(() => sortPromosByPriority(settings.promos || []));
+
+  // Master Product Filters & Sorting (Revisi 7)
+  const [masterStatusFilter, setMasterStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+  const [masterSortOrder, setMasterSortOrder] = useState<"UPDATED_DESC" | "UPDATED_ASC" | "NAME_ASC" | "PRICE_ASC" | "PRICE_DESC">("UPDATED_DESC");
+
+  // Promo Product Multi-Select Modal State (Revisi 5)
+  const [isPromoProductModalOpen, setIsPromoProductModalOpen] = useState(false);
+  const [activePromoIdForProductSelect, setActivePromoIdForProductSelect] = useState<string | null>(null);
+  const [selectedProductIdsInModal, setSelectedProductIdsInModal] = useState<string[]>([]);
+  const [promoProductSearch, setPromoProductSearch] = useState("");
+  const [promoProductCategoryFilter, setPromoProductCategoryFilter] = useState("ALL");
+  const [promoProductTenantFilter, setPromoProductTenantFilter] = useState("ALL");
+
+  // Co-working Holidays & Operating Hours State (Revisi 1 & 4)
+  const [cwWeekendClosed, setCwWeekendClosed] = useState(settings.coworkingHolidays?.closeOnWeekends ?? true);
+  const [cwNationalHolidaysClosed, setCwNationalHolidaysClosed] = useState(settings.coworkingHolidays?.closeOnNationalHolidays ?? true);
+  const [cwOverrides, setCwOverrides] = useState<HolidayOverrideDate[]>(settings.coworkingHolidays?.overrides || []);
+  const [newOverrideDate, setNewOverrideDate] = useState("");
+  const [newOverrideType, setNewOverrideType] = useState<"OPEN" | "CLOSED">("OPEN");
+  const [newOverrideReason, setNewOverrideReason] = useState("");
+
+  // Operating Hours State (Revisi 4)
+  const [cwOpenTime, setCwOpenTime] = useState(settings.operationalHours?.coworking?.open || "09:00");
+  const [cwCloseTime, setCwCloseTime] = useState(settings.operationalHours?.coworking?.close || "18:00");
+  const [fnbOpenTime, setFnbOpenTime] = useState(settings.operationalHours?.fnb?.open || "07:00");
+  const [fnbCloseTime, setFnbCloseTime] = useState(settings.operationalHours?.fnb?.close || "22:00");
+
+  // Tenant Operations State (Revisi 2)
+  const [tenantOps, setTenantOps] = useState<Record<string, TenantOperationConfig>>(settings.tenantOperations || {});
+  const [tenantOpenTime, setTenantOpenTime] = useState(
+    settings.tenantOperations?.[user?.tenant?.id || "tenant-ks"]?.openTime || "08:00"
+  );
+  const [tenantCloseTime, setTenantCloseTime] = useState(
+    settings.tenantOperations?.[user?.tenant?.id || "tenant-ks"]?.closeTime || "21:00"
+  );
+  const [tenantClosedReason, setTenantClosedReason] = useState(
+    settings.tenantOperations?.[user?.tenant?.id || "tenant-ks"]?.temporaryClosedReason || ""
+  );
 
   // Tenant Settings Form State (Owner Mitra)
   const [tenantBrandName, setTenantBrandName] = useState(user?.tenant?.name || "Kopi Senja");
@@ -290,8 +339,15 @@ export default function SettingsPage() {
     showMasterToast(`Mitra "${newTenant.name}" berhasil ditambahkan ke Master Data.`);
   };
 
-  // Local Coworking Spaces for Master Data
+  // Local Coworking Spaces for Master Data (Synced with CoworkingContext)
   const [localSpaces, setLocalSpaces] = useState<any[]>(cwSpaces);
+
+  useEffect(() => {
+    if (cwSpaces && cwSpaces.length > 0) {
+      setLocalSpaces(cwSpaces);
+    }
+  }, [cwSpaces]);
+
   const [isAddSpaceModalOpen, setIsAddSpaceModalOpen] = useState(false);
   const [isEditSpaceModalOpen, setIsEditSpaceModalOpen] = useState(false);
   const [editingSpace, setEditingSpace] = useState<any>(null);
@@ -321,11 +377,10 @@ export default function SettingsPage() {
   const handleSaveNewSpace = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formSpaceName.trim()) return;
-    const newSpace = {
-      id: `sp-${Date.now()}`,
+    const newSpacePayload = {
       name: formSpaceName.trim(),
-      type: formSpaceType as any,
-      area: formSpaceArea,
+      type: formSpaceType.trim() || "HOT_DESK",
+      area: formSpaceArea.trim() || "Ground Floor Main",
       capacity: Number(formSpaceCap) || 1,
       hourlyRate: Number(formSpaceHourly) || 15000,
       dailyRate: Number(formSpaceDaily) || 65000,
@@ -333,9 +388,10 @@ export default function SettingsPage() {
       imageUrl: formSpaceImg.trim() || undefined,
       amenities: ["WiFi 100Mbps", "Power Hub", "Air Conditioner"],
     };
-    setLocalSpaces((prev) => [...prev, newSpace]);
+    const created = addSpace(newSpacePayload);
+    setLocalSpaces((prev) => [...prev, created]);
     setIsAddSpaceModalOpen(false);
-    showMasterToast(`Ruang "${newSpace.name}" berhasil ditambahkan ke Master Data.`);
+    showMasterToast(`Ruang "${created.name}" (${created.type}) berhasil ditambahkan ke Master Data.`);
   };
 
   const handleOpenEditSpace = (sp: any) => {
@@ -354,34 +410,32 @@ export default function SettingsPage() {
   const handleSaveEditSpace = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingSpace || !formSpaceName.trim()) return;
+    const updates = {
+      name: formSpaceName.trim(),
+      type: formSpaceType.trim() || "HOT_DESK",
+      area: formSpaceArea.trim() || "Ground Floor Main",
+      capacity: Number(formSpaceCap) || 1,
+      hourlyRate: Number(formSpaceHourly) || 15000,
+      dailyRate: Number(formSpaceDaily) || 65000,
+      status: formSpaceStatus as any,
+      imageUrl: formSpaceImg.trim() || undefined,
+    };
+    updateSpace(editingSpace.id, updates);
     setLocalSpaces((prev) =>
-      prev.map((s) =>
-        s.id === editingSpace.id
-          ? {
-            ...s,
-            name: formSpaceName.trim(),
-            type: formSpaceType as any,
-            area: formSpaceArea,
-            capacity: Number(formSpaceCap) || 1,
-            hourlyRate: Number(formSpaceHourly) || 15000,
-            dailyRate: Number(formSpaceDaily) || 65000,
-            status: formSpaceStatus as any,
-            imageUrl: formSpaceImg.trim() || undefined,
-          }
-          : s
-      )
+      prev.map((s) => (s.id === editingSpace.id ? { ...s, ...updates } : s))
     );
     setIsEditSpaceModalOpen(false);
     setEditingSpace(null);
-    showMasterToast(`Perubahan ruang "${formSpaceName}" berhasil disimpan.`);
+    showMasterToast(`Perubahan ruang "${formSpaceName}" berhasil disimpan ke Master Data.`);
   };
 
   const handleConfirmDeleteSpace = () => {
     if (!deletingSpace) return;
+    deleteSpace(deletingSpace.id);
     setLocalSpaces((prev) => prev.filter((s) => s.id !== deletingSpace.id));
     setIsDeleteSpaceModalOpen(false);
     setDeletingSpace(null);
-    showMasterToast(`Ruang "${deletingSpace.name}" berhasil dihapus.`);
+    showMasterToast(`Ruang "${deletingSpace.name}" berhasil dihapus dari Master Data.`);
   };
 
   // Local Membership Plans for Master Data
@@ -554,16 +608,40 @@ export default function SettingsPage() {
     "Konfigurasi Platform & Pajak",
   ];
 
-  // Filtered Master Products
-  const displayedMasterProducts = filteredProducts.filter((p) => {
-    const matchTenant = masterTenantFilter === "ALL" || p.tenantId === masterTenantFilter;
-    const matchCategory = masterCategoryFilter === "ALL" || p.category === masterCategoryFilter;
-    const matchSearch =
-      p.name.toLowerCase().includes(masterSearch.toLowerCase()) ||
-      p.category.toLowerCase().includes(masterSearch.toLowerCase()) ||
-      (p.tenantId && getTenantName(p.tenantId)?.toLowerCase().includes(masterSearch.toLowerCase()));
-    return matchTenant && matchCategory && matchSearch;
-  });
+  // Filtered & Sorted Master Products (Revisi 7)
+  const sortProducts = (list: MasterProduct[]) => {
+    return [...list].sort((a, b) => {
+      if (masterSortOrder === "UPDATED_DESC") {
+        return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+      }
+      if (masterSortOrder === "UPDATED_ASC") {
+        return new Date(a.updatedAt || 0).getTime() - new Date(b.updatedAt || 0).getTime();
+      }
+      if (masterSortOrder === "NAME_ASC") {
+        return a.name.localeCompare(b.name);
+      }
+      if (masterSortOrder === "PRICE_ASC") {
+        return a.basePrice - b.basePrice;
+      }
+      if (masterSortOrder === "PRICE_DESC") {
+        return b.basePrice - a.basePrice;
+      }
+      return 0;
+    });
+  };
+
+  const displayedMasterProducts = sortProducts(
+    filteredProducts.filter((p) => {
+      const matchTenant = masterTenantFilter === "ALL" || p.tenantId === masterTenantFilter;
+      const matchCategory = masterCategoryFilter === "ALL" || p.category === masterCategoryFilter;
+      const matchStatus = masterStatusFilter === "ALL" || p.status === masterStatusFilter;
+      const matchSearch =
+        p.name.toLowerCase().includes(masterSearch.toLowerCase()) ||
+        p.category.toLowerCase().includes(masterSearch.toLowerCase()) ||
+        (p.tenantId && getTenantName(p.tenantId)?.toLowerCase().includes(masterSearch.toLowerCase()));
+      return matchTenant && matchCategory && matchStatus && matchSearch;
+    })
+  );
 
   const refreshRevenueSplits = () => {
     setRevenueSplits(getAllTenantRevenueSplits());
@@ -677,10 +755,150 @@ export default function SettingsPage() {
         platinumMin: Number(platPts),
       },
       promos,
+      coworkingHolidays: {
+        defaultWeekendClosed: cwWeekendClosed,
+        nationalHolidays: cwNationalHolidaysClosed ? INDONESIAN_NATIONAL_HOLIDAYS_2026 : [],
+        closeOnWeekends: cwWeekendClosed,
+        closeOnNationalHolidays: cwNationalHolidaysClosed,
+        overrides: cwOverrides,
+      },
+      operationalHours: {
+        coworking: {
+          openTime: cwOpenTime,
+          closeTime: cwCloseTime,
+          isOpen: true,
+          open: cwOpenTime,
+          close: cwCloseTime,
+          allowBookingOutsideHours: false,
+        },
+        fnb: {
+          openTime: fnbOpenTime,
+          closeTime: fnbCloseTime,
+          isOpen: true,
+          open: fnbOpenTime,
+          close: fnbCloseTime,
+          allowOrderOutsideHours: false,
+        },
+      },
+      tenantOperations: tenantOps,
     });
 
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 3500);
+  };
+
+  // Promo Product Multi-Select Handlers (Revisi 5)
+  const handleOpenPromoProductSelect = (promoId: string) => {
+    const targetPromo = promos.find((p) => p.id === promoId);
+    if (!targetPromo) return;
+    setActivePromoIdForProductSelect(promoId);
+    let initialIds: string[] = [];
+    if (targetPromo.applicableProductIds && targetPromo.applicableProductIds.length > 0) {
+      initialIds = [...targetPromo.applicableProductIds];
+    } else if (targetPromo.targetId) {
+      initialIds = targetPromo.targetId.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+    setSelectedProductIdsInModal(initialIds);
+    setPromoProductSearch("");
+    setPromoProductCategoryFilter("ALL");
+    setPromoProductTenantFilter("ALL");
+    setIsPromoProductModalOpen(true);
+  };
+
+  const handleToggleModalProduct = (productId: string) => {
+    setSelectedProductIdsInModal((prev) =>
+      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
+    );
+  };
+
+  const handleSelectAllModalProducts = (ids: string[]) => {
+    setSelectedProductIdsInModal((prev) => Array.from(new Set([...prev, ...ids])));
+  };
+
+  const handleClearAllModalProducts = () => {
+    setSelectedProductIdsInModal([]);
+  };
+
+  const handleSavePromoProducts = () => {
+    if (!activePromoIdForProductSelect) return;
+    setPromos((prev) =>
+      prev.map((p) => {
+        if (p.id !== activePromoIdForProductSelect) return p;
+        return {
+          ...p,
+          applicableProductIds: selectedProductIdsInModal,
+          targetId: selectedProductIdsInModal.join(","),
+        };
+      })
+    );
+    setIsPromoProductModalOpen(false);
+    showMasterToast(`${selectedProductIdsInModal.length} produk menu berhasil dikaitkan ke kupon diskon.`);
+  };
+
+  const handleRemoveProductFromPromo = (promoId: string, productId: string) => {
+    setPromos((prev) =>
+      prev.map((p) => {
+        if (p.id !== promoId) return p;
+        const currentList = p.applicableProductIds || (p.targetId ? p.targetId.split(",").map((s) => s.trim()).filter(Boolean) : []);
+        const nextList = currentList.filter((id) => id !== productId);
+        return {
+          ...p,
+          applicableProductIds: nextList,
+          targetId: nextList.join(","),
+        };
+      })
+    );
+  };
+
+  // Co-working Holiday Override Handlers (Revisi 1)
+  const handleAddHolidayOverride = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newOverrideDate) return;
+    const newEntry: HolidayOverride = {
+      date: newOverrideDate,
+      isOpen: newOverrideType === "OPEN",
+      type: newOverrideType,
+      reason: newOverrideReason.trim() || undefined,
+    };
+    setCwOverrides((prev) => {
+      const filtered = prev.filter((o) => o.date !== newOverrideDate);
+      return [...filtered, newEntry];
+    });
+    setNewOverrideDate("");
+    setNewOverrideReason("");
+    showMasterToast(`Override tanggal ${newOverrideDate} (${newOverrideType === "OPEN" ? "Buka Khusus" : "Tutup Khusus"}) berhasil ditambahkan.`);
+  };
+
+  const handleRemoveHolidayOverride = (dateStr: string) => {
+    setCwOverrides((prev) => prev.filter((o) => o.date !== dateStr));
+    showMasterToast(`Override tanggal ${dateStr} dihapus.`);
+  };
+
+  // Tenant Operation Controls Handler (Revisi 2)
+  const handleUpdateTenantOperation = (
+    tenantId: string,
+    field: keyof TenantOperationConfig,
+    value: any
+  ) => {
+    setTenantOps((prev) => {
+      const existing: TenantOperationConfig = prev[tenantId] || {
+        isOpenOrder: true,
+        tenantId,
+        tenantName: localTenants.find((t) => t.id === tenantId)?.name || tenantId,
+        isAcceptingOrders: true,
+        openTime: "08:00",
+        closeTime: "21:00",
+      };
+      return {
+        ...prev,
+        [tenantId]: {
+          ...existing,
+          [field]: value,
+          ...(field === "isOpenOrder" ? { isAcceptingOrders: value } : {}),
+          ...(field === "isAcceptingOrders" ? { isOpenOrder: value } : {}),
+        },
+      };
+    });
   };
 
   const handleSaveTenantSettings = (e: React.FormEvent) => {
@@ -734,6 +952,21 @@ export default function SettingsPage() {
     } catch (err) {
       console.error("Failed saving tenant settings", err);
     }
+
+    const updatedTenantOps: Record<string, TenantOperationConfig> = {
+      ...tenantOps,
+      [currentTenantId]: {
+        isOpenOrder: tenantStatus === "ACTIVE",
+        tenantId: currentTenantId,
+        tenantName: tenantBrandName.trim(),
+        isAcceptingOrders: tenantStatus === "ACTIVE",
+        openTime: tenantOpenTime,
+        closeTime: tenantCloseTime,
+        temporaryClosedReason: tenantClosedReason.trim() || undefined,
+      },
+    };
+    setTenantOps(updatedTenantOps);
+    updateSettings({ tenantOperations: updatedTenantOps });
 
     setTenantSavedSuccess(true);
     setTimeout(() => setTenantSavedSuccess(false), 3500);
@@ -792,13 +1025,16 @@ export default function SettingsPage() {
   // Render Settings
   const myTenantId = user?.tenant?.id || "tenant-ks";
   const myTenantProducts = filteredProducts.filter((p) => p.tenantId === myTenantId);
-  const displayedMyTenantProducts = myTenantProducts.filter((p) => {
-    const matchCategory = masterCategoryFilter === "ALL" || p.category === masterCategoryFilter;
-    const matchSearch =
-      p.name.toLowerCase().includes(masterSearch.toLowerCase()) ||
-      p.category.toLowerCase().includes(masterSearch.toLowerCase());
-    return matchCategory && matchSearch;
-  });
+  const displayedMyTenantProducts = sortProducts(
+    myTenantProducts.filter((p) => {
+      const matchCategory = masterCategoryFilter === "ALL" || p.category === masterCategoryFilter;
+      const matchStatus = masterStatusFilter === "ALL" || p.status === masterStatusFilter;
+      const matchSearch =
+        p.name.toLowerCase().includes(masterSearch.toLowerCase()) ||
+        p.category.toLowerCase().includes(masterSearch.toLowerCase());
+      return matchCategory && matchStatus && matchSearch;
+    })
+  );
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -917,6 +1153,35 @@ export default function SettingsPage() {
                     {categories.map((c) => (
                       <option key={c} value={c}>{c}</option>
                     ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center space-x-1.5">
+                  <span className="text-[11px] font-semibold text-slate-500">Status:</span>
+                  <select
+                    value={masterStatusFilter}
+                    onChange={(e) => setMasterStatusFilter(e.target.value as any)}
+                    className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 font-semibold"
+                  >
+                    <option value="ALL">Semua Status</option>
+                    <option value="ACTIVE">Aktif Saja</option>
+                    <option value="INACTIVE">Nonaktif Saja</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center space-x-1.5">
+                  <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-[11px] font-semibold text-slate-500">Urutkan:</span>
+                  <select
+                    value={masterSortOrder}
+                    onChange={(e) => setMasterSortOrder(e.target.value as any)}
+                    className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-white text-slate-700 font-semibold"
+                  >
+                    <option value="UPDATED_DESC">Terakhir Diubah/Diaktifkan</option>
+                    <option value="UPDATED_ASC">Terlama Diubah</option>
+                    <option value="NAME_ASC">Nama Menu (A-Z)</option>
+                    <option value="PRICE_ASC">Harga Termurah</option>
+                    <option value="PRICE_DESC">Harga Tertinggi</option>
                   </select>
                 </div>
               </div>
@@ -1567,6 +1832,36 @@ export default function SettingsPage() {
                         </option>
                       ))}
                     </select>
+
+                    {/* Status Filter (Revisi 7) */}
+                    <div className="flex items-center space-x-1">
+                      <Power className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <select
+                        value={masterStatusFilter}
+                        onChange={(e) => setMasterStatusFilter(e.target.value as any)}
+                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                      >
+                        <option value="ALL">Semua Status</option>
+                        <option value="ACTIVE">Aktif Saja</option>
+                        <option value="INACTIVE">Nonaktif Saja</option>
+                      </select>
+                    </div>
+
+                    {/* Sort Order (Revisi 7) */}
+                    <div className="flex items-center space-x-1">
+                      <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      <select
+                        value={masterSortOrder}
+                        onChange={(e) => setMasterSortOrder(e.target.value as any)}
+                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                      >
+                        <option value="UPDATED_DESC">Terakhir Diubah/Diaktifkan</option>
+                        <option value="UPDATED_ASC">Terlama Diubah</option>
+                        <option value="NAME_ASC">Nama Produk (A-Z)</option>
+                        <option value="PRICE_ASC">Harga Termurah</option>
+                        <option value="PRICE_DESC">Harga Tertinggi</option>
+                      </select>
+                    </div>
                   </div>
 
                   <div className="text-[11px] font-bold text-slate-500">
@@ -1711,37 +2006,67 @@ export default function SettingsPage() {
                     </h4>
                   </div>
                   <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                    <table className="w-full text-left text-xs border-collapse min-w-[650px]">
+                    <table className="w-full text-left text-xs border-collapse min-w-[760px]">
                       <thead className="bg-slate-50">
                         <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px]">
                           <th className="p-3 font-bold">Mitra F&B</th>
                           <th className="p-3 font-bold">Kode Merchant</th>
-                          <th className="p-3 font-bold">Kategori Layanan</th>
-                          <th className="p-3 font-bold">Status Operasional</th>
+                          <th className="p-3 font-bold">Jam Buka - Tutup Gerai (Revisi 2)</th>
+                          <th className="p-3 font-bold">Status Terima Order</th>
                           <th className="p-3 font-bold text-right">Aksi Buka / Tutup</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-700 bg-white">
                         {localTenants.map((t) => {
-                          const status = allTenantStatuses[t.id] || "ACTIVE";
-                          const isAct = status === "ACTIVE";
+                          const op = tenantOps[t.id] || {
+                            tenantId: t.id,
+                            tenantName: t.name,
+                            isAcceptingOrders: (allTenantStatuses[t.id] || "ACTIVE") === "ACTIVE",
+                            openTime: "08:00",
+                            closeTime: "21:00",
+                          };
+                          const isAccepting = op.isAcceptingOrders;
+
                           return (
                             <tr key={t.id} className="hover:bg-slate-50/50">
-                              <td className="p-3 font-bold text-slate-900 flex items-center space-x-2">
-                                <Store className="w-3.5 h-3.5 text-brand-orange" />
-                                <span>{t.name}</span>
-                                <span className="text-[10px] text-slate-500 font-normal">({t.badge})</span>
+                              <td className="p-3 font-bold text-slate-900">
+                                <div className="flex items-center space-x-2">
+                                  <Store className="w-3.5 h-3.5 text-brand-orange shrink-0" />
+                                  <span>{t.name}</span>
+                                  <span className="text-[10px] text-slate-500 font-normal">({t.badge})</span>
+                                </div>
                               </td>
                               <td className="p-3 font-mono text-slate-500">{t.code}</td>
-                              <td className="p-3 font-medium text-slate-600">Food & Beverage (F&B)</td>
+                              <td className="p-3">
+                                <div className="flex items-center space-x-1.5">
+                                  <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                  <input
+                                    type="time"
+                                    value={op.openTime || "08:00"}
+                                    onChange={(e) => handleUpdateTenantOperation(t.id, "openTime", e.target.value)}
+                                    className="px-1.5 py-1 border border-slate-200 rounded text-xs font-mono font-bold"
+                                    title="Jam Buka Gerai"
+                                  />
+                                  <span className="text-slate-400">-</span>
+                                  <input
+                                    type="time"
+                                    value={op.closeTime || "21:00"}
+                                    onChange={(e) => handleUpdateTenantOperation(t.id, "closeTime", e.target.value)}
+                                    className="px-1.5 py-1 border border-slate-200 rounded text-xs font-mono font-bold"
+                                    title="Jam Tutup Gerai"
+                                  />
+                                </div>
+                              </td>
                               <td className="p-3">
                                 <span
-                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isAct
-                                    ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                    : "bg-red-100 text-red-800 border-red-300"
-                                    }`}
+                                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center space-x-1 ${
+                                    isAccepting
+                                      ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                      : "bg-red-100 text-red-800 border-red-300"
+                                  }`}
                                 >
-                                  {isAct ? "ACTIVE (BUKA)" : "INACTIVE (TUTUP)"}
+                                  <span className={`w-1.5 h-1.5 rounded-full ${isAccepting ? "bg-emerald-600" : "bg-red-600"}`} />
+                                  <span>{isAccepting ? "OPEN ORDER (Buka)" : "TUTUP SEMENTARA"}</span>
                                 </span>
                               </td>
                               <td className="p-3 text-right space-x-2">
@@ -1750,18 +2075,20 @@ export default function SettingsPage() {
                                   type="button"
                                   variant="outline"
                                   onClick={() => {
-                                    const next = isAct ? "INACTIVE" : "ACTIVE";
-                                    setTenantStatus(t.id, next);
+                                    const next = !isAccepting;
+                                    handleUpdateTenantOperation(t.id, "isAcceptingOrders", next);
+                                    setTenantStatus(t.id, next ? "ACTIVE" : "INACTIVE");
                                     refreshAllTenantStatuses();
-                                    showMasterToast(`Status ${t.name} diubah menjadi ${next}.`);
+                                    showMasterToast(`Status order ${t.name} diubah menjadi ${next ? "Open Order (Buka)" : "Tutup Sementara"}.`);
                                   }}
-                                  className={`h-7 text-xs font-bold px-2.5 rounded-xl ${isAct
-                                    ? "border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
-                                    : "border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                                    }`}
+                                  className={`h-7 text-xs font-bold px-2.5 rounded-xl ${
+                                    isAccepting
+                                      ? "border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                                      : "border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                                  }`}
                                 >
                                   <Power className="w-3 h-3 mr-1" />
-                                  <span>{isAct ? "Nonaktifkan" : "Aktifkan"}</span>
+                                  <span>{isAccepting ? "Tutup Order" : "Buka Order"}</span>
                                 </Button>
                               </td>
                             </tr>
@@ -2142,256 +2469,375 @@ export default function SettingsPage() {
                     Belum ada promo yang dikonfigurasi. Klik "+ Tambah Voucher Promo" di pojok kanan atas.
                   </div>
                 ) : (
-                  promos.map((promo, idx) => (
-                    <div key={promo.id} className="border border-slate-200 rounded-2xl p-4 space-y-3 bg-slate-50 shadow-2xs">
-                      {/* Row 1: Code, Name, Active Toggle & Delete */}
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-200/80">
-                        <div className="flex items-center space-x-2 flex-1">
-                          <div className="w-28">
-                            <label className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">Kode Kupon</label>
-                            <input
-                              type="text"
-                              value={promo.code || ""}
-                              onChange={(e) => {
-                                const newPromos = [...promos];
-                                newPromos[idx].code = e.target.value.toUpperCase();
-                                setPromos(newPromos);
-                              }}
-                              placeholder="DAGO20"
-                              className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-black uppercase w-full bg-white text-emerald-700 focus:ring-1 focus:ring-emerald-500"
-                            />
+                  sortPromosByPriority(promos).map((promo) => {
+                    const computedStatus = getPromoComputedStatus(promo);
+                    const isMuted = computedStatus !== "ACTIVE" && computedStatus !== "SCHEDULED";
+                    const targetProductIds = promo.applicableProductIds || (promo.targetId ? promo.targetId.split(",").map((s) => s.trim()).filter(Boolean) : []);
+
+                    return (
+                      <div
+                        key={promo.id}
+                        className={`border rounded-2xl p-4 space-y-3 shadow-2xs transition-all ${
+                          isMuted
+                            ? "bg-slate-100/70 border-slate-300/80 opacity-80"
+                            : "bg-slate-50 border-slate-200"
+                        }`}
+                      >
+                        {/* Row 1: Code, Name, Status Badge, Active Toggle & Delete */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-200/80">
+                          <div className="flex items-center space-x-2 flex-1">
+                            <div className="w-28">
+                              <label className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">Kode Kupon</label>
+                              <input
+                                type="text"
+                                value={promo.code || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value.toUpperCase();
+                                  setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, code: val } : p)));
+                                }}
+                                placeholder="DAGO20"
+                                className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-black uppercase w-full bg-white text-emerald-700 focus:ring-1 focus:ring-emerald-500"
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <label className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">Nama Promo</label>
+                              <input
+                                type="text"
+                                value={promo.name}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, name: val } : p)));
+                                }}
+                                placeholder="Nama Promo"
+                                className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold w-full bg-white text-slate-800"
+                              />
+                            </div>
+                            {/* Computed Status Badge (Revisi 6) */}
+                            <div className="self-end pb-1.5">
+                              {computedStatus === "ACTIVE" && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse" />
+                                  AKTIF
+                                </span>
+                              )}
+                              {computedStatus === "SCHEDULED" && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                                  TERJADWAL
+                                </span>
+                              )}
+                              {computedStatus === "EXPIRED" && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                  KADALUWARSA
+                                </span>
+                              )}
+                              {computedStatus === "QUOTA_EXHAUSTED" && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                  KUOTA HABIS
+                                </span>
+                              )}
+                              {computedStatus === "INACTIVE" && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300">
+                                  NONAKTIF
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex-1">
-                            <label className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">Nama Promo</label>
-                            <input
-                              type="text"
-                              value={promo.name}
-                              onChange={(e) => {
-                                const newPromos = [...promos];
-                                newPromos[idx].name = e.target.value;
-                                setPromos(newPromos);
-                              }}
-                              placeholder="Nama Promo"
-                              className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold w-full bg-white text-slate-800"
-                            />
+
+                          <div className="flex items-center space-x-3 self-end sm:self-center">
+                            <div className="text-right">
+                              <span className="text-[10px] font-bold text-slate-500 block">
+                                Terpakai: <strong className="text-slate-900">{promo.usageCount || 0}</strong> / {promo.quota || "∞"}
+                              </span>
+                            </div>
+                            <label className="text-xs flex items-center space-x-1.5 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={promo.isActive}
+                                onChange={(e) => {
+                                  const val = e.target.checked;
+                                  setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, isActive: val } : p)));
+                                }}
+                                className="rounded text-emerald-600"
+                              />
+                              <span className="font-bold text-[11px] text-slate-700">{promo.isActive ? "Aktif" : "Nonaktif"}</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setPromos((prev) => prev.filter((p) => p.id !== promo.id))}
+                              className="text-rose-500 hover:text-rose-700 p-1.5 hover:bg-rose-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
 
-                        <div className="flex items-center space-x-3 self-end sm:self-center">
-                          <div className="text-right">
-                            <span className="text-[10px] font-bold text-slate-500 block">
-                              Terpakai: <strong className="text-slate-900">{promo.usageCount || 0}</strong> / {promo.quota || "∞"}
-                            </span>
-                          </div>
-                          <label className="text-xs flex items-center space-x-1.5 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200">
-                            <input
-                              type="checkbox"
-                              checked={promo.isActive}
-                              onChange={(e) => {
-                                const newPromos = [...promos];
-                                newPromos[idx].isActive = e.target.checked;
-                                setPromos(newPromos);
-                              }}
-                              className="rounded text-emerald-600"
-                            />
-                            <span className="font-bold text-[11px] text-slate-700">{promo.isActive ? "Aktif" : "Nonaktif"}</span>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => setPromos(promos.filter((p) => p.id !== promo.id))}
-                            className="text-rose-500 hover:text-rose-700 p-1.5 hover:bg-rose-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Row 2: Deskripsi */}
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Deskripsi Singkat / Syarat Ketentuan</label>
-                        <input
-                          type="text"
-                          value={promo.description || ""}
-                          onChange={(e) => {
-                            const newPromos = [...promos];
-                            newPromos[idx].description = e.target.value;
-                            setPromos(newPromos);
-                          }}
-                          placeholder="Contoh: Diskon 20% untuk semua transaksi weekend..."
-                          className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs w-full bg-white text-slate-600"
-                        />
-                      </div>
-
-                      {/* Row 3: Grid Configuration */}
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                        {/* Row 2: Deskripsi */}
                         <div>
-                          <label className="block text-slate-500 font-medium mb-1">Berlaku Untuk</label>
-                          <select
-                            value={promo.scope || "ALL"}
-                            onChange={(e) => {
-                              const newPromos = [...promos];
-                              newPromos[idx].scope = e.target.value as any;
-                              setPromos(newPromos);
-                            }}
-                            className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
-                          >
-                            <option value="ALL">Semua (F&B & Co-Work)</option>
-                            <option value="FNB">Khusus F&B</option>
-                            <option value="COWORKING">Khusus Co-Working</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-slate-500 font-medium mb-1">Tipe Diskon</label>
-                          <select
-                            value={promo.discountType}
-                            onChange={(e) => {
-                              const newPromos = [...promos];
-                              newPromos[idx].discountType = e.target.value as PromoType;
-                              setPromos(newPromos);
-                            }}
-                            className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
-                          >
-                            <option value="PERCENTAGE">Persentase (%)</option>
-                            <option value="FIXED">Nominal Fixed (Rp)</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-slate-500 font-medium mb-1">
-                            {promo.discountType === "PERCENTAGE" ? "Nilai Diskon (%)" : "Nilai Diskon (Rp)"}
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={promo.discountValue}
-                            onChange={(e) => {
-                              const newPromos = [...promos];
-                              newPromos[idx].discountValue = Number(e.target.value);
-                              setPromos(newPromos);
-                            }}
-                            className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-slate-500 font-medium mb-1">Maks. Diskon (Rp)</label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={promo.maxDiscount || ""}
-                            onChange={(e) => {
-                              const newPromos = [...promos];
-                              newPromos[idx].maxDiscount = e.target.value ? Number(e.target.value) : undefined;
-                              setPromos(newPromos);
-                            }}
-                            placeholder="Tanpa batas"
-                            className="w-full px-2 py-1.5 border rounded-lg bg-white"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-slate-500 font-medium mb-1">Min. Belanja (Rp)</label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={promo.minimumAmount || ""}
-                            onChange={(e) => {
-                              const newPromos = [...promos];
-                              newPromos[idx].minimumAmount = e.target.value ? Number(e.target.value) : undefined;
-                              setPromos(newPromos);
-                            }}
-                            placeholder="0 (Tanpa min)"
-                            className="w-full px-2 py-1.5 border rounded-lg bg-white"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-slate-500 font-medium mb-1">Kuota Pemakaian</label>
-                          <input
-                            type="number"
-                            min={1}
-                            value={promo.quota || ""}
-                            onChange={(e) => {
-                              const newPromos = [...promos];
-                              newPromos[idx].quota = e.target.value ? Number(e.target.value) : undefined;
-                              setPromos(newPromos);
-                            }}
-                            placeholder="Tanpa batas"
-                            className="w-full px-2 py-1.5 border rounded-lg bg-white"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Row 4: Target Type & Periode Validitas */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs pt-1">
-                        <div>
-                          <label className="block text-slate-500 font-medium mb-1">Target Menu/Mitra</label>
-                          <select
-                            value={promo.targetType || "ALL"}
-                            onChange={(e) => {
-                              const newPromos = [...promos];
-                              newPromos[idx].targetType = e.target.value as any;
-                              setPromos(newPromos);
-                            }}
-                            className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
-                          >
-                            <option value="ALL">Semua Menu & Mitra</option>
-                            <option value="TENANT">Khusus Mitra / Tenant</option>
-                            <option value="CATEGORY">Khusus Kategori</option>
-                            <option value="PRODUCT">Khusus Produk Tertentu</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-slate-500 font-medium mb-1">
-                            {promo.targetType === "TENANT" ? "Target Tenant ID" : promo.targetType === "CATEGORY" ? "Target Kategori" : promo.targetType === "PRODUCT" ? "Target Product ID" : "Target Scope ID"}
-                          </label>
+                          <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Deskripsi Singkat / Syarat Ketentuan</label>
                           <input
                             type="text"
-                            disabled={!promo.targetType || promo.targetType === "ALL"}
-                            value={promo.targetId || ""}
+                            value={promo.description || ""}
                             onChange={(e) => {
-                              const newPromos = [...promos];
-                              newPromos[idx].targetId = e.target.value;
-                              setPromos(newPromos);
+                              const val = e.target.value;
+                              setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, description: val } : p)));
                             }}
-                            placeholder={promo.targetType === "ALL" || !promo.targetType ? "Berlaku Semua" : "Masukkan ID / Kategori"}
-                            className={`w-full px-2.5 py-1.5 border rounded-lg text-xs font-mono ${!promo.targetType || promo.targetType === "ALL" ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "bg-white text-slate-900"
-                              }`}
+                            placeholder="Contoh: Diskon 20% untuk semua transaksi weekend..."
+                            className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs w-full bg-white text-slate-600"
                           />
                         </div>
 
-                        <div>
-                          <label className="block text-slate-500 font-medium mb-1">Tanggal Mulai Berlaku</label>
-                          <input
-                            type="date"
-                            value={promo.validFrom ? promo.validFrom.split("T")[0] : ""}
-                            onChange={(e) => {
-                              const newPromos = [...promos];
-                              newPromos[idx].validFrom = e.target.value ? new Date(e.target.value).toISOString() : undefined;
-                              setPromos(newPromos);
-                            }}
-                            className="w-full px-2.5 py-1.5 border rounded-lg bg-white text-xs"
-                          />
+                        {/* Row 3: Grid Configuration */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                          <div>
+                            <label className="block text-slate-500 font-medium mb-1">Berlaku Untuk</label>
+                            <select
+                              value={promo.scope || "ALL"}
+                              onChange={(e) => {
+                                const val = e.target.value as any;
+                                setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, scope: val } : p)));
+                              }}
+                              className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
+                            >
+                              <option value="ALL">Semua (F&B & Co-Work)</option>
+                              <option value="FNB">Khusus F&B</option>
+                              <option value="COWORKING">Khusus Co-Working</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-500 font-medium mb-1">Tipe Diskon</label>
+                            <select
+                              value={promo.discountType}
+                              onChange={(e) => {
+                                const val = e.target.value as PromoType;
+                                setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, discountType: val } : p)));
+                              }}
+                              className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
+                            >
+                              <option value="PERCENTAGE">Persentase (%)</option>
+                              <option value="FIXED">Nominal Fixed (Rp)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-500 font-medium mb-1">
+                              {promo.discountType === "PERCENTAGE" ? "Nilai Diskon (%)" : "Nilai Diskon (Rp)"}
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={promo.discountValue}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, discountValue: val } : p)));
+                              }}
+                              className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-500 font-medium mb-1">Maks. Diskon (Rp)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={promo.maxDiscount || ""}
+                              onChange={(e) => {
+                                const val = e.target.value ? Number(e.target.value) : undefined;
+                                setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, maxDiscount: val } : p)));
+                              }}
+                              placeholder="Tanpa batas"
+                              className="w-full px-2 py-1.5 border rounded-lg bg-white"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-500 font-medium mb-1">Min. Belanja (Rp)</label>
+                            <input
+                              type="number"
+                              min={0}
+                              value={promo.minimumAmount || ""}
+                              onChange={(e) => {
+                                const val = e.target.value ? Number(e.target.value) : undefined;
+                                setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, minimumAmount: val } : p)));
+                              }}
+                              placeholder="0 (Tanpa min)"
+                              className="w-full px-2 py-1.5 border rounded-lg bg-white"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-500 font-medium mb-1">Kuota Pemakaian</label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={promo.quota || ""}
+                              onChange={(e) => {
+                                const val = e.target.value ? Number(e.target.value) : undefined;
+                                setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, quota: val } : p)));
+                              }}
+                              placeholder="Tanpa batas"
+                              className="w-full px-2 py-1.5 border rounded-lg bg-white"
+                            />
+                          </div>
                         </div>
 
-                        <div>
-                          <label className="block text-slate-500 font-medium mb-1">Tanggal Berakhir (Expired)</label>
-                          <input
-                            type="date"
-                            value={promo.validUntil ? promo.validUntil.split("T")[0] : ""}
-                            onChange={(e) => {
-                              const newPromos = [...promos];
-                              newPromos[idx].validUntil = e.target.value ? new Date(e.target.value + "T23:59:59.000Z").toISOString() : undefined;
-                              setPromos(newPromos);
-                            }}
-                            className="w-full px-2.5 py-1.5 border rounded-lg bg-white text-xs"
-                          />
+                        {/* Row 4: Target Type & Periode Validitas (Revisi 5) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs pt-1">
+                          <div>
+                            <label className="block text-slate-500 font-medium mb-1">Target Menu/Mitra</label>
+                            <select
+                              value={promo.targetType || "ALL"}
+                              onChange={(e) => {
+                                const val = e.target.value as any;
+                                setPromos((prev) =>
+                                  prev.map((p) => (p.id === promo.id ? { ...p, targetType: val } : p))
+                                );
+                              }}
+                              className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
+                            >
+                              <option value="ALL">Semua Menu & Mitra</option>
+                              <option value="TENANT">Khusus Mitra / Tenant</option>
+                              <option value="CATEGORY">Khusus Kategori</option>
+                              <option value="PRODUCT">Khusus Produk Tertentu (Multi-Select)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-500 font-medium mb-1">
+                              {promo.targetType === "TENANT"
+                                ? "Pilih Mitra Target"
+                                : promo.targetType === "CATEGORY"
+                                ? "Pilih Kategori Target"
+                                : promo.targetType === "PRODUCT"
+                                ? `Produk Target (${targetProductIds.length} Dipilih)`
+                                : "Lingkup Target"}
+                            </label>
+
+                            {/* Dropdown for TENANT */}
+                            {promo.targetType === "TENANT" && (
+                              <select
+                                value={promo.targetId || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setPromos((prev) =>
+                                    prev.map((p) => (p.id === promo.id ? { ...p, targetId: val } : p))
+                                  );
+                                }}
+                                className="w-full px-2.5 py-1.5 border rounded-lg bg-white font-semibold text-slate-800"
+                              >
+                                <option value="">Pilih Mitra...</option>
+                                {localTenants.map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name} ({t.code})
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+
+                            {/* Dropdown for CATEGORY */}
+                            {promo.targetType === "CATEGORY" && (
+                              <select
+                                value={promo.targetId || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setPromos((prev) =>
+                                    prev.map((p) => (p.id === promo.id ? { ...p, targetId: val } : p))
+                                  );
+                                }}
+                                className="w-full px-2.5 py-1.5 border rounded-lg bg-white font-semibold text-slate-800"
+                              >
+                                <option value="">Pilih Kategori...</option>
+                                {categories.map((c) => (
+                                  <option key={c} value={c}>
+                                    {c}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+
+                            {/* Multi-Select Button for PRODUCT (Revisi 5) */}
+                            {promo.targetType === "PRODUCT" && (
+                              <div className="space-y-1.5">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenPromoProductSelect(promo.id)}
+                                  className="w-full h-8 text-xs font-bold border-brand-orange text-brand-orange hover:bg-orange-50 flex items-center justify-center space-x-1 rounded-lg"
+                                >
+                                  <UtensilsCrossed className="w-3.5 h-3.5 mr-1" />
+                                  <span>+ Pilih Menu Produk ({targetProductIds.length})</span>
+                                </Button>
+                                {targetProductIds.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto p-1.5 bg-white border border-slate-200 rounded-lg">
+                                    {targetProductIds.map((pid) => {
+                                      const prod = filteredProducts.find((p) => p.id === pid);
+                                      return (
+                                        <span
+                                          key={pid}
+                                          className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-900 text-[10px] font-medium"
+                                        >
+                                          <span className="truncate max-w-[100px]">{prod?.name || pid}</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemoveProductFromPromo(promo.id, pid)}
+                                            className="text-orange-500 hover:text-rose-600 ml-0.5"
+                                            title="Hapus dari promo"
+                                          >
+                                            <X className="w-2.5 h-2.5" />
+                                          </button>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* ALL / Fallback */}
+                            {(!promo.targetType || promo.targetType === "ALL") && (
+                              <input
+                                type="text"
+                                disabled
+                                value="Berlaku untuk Semua Menu"
+                                className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-slate-100 text-slate-400 cursor-not-allowed"
+                              />
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-500 font-medium mb-1">Tanggal Mulai Berlaku</label>
+                            <input
+                              type="date"
+                              value={promo.validFrom ? promo.validFrom.split("T")[0] : ""}
+                              onChange={(e) => {
+                                const val = e.target.value ? new Date(e.target.value).toISOString() : undefined;
+                                setPromos((prev) =>
+                                  prev.map((p) => (p.id === promo.id ? { ...p, validFrom: val } : p))
+                                );
+                              }}
+                              className="w-full px-2.5 py-1.5 border rounded-lg bg-white text-xs"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-500 font-medium mb-1">Tanggal Berakhir (Expired)</label>
+                            <input
+                              type="date"
+                              value={promo.validUntil ? promo.validUntil.split("T")[0] : ""}
+                              onChange={(e) => {
+                                const val = e.target.value ? new Date(e.target.value + "T23:59:59.000Z").toISOString() : undefined;
+                                setPromos((prev) =>
+                                  prev.map((p) => (p.id === promo.id ? { ...p, validUntil: val } : p))
+                                );
+                              }}
+                              className="w-full px-2.5 py-1.5 border rounded-lg bg-white text-xs"
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
 
                 <div className="flex justify-end pt-2">
@@ -2620,6 +3066,255 @@ export default function SettingsPage() {
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* PEMISAHAN JAM OPERASIONAL LAYANAN (REVISI 4) */}
+                <Card className="shadow-2xs border border-slate-200">
+                  <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
+                    <CardTitle className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                      <Clock className="w-4 h-4 text-brand-orange" />
+                      <span>Pemisahan Jam Operasional Layanan (F&B vs Co-Working)</span>
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Atur jam operasional independen untuk layanan Kuliner F&B (POS Kasir & Portal) dan Ruang Co-Working.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    {/* Co-working Operating Hours */}
+                    <div className="p-3.5 border border-slate-200 rounded-xl bg-slate-50/50 space-y-2">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
+                        <div className="flex items-center space-x-2 font-bold text-slate-800">
+                          <Laptop className="w-4 h-4 text-blue-600" />
+                          <span>Co-Working Space</span>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">09.00 - 18.00 Default</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Pemesanan slot / meja co-working hanya diizinkan dalam rentang jam operasional ini.
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">Jam Buka</label>
+                          <input
+                            type="time"
+                            value={cwOpenTime}
+                            onChange={(e) => setCwOpenTime(e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white font-bold text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">Jam Tutup</label>
+                          <input
+                            type="time"
+                            value={cwCloseTime}
+                            onChange={(e) => setCwCloseTime(e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white font-bold text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* F&B Operating Hours */}
+                    <div className="p-3.5 border border-slate-200 rounded-xl bg-slate-50/50 space-y-2">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
+                        <div className="flex items-center space-x-2 font-bold text-slate-800">
+                          <UtensilsCrossed className="w-4 h-4 text-amber-600" />
+                          <span>Kuliner & F&B Hub</span>
+                        </div>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800">07.00 - 22.00 Default</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Transaksi POS kasir dan pesanan Customer Portal mobile F&B dibatasi dalam rentang jam ini.
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">Jam Buka</label>
+                          <input
+                            type="time"
+                            value={fnbOpenTime}
+                            onChange={(e) => setFnbOpenTime(e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white font-bold text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">Jam Tutup</label>
+                          <input
+                            type="time"
+                            value={fnbCloseTime}
+                            onChange={(e) => setFnbCloseTime(e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white font-bold text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* KALENDER HARI LIBUR & ATURAN CO-WORKING (REVISI 1) */}
+                <Card className="shadow-2xs border border-slate-200">
+                  <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
+                    <CardTitle className="text-sm font-bold text-slate-800 flex items-center space-x-2">
+                      <Calendar className="w-4 h-4 text-emerald-600" />
+                      <span>Kalender Hari Libur & Aturan Co-Working</span>
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Aturan operasional hari libur nasional Indonesia dan akhir pekan (Sabtu & Minggu) beserta override tanggal khusus.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 space-y-4 text-xs">
+                    {/* Toggles */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="p-3 border border-slate-200 rounded-xl bg-white flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-slate-800">Tutup Akhir Pekan (Sabtu & Minggu)</p>
+                          <p className="text-[11px] text-slate-500">Co-working tutup default pada hari Sabtu dan Minggu.</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer ml-3">
+                          <input
+                            type="checkbox"
+                            checked={cwWeekendClosed}
+                            onChange={(e) => setCwWeekendClosed(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                        </label>
+                      </div>
+
+                      <div className="p-3 border border-slate-200 rounded-xl bg-white flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-slate-800">Tutup Hari Libur Nasional (Default)</p>
+                          <p className="text-[11px] text-slate-500">Tutup otomatis saat libur nasional resmi Republik Indonesia.</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer ml-3">
+                          <input
+                            type="checkbox"
+                            checked={cwNationalHolidaysClosed}
+                            onChange={(e) => setCwNationalHolidaysClosed(e.target.checked)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Daftar Libur Nasional 2026 */}
+                    <details className="border border-slate-200 rounded-xl bg-slate-50/50 p-3">
+                      <summary className="font-bold text-slate-700 cursor-pointer flex items-center justify-between">
+                        <span className="flex items-center space-x-2">
+                          <CalendarDays className="w-4 h-4 text-slate-500" />
+                          <span>Lihat Jadwal Hari Libur Nasional Indonesia 2026 ({INDONESIAN_NATIONAL_HOLIDAYS_2026.length} Hari)</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400">Klik untuk melihat</span>
+                      </summary>
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-48 overflow-y-auto pt-2 border-t border-slate-200">
+                        {INDONESIAN_NATIONAL_HOLIDAYS_2026.map((h: { date: string; name: string }) => (
+                          <div key={h.date} className="p-2 bg-white border border-slate-200 rounded-lg text-[11px]">
+                            <span className="font-mono font-bold text-rose-700 block">{h.date}</span>
+                            <span className="text-slate-600 line-clamp-1">{h.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+
+                    {/* Form Override Tanggal Khusus */}
+                    <div className="border border-slate-200 rounded-xl p-3.5 bg-white space-y-3">
+                      <div>
+                        <h5 className="font-bold text-slate-800">Override Tanggal Khusus (Owner / Admin)</h5>
+                        <p className="text-[11px] text-slate-500">
+                          Gunakan override untuk membuka Co-working pada tanggal merah / akhir pekan tertentu, atau menutup pada hari kerja biasa.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1">
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">Tanggal</label>
+                          <input
+                            type="date"
+                            value={newOverrideDate}
+                            onChange={(e) => setNewOverrideDate(e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-600 mb-1">Kebijakan Status</label>
+                          <select
+                            value={newOverrideType}
+                            onChange={(e) => setNewOverrideType(e.target.value as "OPEN" | "CLOSED")}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white font-bold"
+                          >
+                            <option value="OPEN">BUKA_KHUSUS (Buka di Hari Libur)</option>
+                            <option value="CLOSED">TUTUP_KHUSUS (Tutup di Hari Kerja)</option>
+                          </select>
+                        </div>
+                        <div className="sm:col-span-2 flex items-end space-x-2">
+                          <div className="flex-1">
+                            <label className="block text-[11px] font-bold text-slate-600 mb-1">Alasan / Catatan</label>
+                            <input
+                              type="text"
+                              placeholder="Contoh: Event Khusus Hackathon / Maintenance Gedung"
+                              value={newOverrideReason}
+                              onChange={(e) => setNewOverrideReason(e.target.value)}
+                              className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            onClick={handleAddHolidayOverride}
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-9 px-3 rounded-lg text-xs shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5 mr-1" />
+                            <span>Tambah</span>
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Tabel Active Overrides */}
+                      {cwOverrides.length > 0 && (
+                        <div className="border border-slate-200 rounded-lg overflow-hidden mt-2">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead className="bg-slate-50 text-slate-400 text-[10px] uppercase border-b border-slate-200">
+                              <tr>
+                                <th className="p-2.5 font-bold">Tanggal</th>
+                                <th className="p-2.5 font-bold">Status Override</th>
+                                <th className="p-2.5 font-bold">Keterangan / Alasan</th>
+                                <th className="p-2.5 font-bold text-right">Aksi</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                              {cwOverrides.map((ov) => (
+                                <tr key={ov.date} className="hover:bg-slate-50/50">
+                                  <td className="p-2.5 font-mono font-bold text-slate-800">{ov.date}</td>
+                                  <td className="p-2.5">
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                        (ov.isOpen ?? ov.type === "OPEN")
+                                          ? "bg-emerald-100 text-emerald-800"
+                                          : "bg-rose-100 text-rose-800"
+                                      }`}
+                                    >
+                                      {(ov.isOpen ?? ov.type === "OPEN") ? "BUKA KHUSUS" : "TUTUP KHUSUS"}
+                                    </span>
+                                  </td>
+                                  <td className="p-2.5 text-slate-600">{ov.reason || "-"}</td>
+                                  <td className="p-2.5 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveHolidayOverride(ov.date)}
+                                      className="text-rose-500 hover:text-rose-700 p-1 hover:bg-rose-50 rounded"
+                                      title="Hapus Override"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
 
                 {/* Save Bar */}
                 <div className="flex items-center justify-end pt-4 border-t border-slate-200">
@@ -3094,29 +3789,66 @@ export default function SettingsPage() {
                       className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-3">
                     <div className="space-y-1">
-                      <label className="font-bold text-slate-700">Tipe Ruangan</label>
-                      <select
-                        value={formSpaceType}
-                        onChange={(e) => setFormSpaceType(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-semibold"
-                      >
-                        <option value="HOT_DESK">HOT_DESK</option>
-                        <option value="DEDICATED_DESK">DEDICATED_DESK</option>
-                        <option value="PRIVATE_OFFICE">PRIVATE_OFFICE</option>
-                        <option value="MEETING_ROOM">MEETING_ROOM</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="font-bold text-slate-700">Area / Lantai</label>
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-700">Tipe Ruangan (Kustom / Bebas) *</label>
+                        <span className="text-[10px] text-slate-400">Ketik bebas atau pilih preset</span>
+                      </div>
                       <input
                         type="text"
+                        required
+                        value={formSpaceType}
+                        onChange={(e) => setFormSpaceType(e.target.value)}
+                        placeholder="Contoh: HOT_DESK, PODCAST_STUDIO, EVENT_SPACE"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl font-semibold bg-white"
+                      />
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {["HOT_DESK", "DEDICATED_DESK", "PRIVATE_OFFICE", "MEETING_ROOM", "PODCAST_STUDIO", "EVENT_SPACE"].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setFormSpaceType(preset)}
+                            className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all ${
+                              formSpaceType === preset
+                                ? "bg-slate-900 text-white"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-700">Area / Lantai (Kustom / Bebas) *</label>
+                        <span className="text-[10px] text-slate-400">Ketik bebas atau pilih preset</span>
+                      </div>
+                      <input
+                        type="text"
+                        required
                         value={formSpaceArea}
                         onChange={(e) => setFormSpaceArea(e.target.value)}
-                        placeholder="Ground Floor Main"
+                        placeholder="Contoh: Ground Floor Main, Rooftop Terrace"
                         className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                       />
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {["Ground Floor Main", "Mezzanine Quiet Zone", "VIP Meeting Wing", "Lantai 2 Mezzanine", "Rooftop Terrace"].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setFormSpaceArea(preset)}
+                            className={`text-[10px] px-2 py-0.5 rounded-md font-medium transition-all ${
+                              formSpaceArea === preset
+                                ? "bg-slate-900 text-white"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
@@ -3243,28 +3975,66 @@ export default function SettingsPage() {
                       className="w-full px-3 py-2 border border-slate-200 rounded-xl font-bold"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-3">
                     <div className="space-y-1">
-                      <label className="font-bold text-slate-700">Tipe Ruangan</label>
-                      <select
-                        value={formSpaceType}
-                        onChange={(e) => setFormSpaceType(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-semibold"
-                      >
-                        <option value="HOT_DESK">HOT_DESK</option>
-                        <option value="DEDICATED_DESK">DEDICATED_DESK</option>
-                        <option value="PRIVATE_OFFICE">PRIVATE_OFFICE</option>
-                        <option value="MEETING_ROOM">MEETING_ROOM</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="font-bold text-slate-700">Area / Lantai</label>
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-700">Tipe Ruangan (Kustom / Bebas) *</label>
+                        <span className="text-[10px] text-slate-400">Ketik bebas atau pilih preset</span>
+                      </div>
                       <input
                         type="text"
+                        required
+                        value={formSpaceType}
+                        onChange={(e) => setFormSpaceType(e.target.value)}
+                        placeholder="Contoh: HOT_DESK, PODCAST_STUDIO, EVENT_SPACE"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl font-semibold bg-white"
+                      />
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {["HOT_DESK", "DEDICATED_DESK", "PRIVATE_OFFICE", "MEETING_ROOM", "PODCAST_STUDIO", "EVENT_SPACE"].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setFormSpaceType(preset)}
+                            className={`text-[10px] px-2 py-0.5 rounded-md font-bold transition-all ${
+                              formSpaceType === preset
+                                ? "bg-slate-900 text-white"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="font-bold text-slate-700">Area / Lantai (Kustom / Bebas) *</label>
+                        <span className="text-[10px] text-slate-400">Ketik bebas atau pilih preset</span>
+                      </div>
+                      <input
+                        type="text"
+                        required
                         value={formSpaceArea}
                         onChange={(e) => setFormSpaceArea(e.target.value)}
+                        placeholder="Contoh: Ground Floor Main, Rooftop Terrace"
                         className="w-full px-3 py-2 border border-slate-200 rounded-xl"
                       />
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {["Ground Floor Main", "Mezzanine Quiet Zone", "VIP Meeting Wing", "Lantai 2 Mezzanine", "Rooftop Terrace"].map((preset) => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => setFormSpaceArea(preset)}
+                            className={`text-[10px] px-2 py-0.5 rounded-md font-medium transition-all ${
+                              formSpaceArea === preset
+                                ? "bg-slate-900 text-white"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
@@ -3724,6 +4494,202 @@ export default function SettingsPage() {
                   <Button type="button" onClick={handleConfirmDeleteTable} className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs">
                     Ya, Hapus
                   </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL: PILIH MENU PRODUK PROMO (REVISI 5) */}
+          {isPromoProductModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden animate-in zoom-in-95">
+                {/* Header */}
+                <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-9 h-9 rounded-xl bg-orange-100 text-brand-orange flex items-center justify-center shrink-0">
+                      <UtensilsCrossed className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-900">Katalog Menu Promo Diskon</h4>
+                      <p className="text-[11px] text-slate-500">
+                        Pilih menu yang berhak mendapatkan diskon dengan mencentang checkbox produk.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPromoProductModalOpen(false)}
+                    className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Filter and Search Bar */}
+                <div className="p-3 border-b border-slate-100 bg-white grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Cari nama menu..."
+                      value={promoProductSearch}
+                      onChange={(e) => setPromoProductSearch(e.target.value)}
+                      className="w-full pl-8 pr-2.5 py-1.5 border border-slate-200 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div>
+                    <select
+                      value={promoProductCategoryFilter}
+                      onChange={(e) => setPromoProductCategoryFilter(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white font-medium"
+                    >
+                      <option value="ALL">Semua Kategori</option>
+                      {categories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <select
+                      value={promoProductTenantFilter}
+                      onChange={(e) => setPromoProductTenantFilter(e.target.value)}
+                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white font-medium"
+                    >
+                      <option value="ALL">Semua Mitra / Tenant</option>
+                      {localTenants.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Multi-Select Toolbar */}
+                {(() => {
+                  const modalFilteredProducts = filteredProducts.filter((p) => {
+                    const matchCat = promoProductCategoryFilter === "ALL" || p.category === promoProductCategoryFilter;
+                    const matchTenant = promoProductTenantFilter === "ALL" || p.tenantId === promoProductTenantFilter;
+                    const matchSearch =
+                      p.name.toLowerCase().includes(promoProductSearch.toLowerCase()) ||
+                      p.category.toLowerCase().includes(promoProductSearch.toLowerCase());
+                    return matchCat && matchTenant && matchSearch;
+                  });
+
+                  return (
+                    <>
+                      <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-xs">
+                        <span className="text-[11px] font-bold text-slate-500">
+                          Menampilkan {modalFilteredProducts.length} produk ({selectedProductIdsInModal.length} terpilih)
+                        </span>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSelectAllModalProducts(modalFilteredProducts.map((p) => p.id))}
+                            className="text-[11px] font-bold text-brand-orange hover:underline"
+                          >
+                            Pilih Semua
+                          </button>
+                          <span className="text-slate-300">|</span>
+                          <button
+                            type="button"
+                            onClick={handleClearAllModalProducts}
+                            className="text-[11px] font-bold text-rose-600 hover:underline"
+                          >
+                            Hapus Semua
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Product Checkbox List */}
+                      <div className="flex-1 overflow-y-auto p-4 max-h-[50vh] divide-y divide-slate-100">
+                        {modalFilteredProducts.length === 0 ? (
+                          <div className="text-center py-8 text-xs text-slate-400 italic">
+                            Tidak ada produk menu yang sesuai filter.
+                          </div>
+                        ) : (
+                          modalFilteredProducts.map((p) => {
+                            const isSelected = selectedProductIdsInModal.includes(p.id);
+                            const tenantName = p.tenantId ? getTenantName(p.tenantId) : "Dago Hub";
+
+                            return (
+                              <label
+                                key={p.id}
+                                className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-colors ${
+                                  isSelected ? "bg-orange-50/70" : "hover:bg-slate-50"
+                                }`}
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => handleToggleModalProduct(p.id)}
+                                    className="w-4 h-4 rounded text-brand-orange focus:ring-brand-orange"
+                                  />
+                                  <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                                    {p.imageUrl ? (
+                                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <UtensilsCrossed className="w-4 h-4 text-slate-400" />
+                                    )}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center space-x-2">
+                                      <h5 className="font-bold text-xs text-slate-900">{p.name}</h5>
+                                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-medium">
+                                        {p.category}
+                                      </span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-500">{tenantName}</p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <span className="font-mono font-bold text-xs text-slate-900 block">
+                                    {formatCurrencyIDR(p.basePrice)}
+                                  </span>
+                                  <span
+                                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                                      p.status === "ACTIVE"
+                                        ? "bg-emerald-100 text-emerald-800"
+                                        : "bg-slate-100 text-slate-500"
+                                    }`}
+                                  >
+                                    {p.status}
+                                  </span>
+                                </div>
+                              </label>
+                            );
+                          })
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
+
+                {/* Footer */}
+                <div className="p-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-600">
+                    Total: <strong className="text-brand-orange">{selectedProductIdsInModal.length}</strong> produk dipilih
+                  </span>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsPromoProductModalOpen(false)}
+                      className="rounded-xl text-xs h-8"
+                    >
+                      Batal
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={handleSavePromoProducts}
+                      className="bg-brand-orange hover:bg-orange-600 text-white font-bold rounded-xl text-xs h-8 shadow-xs"
+                    >
+                      Simpan Pilihan Produk
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>

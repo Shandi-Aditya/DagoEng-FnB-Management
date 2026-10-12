@@ -1,5 +1,13 @@
 export type LanguageCode = "id" | "en";
 import { PromoConfig } from "../lib/promo";
+import {
+  CoworkingHolidayConfig,
+  ServiceOperationalHours,
+  TenantOperationConfig,
+  DEFAULT_COWORKING_HOLIDAY_CONFIG,
+  DEFAULT_OPERATIONAL_HOURS,
+  DEFAULT_TENANT_OPERATIONS,
+} from "../lib/operating-hours";
 
 export interface LoyaltyTierConfig {
   bronzeMin: number;
@@ -25,6 +33,9 @@ export interface PlatformSettings {
   receiptFooter: string;
   autoDeductInventory: boolean;
   promos: PromoConfig[];
+  coworkingHolidays: CoworkingHolidayConfig;
+  operationalHours: ServiceOperationalHours;
+  tenantOperations: Record<string, TenantOperationConfig>;
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -36,6 +47,9 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   isTaxEnabled: true,
   serviceChargePercent: 5,
   lowStockThresholdPercent: 40,
+  coworkingHolidays: DEFAULT_COWORKING_HOLIDAY_CONFIG,
+  operationalHours: DEFAULT_OPERATIONAL_HOURS,
+  tenantOperations: DEFAULT_TENANT_OPERATIONS,
   loyaltyTiers: {
     bronzeMin: 0,
     bronzeMax: 499,

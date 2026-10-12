@@ -81,6 +81,7 @@ describe("RBAC Matrix & Permission Guard Evaluation", () => {
     expect(ownerNavNames).not.toContain("Kitchen KDS");
 
     expect(cashierNavNames).toContain("POS Kasir");
+    expect(cashierNavNames).not.toContain("Co-working Space");
     expect(cashierNavNames).not.toContain("AI Business Insight");
     expect(cashierNavNames).not.toContain("Laporan & Finance");
 

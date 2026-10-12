@@ -1,7 +1,15 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { IngredientItem, RecipeBOM, PurchaseOrder, StockAdjustmentLog, StockStatus } from "@/types/inventory";
+import {
+  IngredientItem,
+  RecipeBOM,
+  PurchaseOrder,
+  StockAdjustmentLog,
+  StockStatus,
+  StockOpnameRecord,
+  StockOpnameReason,
+} from "@/types/inventory";
 import {
   INITIAL_INGREDIENTS,
   INITIAL_RECIPES,
@@ -19,12 +27,16 @@ interface InventoryContextType {
   purchaseOrders: PurchaseOrder[];
   filteredPurchaseOrders: PurchaseOrder[];
   logs: StockAdjustmentLog[];
+  stockOpnames: StockOpnameRecord[];
   adjustStock: (
     ingredientId: string,
     delta: number,
     reason: StockAdjustmentLog["reason"],
     user?: string
   ) => void;
+  recordStockOpname: (
+    record: Omit<StockOpnameRecord, "id" | "opnameNumber" | "variance" | "varianceType" | "createdAt" | "status">
+  ) => StockOpnameRecord;
   checkProductStockStatus: (productNameOrId: string) => { status: "SAFE" | "CRITICAL" | "OUT_OF_STOCK"; label?: string };
   simulateBOMDeduction: (menuId: string, quantity: number) => { success: boolean; message: string };
   upsertRecipe: (recipe: RecipeBOM) => void;
@@ -40,6 +52,7 @@ const STORAGE_KEY_INGREDIENTS = "dagoeng_inventory_ingredients_v3";
 const STORAGE_KEY_RECIPES = "dagoeng_inventory_recipes_v3";
 const STORAGE_KEY_POS = "dagoeng_inventory_pos_v3";
 const STORAGE_KEY_LOGS = "dagoeng_inventory_logs_v3";
+const STORAGE_KEY_OPNAMES = "dagoeng_inventory_opnames_v1";
 
 export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const { activeOutletId, activeOutlet, isAllOutlets } = useOutlet();
@@ -50,6 +63,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const [recipes, setRecipes] = useState<RecipeBOM[]>(INITIAL_RECIPES);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(INITIAL_PURCHASE_ORDERS);
   const [logs, setLogs] = useState<StockAdjustmentLog[]>([]);
+  const [stockOpnames, setStockOpnames] = useState<StockOpnameRecord[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
@@ -58,11 +72,13 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       const savedRec = localStorage.getItem(STORAGE_KEY_RECIPES);
       const savedPOs = localStorage.getItem(STORAGE_KEY_POS);
       const savedLogs = localStorage.getItem(STORAGE_KEY_LOGS);
+      const savedOpnames = localStorage.getItem(STORAGE_KEY_OPNAMES);
 
       if (savedIng) setIngredients(JSON.parse(savedIng));
       if (savedRec) setRecipes(JSON.parse(savedRec));
       if (savedPOs) setPurchaseOrders(JSON.parse(savedPOs));
       if (savedLogs) setLogs(JSON.parse(savedLogs));
+      if (savedOpnames) setStockOpnames(JSON.parse(savedOpnames));
     } catch (e) {
       console.error("Failed to load inventory state", e);
     } finally {
@@ -77,10 +93,11 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(STORAGE_KEY_RECIPES, JSON.stringify(recipes));
       localStorage.setItem(STORAGE_KEY_POS, JSON.stringify(purchaseOrders));
       localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs));
+      localStorage.setItem(STORAGE_KEY_OPNAMES, JSON.stringify(stockOpnames));
     } catch (e) {
       console.error("Failed to save inventory state", e);
     }
-  }, [ingredients, recipes, purchaseOrders, logs, isInitialized]);
+  }, [ingredients, recipes, purchaseOrders, logs, stockOpnames, isInitialized]);
 
   // Scoped ingredients
   const filteredIngredients = ingredients.filter((ing) => {
@@ -293,16 +310,96 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     setRecipes((prev) => prev.filter((r) => r.menuId !== menuId));
   };
 
+  const recordStockOpname = (
+    record: Omit<StockOpnameRecord, "id" | "opnameNumber" | "variance" | "varianceType" | "createdAt" | "status">
+  ): StockOpnameRecord => {
+    const sysStock = Number(record.systemStock);
+    const physStock = Number(record.physicalStock);
+    const variance = physStock - sysStock;
+    const varianceType: "SURPLUS" | "DEFICIT" | "MATCH" =
+      variance > 0 ? "SURPLUS" : variance < 0 ? "DEFICIT" : "MATCH";
+
+    const newRecord: StockOpnameRecord = {
+      ...record,
+      systemStock: sysStock,
+      physicalStock: physStock,
+      id: `opn-${Date.now()}`,
+      opnameNumber: `SOP-${new Date().toISOString().slice(0, 7).replace("-", "")}-${Date.now().toString().slice(-4)}`,
+      variance,
+      varianceType,
+      status: "APPLIED",
+      createdAt: new Date().toISOString(),
+    };
+
+    setStockOpnames((prev) => [newRecord, ...prev]);
+
+    // Update ingredient actual physical stock
+    setIngredients((prev) =>
+      prev.map((ing) => {
+        if (ing.id === record.ingredientId) {
+          const newStatus: "CRITICAL" | "LOW" | "SAFE" =
+            physStock <= ing.min ? "CRITICAL" : physStock <= ing.min * 1.5 ? "LOW" : "SAFE";
+          return {
+            ...ing,
+            stockNumber: physStock,
+            status: newStatus,
+            lastUpdated: "Hari ini (Stock Opname)",
+          };
+        }
+        return ing;
+      })
+    );
+
+    // Record adjustment audit log
+    const auditLog: StockAdjustmentLog = {
+      id: `log-opn-${Date.now()}`,
+      ingredientId: record.ingredientId,
+      ingredientName: record.ingredientName,
+      delta: variance,
+      previousStock: sysStock,
+      currentStock: physStock,
+      reason: "OPNAME_HILANG_RUSAK",
+      timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+      user: record.performedBy || "Staff Inventory",
+    };
+    setLogs((prev) => [auditLog, ...prev]);
+
+    logActivity({
+      module: "INVENTORY",
+      action: "STOCK_ADJUSTMENT",
+      recordId: newRecord.opnameNumber,
+      previousValue: `${record.ingredientName}: ${sysStock} ${record.unit}`,
+      newValue: `${record.ingredientName}: ${physStock} ${record.unit} (Selisih: ${variance > 0 ? `+${variance}` : variance})`,
+      description: `Pencatatan Stock Opname ${record.ingredientName}: Fisik=${physStock}, Sistem=${sysStock}, Alasan=${record.reason}`,
+      reason: `Stock Opname: ${record.reason} ${record.reasonNotes ? `(${record.reasonNotes})` : ""}`,
+      status: "SUCCESS",
+    });
+
+    addNotification({
+      type: "SYSTEM_ALERT",
+      title: "Penyesuaian Stock Opname Selesai",
+      detail: `Stock Opname #${newRecord.opnameNumber} untuk ${record.ingredientName} (${variance >= 0 ? `+${variance}` : variance} ${record.unit}) berhasil dicatat.`,
+      relatedModule: "INVENTORY",
+      actionUrl: "/inventory",
+      outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
+      outletName: activeOutlet?.name || "Singaraja",
+    });
+
+    return newRecord;
+  };
+
   const resetInventoryData = () => {
     setIngredients(INITIAL_INGREDIENTS);
     setRecipes(INITIAL_RECIPES);
     setPurchaseOrders(INITIAL_PURCHASE_ORDERS);
     setLogs([]);
+    setStockOpnames([]);
     try {
       localStorage.removeItem(STORAGE_KEY_INGREDIENTS);
       localStorage.removeItem(STORAGE_KEY_RECIPES);
       localStorage.removeItem(STORAGE_KEY_POS);
       localStorage.removeItem(STORAGE_KEY_LOGS);
+      localStorage.removeItem(STORAGE_KEY_OPNAMES);
     } catch (e) {
       console.error(e);
     }
@@ -317,7 +414,9 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         purchaseOrders,
         filteredPurchaseOrders,
         logs,
+        stockOpnames,
         adjustStock,
+        recordStockOpname,
         checkProductStockStatus,
         simulateBOMDeduction,
         upsertRecipe,

@@ -148,7 +148,7 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     href: "/coworking",
     icon: "Laptop",
     module: "CO_WORKING",
-    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"],
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
   },
 
   // 4. Reports, Staff & Governance
