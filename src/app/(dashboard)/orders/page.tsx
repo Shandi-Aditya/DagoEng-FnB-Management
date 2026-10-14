@@ -117,14 +117,46 @@ export default function OrdersPage() {
       "Promo",
       "Diskon (Rp)",
       "Total Tagihan (Rp)",
-      "Status",
+      "Status Operasional",
+      "Status Pembayaran",
       "Metode Pembayaran",
       "Jumlah Item",
       "Waktu Dibuat",
+      "Waktu Pelunasan",
     ];
     const rows = displayedOrders.map((o) => {
       const promoName = settings.promos.find((p) => p.id === o.promoId)?.name || o.promoId || "-";
       const discountVal = o.discount ?? Math.max(0, (o.subtotal + (o.tax || 0)) - o.total);
+      const opStatusLabel =
+        o.status === "COMPLETED"
+          ? "Selesai"
+          : o.status === "SERVED"
+          ? "Siap Disajikan"
+          : o.status === "COOKING"
+          ? "Sedang Dimasak"
+          : o.status === "KITCHEN_RECEIVED"
+          ? "Diterima Dapur"
+          : o.status === "CONFIRMED"
+          ? "Dikonfirmasi"
+          : o.status === "NEW"
+          ? "Baru"
+          : o.status === "CANCELLED"
+          ? "Dibatalkan"
+          : o.status;
+
+      const payStatusLabel =
+        o.paymentStatus === "PAID"
+          ? "Lunas"
+          : o.paymentStatus === "REFUNDED"
+          ? "Refund"
+          : "Belum Dibayar";
+
+      const settlementTime = o.completedAt
+        ? new Date(o.completedAt).toLocaleString("id-ID")
+        : o.paymentStatus === "PAID"
+        ? new Date(o.createdAt).toLocaleString("id-ID")
+        : "-";
+
       return [
         o.orderNumber,
         o.tableNumber,
@@ -133,10 +165,12 @@ export default function OrdersPage() {
         promoName,
         discountVal > 0 ? `-Rp ${discountVal.toLocaleString("id-ID")}` : "Rp 0",
         `Rp ${o.total.toLocaleString("id-ID")}`,
-        o.status,
-        o.paymentMethod || "QRIS",
+        opStatusLabel,
+        payStatusLabel,
+        o.paymentMethod || "-",
         o.items.length,
         new Date(o.createdAt).toLocaleString("id-ID"),
+        settlementTime,
       ];
     });
     return { headers, rows };
@@ -336,7 +370,8 @@ export default function OrdersPage() {
                 <tr>
                   <th className="p-3">No. Pesanan</th>
                   <th className="p-3">Meja / Pelanggan</th>
-                  <th className="p-3">Status Lifecycle</th>
+                  <th className="p-3">Status Operasional</th>
+                  <th className="p-3">Status Pembayaran</th>
                   <th className="p-3">Waktu Tunggu</th>
                   <th className="p-3">SLA Status</th>
                   <th className="p-3">Total Tagihan</th>
@@ -347,7 +382,7 @@ export default function OrdersPage() {
               <tbody className="divide-y divide-slate-100 text-slate-700">
                 {displayedOrders.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400 text-xs">
+                    <td colSpan={9} className="p-8 text-center text-slate-400 text-xs">
                       Belum ada riwayat transaksi pesanan pada periode ini.
                     </td>
                   </tr>
@@ -369,10 +404,25 @@ export default function OrdersPage() {
                             className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                               isCompleted
                                 ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                : o.status === "SERVED"
+                                ? "bg-teal-100 text-teal-800 border border-teal-200"
                                 : "bg-brand-orange/10 text-brand-orange border border-brand-orange/20"
                             }`}
                           >
                             {o.status.replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              o.paymentStatus === "PAID"
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                : o.paymentStatus === "REFUNDED"
+                                ? "bg-purple-100 text-purple-800 border border-purple-200"
+                                : "bg-amber-100 text-amber-800 border border-amber-200"
+                            }`}
+                          >
+                            {o.paymentStatus === "PAID" ? "LUNAS" : o.paymentStatus === "REFUNDED" ? "REFUND" : "BELUM LUNAS"}
                           </span>
                         </td>
                         <td className="p-3 font-mono font-semibold" suppressHydrationWarning>
@@ -394,13 +444,9 @@ export default function OrdersPage() {
                         <td className="p-3 font-bold text-slate-900">{formatCurrencyIDR(o.total)}</td>
                         <td className="p-3">
                           <span
-                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                              o.paymentStatus === "PAID"
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : "bg-amber-50 text-amber-700 border border-amber-200"
-                            }`}
+                            className="text-[10px] font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200"
                           >
-                            {o.paymentMethod || (o.paymentStatus === "PAID" ? "QRIS" : "PENDING")}
+                            {o.paymentMethod || "-"}
                           </span>
                         </td>
                         <td className="p-3 text-right">
@@ -589,7 +635,7 @@ export default function OrdersPage() {
                       )}
                       {item.note && (
                         <p className="text-[11px] text-slate-600 bg-slate-50 p-1.5 rounded border border-slate-100 mt-1">
-                          💬 {item.note}
+                          Catatan: {item.note}
                         </p>
                       )}
                     </div>

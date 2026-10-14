@@ -6,7 +6,8 @@ import { POSReceiptData } from "./types";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { X, Printer, Share2, CheckCircle2, RotateCcw, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DEFAULT_FNB_TENANTS, getAllStoredTenantSettings } from "@/lib/tenant";
+import { DEFAULT_FNB_TENANTS, getAllStoredTenantSettings, getTenantName } from "@/lib/tenant";
+import { getOrCreateSimulatedWifiVoucher, getSimulatedWifiCalcBasis } from "@/lib/wifi";
 
 interface ReceiptModalProps {
   isOpen?: boolean;
@@ -30,7 +31,18 @@ export function ReceiptModal({
     window.print();
   };
 
-  // Resolve tenant for branding
+  // Distinct tenant identification
+  const tenantIdsInItems = Array.from(
+    new Set(
+      (receiptData.items || [])
+        .map((i) => i.tenantId || (i.tenantName ? DEFAULT_FNB_TENANTS.find((t) => t.name.toLowerCase() === i.tenantName?.toLowerCase())?.id : undefined))
+        .filter(Boolean)
+    )
+  );
+
+  const isMultiTenant = tenantIdsInItems.length > 1;
+
+  // Resolve tenant for single-mitra branding
   const primaryTenantId =
     receiptData.tenantId ||
     receiptData.items?.find((i) => i.tenantId)?.tenantId ||
@@ -43,19 +55,58 @@ export function ReceiptModal({
   const storedTenantSettings = allStoredSettings[primaryTenantId];
   const defaultTenantInfo = DEFAULT_FNB_TENANTS.find((t) => t.id === primaryTenantId) || DEFAULT_FNB_TENANTS[0];
 
-  const brandName =
-    receiptData.receiptHeader ||
-    storedTenantSettings?.receiptHeader ||
-    storedTenantSettings?.brandName ||
-    receiptData.tenantName ||
-    defaultTenantInfo.name;
+  const brandName = isMultiTenant
+    ? "DAGO CREATIVE HUB"
+    : (
+        receiptData.receiptHeader ||
+        storedTenantSettings?.receiptHeader ||
+        storedTenantSettings?.brandName ||
+        receiptData.tenantName ||
+        defaultTenantInfo.name
+      );
 
-  const tagline = storedTenantSettings?.tagline || defaultTenantInfo.tagline || defaultTenantInfo.badge;
-  const contactPhone = storedTenantSettings?.contactPhone || receiptData.outletPhone;
+  const tagline = isMultiTenant
+    ? "Ringkasan Pesanan Multi-Mitra"
+    : (storedTenantSettings?.tagline || defaultTenantInfo.tagline || defaultTenantInfo.badge);
+
+  const contactPhone = isMultiTenant
+    ? receiptData.outletPhone || "(0362) 23456"
+    : (storedTenantSettings?.contactPhone || receiptData.outletPhone);
+
   const footerMessage =
     receiptData.receiptFooter ||
-    storedTenantSettings?.receiptFooter ||
+    (!isMultiTenant ? storedTenantSettings?.receiptFooter : undefined) ||
     "Terima Kasih Atas Kunjungan Anda!";
+
+  // Group items by tenant for clear per-mitra auditing
+  const groupedItems = React.useMemo(() => {
+    const map = new Map<string, { tenantName: string; items: typeof receiptData.items; subtotal: number }>();
+    (receiptData.items || []).forEach((item) => {
+      const tId = item.tenantId || "tenant-ks";
+      const tName = item.tenantName || getTenantName(tId) || "Mitra Kuliner";
+      const existing = map.get(tId) || { tenantName: tName, items: [], subtotal: 0 };
+      existing.items.push(item);
+      existing.subtotal += item.subtotal;
+      map.set(tId, existing);
+    });
+    return Array.from(map.entries()).map(([tenantId, data]) => ({ tenantId, ...data }));
+  }, [receiptData.items]);
+
+  // Ambil atau buat voucher Wi-Fi stabil untuk transaksi ini jika memenuhi batas nominal aturan simulasi
+  const simulatedWifiVoucher = React.useMemo(() => {
+    if (!receiptData.orderNumber) return null;
+    const calcBasis = getSimulatedWifiCalcBasis();
+    const evaluatedAmount = calcBasis === "NET_SALES" ? (receiptData.subtotal || 0) : (receiptData.grandTotal || 0);
+
+    return getOrCreateSimulatedWifiVoucher(
+      receiptData.orderNumber,
+      receiptData.customerName,
+      evaluatedAmount,
+      receiptData.outletName,
+      primaryTenantId,
+      brandName
+    );
+  }, [receiptData.orderNumber, receiptData.customerName, receiptData.subtotal, receiptData.grandTotal, receiptData.outletName, primaryTenantId, brandName]);
 
   return (
     <>
@@ -116,11 +167,16 @@ export function ReceiptModal({
               id="thermal-receipt"
               className="w-full max-w-[340px] bg-white p-5 rounded-lg shadow-sm border border-slate-200 font-mono text-slate-900 text-xs space-y-4 print:w-full print:shadow-none print:border-none"
             >
-              {/* Store Header (Clean & Neutral, without single-tenant misleading logo) */}
+              {/* Store Header (Neutral Platform Header for Multi-Mitra vs Tenant Identity for Single-Mitra) */}
               <div className="text-center space-y-1 border-b border-dashed border-slate-300 pb-3">
                 <h2 className="font-black text-sm tracking-wider uppercase text-slate-900">
-                  {receiptData.outletName || "DAGO CREATIVE HUB"}
+                  {brandName}
                 </h2>
+                {tagline && (
+                  <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">
+                    {tagline}
+                  </p>
+                )}
                 <p className="text-[10px] text-slate-500 leading-tight">
                   {receiptData.outletAddress || "Jl. Veteran No. 18, Singaraja, Bali"}
                 </p>
@@ -157,38 +213,72 @@ export function ReceiptModal({
                 )}
               </div>
 
-              {/* Items List */}
+              {/* Items List - Grouped by Mitra if Multi-Tenant */}
               <div className="space-y-2 border-b border-dashed border-slate-300 pb-3">
-                {receiptData.items.map((item, idx) => (
-                  <div key={idx} className="space-y-0.5 text-xs">
-                    <div className="flex justify-between font-semibold">
-                      <span>
-                        {item.name} x{item.quantity}
-                      </span>
-                      <span>{formatCurrencyIDR(item.subtotal)}</span>
+                {isMultiTenant ? (
+                  groupedItems.map((group) => (
+                    <div
+                      key={group.tenantId}
+                      className="space-y-1.5 pt-2 first:pt-0 border-t first:border-t-0 border-dashed border-slate-200"
+                    >
+                      <div className="flex items-center justify-between bg-slate-50 px-2 py-1 rounded text-[10px] font-bold text-slate-800 border border-slate-100">
+                        <span>Mitra: {group.tenantName}</span>
+                        <span className="font-mono text-slate-500">{group.items.length} item</span>
+                      </div>
+                      {group.items.map((item, idx) => (
+                        <div key={idx} className="space-y-0.5 text-xs pl-1">
+                          <div className="flex justify-between font-semibold">
+                            <span>
+                              {item.name} x{item.quantity}
+                            </span>
+                            <span>{formatCurrencyIDR(item.subtotal)}</span>
+                          </div>
+                          {item.variantName && (
+                            <p className="text-[10px] text-slate-500 pl-2">• {item.variantName}</p>
+                          )}
+                          {item.modifiers && item.modifiers.length > 0 && (
+                            <p className="text-[10px] text-slate-500 pl-2">
+                              • {item.modifiers.join(", ")}
+                            </p>
+                          )}
+                          {item.notes && (
+                            <p className="text-[10px] italic text-slate-400 pl-2">
+                              *Catatan: {item.notes}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                      <div className="flex justify-between text-[11px] font-bold text-slate-700 pt-1 border-t border-dotted border-slate-200 pl-1">
+                        <span>Subtotal ({group.tenantName}):</span>
+                        <span>{formatCurrencyIDR(group.subtotal)}</span>
+                      </div>
                     </div>
-                    {item.tenantName && (
-                      <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wide">
-                        [{item.tenantName}]
-                      </p>
-                    )}
-                    {item.variantName && (
-                      <p className="text-[10px] text-slate-500 pl-2">
-                        • {item.variantName}
-                      </p>
-                    )}
-                    {item.modifiers && item.modifiers.length > 0 && (
-                      <p className="text-[10px] text-slate-500 pl-2">
-                        • {item.modifiers.join(", ")}
-                      </p>
-                    )}
-                    {item.notes && (
-                      <p className="text-[10px] italic text-slate-400 pl-2">
-                        *Catatan: {item.notes}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  receiptData.items.map((item, idx) => (
+                    <div key={idx} className="space-y-0.5 text-xs">
+                      <div className="flex justify-between font-semibold">
+                        <span>
+                          {item.name} x{item.quantity}
+                        </span>
+                        <span>{formatCurrencyIDR(item.subtotal)}</span>
+                      </div>
+                      {item.variantName && (
+                        <p className="text-[10px] text-slate-500 pl-2">• {item.variantName}</p>
+                      )}
+                      {item.modifiers && item.modifiers.length > 0 && (
+                        <p className="text-[10px] text-slate-500 pl-2">
+                          • {item.modifiers.join(", ")}
+                        </p>
+                      )}
+                      {item.notes && (
+                        <p className="text-[10px] italic text-slate-400 pl-2">
+                          *Catatan: {item.notes}
+                        </p>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
 
               {/* Calculations Breakdown */}
@@ -200,7 +290,7 @@ export function ReceiptModal({
                 {receiptData.loyaltyMember && (
                   <div className="p-1.5 bg-orange-50 rounded border border-orange-200 text-[10px] space-y-0.5 my-1">
                     <div className="flex justify-between font-bold text-slate-800">
-                      <span>👑 Loyalty: {receiptData.loyaltyMember.name}</span>
+                      <span>Loyalty Member: {receiptData.loyaltyMember.name}</span>
                       <span className="text-brand-orange">Tier {receiptData.loyaltyMember.tier}</span>
                     </div>
                     {receiptData.loyaltyMember.voucherTitle && (
@@ -266,6 +356,30 @@ export function ReceiptModal({
 
               {/* Receipt Footer */}
               <div className="text-center text-[10px] text-slate-500 space-y-2 pt-2 border-t border-dashed border-slate-300">
+                {/* Blok Voucher Wi-Fi Tamu (Simulasi Aman - Hanya Tampil Jika Memenuhi Batas Nominal Transaksi) */}
+                {simulatedWifiVoucher && (
+                  <div className="my-2 p-2 rounded-lg border border-dashed border-purple-300 bg-purple-50/70 text-center space-y-1">
+                    <div className="flex items-center justify-center space-x-1">
+                      <span className="text-[10px] font-black text-purple-900 uppercase tracking-wider">
+                        Kode Akses Wi-Fi Tamu
+                      </span>
+                      <span className="text-[8px] bg-purple-200 text-purple-800 px-1 py-0.5 rounded font-bold">
+                        SIMULASI
+                      </span>
+                    </div>
+                    <p className="font-mono text-sm font-black text-purple-700 tracking-wider">
+                      {simulatedWifiVoucher.voucherCode}
+                    </p>
+                    <div className="flex justify-between text-[9px] text-slate-600 px-1">
+                      <span>Durasi: <strong>{simulatedWifiVoucher.durationFormatted}</strong></span>
+                      <span>SSID: <strong>DagoEng-Guest</strong></span>
+                    </div>
+                    <p className="text-[8px] text-slate-400 italic">
+                      *Simulasi kode terikat struk #{receiptData.orderNumber}
+                    </p>
+                  </div>
+                )}
+
                 <p className="font-bold text-slate-800">{footerMessage}</p>
                 <p className="text-[10px] text-slate-500">Wi-Fi: DagoCreativeHub • Pass: smarterfnb2026</p>
                 <div className="pt-2 border-t border-dashed border-slate-200 flex flex-col items-center justify-center space-y-1 text-slate-400">

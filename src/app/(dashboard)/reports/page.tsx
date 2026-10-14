@@ -26,9 +26,13 @@ import {
   Printer,
   FileSpreadsheet,
   Building2,
+  Info,
+  Calendar,
 } from "lucide-react";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import StructuredReportPDFModal, { ReportType } from "@/features/reports/StructuredReportPDFModal";
+import { DateRangePicker } from "@/features/dashboard/DateRangePicker";
+import { ProFeatureBadge } from "@/components/premium";
 
 export default function ReportsPage() {
   const { formattedRangeLabel } = useDateFilter();
@@ -282,39 +286,55 @@ export default function ReportsPage() {
       )}
 
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 flex items-center space-x-2">
-            <BarChart3 className="w-6 h-6 text-brand-orange" />
-            <span>Laporan Manajemen & Structured PDF Exports</span>
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Laporan operasional resmi Dago Creative Hub • Scope: <strong className="text-slate-800">{activeOutlet?.name}</strong> • Periode: <strong className="text-slate-800">{formattedRangeLabel}</strong>
+          <div className="flex items-center space-x-2">
+            <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-brand-orange shadow-2xs">
+              <BarChart3 className="w-5 h-5" />
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+              Laporan Manajemen & Ekspor Terstruktur
+            </h2>
+          </div>
+          <p className="text-xs text-slate-500 mt-1">
+            Laporan operasional resmi Dago Creative Hub • Scope:{" "}
+            <span className="font-semibold text-slate-800">{activeOutlet?.name || "Singaraja"}</span> • Periode:{" "}
+            <span className="font-semibold text-brand-orange">{formattedRangeLabel}</span>
           </p>
         </div>
+
+        {/* Action Controls & Date Range Picker */}
         <div className="flex flex-wrap items-center gap-2">
+          <DateRangePicker />
+
           <Button
             size="sm"
             onClick={handleExportExcel}
             variant="outline"
-            className="text-xs space-x-1 border-emerald-300 text-emerald-800 hover:bg-emerald-50 font-semibold"
+            className="text-xs space-x-1.5 border-slate-200/90 text-slate-700 hover:bg-slate-50 font-bold rounded-xl h-9 px-3 shadow-2xs flex items-center"
+            title="Download Spreadsheet Excel (.xls)"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
             <span>Excel (.xls)</span>
+            <ProFeatureBadge label="PRO" variant="pro" size="xs" />
           </Button>
+
           <Button
             size="sm"
             onClick={handleExportCSV}
             variant="outline"
-            className="text-xs space-x-1.5 border-slate-300 hover:bg-slate-50 text-slate-700"
+            className="text-xs space-x-1.5 border-slate-200/90 hover:bg-slate-50 text-slate-700 font-bold rounded-xl h-9 px-3.5 shadow-2xs"
+            title="Download Data CSV"
           >
-            <Download className="w-3.5 h-3.5 text-slate-600" />
+            <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>Export CSV</span>
           </Button>
+
           <Button
             size="sm"
             onClick={() => setIsPDFModalOpen(true)}
-            className="text-xs space-x-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold shadow-xs"
+            className="text-xs space-x-1.5 bg-brand-orange hover:bg-orange-600 text-white font-bold rounded-xl h-9 px-4 shadow-xs"
+            title="Buka Dokumen PDF & Cetak Struk / Berkas Resmi"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Cetak PDF Resmi</span>
@@ -323,7 +343,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Report Categories Selector */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
           { id: "SALES", label: "Penjualan POS", icon: DollarSign, count: `${filteredOrders.length} Trx` },
           { id: "SETTLEMENT", label: "Settlement Mitra", icon: Building2, count: `${calculateSettlement(filteredOrders).length} Tenant` },
@@ -338,80 +358,135 @@ export default function ReportsPage() {
             <button
               key={cat.id}
               onClick={() => setSelectedReportType(cat.id as ReportType)}
-              className={`p-3 rounded-xl border text-left transition-all ${
+              className={`p-3.5 rounded-2xl border text-left transition-all duration-200 cursor-pointer ${
                 isSelected
-                  ? "bg-purple-50/80 border-purple-500 shadow-xs text-purple-900 ring-1 ring-purple-500/20"
-                  : "bg-white border-slate-200 hover:border-slate-300 text-slate-700"
+                  ? "bg-orange-50/90 border-brand-orange/40 shadow-xs text-orange-950 ring-1 ring-brand-orange/20 font-bold"
+                  : "bg-white border-slate-200/90 hover:border-slate-300 hover:bg-slate-50/60 text-slate-700 shadow-2xs"
               }`}
             >
               <div className="flex items-center justify-between">
-                <Icon className={`w-4 h-4 ${isSelected ? "text-purple-600" : "text-slate-400"}`} />
-                <span className="text-[10px] font-semibold text-slate-400">{cat.count}</span>
+                <div
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                    isSelected ? "bg-brand-orange/20 text-brand-orange" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                </div>
+                <span
+                  className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md ${
+                    isSelected ? "bg-brand-orange/20 text-brand-orange" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {cat.count}
+                </span>
               </div>
-              <p className="font-bold text-xs mt-2">{cat.label}</p>
+              <p className="font-bold text-xs mt-2.5 text-slate-900 tracking-tight">{cat.label}</p>
             </button>
           );
         })}
       </div>
 
       {/* KPI Cards Preview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {currentReportData.summaryCards.map((card: any, idx: number) => (
-          <Card key={idx} className="p-4 bg-white border border-slate-200 shadow-xs">
-            <p className="text-xs font-semibold text-slate-400">{card.label}</p>
-            <p className="text-xl font-bold text-slate-900 mt-1">{card.value}</p>
-            {card.sub && <p className="text-[11px] text-slate-500 mt-0.5">{card.sub}</p>}
+          <Card key={idx} className="p-4.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow space-y-1">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{card.label}</p>
+            <p className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight mt-1">{card.value}</p>
+            {card.sub && <p className="text-[11px] text-slate-400 font-medium">{card.sub}</p>}
           </Card>
         ))}
       </div>
 
       {/* Report Table Preview Card */}
-      <Card className="shadow-xs border border-slate-200 overflow-hidden">
-        <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50 flex flex-row items-center justify-between">
+      <Card className="shadow-2xs border border-slate-200/90 rounded-2xl overflow-hidden bg-white">
+        <CardHeader className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <CardTitle className="text-sm font-bold text-slate-800">
+            <CardTitle className="text-sm font-bold text-slate-900">
               {currentReportData.title}
             </CardTitle>
             <p className="text-xs text-slate-500 mt-0.5">{currentReportData.subtitle}</p>
           </div>
-          <span className="text-xs font-semibold px-2 py-0.5 bg-slate-200 text-slate-700 rounded-md">
+          <span className="text-xs font-bold px-3 py-1 bg-slate-100 text-slate-700 rounded-full border border-slate-200/80 self-start sm:self-center">
             {currentReportData.tableRows.length} Baris Data
           </span>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600">
-              <thead className="bg-slate-50 text-slate-700 uppercase font-semibold text-[11px] border-b border-slate-200">
+            <table className="w-full text-left text-xs text-slate-600 min-w-[720px]">
+              <thead className="bg-slate-50/80 text-slate-500 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-200">
                 <tr>
                   {currentReportData.tableHeaders.map((th, i) => (
-                    <th key={i} className="px-4 py-3">
+                    <th key={i} className="px-4 py-3.5">
                       {th}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {currentReportData.tableRows.slice(0, 10).map((row, rIdx) => (
-                  <tr key={rIdx} className="hover:bg-slate-50/80 transition-colors">
-                    {row.map((cell, cIdx) => (
-                      <td
-                        key={cIdx}
-                        className={`px-4 py-3 ${
-                          typeof cell === "number" || (typeof cell === "string" && cell.startsWith("Rp"))
-                            ? "font-mono font-medium text-slate-900"
-                            : ""
-                        }`}
-                      >
-                        {cell}
-                      </td>
-                    ))}
+                {currentReportData.tableRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={currentReportData.tableHeaders.length} className="px-4 py-12 text-center">
+                      <div className="max-w-sm mx-auto space-y-2">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <p className="font-bold text-slate-700 text-xs">Belum ada baris data untuk modul laporan ini</p>
+                        <p className="text-[11px] text-slate-400">
+                          Tidak ada transaksi atau entri yang tercatat untuk outlet {activeOutlet?.name || "Singaraja"} pada rentang {formattedRangeLabel}.
+                        </p>
+                      </div>
+                    </td>
                   </tr>
-                ))}
+                ) : (
+                  currentReportData.tableRows.slice(0, 10).map((row, rIdx) => (
+                    <tr key={rIdx} className="hover:bg-slate-50/70 transition-colors">
+                      {row.map((cell, cIdx) => (
+                        <td
+                          key={cIdx}
+                          className={`px-4 py-3.5 ${
+                            typeof cell === "number" || (typeof cell === "string" && (cell.startsWith("Rp") || cell.endsWith("%")))
+                              ? "font-mono font-semibold text-slate-900"
+                              : ""
+                          }`}
+                        >
+                          {cell}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+
+          {currentReportData.tableRows.length > 10 && (
+            <div className="p-3 bg-slate-50/80 border-t border-slate-100 text-center text-xs text-slate-500">
+              Menampilkan 10 baris pratinjau pertama dari total <strong>{currentReportData.tableRows.length}</strong> baris data.
+              Gunakan tombol <strong>Cetak PDF Resmi</strong> atau <strong>Excel (.xls)</strong> di atas untuk melihat seluruh data.
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Reconciliation / Settlement Extra Breakdown Card */}
+      {currentReportData.reconciliationInfo && currentReportData.reconciliationInfo.length > 0 && (
+        <div className="p-4.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-3">
+          <div className="flex items-center space-x-2 pb-2 border-b border-slate-100">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+              Ringkasan Rekonsiliasi & Audit Terkait
+            </h4>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {currentReportData.reconciliationInfo.map((rec: any, rIdx: number) => (
+              <div key={rIdx} className="p-3 rounded-xl bg-slate-50/70 border border-slate-200/60 flex items-center justify-between text-xs">
+                <span className="text-slate-500 font-medium text-[11px]">{rec.label}</span>
+                <span className="font-bold font-mono text-slate-900">{rec.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* PDF Modal */}
       {isPDFModalOpen && (

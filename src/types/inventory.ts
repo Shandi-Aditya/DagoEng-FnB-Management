@@ -86,6 +86,7 @@ export interface StockOpnameRecord {
   systemStock: number;
   physicalStock: number;
   variance: number; // physicalStock - systemStock
+  varianceValue?: number; // monetary estimation of variance
   varianceType: "SURPLUS" | "DEFICIT" | "MATCH";
   reason: StockOpnameReason;
   reasonNotes?: string;

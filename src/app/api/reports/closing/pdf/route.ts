@@ -135,17 +135,17 @@ export async function GET(req: NextRequest) {
       </thead>
       <tbody>
         <tr>
-          <td>📲 QRIS Dinamis</td>
+          <td>QRIS Dinamis</td>
           <td>Digital Auto-Settlement</td>
           <td class="text-right font-mono">${formatIDR(qris)}</td>
         </tr>
         <tr>
-          <td>💵 Uang Tunai (Cash)</td>
+          <td>Uang Tunai (Cash)</td>
           <td>Setoran Kas Fisik</td>
           <td class="text-right font-mono">${formatIDR(cash)}</td>
         </tr>
         <tr>
-          <td>💳 Kartu EDC</td>
+          <td>Kartu EDC</td>
           <td>Merchant Settlement</td>
           <td class="text-right font-mono">${formatIDR(edc)}</td>
         </tr>
@@ -175,7 +175,7 @@ export async function GET(req: NextRequest) {
 
     <div class="no-print" style="margin-top: 24px; text-align: center;">
       <button onclick="window.print()" style="background: #ea580c; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 700; cursor: pointer;">
-        🖨️ Cetak / Unduh PDF Dokumen
+        Cetak / Unduh PDF Dokumen
       </button>
     </div>
   </div>

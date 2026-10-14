@@ -188,7 +188,7 @@ export default function WaiterMobilePage() {
                   <div className="space-y-1">
                     {t.customer ? (
                       <p className="font-bold text-slate-800 text-xs truncate">
-                        👤 {t.customer}
+                        Pelanggan: {t.customer}
                       </p>
                     ) : (
                       <p className="text-slate-400 text-[11px] italic">Meja kosong / belum ada tamu</p>
@@ -207,7 +207,7 @@ export default function WaiterMobilePage() {
                       <div className="flex items-center justify-between font-bold text-slate-700 text-[10px] pb-1 border-b border-slate-200/60">
                         <span>Pesanan Menu ({activeOrder.items.length} item):</span>
                         <span className={`font-mono ${activeOrder.status === "READY" ? "text-emerald-600 font-bold" : "text-slate-500"}`}>
-                          {activeOrder.status === "COOKING" ? "🍳 Dimasak" : activeOrder.status === "READY" ? "✅ Siap Saji" : "⏳ Antre"}
+                          {activeOrder.status === "COOKING" ? "Dimasak" : activeOrder.status === "READY" ? "Siap Saji" : "Antre"}
                         </span>
                       </div>
                       <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
@@ -238,7 +238,7 @@ export default function WaiterMobilePage() {
                       }`}
                     >
                       {isOccupied && "Minta Bill / Tagihan"}
-                      {isBilling && "Tamu Bayar ➔ Bersihkan Meja"}
+                      {isBilling && "Tamu Bayar -> Bersihkan Meja"}
                       {isCleaning && "Selesai Bersihkan (Reset Meja)"}
                       {isReserved && "Dudukkan Tamu Reservasi"}
                       {isAvailable && "+ Dudukkan Tamu Baru"}

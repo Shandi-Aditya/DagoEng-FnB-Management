@@ -4,10 +4,13 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { PlatformSettings, DEFAULT_PLATFORM_SETTINGS, LanguageCode } from "@/types/settings";
 import { useAuth } from "./AuthContext";
 import { useActivityLog } from "./ActivityLogContext";
+import { redeemPromoQuota, refundPromoQuota } from "@/lib/promo";
 
 interface SettingsContextType {
   settings: PlatformSettings;
   updateSettings: (newSettings: Partial<PlatformSettings>, reason?: string) => void;
+  redeemPromo: (promoIdOrCode: string, customerId?: string) => boolean;
+  refundPromo: (promoIdOrCode: string, customerId?: string) => boolean;
   t: (key: string) => string;
 }
 
@@ -147,6 +150,20 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const redeemPromo = (promoIdOrCode: string, customerId?: string): boolean => {
+    const res = redeemPromoQuota(settings.promos || [], promoIdOrCode, customerId);
+    if (!res.success) return false;
+    setSettings((prev) => ({ ...prev, promos: res.updatedPromos }));
+    return true;
+  };
+
+  const refundPromo = (promoIdOrCode: string, customerId?: string): boolean => {
+    const res = refundPromoQuota(settings.promos || [], promoIdOrCode, customerId);
+    if (!res.success) return false;
+    setSettings((prev) => ({ ...prev, promos: res.updatedPromos }));
+    return true;
+  };
+
   const t = (key: string): string => {
     const lang = settings.language || "id";
     return DICTIONARY[lang]?.[key] || key;
@@ -157,6 +174,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       value={{
         settings,
         updateSettings,
+        redeemPromo,
+        refundPromo,
         t,
       }}
     >
@@ -171,6 +190,8 @@ export function useSettings() {
     return {
       settings: DEFAULT_PLATFORM_SETTINGS,
       updateSettings: () => {},
+      redeemPromo: () => false,
+      refundPromo: () => false,
       t: (key: string) => key,
     };
   }

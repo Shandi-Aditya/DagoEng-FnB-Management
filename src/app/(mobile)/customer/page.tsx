@@ -22,7 +22,7 @@ import {
   isServiceWithinHours,
 } from "@/lib/operating-hours";
 import { DEMO_PERSONAS } from "@/contexts/AuthContext";
-import { calculateOrderPricing, checkPromoValidity, isPromoEligibleForItem, PromoConfig, validateVoucherCode, calculateCoworkingPricing } from "@/lib/promo";
+import { calculateOrderPricing, checkPromoValidity, isPromoEligibleForItem, PromoConfig, validateVoucherCode, calculateCoworkingPricing, getPromoRemainingQuota } from "@/lib/promo";
 import { LOYALTY_VOUCHERS } from "@/features/pos/mock-data";
 import { MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
 import { PaymentWaitingModal } from "@/features/payment/PaymentWaitingModal";
@@ -31,7 +31,7 @@ import { OrderRecord } from "@/types/order";
 import { LoyaltyTier } from "@/types/loyalty";
 import { CoworkingSpaceItem, CoworkingMembershipPlan } from "@/types/coworking";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
-import { isTenantActive, getTenantStatus } from "@/lib/tenant";
+import { isTenantActive, getTenantStatus, getAllFnbTenants, getTenantName } from "@/lib/tenant";
 import {
   Home,
   UtensilsCrossed,
@@ -89,44 +89,26 @@ interface FnbPartner {
   badge: string;
 }
 
-const FNB_PARTNERS: FnbPartner[] = [
-  {
-    id: "tenant-ks",
-    name: "Kopi Senja",
-    tagline: "Kopi Spesialti & Aneka Minuman",
-    desc: "Sajian kopi pilihan dan aneka minuman segar untuk menemani aktivitas Anda.",
-    category: "Minuman",
-    icon: "☕",
-    badge: "Official Mitra Kopi",
+const getFnbPartners = (): FnbPartner[] => {
+  const tenants = getAllFnbTenants();
+  return tenants.map((t) => ({
+    id: t.id,
+    name: t.name,
+    tagline: t.tagline || "Mitra Kuliner Pilihan",
+    desc: t.desc || "Sajian kuliner berkualitas.",
+    category: t.id === "tenant-ks" || t.id === "tenant-tea" ? "Minuman" : t.id === "tenant-bakery" ? "Camilan" : "Makanan",
+    icon: t.id === "tenant-ks" ? "Coffee" : t.id === "tenant-kitchen" ? "Utensils" : t.id === "tenant-bakery" ? "Croissant" : "Leaf",
+    badge: t.badge || "Official Mitra",
+  }));
+};
+
+const FNB_PARTNERS: FnbPartner[] = new Proxy([] as FnbPartner[], {
+  get(target, prop, receiver) {
+    const list = getFnbPartners();
+    const val = Reflect.get(list, prop, receiver);
+    return typeof val === "function" ? val.bind(list) : val;
   },
-  {
-    id: "tenant-kitchen",
-    name: "Dapur Mama",
-    tagline: "Masakan Rumahan & Hidangan Utama",
-    desc: "Hidangan utama hangat, aneka olahan nasi, dan lauk lezat khas masakan rumah.",
-    category: "Makanan",
-    icon: "🍽️",
-    badge: "Official Kitchen",
-  },
-  {
-    id: "tenant-bakery",
-    name: "Manis Bakery",
-    tagline: "Roti, Kue & Pastry Segar",
-    desc: "Roti segar, pastry mentega lembut, dan camilan lezat yang dipanggang setiap hari.",
-    category: "Camilan",
-    icon: "🥐",
-    badge: "Fresh Baked Daily",
-  },
-  {
-    id: "tenant-tea",
-    name: "Warung Bu Narti",
-    tagline: "Kuliner Tradisional & Minuman Nusantara",
-    desc: "Aneka seduhan teh segar, minuman rempah tradisional, dan sajian khas nusantara.",
-    category: "Minuman",
-    icon: "🍃",
-    badge: "Mitra Nusantara",
-  },
-];
+});
 
 type CustomerTab = "HOME" | "MENU" | "COWORKING" | "ORDERS" | "LOYALTY" | "PROFILE";
 
@@ -168,6 +150,35 @@ function parseHour(timeStr: string): number {
   return Math.floor(parseTimeToMinutes(timeStr) / 60);
 }
 
+function getSmartDefaultStartTime(targetDateStr: string, openTime = "08:00", closeTime = "22:00"): string {
+  const now = new Date();
+  const todayStr = now.toISOString().split("T")[0];
+  const openMins = parseTimeToMinutes(openTime);
+  const closeMins = parseTimeToMinutes(closeTime);
+
+  if (targetDateStr !== todayStr) {
+    return openTime;
+  }
+
+  const curHours = now.getHours();
+  const curMins = now.getMinutes();
+  const roundedMins = Math.ceil(curMins / 15) * 15;
+  let finalHour = curHours;
+  let finalMin = roundedMins;
+  if (finalMin >= 60) {
+    finalHour += 1;
+    finalMin = 0;
+  }
+  const nowMins = finalHour * 60 + finalMin;
+
+  if (nowMins < openMins) return openTime;
+  if (nowMins >= closeMins) return openTime;
+
+  const hh = String(finalHour).padStart(2, "0");
+  const mm = String(finalMin).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
 function calculateEndTime(startTime: string, durationHours: number): string {
   if (!startTime) return "11:00";
   const startMins = parseTimeToMinutes(startTime);
@@ -199,7 +210,7 @@ function CustomerPortalContent() {
   const { areas, filteredAreas, getAvailableTables, releaseTableToAvailable, occupyTableWithOrder } = useTables();
   const { simulateBOMDeduction } = useInventory();
   const { spaces, bookings, bookSpace, confirmBookingPayment, cancelBooking } = useCoworking();
-  const { settings } = useSettings();
+  const { settings, redeemPromo } = useSettings();
 
   const [isMounted, setIsMounted] = useState(false);
   const [tenantSettingsVersion, setTenantSettingsVersion] = useState(0);
@@ -217,13 +228,12 @@ function CustomerPortalContent() {
 
   // Filter only ACTIVE tenants for customer portal visibility (prevent SSR hydration mismatch)
   const activeFnbPartners = useMemo(() => {
-    if (!isMounted) return FNB_PARTNERS;
-    return FNB_PARTNERS.filter((partner) => isTenantActive(partner.id));
+    return getFnbPartners().filter((partner) => isTenantActive(partner.id));
   }, [tenantSettingsVersion, isMounted]);
 
   const urlPartner = searchParams.get("partner");
   const initialPartnerId =
-    urlPartner && FNB_PARTNERS.some((p) => p.id === urlPartner)
+    urlPartner && getFnbPartners().some((p) => p.id === urlPartner)
       ? urlPartner
       : "tenant-ks";
 
@@ -493,6 +503,8 @@ function CustomerPortalContent() {
   const [coworkVoucherCode, setCoworkVoucherCode] = useState<string>("");
   const [appliedCoworkPromo, setAppliedCoworkPromo] = useState<PromoConfig | null>(null);
   const [coworkVoucherValidationMsg, setCoworkVoucherValidationMsg] = useState<{ type: "SUCCESS" | "ERROR"; text: string } | null>(null);
+  const [voucherTabSegment, setVoucherTabSegment] = useState<"AVAILABLE" | "HISTORY">("AVAILABLE");
+  const [cancellingBookingId, setCancellingBookingId] = useState<string | null>(null);
 
   // Cart Calculations
   const cartTotalItems = useMemo(() => {
@@ -627,8 +639,13 @@ function CustomerPortalContent() {
       showToast(`Voucher "${promo.code || promo.name}" sudah Anda klaim.`);
       return;
     }
+    const remaining = getPromoRemainingQuota(promo);
+    if (remaining !== null && remaining <= 0) {
+      showToast(`Voucher "${promo.code || promo.name}" kuota sudah habis.`);
+      return;
+    }
     setClaimedPromoIds((prev) => [...prev, promo.id]);
-    showToast(`Berhasil klaim voucher "${promo.code || promo.name}"!`);
+    showToast(`Berhasil klaim voucher "${promo.code || promo.name}"! Masuk ke "Voucher Saya".`);
   };
 
   const showToast = (msg: string) => {
@@ -747,10 +764,6 @@ function CustomerPortalContent() {
       notes: orderNotes || undefined,
     });
 
-    if (appliedVoucherPromo) {
-      setUsedPromoIds((prev) => [...prev, appliedVoucherPromo.id]);
-    }
-
     // 2. Clear cart & reset all promo state completely
     setCart([]);
     setOrderNotes("");
@@ -834,7 +847,16 @@ function CustomerPortalContent() {
       });
     }
 
-    // 5. Update local state
+    // 5. Quota reduction & promo redemption on completed payment (Section B)
+    if (targetOrder.promoId) {
+      redeemPromo(
+        targetOrder.promoId,
+        currentMember?.phone || user?.phone || targetOrder.customerName || "cust"
+      );
+      setUsedPromoIds((prev) => [...prev, targetOrder.promoId!]);
+    }
+
+    // 6. Update local state
     setWaitingPaymentOrder((prev) =>
       prev && prev.id === targetOrder.id
         ? { ...prev, paymentStatus: "PAID", status: "CONFIRMED" }
@@ -866,6 +888,19 @@ function CustomerPortalContent() {
     const maxCapacity = space?.type === "HOT_DESK" ? (space.capacity || 8) : 1;
     const startMins = typeof startTimeInput === "number" ? startTimeInput * 60 : parseTimeToMinutes(startTimeInput);
     const targetEndMins = startMins + durationHours * 60;
+
+    // Past time check for today
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+    if (targetDate === todayStr) {
+      const nowMins = now.getHours() * 60 + now.getMinutes();
+      if (startMins < nowMins - 15) {
+        return {
+          isAvailable: false,
+          reason: "Waktu sudah lewat",
+        };
+      }
+    }
 
     const activeBookings = bookings.filter(
       (b) =>
@@ -907,10 +942,13 @@ function CustomerPortalContent() {
     setBookingPaymentMethod("QRIS");
     setBookingNotes("");
 
-    // Auto pick first available slot for today
+    // Auto pick smart default time for today (current time clamped to operational hours)
+    const smartDefault = getSmartDefaultStartTime(today, "08:00", "22:00");
     const firstAvail = COWORKING_TIME_SLOTS.find((slot) => {
-      return checkSlotAvailability(space.id, today, slot, 2).isAvailable;
-    }) || "09:00";
+      const slotMins = parseTimeToMinutes(slot);
+      const smartMins = parseTimeToMinutes(smartDefault);
+      return slotMins >= smartMins && checkSlotAvailability(space.id, today, slot, 2).isAvailable;
+    }) || smartDefault;
     setBookingStartTime(firstAvail);
 
     setIsBookingModalOpen(true);
@@ -1124,6 +1162,15 @@ function CustomerPortalContent() {
           }
         }
 
+        if (appliedCoworkPromo?.id) {
+          redeemPromo(
+            appliedCoworkPromo.id,
+            booking.guestPhone || currentMember?.phone || user?.phone || "cust"
+          );
+          setUsedPromoIds((prev) => [...prev, appliedCoworkPromo.id]);
+          setAppliedCoworkPromo(null);
+        }
+
         setWaitingPaymentBooking((prev: any) => (prev ? { ...prev, paymentStatus: "PAID" } : null));
         const loyaltyMsg = pts > 0 ? ` (+${pts} Poin Loyalty)` : "";
         showToast(`Pembayaran Booking ${booking.spaceName} Berhasil! Ruangan siap digunakan.${loyaltyMsg}`);
@@ -1266,14 +1313,14 @@ function CustomerPortalContent() {
       case "KITCHEN_RECEIVED":
         return { label: "Diterima Dapur", color: "bg-amber-50 text-amber-700 border-amber-200" };
       case "COOKING":
-        return { label: "Sedang Dimasak 👨‍🍳", color: "bg-orange-50 text-orange-700 border-orange-200" };
+        return { label: "Sedang Dimasak", color: "bg-orange-50 text-orange-700 border-orange-200" };
       case "READY":
-        return { label: "Siap Disajikan / Ambil ✨", color: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+        return { label: "Siap Disajikan / Ambil", color: "bg-emerald-50 text-emerald-700 border-emerald-200" };
       case "SERVED":
       case "COMPLETED":
         return { label: "Selesai", color: "bg-slate-100 text-slate-700 border-slate-200" };
       case "CANCELLED":
-        return { label: "Dibatalkan ⚪", color: "bg-rose-50 text-rose-700 border-rose-200" };
+        return { label: "Dibatalkan", color: "bg-rose-50 text-rose-700 border-rose-200" };
       default:
         return { label: status, color: "bg-slate-100 text-slate-700 border-slate-200" };
     }
@@ -1431,7 +1478,7 @@ function CustomerPortalContent() {
                           </span>
                         </div>
                         <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white">
-                          Nikmati Sajian Kuliner Mitra & Layanan Terbaik ✨
+                          Nikmati Sajian Kuliner Mitra & Layanan Terbaik
                         </h2>
                         <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                           Pesan makanan & minuman lezat dari mitra favorit Anda atau booking ruang kerja modern. Kumpulkan poin loyalty untuk setiap transaksi.
@@ -1495,7 +1542,7 @@ function CustomerPortalContent() {
                           </span>
                         </div>
                         <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-white">
-                          Halo, {currentMember?.name} 👋
+                          Halo, {currentMember?.name}
                         </h2>
                         <p className="text-xs sm:text-sm text-slate-300">
                           Selamat datang di portal mandiri Dago Creative Hub!
@@ -2158,7 +2205,7 @@ function CustomerPortalContent() {
                               <div key={tenantId} className="p-3 bg-slate-50/90 rounded-2xl border border-slate-200/80 space-y-2">
                                 <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/60">
                                   <div className="flex items-center space-x-1.5">
-                                    <span className="text-sm">{partner?.icon || "🍽️"}</span>
+                                    <UtensilsCrossed className="w-3.5 h-3.5 text-slate-500" />
                                     <span className="font-black text-xs text-slate-800">
                                       {partner?.name || "Mitra Kuliner"}
                                     </span>
@@ -2246,7 +2293,7 @@ function CustomerPortalContent() {
                             </div>
                             {availableCustomerTables.length === 0 ? (
                               <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs font-bold text-rose-700">
-                                ⚠️ Semua meja di {activeOutlet?.name || "outlet ini"} sedang terisi/penuh. Silakan pilih opsi Bawa Pulang (Takeaway) atau hubungi kasir/waiter.
+                                Semua meja di {activeOutlet?.name || "outlet ini"} sedang terisi/penuh. Silakan pilih opsi Bawa Pulang (Takeaway) atau hubungi kasir/waiter.
                               </div>
                             ) : (
                               <select
@@ -2395,7 +2442,7 @@ function CustomerPortalContent() {
                                 })
                                 .map((p: PromoConfig) => (
                                   <option key={p.id} value={p.id}>
-                                    {p.code ? `[${p.code}] ` : ""}🎟️ {p.name} ({p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : formatCurrencyIDR(p.discountValue)})
+                                    {p.code ? `[${p.code}] ` : ""}{p.name} ({p.discountType === "PERCENTAGE" ? `${p.discountValue}%` : formatCurrencyIDR(p.discountValue)})
                                   </option>
                                 ))}
                             </select>
@@ -2729,7 +2776,7 @@ function CustomerPortalContent() {
                                 : "text-slate-600 hover:text-slate-900"
                             }`}
                           >
-                            📅 Sewa Harian / Rentang Tgl
+                            Sewa Harian / Rentang Tgl
                           </button>
                         </div>
 
@@ -2747,7 +2794,11 @@ function CustomerPortalContent() {
                                   type="date"
                                   min={new Date().toISOString().split("T")[0]}
                                   value={bookingDate}
-                                  onChange={(e) => setBookingDate(e.target.value)}
+                                  onChange={(e) => {
+                                    const newDate = e.target.value;
+                                    setBookingDate(newDate);
+                                    setBookingStartTime(getSmartDefaultStartTime(newDate, "08:00", "22:00"));
+                                  }}
                                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
                                   required
                                 />
@@ -2798,6 +2849,24 @@ function CustomerPortalContent() {
                                 />
                               </div>
 
+                              {(() => {
+                                const currentSlotCheck = checkSlotAvailability(
+                                  selectedSpaceForBooking.id,
+                                  bookingDate,
+                                  bookingStartTime,
+                                  bookingDuration
+                                );
+                                if (!currentSlotCheck.isAvailable) {
+                                  return (
+                                    <div className="p-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-semibold flex items-center gap-1.5">
+                                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-600" />
+                                      <span>Slot jam {bookingStartTime} tidak tersedia: {currentSlotCheck.reason}. Silakan pilih jam lain.</span>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
+
                               <div className="space-y-1">
                                 <span className="text-[10px] text-slate-400 font-semibold block">Pilihan Cepat Slot Jam:</span>
                                 <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 max-h-32 overflow-y-auto p-1.5 bg-slate-50 rounded-2xl border border-slate-200/80">
@@ -2818,7 +2887,7 @@ function CustomerPortalContent() {
                                         onClick={() => setBookingStartTime(slot)}
                                         className={`py-1.5 px-1 rounded-xl text-center transition-all flex flex-col items-center justify-center ${
                                           !avail.isAvailable
-                                            ? "bg-rose-50/70 border border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
+                                            ? "bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed opacity-60 line-through"
                                             : isSelected
                                               ? "bg-slate-900 text-white shadow-xs font-black ring-2 ring-slate-900/20 scale-[1.02]"
                                               : "bg-white border border-slate-200 text-slate-700 hover:bg-blue-50 hover:border-blue-300 font-bold"
@@ -2828,13 +2897,13 @@ function CustomerPortalContent() {
                                         <span
                                           className={`text-[8px] font-bold mt-0.5 ${
                                             !avail.isAvailable
-                                              ? "text-rose-600 font-black"
+                                              ? "text-rose-500 font-semibold"
                                               : isSelected
                                                 ? "text-blue-200"
                                                 : "text-emerald-600"
                                           }`}
                                         >
-                                          {avail.isAvailable ? "Tersedia" : "Penuh"}
+                                          {!avail.isAvailable ? (avail.reason === "Waktu sudah lewat" ? "Lewat" : "Penuh") : "Buka"}
                                         </span>
                                       </button>
                                     );

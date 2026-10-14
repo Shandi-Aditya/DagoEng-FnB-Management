@@ -11,6 +11,8 @@ import { useOrders } from "@/contexts/OrderContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { CashDrawerShiftModal } from "@/features/pos/CashDrawerShiftModal";
 import { getAuthorizedNavItems } from "@/lib/rbac";
+import { getTenantName } from "@/lib/tenant";
+import { ProFeatureBadge } from "@/components/premium";
 import {
   LayoutDashboard,
   Calculator,
@@ -121,7 +123,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
               DAGO <span className="text-brand-orange">Creative Hub</span>
             </h1>
             <p className="text-[10px] text-slate-400 font-medium tracking-wide">
-              {user?.tenant ? user.tenant.name : "Platform & Management"}
+              {user?.tenant ? getTenantName(user.tenant.id) : "Platform & Management"}
             </p>
           </div>
         </div>
@@ -142,22 +144,29 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 key={item.href}
                 href={item.href}
                 onClick={onNavigate}
-                className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-all group ${
+                className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all group ${
                   isActive
-                    ? "bg-brand-orange/10 text-brand-orange font-bold border-l-4 border-brand-orange pl-2.5"
+                    ? "bg-orange-50/90 text-orange-950 font-bold border border-orange-200/70 shadow-2xs"
                     : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
-                  <span className={isActive ? "text-brand-orange" : "text-slate-400 group-hover:text-slate-600"}>
+                  <span className={isActive ? "text-orange-600" : "text-slate-400 group-hover:text-slate-600"}>
                     {ICON_MAP[item.icon]}
                   </span>
-                  <span>{item.name}</span>
+                  <span className={isActive ? "text-slate-900" : ""}>{item.name}</span>
                 </div>
                 {item.module !== "CORE" && (
-                  <span className="text-[9px] font-mono text-slate-400 font-normal">
-                    {item.module}
-                  </span>
+                  <div className="flex items-center space-x-1.5">
+                    {item.module === "CO_WORKING" && (
+                      <ProFeatureBadge label="PRO" variant="pro" size="xs" />
+                    )}
+                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+                      isActive ? "bg-orange-100/70 text-orange-800 font-semibold" : "text-slate-400 font-normal"
+                    }`}>
+                      {item.module}
+                    </span>
+                  </div>
                 )}
               </Link>
             );
@@ -175,7 +184,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             <div className="truncate">
               <p className="text-xs font-semibold text-slate-800 truncate">{user?.name}</p>
               <p className="text-[10px] text-slate-400 truncate">
-                {user?.tenant ? user.tenant.name : user?.organization?.name || "Dago Hub"}
+                {user?.tenant ? (getTenantName(user.tenant.id) || user.tenant.name) : user?.organization?.name || "Dago Hub"}
               </p>
             </div>
           </div>

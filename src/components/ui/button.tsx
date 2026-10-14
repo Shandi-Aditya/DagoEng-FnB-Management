@@ -3,24 +3,24 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-orange focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-lg text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/15 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
   {
     variants: {
       variant: {
-        default: "bg-brand-orange text-white hover:bg-[#E65A00] shadow-sm",
-        secondary: "bg-slate-100 text-slate-900 hover:bg-slate-200 border border-slate-200",
-        outline: "border border-slate-300 bg-white hover:bg-slate-50 text-slate-700",
-        ghost: "hover:bg-slate-100 text-slate-700",
-        cyan: "bg-brand-cyan text-white hover:bg-[#009FE5] shadow-sm",
-        green: "bg-brand-green text-white hover:bg-[#00B048] shadow-sm",
-        danger: "bg-red-600 text-white hover:bg-red-700 shadow-sm",
-        link: "text-brand-orange underline-offset-4 hover:underline",
+        default: "bg-brand-orange text-white hover:bg-[#C2410C] shadow-xs",
+        secondary: "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200/90 shadow-2xs font-semibold",
+        outline: "border border-slate-300/80 bg-white hover:bg-slate-50 text-slate-700 shadow-2xs",
+        ghost: "hover:bg-slate-100/80 text-slate-700",
+        cyan: "bg-sky-600 text-white hover:bg-sky-700 shadow-xs",
+        green: "bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs",
+        danger: "bg-rose-600 text-white hover:bg-rose-700 shadow-xs",
+        link: "text-brand-orange underline-offset-4 hover:underline font-medium",
       },
       size: {
         default: "h-10 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-11 rounded-md px-6 text-base font-semibold",
-        icon: "h-9 w-9",
+        sm: "h-8 rounded-md px-3 text-xs font-medium",
+        lg: "h-11 rounded-lg px-6 text-base font-semibold",
+        icon: "h-9 w-9 rounded-lg",
       },
     },
     defaultVariants: {

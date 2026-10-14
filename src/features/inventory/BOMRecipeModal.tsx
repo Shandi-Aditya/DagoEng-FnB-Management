@@ -17,6 +17,7 @@ import {
   Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ProFeatureBadge } from "@/components/premium";
 
 interface BOMRecipeModalProps {
   isOpen: boolean;
@@ -160,7 +161,7 @@ export function BOMRecipeModal({
 
       setRecipeLines(generated);
       setIsAIGenerating(false);
-      setAiNotice(`✨ AI Berhasil menyusun ${generated.length} takaran bahan baku presisi untuk "${currentProduct?.name}"!`);
+      setAiNotice(`AI Berhasil menyusun ${generated.length} takaran bahan baku presisi untuk "${currentProduct?.name}"!`);
       setTimeout(() => setAiNotice(""), 5000);
     }, 600);
   };
@@ -188,7 +189,7 @@ export function BOMRecipeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/80 backdrop-blur-xs animate-in fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
         {/* Header */}
         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
@@ -199,6 +200,7 @@ export function BOMRecipeModal({
             <div>
               <h3 className="text-sm font-bold text-white flex items-center space-x-2">
                 <span>Formulasi Resep BOM & Kalkulasi COGS</span>
+                <ProFeatureBadge label="ADD-ON" variant="addon" size="xs" />
               </h3>
               <p className="text-[11px] text-slate-400">
                 Hubungkan menu katalog dengan bahan baku gudang untuk auto-deduction
@@ -272,7 +274,7 @@ export function BOMRecipeModal({
               className="text-xs bg-purple-600 hover:bg-purple-700 text-white font-bold space-x-1.5 shadow-xs"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>{isAIGenerating ? "Memproses..." : "✨ AI Generate"}</span>
+              <span>{isAIGenerating ? "Memproses..." : "AI Generate"}</span>
             </Button>
           </div>
 

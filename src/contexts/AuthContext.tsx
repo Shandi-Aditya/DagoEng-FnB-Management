@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { AuthenticatedUser, RoleSlug, BusinessModuleCode, ScopeLevel } from "@/types/auth";
+import { getTenantName } from "@/lib/tenant";
 
 export type PersonaKey =
   | "DAGO_OWNER"
@@ -255,9 +256,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     const savedKey = localStorage.getItem("dagoeng_active_persona") as PersonaKey | null;
-    if (savedKey && DEMO_PERSONAS[savedKey]) {
-      setUser(DEMO_PERSONAS[savedKey]);
+    let initialUser = (savedKey && DEMO_PERSONAS[savedKey]) ? DEMO_PERSONAS[savedKey] : DEMO_PERSONAS.DAGO_OWNER;
+    if (initialUser?.tenant?.id) {
+      const freshName = getTenantName(initialUser.tenant.id);
+      if (freshName && freshName !== initialUser.tenant.name) {
+        initialUser = {
+          ...initialUser,
+          tenant: { ...initialUser.tenant, name: freshName },
+        };
+      }
     }
+    if (savedKey && DEMO_PERSONAS[savedKey]) {
+      setUser(initialUser);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleTenantUpdated = () => {
+      setUser((current) => {
+        if (!current?.tenant?.id) return current;
+        const freshName = getTenantName(current.tenant.id);
+        if (freshName && freshName !== current.tenant.name) {
+          return {
+            ...current,
+            tenant: {
+              ...current.tenant,
+              name: freshName,
+            },
+          };
+        }
+        return current;
+      });
+    };
+
+    window.addEventListener("tenant_settings_updated", handleTenantUpdated);
+    return () => window.removeEventListener("tenant_settings_updated", handleTenantUpdated);
   }, []);
 
   const toggleOrgModule = (moduleCode: BusinessModuleCode) => {

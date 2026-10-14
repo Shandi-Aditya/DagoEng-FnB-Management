@@ -22,6 +22,7 @@ export interface PromoConfig {
   claimedBy?: string[]; // List of customer identifiers (phone/id) who claimed
   usedBy?: string[]; // List of customer identifiers who used (single-use enforcement)
   requiresClaim?: boolean; // If true, customer must claim before use
+  tenantId?: string; // Optional tenant owner ID for Mitra-scoped promos
   isActive: boolean;
 }
 
@@ -283,5 +284,108 @@ export function calculateCoworkingPricing(
     tax: Math.round(tax),
     total: Math.round(total),
   };
+}
+
+/**
+ * Returns remaining quota for promo. Returns null if unlimited.
+ */
+export function getPromoRemainingQuota(promo: PromoConfig): number | null {
+  if (promo.quota === undefined || promo.quota <= 0) return null;
+  const used = promo.usageCount || 0;
+  return Math.max(0, promo.quota - used);
+}
+
+/**
+ * Decrements quota by incrementing usageCount and recording customer usage.
+ * Only applied upon successful transaction completion/payment.
+ */
+export function redeemPromoQuota(
+  promos: PromoConfig[],
+  promoIdOrCode: string,
+  customerId?: string
+): { updatedPromos: PromoConfig[]; success: boolean; promo?: PromoConfig; reason?: string } {
+  if (!promoIdOrCode) {
+    return { updatedPromos: promos, success: false, reason: "ID atau Kode Promo tidak valid" };
+  }
+
+  const clean = promoIdOrCode.trim().toUpperCase();
+  const idx = promos.findIndex(
+    (p) => p.id === promoIdOrCode || (p.code && p.code.trim().toUpperCase() === clean) || p.name.trim().toUpperCase() === clean
+  );
+
+  if (idx < 0) {
+    return { updatedPromos: promos, success: false, reason: "Promo tidak ditemukan" };
+  }
+
+  const target = promos[idx];
+
+  // Quota check
+  if (target.quota !== undefined && target.quota > 0) {
+    const currentUsage = target.usageCount || 0;
+    if (currentUsage >= target.quota) {
+      return {
+        updatedPromos: promos,
+        success: false,
+        promo: target,
+        reason: "Kuota pemakaian voucher ini sudah habis.",
+      };
+    }
+  }
+
+  // Single-use customer check
+  if (customerId && target.usedBy && target.usedBy.includes(customerId)) {
+    return {
+      updatedPromos: promos,
+      success: false,
+      promo: target,
+      reason: "Pelanggan sudah pernah menggunakan voucher ini sebelumnya.",
+    };
+  }
+
+  const updatedTarget: PromoConfig = {
+    ...target,
+    usageCount: (target.usageCount || 0) + 1,
+    usedBy: customerId ? Array.from(new Set([...(target.usedBy || []), customerId])) : target.usedBy,
+  };
+
+  const updatedPromos = [...promos];
+  updatedPromos[idx] = updatedTarget;
+
+  return {
+    updatedPromos,
+    success: true,
+    promo: updatedTarget,
+  };
+}
+
+/**
+ * Reverts promo quota increment if a paid transaction is officially cancelled/refunded.
+ */
+export function refundPromoQuota(
+  promos: PromoConfig[],
+  promoIdOrCode: string,
+  customerId?: string
+): { updatedPromos: PromoConfig[]; success: boolean } {
+  if (!promoIdOrCode) return { updatedPromos: promos, success: false };
+
+  const clean = promoIdOrCode.trim().toUpperCase();
+  const idx = promos.findIndex(
+    (p) => p.id === promoIdOrCode || (p.code && p.code.trim().toUpperCase() === clean) || p.name.trim().toUpperCase() === clean
+  );
+
+  if (idx < 0) return { updatedPromos: promos, success: false };
+
+  const target = promos[idx];
+  const newCount = Math.max(0, (target.usageCount || 0) - 1);
+  const newUsedBy = customerId && target.usedBy ? target.usedBy.filter((c) => c !== customerId) : target.usedBy;
+
+  const updatedPromos = [...promos];
+  updatedPromos[idx] = {
+    ...target,
+    usageCount: newCount,
+    usedBy: newUsedBy,
+  };
+
+  return { updatedPromos, success: true };
 }
 

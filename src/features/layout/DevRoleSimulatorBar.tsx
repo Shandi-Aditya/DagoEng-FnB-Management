@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth, PersonaKey, DEMO_PERSONAS } from "@/contexts/AuthContext";
-import { ShieldAlert, Users, ChevronDown, Check, Building, Laptop, Coffee, Briefcase, ExternalLink, Zap, RotateCcw } from "lucide-react";
+import { ShieldAlert, Users, ChevronDown, Check, Building, Laptop, Coffee, Briefcase, ExternalLink, Zap, RotateCcw, Calculator, ChefHat, Smartphone } from "lucide-react";
 
 interface PersonaOption {
   key: PersonaKey;
@@ -89,12 +89,12 @@ const PERSONAS_LIST: PersonaOption[] = [
   },
 ];
 
-const QUICK_PERSONAS: { key: PersonaKey; label: string; icon: string }[] = [
-  { key: "DAGO_OWNER", label: "Dago Hub Owner", icon: "🏢" },
-  { key: "TENANT_OWNER_KS", label: "Kopi Senja (Tenant)", icon: "☕" },
-  { key: "CASHIER_SGR", label: "POS Kasir", icon: "🛒" },
-  { key: "KITCHEN_SGR", label: "Dapur KDS", icon: "🍳" },
-  { key: "CUSTOMER_DEMO", label: "Pelanggan QR", icon: "📱" },
+const QUICK_PERSONAS: { key: PersonaKey; label: string; icon: React.ReactNode }[] = [
+  { key: "DAGO_OWNER", label: "Dago Hub Owner", icon: <Building className="w-3 h-3 text-brand-orange" /> },
+  { key: "TENANT_OWNER_KS", label: "Kopi Senja (Tenant)", icon: <Coffee className="w-3 h-3 text-amber-400" /> },
+  { key: "CASHIER_SGR", label: "POS Kasir", icon: <Calculator className="w-3 h-3 text-emerald-400" /> },
+  { key: "KITCHEN_SGR", label: "Dapur KDS", icon: <ChefHat className="w-3 h-3 text-rose-400" /> },
+  { key: "CUSTOMER_DEMO", label: "Pelanggan QR", icon: <Smartphone className="w-3 h-3 text-purple-400" /> },
 ];
 
 export function DevRoleSimulatorBar() {

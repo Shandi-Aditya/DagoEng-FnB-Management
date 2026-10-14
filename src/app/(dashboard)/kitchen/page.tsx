@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { soundChime } from "@/lib/audio-chime";
+import { ProFeatureBadge } from "@/components/premium";
 
 export default function KitchenKDSPage() {
   const { activeOutlet, activeOutletId } = useOutlet();
@@ -239,10 +240,14 @@ export default function KitchenKDSPage() {
               }`}
             >
               {type === "ALL" && "Semua Pesanan"}
-              {type === "DINE_IN" && "🍽️ Dine In"}
-              {type === "TAKE_AWAY" && "🛍️ Takeaway / Delivery"}
+              {type === "DINE_IN" && "Dine In"}
+              {type === "TAKE_AWAY" && "Takeaway / Delivery"}
             </button>
           ))}
+          <div className="hidden lg:flex items-center space-x-1.5 pl-2.5 ml-1 border-l border-slate-200">
+            <span className="text-[11px] text-slate-500 font-medium">Stasiun: Central Kitchen</span>
+            <ProFeatureBadge label="MULTI-STATION PRO" variant="pro" size="xs" />
+          </div>
         </div>
 
         <div className="flex items-center space-x-3 text-xs text-slate-600 pr-2">
@@ -323,10 +328,10 @@ export default function KitchenKDSPage() {
                               suppressHydrationWarning
                               className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${
                                 isDelayed
-                                  ? "bg-red-100 text-red-700 animate-pulse border border-red-300"
+                                  ? "bg-rose-50 text-rose-700 animate-pulse border border-rose-300"
                                   : isAtRisk
-                                  ? "bg-amber-100 text-amber-800 border border-amber-300"
-                                  : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                  ? "bg-amber-50 text-amber-800 border border-amber-300"
+                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                               }`}
                             >
                               <Clock className="w-3 h-3 mr-1" />
@@ -336,9 +341,20 @@ export default function KitchenKDSPage() {
                               </span>
                             </span>
 
-                            <span className="text-[10px] text-slate-500 font-semibold uppercase px-1.5 py-0.5 bg-slate-100 rounded">
-                              {order.orderType === "DINE_IN" ? "Dine In" : "Takeaway"}
-                            </span>
+                            <div className="flex items-center space-x-1.5">
+                              <span
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                  order.paymentStatus === "PAID"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : "bg-amber-50 text-amber-700 border-amber-200"
+                                }`}
+                              >
+                                {order.paymentStatus === "PAID" ? "LUNAS" : "BELUM LUNAS"}
+                              </span>
+                              <span className="text-[10px] text-slate-500 font-semibold uppercase px-1.5 py-0.5 bg-slate-100 rounded">
+                                {order.orderType === "DINE_IN" ? "Dine In" : "Takeaway"}
+                              </span>
+                            </div>
                           </div>
 
                           {/* Items List with Modifiers */}
@@ -353,7 +369,7 @@ export default function KitchenKDSPage() {
                                     {it.modifiers.map((mod, mIdx) => (
                                       <span
                                         key={mIdx}
-                                        className="text-[10px] bg-orange-100 text-brand-orange font-semibold px-1 rounded"
+                                        className="text-[10px] bg-orange-50 text-brand-orange border border-orange-200/60 font-semibold px-1.5 py-0.5 rounded"
                                       >
                                         ↳ {mod}
                                       </span>

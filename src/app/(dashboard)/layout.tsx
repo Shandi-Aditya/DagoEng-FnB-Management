@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar } from "@/features/layout/Sidebar";
 import { Header } from "@/features/layout/Header";
@@ -14,7 +14,11 @@ export default function DashboardLayout({
 }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Operational screens that benefit from maximum horizontal space
+  const isFullWidthPage = pathname === "/pos" || pathname === "/kitchen" || pathname === "/tables";
 
   useEffect(() => {
     if (!isLoading && user === null) {
@@ -66,7 +70,13 @@ export default function DashboardLayout({
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
           <Header onOpenMobileMenu={() => setIsMobileMenuOpen(true)} />
-          <main className="flex-1 p-3 sm:p-5 lg:p-6 max-w-7xl w-full mx-auto animate-in fade-in duration-200">
+          <main
+            className={`flex-1 w-full animate-in fade-in duration-200 ${
+              isFullWidthPage
+                ? "p-2.5 sm:p-4 lg:p-5"
+                : "p-3 sm:p-5 lg:p-6 max-w-7xl mx-auto"
+            }`}
+          >
             {children}
           </main>
         </div>

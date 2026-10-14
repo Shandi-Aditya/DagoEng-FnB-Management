@@ -84,32 +84,32 @@ export function DailyClosingPDFModal({
       );
 
       // Open Direct WhatsApp fallback
-      const text = encodeURIComponent(`📄 *LAPORAN RESMI CLOSING KEUANGAN - DAGOENG F&B*
-━━━━━━━━━━━━━━━━━━━━
+      const text = encodeURIComponent(`*LAPORAN RESMI CLOSING KEUANGAN - DAGOENG F&B*
+----------------------------------------
 No. Dokumen: *${reportData.reportNumber}*
 Outlet: *${reportData.outletName}*
 Waktu: ${reportData.closingDateTime} (Shift: ${reportData.shiftName})
 Kasir: ${reportData.cashierName}
 
-💰 *RINGKASAN KEUANGAN:*
+*RINGKASAN KEUANGAN:*
 • Total Transaksi: ${reportData.totalTransactionsCount} Struk
 • Omset Kotor: ${formatCurrencyIDR(reportData.totalGrossSales)}
 • Pajak PB1/PPN (${reportData.isTaxEnabled ? `${reportData.taxRatePercent}%` : "Non-Aktif"}): ${formatCurrencyIDR(reportData.totalTax)}
 • *Omset Bersih:* *${formatCurrencyIDR(reportData.totalNetSales)}*
 
-💳 *METODE PEMBAYARAN:*
+*METODE PEMBAYARAN:*
 • QRIS Dinamis: ${formatCurrencyIDR(reportData.qrisSales)}
 • Kas Tunai: ${formatCurrencyIDR(reportData.totalCashSales)}
 • Kartu EDC: ${formatCurrencyIDR(reportData.edcSales)}
 
-🤝 *BAGI HASIL REVENUE SHARE:*
+*BAGI HASIL REVENUE SHARE:*
 • Hak Tenant (${reportData.tenantSharePercent}%): *${formatCurrencyIDR(reportData.tenantTotalShare)}*
 • Hak Dago Hub (${reportData.dagoSharePercent}%): *${formatCurrencyIDR(reportData.dagoTotalShare)}*
 
-🔐 *STATUS VALIDASI:*
+*STATUS VALIDASI:*
 • Dokumen Tersertifikasi Digital (Hash: ${reportData.verificationHash.slice(0, 10)}...)
 • Sah tanpa tanda tangan fisik.
-━━━━━━━━━━━━━━━━━━━━
+----------------------------------------
 _DagoEng Creative Hub - Financial Automated System_`);
 
       const cleanPhone = managerPhone.replace(/\D/g, "");
@@ -154,7 +154,7 @@ _DagoEng Creative Hub - Financial Automated System_`);
         }
       `}</style>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs animate-in fade-in">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200 flex flex-col max-h-[92vh]">
           {/* Top Control Bar (Hidden when printing) */}
           <div className="px-6 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white print:hidden">

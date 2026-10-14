@@ -608,7 +608,7 @@ export default function CoworkingPage() {
                       {isOccupied && sp.currentSession && (
                         <div className="mt-2 p-2.5 bg-white rounded-xl border border-blue-200 space-y-1">
                           <div className="flex justify-between text-xs font-bold text-slate-900">
-                            <span>👤 {sp.currentSession.guestName}</span>
+                            <span>Tamu: {sp.currentSession.guestName}</span>
                             <span className="text-blue-600 font-mono text-[11px]">{sp.currentSession.checkInTime}</span>
                           </div>
                           <p className="text-[10px] text-slate-500">
@@ -811,7 +811,7 @@ export default function CoworkingPage() {
                       : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
                 >
-                  {st === "ALL" ? "Semua Status" : st === "ACTIVE" ? "🟢 Member Aktif" : "🔴 Expired"}
+                  {st === "ALL" ? "Semua Status" : st === "ACTIVE" ? "Member Aktif" : "Expired"}
                 </button>
               ))}
             </div>
@@ -874,7 +874,7 @@ export default function CoworkingPage() {
         <Card className="shadow-sm animate-in fade-in">
           <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
             <CardTitle className="text-sm font-bold text-slate-900 flex items-center justify-between">
-              <span>📋 Log Aktivitas Check-in & Check-out Co-working</span>
+              <span>Log Aktivitas Check-in & Check-out Co-working</span>
               <span className="text-xs text-slate-500 font-normal">Sinkronisasi status meja & waktu riil sistem</span>
             </CardTitle>
           </CardHeader>
@@ -995,7 +995,7 @@ export default function CoworkingPage() {
                 >
                   {spaces.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} ({s.type.replace("_", " ")} &bull; {s.status === "AVAILABLE" ? "🟢 Tersedia" : "🔴 Terisi"})
+                      {s.name} ({s.type.replace("_", " ")} &bull; {s.status === "AVAILABLE" ? "Tersedia" : "Terisi"})
                     </option>
                   ))}
                 </select>
@@ -1016,7 +1016,7 @@ export default function CoworkingPage() {
                         : "text-slate-600 hover:text-slate-900"
                       }`}
                   >
-                    ⏱️ Paket Jam
+                    Paket Jam
                   </button>
                   <button
                     type="button"
@@ -1029,7 +1029,7 @@ export default function CoworkingPage() {
                         : "text-slate-600 hover:text-slate-900"
                       }`}
                   >
-                    📅 Sewa Harian / Multi-Hari
+                    Sewa Harian / Multi-Hari
                   </button>
                   <button
                     type="button"
@@ -1039,7 +1039,7 @@ export default function CoworkingPage() {
                         : "text-slate-600 hover:text-slate-900"
                       }`}
                   >
-                    🏢 Bulanan (30 Hari)
+                    Bulanan (30 Hari)
                   </button>
                 </div>
               </div>
@@ -1269,7 +1269,7 @@ export default function CoworkingPage() {
 
                   <div className="p-2 bg-white rounded-xl border border-amber-200 text-[11px] text-amber-900 flex items-center justify-between font-bold">
                     <span>
-                      📅 Total:{" "}
+                      Total:{" "}
                       {bookDailyPreset === "1_DAY"
                         ? "1 Hari"
                         : bookDailyPreset === "3_DAYS"

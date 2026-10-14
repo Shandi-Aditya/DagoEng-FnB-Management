@@ -274,7 +274,7 @@ export default function TablesPage() {
               <Card key={area.id} className="shadow-sm">
                 <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
                   <CardTitle className="text-sm font-bold text-slate-800 flex items-center justify-between">
-                    <span>📍 {area.name}</span>
+                    <span>{area.name}</span>
                     <span className="text-xs text-slate-500 font-medium">
                       {area.tables.filter((t) => t.status === "OCCUPIED").length} / {area.tables.length} Terisi
                     </span>
@@ -372,9 +372,9 @@ export default function TablesPage() {
             <div className="flex items-center space-x-1.5 text-xs">
               {[
                 { key: "ALL", label: "Semua Reservasi" },
-                { key: "CONFIRMED", label: "Menunggu Kedatangan 🟡" },
-                { key: "SEATED", label: "Sudah Duduk (Seated) 🟢" },
-                { key: "CANCELLED", label: "Dibatalkan ⚪" },
+                { key: "CONFIRMED", label: "Menunggu Kedatangan" },
+                { key: "SEATED", label: "Sudah Duduk (Seated)" },
+                { key: "CANCELLED", label: "Dibatalkan" },
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -577,7 +577,7 @@ export default function TablesPage() {
                     onClick={() => handleUpdateTableStatus("CLEANING")}
                     className={selectedTableDetails.table.status === "CLEANING" ? "bg-slate-700 text-white" : ""}
                   >
-                    ⚪ Perlu Dibersihkan
+                    Perlu Dibersihkan
                   </Button>
                 </div>
               </div>

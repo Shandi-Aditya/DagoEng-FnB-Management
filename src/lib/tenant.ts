@@ -139,7 +139,7 @@ export const DEFAULT_FNB_TENANTS: FnbPartnerInfo[] = [
     code: "KOPI-SENJA",
     name: "Kopi Senja",
     badge: "Official Mitra Kopi",
-    icon: "☕",
+    icon: "Coffee",
     tagline: "Kopi Spesialti & Aneka Minuman",
     desc: "Sajian kopi pilihan dan aneka minuman segar untuk menemani aktivitas Anda.",
   },
@@ -148,7 +148,7 @@ export const DEFAULT_FNB_TENANTS: FnbPartnerInfo[] = [
     code: "DAPUR-MAMA",
     name: "Dapur Mama",
     badge: "Official Kitchen",
-    icon: "🍽️",
+    icon: "Utensils",
     tagline: "Masakan Rumahan & Hidangan Utama",
     desc: "Hidangan utama hangat, aneka olahan nasi, dan lauk lezat khas masakan rumah.",
   },
@@ -157,7 +157,7 @@ export const DEFAULT_FNB_TENANTS: FnbPartnerInfo[] = [
     code: "MANIS-BAKERY",
     name: "Manis Bakery",
     badge: "Fresh Baked Daily",
-    icon: "🥐",
+    icon: "Croissant",
     tagline: "Roti, Kue & Pastry Segar",
     desc: "Roti segar, pastry mentega lembut, dan camilan lezat yang dipanggang setiap hari.",
   },
@@ -166,7 +166,7 @@ export const DEFAULT_FNB_TENANTS: FnbPartnerInfo[] = [
     code: "WARUNG-BU-NARTI",
     name: "Warung Bu Narti",
     badge: "Mitra Nusantara",
-    icon: "🍃",
+    icon: "Leaf",
     tagline: "Kuliner Tradisional & Minuman Nusantara",
     desc: "Aneka seduhan teh segar, minuman rempah tradisional, dan sajian khas nusantara.",
   },
@@ -256,7 +256,7 @@ export function getTenantProfile(tenantId: string): TenantProfileData {
     tagline: "Mitra Resmi Dago Creative Hub",
     desc: "Mitra kuliner terdaftar di Dago Creative Hub.",
     badge: "Official Mitra",
-    icon: "🍽️",
+    icon: "Utensils",
   };
 
   const def = DEFAULT_TENANT_PROFILES[tenantId] || {
@@ -353,16 +353,34 @@ export function saveCustomTenant(tenant: FnbPartnerInfo): void {
 export function getAllFnbTenants(): FnbPartnerInfo[] {
   const custom = getCustomTenants();
   const map = new Map<string, FnbPartnerInfo>();
-  DEFAULT_FNB_TENANTS.forEach((t) => map.set(t.id, t));
-  custom.forEach((t) => map.set(t.id, t));
+  DEFAULT_FNB_TENANTS.forEach((t) => map.set(t.id, { ...t }));
+  custom.forEach((t) => map.set(t.id, { ...t }));
+
+  const stored = getAllStoredTenantSettings();
+  map.forEach((tenant, id) => {
+    if (stored[id]?.brandName) {
+      tenant.name = stored[id].brandName;
+    }
+    if (stored[id]?.tagline) {
+      tenant.tagline = stored[id].tagline;
+    }
+    if (stored[id]?.description) {
+      tenant.desc = stored[id].description;
+    }
+  });
+
   return Array.from(map.values());
 }
 
 /**
- * Helper to get readable tenant name by tenantId
+ * Helper to get readable tenant name by tenantId with dynamic brand name overlay
  */
 export function getTenantName(tenantId?: string): string | undefined {
   if (!tenantId) return undefined;
+  const stored = getAllStoredTenantSettings();
+  if (stored[tenantId]?.brandName) {
+    return stored[tenantId].brandName;
+  }
   const all = getAllFnbTenants();
   const match = all.find((t) => t.id === tenantId);
   return match ? match.name : tenantId;

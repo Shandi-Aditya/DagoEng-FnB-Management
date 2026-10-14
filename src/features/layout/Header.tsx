@@ -20,6 +20,7 @@ import {
   Check,
   ExternalLink,
   Menu,
+  Globe,
 } from "lucide-react";
 
 export function Header({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void } = {}) {
@@ -49,7 +50,7 @@ export function Header({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void } =
   };
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30 gap-2">
+    <header className="h-16 bg-white/95 backdrop-blur-xs border-b border-slate-200/90 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30 gap-2">
       {/* Left: Hamburger & Organization Title & Scope Context */}
       <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
         <button
@@ -110,7 +111,10 @@ export function Header({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void } =
                       isAllOutlets ? "text-brand-orange font-bold bg-brand-orange/5" : "text-slate-700"
                     }`}
                   >
-                    <span>🌐 Semua Outlet (Konsolidasi Data)</span>
+                    <span className="flex items-center">
+                      <Globe className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
+                      Semua Outlet (Konsolidasi Data)
+                    </span>
                     {isAllOutlets && <span className="text-[10px] bg-brand-orange text-white px-1.5 rounded">Aktif</span>}
                   </button>
                   <div className="border-t border-slate-100 my-1" />

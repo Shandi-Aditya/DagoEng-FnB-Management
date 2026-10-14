@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { PromoConfig, PromoType, TargetType, getPromoComputedStatus, sortPromosByPriority } from "@/lib/promo";
+import { PromoConfig, PromoType, PromoScope, TargetType, getPromoComputedStatus, sortPromosByPriority } from "@/lib/promo";
 import { useProducts } from "@/contexts/ProductContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
 import { useTables } from "@/contexts/TableContext";
@@ -48,6 +48,18 @@ import {
   CheckSquare,
   Square,
   ArrowUpDown,
+  Zap,
+  Check,
+  Layers,
+  Crown,
+  Sparkles,
+  Package,
+  Wifi,
+  Router,
+  Signal,
+  Server,
+  Info,
+  Sliders,
 } from "lucide-react";
 import {
   INDONESIAN_NATIONAL_HOLIDAYS_2026,
@@ -73,6 +85,33 @@ import {
   getTenantRevenueSplit,
   DEFAULT_TENANT_REVENUE_SPLITS,
 } from "@/lib/settlement";
+import { ProFeatureBadge, PremiumFeatureCard, UpgradeModal } from "@/components/premium";
+import {
+  PLATFORM_PLANS,
+  PlanTier,
+  getSimulatedOrgSubscription,
+  setSimulatedOrgPlan,
+  getSimulatedTenantAddons,
+  toggleSimulatedTenantAddon,
+  OrgSubscriptionState,
+  TenantAddonItem,
+} from "@/lib/subscription";
+import {
+  WifiFnBRule,
+  WifiCoworkingRule,
+  WifiVoucherRecord,
+  WifiNetworkConfig,
+  DEFAULT_NETWORK_CONFIG,
+  getSimulatedFnBRules,
+  saveSimulatedFnBRules,
+  getSimulatedCoworkingRules,
+  getSimulatedWifiVouchers,
+  saveSimulatedWifiVouchers,
+  revokeSimulatedWifiVoucher,
+  validateFnBRulesOverlap,
+  getSimulatedWifiCalcBasis,
+  setSimulatedWifiCalcBasis,
+} from "@/lib/wifi";
 
 export default function SettingsPage() {
   const { user, activeOrgModules, toggleOrgModule } = useAuth();
@@ -173,11 +212,153 @@ export default function SettingsPage() {
 
   // Master Data Tabs & Filters State
   const [selectedMasterTab, setSelectedMasterTab] = useState("Produk & Kategori");
-  const [tenantActiveTab, setTenantActiveTab] = useState<"PRODUCTS" | "PROFILE">("PRODUCTS");
+  const [tenantActiveTab, setTenantActiveTab] = useState<"PRODUCTS" | "PROFILE" | "PROMOS" | "ADDONS" | "WIFI">("PRODUCTS");
   const [masterTenantFilter, setMasterTenantFilter] = useState<string>("ALL");
   const [masterCategoryFilter, setMasterCategoryFilter] = useState<string>("ALL");
   const [masterSearch, setMasterSearch] = useState<string>("");
   const [masterToast, setMasterToast] = useState<string>("");
+  const [previewModalFeature, setPreviewModalFeature] = useState<{
+    title: string;
+    badgeLabel?: string;
+    badgeVariant?: "pro" | "addon" | "enterprise";
+    categoryTag?: string;
+    description: string;
+    benefits?: string[];
+    samplePlanName?: string;
+    statusText?: string;
+  } | null>(null);
+
+  // Simulated Subscription & Add-ons State (Revisi UX Komersial DagoEng)
+  const [orgSub, setOrgSub] = useState<OrgSubscriptionState>(getSimulatedOrgSubscription());
+  const [tenantAddons, setTenantAddons] = useState<TenantAddonItem[]>(getSimulatedTenantAddons());
+
+  // Wi-Fi Management Simulation State (Simulasi Tanpa Hardware Nyata)
+  const [wifiFnBRules, setWifiFnBRules] = useState<WifiFnBRule[]>(() => getSimulatedFnBRules());
+  const [wifiCwRules, setWifiCwRules] = useState<WifiCoworkingRule[]>(() => getSimulatedCoworkingRules());
+  const [wifiVouchers, setWifiVouchers] = useState<WifiVoucherRecord[]>(() => getSimulatedWifiVouchers());
+  const [wifiNetworkConfig] = useState<WifiNetworkConfig>(DEFAULT_NETWORK_CONFIG);
+  const [wifiCalcBasis, setWifiCalcBasis] = useState<"GRAND_TOTAL" | "NET_SALES">(() => getSimulatedWifiCalcBasis());
+
+  // Wi-Fi Voucher Filters
+  const [wifiServiceFilter, setWifiServiceFilter] = useState<"ALL" | "FNB" | "COWORKING">("ALL");
+  const [wifiStatusFilter, setWifiStatusFilter] = useState<"ALL" | "ACTIVE" | "USED" | "EXPIRED" | "CANCELLED">("ALL");
+  const [wifiSearchQuery, setWifiSearchQuery] = useState<string>("");
+
+  // Wi-Fi FnB Rule Add/Edit Modal State
+  const [isWifiRuleModalOpen, setIsWifiRuleModalOpen] = useState(false);
+  const [editingWifiRule, setEditingWifiRule] = useState<WifiFnBRule | null>(null);
+  const [wifiRuleFormLabel, setWifiRuleFormLabel] = useState("");
+  const [wifiRuleFormMin, setWifiRuleFormMin] = useState<number>(25000);
+  const [wifiRuleFormMax, setWifiRuleFormMax] = useState<string>("");
+  const [wifiRuleFormDuration, setWifiRuleFormDuration] = useState<number>(60);
+  const [wifiRuleFormBandwidthDown, setWifiRuleFormBandwidthDown] = useState<number>(10);
+  const [wifiRuleFormBandwidthUp, setWifiRuleFormBandwidthUp] = useState<number>(5);
+  const [wifiRuleFormNotes, setWifiRuleFormNotes] = useState<string>("");
+  const [wifiRuleFormError, setWifiRuleFormError] = useState<string>("");
+
+  const handleOpenAddWifiRule = () => {
+    setEditingWifiRule(null);
+    setWifiRuleFormLabel("Paket Hemat Baru (1 Jam)");
+    setWifiRuleFormMin(50000);
+    setWifiRuleFormMax("");
+    setWifiRuleFormDuration(60);
+    setWifiRuleFormBandwidthDown(15);
+    setWifiRuleFormBandwidthUp(5);
+    setWifiRuleFormNotes("Contoh simulasi paket internet transaksi F&B");
+    setWifiRuleFormError("");
+    setIsWifiRuleModalOpen(true);
+  };
+
+  const handleOpenEditWifiRule = (rule: WifiFnBRule) => {
+    setEditingWifiRule(rule);
+    setWifiRuleFormLabel(rule.label);
+    setWifiRuleFormMin(rule.minTransactionAmount);
+    setWifiRuleFormMax(rule.maxTransactionAmount !== undefined ? String(rule.maxTransactionAmount) : "");
+    setWifiRuleFormDuration(rule.durationMinutes);
+    setWifiRuleFormBandwidthDown(rule.bandwidthLimitDownMbps || 10);
+    setWifiRuleFormBandwidthUp(rule.bandwidthLimitUpMbps || 5);
+    setWifiRuleFormNotes(rule.notes || "");
+    setWifiRuleFormError("");
+    setIsWifiRuleModalOpen(true);
+  };
+
+  const handleSaveWifiRule = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wifiRuleFormLabel.trim()) {
+      setWifiRuleFormError("Nama label aturan wajib diisi.");
+      return;
+    }
+    const minVal = Number(wifiRuleFormMin);
+    if (isNaN(minVal) || minVal < 0) {
+      setWifiRuleFormError("Minimum nominal transaksi harus berupa angka positif.");
+      return;
+    }
+    const maxVal = wifiRuleFormMax.trim() === "" ? undefined : Number(wifiRuleFormMax);
+    if (maxVal !== undefined && (isNaN(maxVal) || maxVal <= minVal)) {
+      setWifiRuleFormError("Maksimum nominal harus lebih besar dari minimum nominal.");
+      return;
+    }
+
+    const newRule: WifiFnBRule = {
+      id: editingWifiRule ? editingWifiRule.id : `rule-fnb-${Date.now()}`,
+      minTransactionAmount: minVal,
+      maxTransactionAmount: maxVal,
+      durationMinutes: Number(wifiRuleFormDuration) || 60,
+      bandwidthLimitDownMbps: Number(wifiRuleFormBandwidthDown) || 10,
+      bandwidthLimitUpMbps: Number(wifiRuleFormBandwidthUp) || 5,
+      label: wifiRuleFormLabel.trim(),
+      isActive: editingWifiRule ? editingWifiRule.isActive : true,
+      notes: wifiRuleFormNotes.trim() || undefined,
+    };
+
+    let updatedRules: WifiFnBRule[];
+    if (editingWifiRule) {
+      updatedRules = wifiFnBRules.map((r) => (r.id === editingWifiRule.id ? newRule : r));
+    } else {
+      updatedRules = [...wifiFnBRules, newRule];
+    }
+
+    const overlap = validateFnBRulesOverlap(updatedRules);
+    if (overlap.hasOverlap) {
+      setWifiRuleFormError(overlap.errorMessage || "Terdeteksi rentang nominal tumpang-tindih dengan aturan lain.");
+      return;
+    }
+
+    const res = saveSimulatedFnBRules(updatedRules);
+    if (!res.success) {
+      setWifiRuleFormError(res.error || "Gagal menyimpan aturan Wi-Fi.");
+      return;
+    }
+
+    setWifiFnBRules(updatedRules);
+    setIsWifiRuleModalOpen(false);
+    showMasterToast(`Aturan Wi-Fi F&B "${newRule.label}" berhasil disimpan (Simulasi).`);
+  };
+
+  const handleToggleWifiRuleStatus = (ruleId: string) => {
+    const updated = wifiFnBRules.map((r) => (r.id === ruleId ? { ...r, isActive: !r.isActive } : r));
+    const overlap = validateFnBRulesOverlap(updated);
+    if (overlap.hasOverlap) {
+      showMasterToast(overlap.errorMessage || "Tidak dapat mengaktifkan aturan: rentang tumpang tindih.");
+      return;
+    }
+    saveSimulatedFnBRules(updated);
+    setWifiFnBRules(updated);
+    showMasterToast("Status aturan Wi-Fi berhasil diperbarui.");
+  };
+
+  const handleDeleteWifiRule = (ruleId: string) => {
+    const updated = wifiFnBRules.filter((r) => r.id !== ruleId);
+    saveSimulatedFnBRules(updated);
+    setWifiFnBRules(updated);
+    showMasterToast("Aturan Wi-Fi berhasil dihapus.");
+  };
+
+  const handleRevokeVoucher = (voucherId: string) => {
+    revokeSimulatedWifiVoucher(voucherId);
+    setWifiVouchers(getSimulatedWifiVouchers());
+    showMasterToast("Voucher berhasil dibatalkan statusnya.");
+  };
 
   // Modals for Product Master Data
   const [isAddProdModalOpen, setIsAddProdModalOpen] = useState(false);
@@ -606,7 +787,20 @@ export default function SettingsPage() {
     "Meja & Area",
     "Voucher & Promo",
     "Konfigurasi Platform & Pajak",
+    "Paket & Add-on (Konsep)",
+    "Manajemen Wi-Fi (Simulasi)",
   ];
+
+  const MASTER_TAB_ICONS: Record<string, React.ReactNode> = {
+    "Produk & Kategori": <UtensilsCrossed className="w-3.5 h-3.5" />,
+    "Mitra & Bagi Hasil": <Store className="w-3.5 h-3.5" />,
+    "Co-working & Ruangan": <Laptop className="w-3.5 h-3.5" />,
+    "Meja & Area": <Grid className="w-3.5 h-3.5" />,
+    "Voucher & Promo": <Tag className="w-3.5 h-3.5" />,
+    "Konfigurasi Platform & Pajak": <Settings className="w-3.5 h-3.5" />,
+    "Paket & Add-on (Konsep)": <Sparkles className="w-3.5 h-3.5 text-purple-600" />,
+    "Manajemen Wi-Fi (Simulasi)": <Wifi className="w-3.5 h-3.5 text-blue-600" />,
+  };
 
   // Filtered & Sorted Master Products (Revisi 7)
   const sortProducts = (list: MasterProduct[]) => {
@@ -658,12 +852,24 @@ export default function SettingsPage() {
   useEffect(() => {
     refreshAllTenantStatuses();
     refreshRevenueSplits();
-  }, []);
+
+    const currentScopeId = isTenantOwner ? (user?.tenant?.id || "tenant-unassigned") : "org-dago-hub";
+    setTenantAddons(getSimulatedTenantAddons(currentScopeId));
+
+    const handleSubscriptionUpdate = () => {
+      setOrgSub(getSimulatedOrgSubscription());
+      const activeScope = isTenantOwner ? (user?.tenant?.id || "tenant-unassigned") : "org-dago-hub";
+      setTenantAddons(getSimulatedTenantAddons(activeScope));
+    };
+
+    window.addEventListener("subscription_state_updated", handleSubscriptionUpdate);
+    return () => window.removeEventListener("subscription_state_updated", handleSubscriptionUpdate);
+  }, [user, isTenantOwner]);
 
   useEffect(() => {
-    if (!isTenantOwner) return;
+    if (!isTenantOwner || !user?.tenant?.id) return;
     try {
-      const currentTenantId = user?.tenant?.id || "tenant-ks";
+      const currentTenantId = user.tenant.id;
       const profile = getTenantProfile(currentTenantId);
       setTenantBrandName(profile.brandName);
       setTenantTagline(profile.tagline);
@@ -1023,7 +1229,7 @@ export default function SettingsPage() {
   }
 
   // Render Settings
-  const myTenantId = user?.tenant?.id || "tenant-ks";
+  const myTenantId = user?.tenant?.id || "";
   const myTenantProducts = filteredProducts.filter((p) => p.tenantId === myTenantId);
   const displayedMyTenantProducts = sortProducts(
     myTenantProducts.filter((p) => {
@@ -1081,32 +1287,70 @@ export default function SettingsPage() {
           </div>
 
           {/* Tab Navigation for Tenant Owner */}
-          <div className="flex items-center space-x-2 border-b border-slate-200 pb-2">
+          <div className="flex items-center space-x-2 border-b border-slate-200 pb-2 overflow-x-auto">
             <button
               type="button"
               onClick={() => setTenantActiveTab("PRODUCTS")}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${tenantActiveTab === "PRODUCTS"
-                ? "bg-brand-orange text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                tenantActiveTab === "PRODUCTS"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200/80"
+              }`}
             >
-              <UtensilsCrossed className="w-4 h-4" />
-              <span>🏷️ Katalog Menu & Produk Mitra ({myTenantProducts.length})</span>
+              <UtensilsCrossed className="w-3.5 h-3.5" />
+              <span>Katalog Menu & Produk Mitra ({myTenantProducts.length})</span>
             </button>
             <button
               type="button"
               onClick={() => setTenantActiveTab("PROFILE")}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${tenantActiveTab === "PROFILE"
-                ? "bg-brand-orange text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                tenantActiveTab === "PROFILE"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200/80"
+              }`}
             >
-              <Store className="w-4 h-4" />
-              <span>⚙️ Profil Bisnis & Rekening Mitra</span>
+              <Store className="w-3.5 h-3.5" />
+              <span>Profil Bisnis & Rekening Mitra</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTenantActiveTab("PROMOS")}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                tenantActiveTab === "PROMOS"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200/80"
+              }`}
+            >
+              <Tag className="w-3.5 h-3.5" />
+              <span>Voucher & Promo Mitra ({promos.filter((p) => !p.tenantId || p.tenantId === myTenantId).length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTenantActiveTab("ADDONS")}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                tenantActiveTab === "ADDONS"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200/80"
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+              <span>Add-on Gerai Mitra (Simulasi)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTenantActiveTab("WIFI")}
+              className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                tenantActiveTab === "WIFI"
+                  ? "bg-slate-900 text-white shadow-xs"
+                  : "bg-white text-slate-600 hover:bg-slate-50 border border-slate-200/80"
+              }`}
+            >
+              <Wifi className="w-3.5 h-3.5 text-blue-600" />
+              <span>Riwayat Wi-Fi Gerai ({wifiVouchers.filter((v) => v.serviceType === "FNB" && v.tenantId === myTenantId).length})</span>
             </button>
           </div>
 
-          {tenantActiveTab === "PRODUCTS" ? (
+          {tenantActiveTab === "PRODUCTS" && (
             <Card className="shadow-xs border border-slate-200 overflow-hidden">
               <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
@@ -1267,7 +1511,9 @@ export default function SettingsPage() {
                 </table>
               </div>
             </Card>
-          ) : (
+          )}
+
+          {tenantActiveTab === "PROFILE" && (
             <form onSubmit={handleSaveTenantSettings} className="space-y-6 text-xs">
               {/* Card 0: Status Operasional Mitra (Aktif / Nonaktif) */}
               <Card className="shadow-xs border border-slate-200 overflow-hidden">
@@ -1326,7 +1572,6 @@ export default function SettingsPage() {
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
-                          <span className="text-base">🔴</span>
                           <span className="font-bold text-sm text-red-900">Nonaktif / Tutup Sementara</span>
                         </div>
                         {tenantStatus === "INACTIVE" && <CheckCircle2 className="w-5 h-5 text-red-600" />}
@@ -1338,7 +1583,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 space-y-1">
-                    <p className="font-semibold text-slate-700">⚡ Sinkronisasi Real-time:</p>
+                    <p className="font-semibold text-slate-700">Sinkronisasi Real-time:</p>
                     <p>
                       Perubahan status akan segera diterapkan pada <strong>Portal Pelanggan (QR Menu)</strong> dan <strong>Sistem Kasir (POS)</strong> setelah tombol Simpan diklik.
                     </p>
@@ -1506,7 +1751,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-500 space-y-1">
-                    <p className="font-semibold text-slate-700">📌 Catatan Operasional & Keamanan:</p>
+                    <p className="font-semibold text-slate-700">Catatan Operasional & Keamanan:</p>
                     <p>• Data rekening di atas hanya dapat diakses dan diubah oleh Owner Mitra <strong>{user?.tenant?.name || "terkait"}</strong>.</p>
                     <p>• DAGO Creative Hub menggunakan data ini sebagai tujuan transfer pencairan bagi hasil (settlement) bersih berkala.</p>
                   </div>
@@ -1630,6 +1875,636 @@ export default function SettingsPage() {
                 </Button>
               </div>
             </form>
+          )}
+
+          {tenantActiveTab === "PROMOS" && (
+            <Card className="shadow-xs border border-slate-200 overflow-hidden">
+              <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
+                    <Tag className="w-4 h-4 text-brand-orange" />
+                    <span>Manajemen Voucher & Promo — {tenantBrandName}</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Kelola voucher diskon khusus produk {tenantBrandName} untuk pelanggan di POS Kasir dan Customer Portal.
+                  </p>
+                </div>
+
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const newCode = `${(tenantBrandName || "MITRA").substring(0, 4).toUpperCase()}${Math.floor(10 + Math.random() * 90)}`;
+                    const newPromo: PromoConfig = {
+                      id: `promo-${Date.now()}`,
+                      code: newCode,
+                      name: `Promo Spesial ${tenantBrandName}`,
+                      description: `Diskon khusus menu ${tenantBrandName}`,
+                      discountType: "PERCENTAGE",
+                      discountValue: 10,
+                      maxDiscount: 20000,
+                      minimumAmount: 25000,
+                      targetType: "TENANT",
+                      targetId: myTenantId,
+                      tenantId: myTenantId,
+                      scope: "FNB",
+                      quota: 25,
+                      usageCount: 0,
+                      validFrom: new Date().toISOString().split("T")[0],
+                      validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+                      isActive: true,
+                    };
+                    setPromos((prev) => [...prev, newPromo]);
+                    showMasterToast(`Voucher baru ${newCode} ditambahkan.`);
+                  }}
+                  className="bg-brand-orange hover:bg-orange-600 text-white font-bold text-xs px-4 space-x-1.5 shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Voucher Mitra</span>
+                </Button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {promos.filter((p) => !p.tenantId || p.tenantId === myTenantId).length === 0 ? (
+                  <div className="text-center py-8 text-slate-400 text-xs italic">
+                    Belum ada voucher promo untuk tenant ini. Klik tombol "+ Tambah Voucher Mitra" di atas.
+                  </div>
+                ) : (
+                  promos
+                    .filter((p) => !p.tenantId || p.tenantId === myTenantId)
+                    .map((promo) => {
+                      const computedStatus = getPromoComputedStatus(promo);
+                      const isMuted = computedStatus !== "ACTIVE" && computedStatus !== "SCHEDULED";
+
+                      return (
+                        <div
+                          key={promo.id}
+                          className={`border rounded-2xl p-4 space-y-3 shadow-2xs transition-all ${
+                            isMuted
+                              ? "bg-slate-100/70 border-slate-300/80 opacity-80"
+                              : "bg-slate-50 border-slate-200"
+                          }`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-200/80">
+                            <div className="flex items-center space-x-2 flex-1">
+                              <div className="w-28">
+                                <label className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">Kode Kupon</label>
+                                <input
+                                  type="text"
+                                  value={promo.code || ""}
+                                  onChange={(e) => {
+                                    const val = e.target.value.toUpperCase();
+                                    setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, code: val } : p)));
+                                  }}
+                                  placeholder="PROMO10"
+                                  className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-black uppercase w-full bg-white text-emerald-700"
+                                />
+                              </div>
+                              <div className="flex-1">
+                                <label className="text-[10px] font-black uppercase text-slate-400 block mb-0.5">Nama Promo</label>
+                                <input
+                                  type="text"
+                                  value={promo.name}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, name: val } : p)));
+                                  }}
+                                  placeholder="Nama Promo"
+                                  className="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold w-full bg-white text-slate-800"
+                                />
+                              </div>
+                              <div className="self-end pb-1.5">
+                                {computedStatus === "ACTIVE" && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    AKTIF
+                                  </span>
+                                )}
+                                {computedStatus === "EXPIRED" && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                    KADALUWARSA
+                                  </span>
+                                )}
+                                {computedStatus === "QUOTA_EXHAUSTED" && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                    KUOTA HABIS
+                                  </span>
+                                )}
+                                {computedStatus === "INACTIVE" && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300">
+                                    NONAKTIF
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center space-x-3 self-end sm:self-center">
+                              <div className="text-right">
+                                <span className="text-[10px] font-bold text-slate-500 block">
+                                  Terpakai: <strong className="text-slate-900">{promo.usageCount || 0}</strong> / {promo.quota || "∞"}
+                                </span>
+                              </div>
+                              <label className="text-xs flex items-center space-x-1.5 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                                <input
+                                  type="checkbox"
+                                  checked={promo.isActive}
+                                  onChange={(e) => {
+                                    const val = e.target.checked;
+                                    setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, isActive: val } : p)));
+                                  }}
+                                  className="rounded text-emerald-600"
+                                />
+                                <span className="font-bold text-[11px] text-slate-700">{promo.isActive ? "Aktif" : "Nonaktif"}</span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setPromos((prev) => prev.filter((p) => p.id !== promo.id))}
+                                className="text-rose-500 hover:text-rose-700 p-1.5 hover:bg-rose-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Deskripsi / Ketentuan Promo</label>
+                            <input
+                              type="text"
+                              value={promo.description || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, description: val } : p)));
+                              }}
+                              placeholder="Contoh: Diskon 10% untuk menu kopi..."
+                              className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs w-full bg-white text-slate-600"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                            <div>
+                              <label className="block text-slate-500 font-medium mb-1">Tipe Diskon</label>
+                              <select
+                                value={promo.discountType}
+                                onChange={(e) => {
+                                  const val = e.target.value as any;
+                                  setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, discountType: val } : p)));
+                                }}
+                                className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
+                              >
+                                <option value="PERCENTAGE">Persentase (%)</option>
+                                <option value="FIXED">Nominal Tetap (Rp)</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-slate-500 font-medium mb-1">
+                                {promo.discountType === "PERCENTAGE" ? "Nilai Diskon (%)" : "Nominal Potongan (Rp)"}
+                              </label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={promo.discountValue}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, discountValue: val } : p)));
+                                }}
+                                className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-slate-500 font-medium mb-1">Maks. Diskon (Rp)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                value={promo.maxDiscount || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value ? Number(e.target.value) : undefined;
+                                  setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, maxDiscount: val } : p)));
+                                }}
+                                placeholder="Tanpa batas"
+                                className="w-full px-2 py-1.5 border rounded-lg bg-white"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-slate-500 font-medium mb-1">Kuota Pemakaian</label>
+                              <input
+                                type="number"
+                                min={1}
+                                value={promo.quota || ""}
+                                onChange={(e) => {
+                                  const val = e.target.value ? Number(e.target.value) : undefined;
+                                  setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, quota: val } : p)));
+                                }}
+                                placeholder="Tanpa batas"
+                                className="w-full px-2 py-1.5 border rounded-lg bg-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-1">
+                            <div>
+                              <label className="block text-slate-500 font-medium mb-1">Target Menu Mitra</label>
+                              <select
+                                value={promo.targetType || "ALL"}
+                                onChange={(e) => {
+                                  const val = e.target.value as any;
+                                  setPromos((prev) =>
+                                    prev.map((p) => (p.id === promo.id ? { ...p, targetType: val } : p))
+                                  );
+                                }}
+                                className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
+                              >
+                                <option value="ALL">Semua Menu {tenantBrandName}</option>
+                                <option value="CATEGORY">Khusus Kategori</option>
+                                <option value="PRODUCT">Khusus Menu Tertentu</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-slate-500 font-medium mb-1">Tgl Mulai Berlaku</label>
+                              <input
+                                type="date"
+                                value={promo.validFrom ? promo.validFrom.split("T")[0] : ""}
+                                onChange={(e) => {
+                                  const val = e.target.value ? new Date(e.target.value).toISOString() : undefined;
+                                  setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, validFrom: val } : p)));
+                                }}
+                                className="w-full px-2.5 py-1.5 border rounded-lg bg-white text-xs"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-slate-500 font-medium mb-1">Tgl Kadaluarsa</label>
+                              <input
+                                type="date"
+                                value={promo.validUntil ? promo.validUntil.split("T")[0] : ""}
+                                onChange={(e) => {
+                                  const val = e.target.value ? new Date(e.target.value + "T23:59:59.000Z").toISOString() : undefined;
+                                  setPromos((prev) => prev.map((p) => (p.id === promo.id ? { ...p, validUntil: val } : p)));
+                                }}
+                                className="w-full px-2.5 py-1.5 border rounded-lg bg-white text-xs"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                )}
+
+                <div className="flex justify-end pt-3 border-t border-slate-200">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      updateSettings({ promos });
+                      showMasterToast("Daftar voucher promo mitra berhasil disimpan!");
+                    }}
+                    size="sm"
+                    className="bg-brand-orange hover:bg-orange-600 text-white font-bold px-6 space-x-1.5 shadow-sm"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Simpan Perubahan Voucher Promo</span>
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {tenantActiveTab === "ADDONS" && (
+            <div className="space-y-4">
+              {/* Header Info Banner */}
+              <div className="p-4 bg-gradient-to-r from-purple-50/80 to-indigo-50/50 border border-purple-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-start space-x-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200 mt-0.5">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                      <h3 className="font-bold text-sm text-slate-900">
+                        Katalog Add-on Gerai Mitra — {tenantBrandName}
+                      </h3>
+                      <ProFeatureBadge label="SIMULASI DEMO" variant="addon" size="xs" />
+                      <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-semibold border border-slate-200">
+                        Scope: Gerai Booth F&B
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed max-w-2xl">
+                      Fitur bernilai tambah khusus untuk operasional gerai {tenantBrandName}. Anda dapat menguji coba aktivasi atau penonaktifan modul di bawah ini secara simulasi tanpa memengaruhi data transaksi kasir riil.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2 self-start sm:self-center shrink-0">
+                  <span className="text-xs px-3 py-1 bg-white border border-purple-200 text-purple-700 font-bold rounded-full shadow-2xs">
+                    {tenantAddons.filter((a) => a.status === "ACTIVE").length} dari {tenantAddons.length} Add-on Aktif
+                  </span>
+                </div>
+              </div>
+
+              {/* Scope Distinction Callout */}
+              <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl flex items-start space-x-2.5 text-xs text-amber-900">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold text-[11px] text-amber-950 uppercase tracking-wide">Pemisahan Lingkup Layanan:</p>
+                  <p className="text-slate-600 text-[11px] leading-relaxed">
+                    Add-on di bawah ini hanya berlaku untuk alur kerja operasional booth {tenantBrandName} (seperti KDS stasiun, resep BOM, dan nota WhatsApp). Lisensi platform pusat dan kuota outlet cabang fisik dikelola secara terpusat oleh Pengelola Dago Creative Hub.
+                  </p>
+                </div>
+              </div>
+
+              {/* Addon Cards Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {tenantAddons.map((addon) => {
+                  const isActive = addon.status === "ACTIVE";
+                  const iconComponent =
+                    addon.code === "KDS_MULTI_STATION" ? (
+                      <UtensilsCrossed className="w-4 h-4 text-purple-600" />
+                    ) : addon.code === "ADVANCED_BOM_COGS" ? (
+                      <Package className="w-4 h-4 text-emerald-600" />
+                    ) : addon.code === "WHATSAPP_AUTO_DISPATCH" ? (
+                      <Zap className="w-4 h-4 text-amber-600" />
+                    ) : (
+                      <Tag className="w-4 h-4 text-blue-600" />
+                    );
+
+                  return (
+                    <div
+                      key={addon.id}
+                      className={`p-4 sm:p-5 rounded-2xl bg-white border transition-all shadow-2xs flex flex-col justify-between space-y-4 ${
+                        isActive
+                          ? "border-purple-200/90 ring-1 ring-purple-100"
+                          : "border-slate-200/80 opacity-90"
+                      }`}
+                    >
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center space-x-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-center shrink-0">
+                              {iconComponent}
+                            </div>
+                            <div>
+                              <div className="flex items-center space-x-1.5 flex-wrap">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                  {addon.categoryTag}
+                                </span>
+                                <ProFeatureBadge label={addon.badgeLabel} variant={addon.badgeVariant} size="xs" />
+                              </div>
+                              <h4 className="font-bold text-sm text-slate-900 leading-snug">{addon.name}</h4>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 text-right">
+                            {isActive ? (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Aktif (Simulasi)
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                Belum Aktif
+                              </span>
+                            )}
+                            <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
+                              {addon.monthlyPriceDisplay}
+                            </span>
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-slate-600 leading-relaxed">{addon.description}</p>
+
+                        <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                          <span className="text-[11px] font-bold text-slate-700 block">Manfaat Operasional Gerai:</span>
+                          {addon.benefits.map((benefit, idx) => (
+                            <div key={idx} className="flex items-start space-x-2 text-xs text-slate-600">
+                              <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                              <span className="leading-tight">{benefit}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setPreviewModalFeature({
+                              title: addon.name,
+                              badgeLabel: addon.badgeLabel,
+                              badgeVariant: addon.badgeVariant,
+                              categoryTag: addon.categoryTag,
+                              description: addon.description,
+                              benefits: addon.benefits,
+                              samplePlanName: `Add-on Gerai Mitra: ${tenantBrandName}`,
+                              statusText: isActive ? "Aktif di Gerai Anda (Simulasi Demo)" : "Tersedia untuk Pengujian Demo",
+                            })
+                          }
+                          className="text-xs text-slate-600 hover:text-slate-900 font-semibold px-2.5 h-8"
+                        >
+                          Pelajari Fitur
+                        </Button>
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            toggleSimulatedTenantAddon(addon.id, myTenantId);
+                            if (isActive) {
+                              showMasterToast(`Simulasi Add-on "${addon.name}" dinonaktifkan untuk ${tenantBrandName}.`);
+                            } else {
+                              showMasterToast(`Simulasi Add-on "${addon.name}" berhasil diaktifkan untuk ${tenantBrandName}!`);
+                            }
+                          }}
+                          className={`text-xs font-bold px-3.5 h-8 rounded-xl shadow-2xs transition-all ${
+                            isActive
+                              ? "bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 hover:border-rose-300"
+                              : "bg-purple-600 hover:bg-purple-700 text-white"
+                          }`}
+                        >
+                          {isActive ? "Simulasikan Nonaktifkan" : "Simulasikan Aktifkan"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {tenantActiveTab === "WIFI" && (
+            <Card className="shadow-xs border border-slate-200 overflow-hidden">
+              <div className="p-4 bg-slate-50/70 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-sm text-slate-800 flex items-center space-x-2">
+                    <Wifi className="w-4 h-4 text-blue-600" />
+                    <span>Riwayat Voucher Wi-Fi Pelanggan — {tenantBrandName}</span>
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Daftar voucher akses internet simulasi yang otomatis diterbitkan saat pelanggan memesan menu dari gerai {tenantBrandName}.
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-1 rounded-full font-bold">
+                    CONTOH SIMULASI
+                  </span>
+                  <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full font-bold">
+                    ISOLASI DATA GERAI
+                  </span>
+                </div>
+              </div>
+
+              {/* Informational Scope Alert */}
+              <div className="p-3.5 bg-blue-50/60 border-b border-blue-100 flex items-start space-x-2.5 text-xs text-blue-900">
+                <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                <div className="space-y-0.5">
+                  <p className="font-semibold text-blue-950">Hak Akses Terbatas Mitra (RBAC)</p>
+                  <p className="text-blue-800 text-[11px] leading-relaxed">
+                    Sesuai kebijakan keamanan platform, mitra gerai hanya memiliki hak untuk memantau voucher pelanggan yang bertransaksi pada gerai ini. Konfigurasi aturan durasi global, bandwidth, dan integrasi router captive portal dikelola oleh Hub Owner / Administrator Platform.
+                  </p>
+                </div>
+              </div>
+
+              {/* Filter Bar */}
+              <div className="p-3 bg-slate-50/40 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={wifiSearchQuery}
+                      onChange={(e) => setWifiSearchQuery(e.target.value)}
+                      placeholder="Cari kode voucher, no struk POS, atau tamu..."
+                      className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+
+                  <select
+                    value={wifiStatusFilter}
+                    onChange={(e) => setWifiStatusFilter(e.target.value as any)}
+                    className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="ALL">Semua Status</option>
+                    <option value="ACTIVE">Aktif</option>
+                    <option value="USED">Terpakai</option>
+                    <option value="EXPIRED">Kedaluwarsa</option>
+                    <option value="CANCELLED">Dibatalkan</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="py-2.5 px-4">Kode Akses</th>
+                      <th className="py-2.5 px-4">Referensi Struk</th>
+                      <th className="py-2.5 px-4">Pelanggan</th>
+                      <th className="py-2.5 px-4">Durasi & Kuota</th>
+                      <th className="py-2.5 px-4">Waktu Diterbitkan</th>
+                      <th className="py-2.5 px-4">Kedaluwarsa</th>
+                      <th className="py-2.5 px-4">Status</th>
+                      <th className="py-2.5 px-4 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(() => {
+                      const tenantVouchers = wifiVouchers
+                        .filter((v) => v.serviceType === "FNB" && v.tenantId === myTenantId)
+                        .filter((v) => {
+                          if (wifiStatusFilter !== "ALL" && v.status !== wifiStatusFilter) return false;
+                          if (wifiSearchQuery.trim()) {
+                            const q = wifiSearchQuery.toLowerCase();
+                            const matchCode = v.voucherCode.toLowerCase().includes(q);
+                            const matchRef = v.referenceLabel.toLowerCase().includes(q) || v.referenceId.toLowerCase().includes(q);
+                            const matchName = v.customerName.toLowerCase().includes(q);
+                            if (!matchCode && !matchRef && !matchName) return false;
+                          }
+                          return true;
+                        });
+
+                      if (tenantVouchers.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={8} className="py-8 text-center text-slate-400 italic">
+                              Tidak ada voucher Wi-Fi simulasi yang cocok dengan filter untuk gerai {tenantBrandName}.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return tenantVouchers.map((v) => (
+                        <tr key={v.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-slate-800 flex items-center space-x-1.5">
+                            <span>{v.voucherCode}</span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">
+                              SIMULASI
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-700">
+                            <span className="font-medium">{v.referenceLabel}</span>
+                            {v.transactionAmount && (
+                              <span className="block text-[10px] text-slate-500">
+                                {formatCurrencyIDR(v.transactionAmount)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-slate-700">
+                            <span>{v.customerName}</span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-700">
+                            <span className="font-semibold text-slate-800">{v.durationFormatted}</span>
+                            <span className="block text-[10px] text-slate-400">Maks. {v.maxDevices} Perangkat</span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-500 text-[11px]">
+                            {new Date(v.issuedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })},{" "}
+                            {new Date(v.issuedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
+                          </td>
+                          <td className="py-3 px-4 text-slate-500 text-[11px]">
+                            {new Date(v.expiresAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })},{" "}
+                            {new Date(v.expiresAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                v.status === "ACTIVE"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : v.status === "USED"
+                                  ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                  : v.status === "EXPIRED"
+                                  ? "bg-slate-100 text-slate-600 border border-slate-200"
+                                  : "bg-rose-50 text-rose-700 border border-rose-200"
+                              }`}
+                            >
+                              {v.status === "ACTIVE"
+                                ? "Aktif"
+                                : v.status === "USED"
+                                ? "Terpakai"
+                                : v.status === "EXPIRED"
+                                ? "Kedaluwarsa"
+                                : "Dibatalkan"}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                navigator.clipboard?.writeText(v.voucherCode);
+                                showMasterToast(`Kode voucher "${v.voucherCode}" berhasil disalin.`);
+                              }}
+                              className="text-[10px] h-7 px-2.5 rounded-lg border-slate-200 text-slate-600 hover:text-slate-900"
+                            >
+                              Salin Kode
+                            </Button>
+                          </td>
+                        </tr>
+                      ));
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
           )}
         </div>
       ) : (
@@ -1774,12 +2649,14 @@ export default function SettingsPage() {
                   key={tab}
                   type="button"
                   onClick={() => setSelectedMasterTab(tab)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex-shrink-0 ${selectedMasterTab === tab
-                    ? "bg-slate-900 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
-                    }`}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex-shrink-0 flex items-center space-x-1.5 ${
+                    selectedMasterTab === tab
+                      ? "bg-slate-900 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900"
+                  }`}
                 >
-                  {tab}
+                  {MASTER_TAB_ICONS[tab]}
+                  <span>{tab}</span>
                 </button>
               ))}
             </div>
@@ -1914,7 +2791,7 @@ export default function SettingsPage() {
                                 </div>
                               </td>
                               <td className="py-3 font-semibold text-slate-700">
-                                <span className="bg-orange-50 text-orange-800 border border-orange-200 px-2 py-0.5 rounded-md text-[11px] font-bold">
+                                <span className="bg-brand-orange/10 text-brand-orange border border-brand-orange/25 px-2 py-0.5 rounded-md text-[11px] font-bold">
                                   {tName}
                                 </span>
                               </td>
@@ -1927,12 +2804,12 @@ export default function SettingsPage() {
                                   onClick={() => toggleProductStatus(p.id)}
                                   className={`inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border transition-all cursor-pointer select-none ${
                                     isAct
-                                      ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
-                                      : "bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200"
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                      : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
                                   }`}
                                   title={`Klik untuk ${isAct ? "menonaktifkan (Matikan)" : "mengaktifkan"} produk`}
                                 >
-                                  <Power className={`w-3 h-3 ${isAct ? "text-emerald-700" : "text-slate-400"}`} />
+                                  <Power className={`w-3 h-3 ${isAct ? "text-emerald-600" : "text-slate-400"}`} />
                                   <span>{isAct ? "AKTIF" : "NON-AKTIF"}</span>
                                 </button>
                               </td>
@@ -2059,10 +2936,10 @@ export default function SettingsPage() {
                               </td>
                               <td className="p-3">
                                 <span
-                                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center space-x-1 ${
+                                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center space-x-1.5 ${
                                     isAccepting
-                                      ? "bg-emerald-100 text-emerald-800 border-emerald-300"
-                                      : "bg-red-100 text-red-800 border-red-300"
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                      : "bg-rose-50 text-rose-700 border-rose-200"
                                   }`}
                                 >
                                   <span className={`w-1.5 h-1.5 rounded-full ${isAccepting ? "bg-emerald-600" : "bg-red-600"}`} />
@@ -2184,7 +3061,7 @@ export default function SettingsPage() {
 
                           {hasError && (
                             <p className="text-[11px] text-red-600 font-semibold mt-2">
-                              ⚠️ {revenueSplitErrors[tenant.id]}
+                              {revenueSplitErrors[tenant.id]}
                             </p>
                           )}
 
@@ -2201,7 +3078,7 @@ export default function SettingsPage() {
                   </div>
 
                   <div className="mt-4 p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-1">
-                    <p className="font-semibold">💡 Ketentuan Settlement Multi-Tenant & Immutability:</p>
+                    <p className="font-semibold">Ketentuan Settlement Multi-Tenant & Immutability:</p>
                     <p>• Perubahan persentase bagi hasil di atas hanya berlaku untuk transaksi baru yang diproses setelah penyimpanan.</p>
                     <p>• Transaksi historis yang telah berstatus PAID tetap mengunci pembagian pendapatan yang berlaku pada saat transaksi diselesaikan.</p>
                   </div>
@@ -2406,10 +3283,10 @@ export default function SettingsPage() {
                               type="button"
                               onClick={() => handleToggleTableStatus(tbl.id)}
                               className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${tbl.status === "AVAILABLE"
-                                ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
                                 : tbl.status === "OCCUPIED"
-                                  ? "bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200"
-                                  : "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100"
+                                  : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
                                 }`}
                               title="Klik untuk ubah status meja"
                             >
@@ -2515,23 +3392,23 @@ export default function SettingsPage() {
                             {/* Computed Status Badge (Revisi 6) */}
                             <div className="self-end pb-1.5">
                               {computedStatus === "ACTIVE" && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1 animate-pulse" />
                                   AKTIF
                                 </span>
                               )}
                               {computedStatus === "SCHEDULED" && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
                                   TERJADWAL
                                 </span>
                               )}
                               {computedStatus === "EXPIRED" && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                                   KADALUWARSA
                                 </span>
                               )}
                               {computedStatus === "QUOTA_EXHAUSTED" && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
                                   KUOTA HABIS
                                 </span>
                               )}
@@ -2681,127 +3558,204 @@ export default function SettingsPage() {
                           </div>
                         </div>
 
-                        {/* Row 4: Target Type & Periode Validitas (Revisi 5) */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 text-xs pt-1">
+                        {/* Row 4: Scope, Target Type & Periode Validitas */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 text-xs pt-1">
                           <div>
-                            <label className="block text-slate-500 font-medium mb-1">Target Menu/Mitra</label>
+                            <label className="block text-slate-500 font-medium mb-1">Lingkup Layanan</label>
                             <select
-                              value={promo.targetType || "ALL"}
+                              value={promo.scope || "ALL"}
                               onChange={(e) => {
-                                const val = e.target.value as any;
+                                const val = e.target.value as PromoScope;
                                 setPromos((prev) =>
-                                  prev.map((p) => (p.id === promo.id ? { ...p, targetType: val } : p))
+                                  prev.map((p) =>
+                                    p.id === promo.id
+                                      ? {
+                                          ...p,
+                                          scope: val,
+                                          targetType: "ALL",
+                                          targetId: undefined,
+                                          applicableProductIds: [],
+                                        }
+                                      : p
+                                  )
                                 );
                               }}
                               className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
                             >
-                              <option value="ALL">Semua Menu & Mitra</option>
-                              <option value="TENANT">Khusus Mitra / Tenant</option>
-                              <option value="CATEGORY">Khusus Kategori</option>
-                              <option value="PRODUCT">Khusus Produk Tertentu (Multi-Select)</option>
+                              <option value="ALL">Semua Layanan (F&B & Co-Work)</option>
+                              <option value="FNB">Khusus F&B</option>
+                              <option value="COWORKING">Khusus Co-Working</option>
                             </select>
                           </div>
 
+                          {promo.scope === "COWORKING" ? (
+                            <div>
+                              <label className="block text-slate-500 font-medium mb-1">Target Ruangan Co-Working</label>
+                              <select
+                                value={promo.targetId || "ALL"}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setPromos((prev) =>
+                                    prev.map((p) =>
+                                      p.id === promo.id
+                                        ? {
+                                            ...p,
+                                            targetType: val === "ALL" ? "ALL" : ("SPACE" as any),
+                                            targetId: val === "ALL" ? undefined : val,
+                                          }
+                                        : p
+                                    )
+                                  );
+                                }}
+                                className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
+                              >
+                                <option value="ALL">Semua Ruangan & Desk</option>
+                                {cwSpaces.map((sp) => (
+                                  <option key={sp.id} value={sp.id}>
+                                    {sp.name} ({sp.type.replace("_", " ")})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (
+                            <div>
+                              <label className="block text-slate-500 font-medium mb-1">Target Menu/Mitra</label>
+                              <select
+                                value={promo.targetType || "ALL"}
+                                onChange={(e) => {
+                                  const val = e.target.value as any;
+                                  setPromos((prev) =>
+                                    prev.map((p) => (p.id === promo.id ? { ...p, targetType: val } : p))
+                                  );
+                                }}
+                                className="w-full px-2 py-1.5 border rounded-lg bg-white font-bold text-slate-700"
+                              >
+                                <option value="ALL">Semua Menu & Mitra</option>
+                                <option value="TENANT">Khusus Mitra / Tenant</option>
+                                <option value="CATEGORY">Khusus Kategori</option>
+                                <option value="PRODUCT">Khusus Produk Tertentu (Multi-Select)</option>
+                              </select>
+                            </div>
+                          )}
+
                           <div>
-                            <label className="block text-slate-500 font-medium mb-1">
-                              {promo.targetType === "TENANT"
-                                ? "Pilih Mitra Target"
-                                : promo.targetType === "CATEGORY"
-                                ? "Pilih Kategori Target"
-                                : promo.targetType === "PRODUCT"
-                                ? `Produk Target (${targetProductIds.length} Dipilih)`
-                                : "Lingkup Target"}
-                            </label>
+                            {promo.scope === "COWORKING" ? (
+                              <div>
+                                <label className="block text-slate-500 font-medium mb-1">Keterangan Target</label>
+                                <input
+                                  type="text"
+                                  disabled
+                                  value={
+                                    !promo.targetId || promo.targetId === "ALL"
+                                      ? "Semua Desk & Ruangan"
+                                      : cwSpaces.find((s) => s.id === promo.targetId)?.name || promo.targetId
+                                  }
+                                  className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-slate-100 text-slate-500 cursor-not-allowed font-medium"
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                <label className="block text-slate-500 font-medium mb-1">
+                                  {promo.targetType === "TENANT"
+                                    ? "Pilih Mitra Target"
+                                    : promo.targetType === "CATEGORY"
+                                    ? "Pilih Kategori Target"
+                                    : promo.targetType === "PRODUCT"
+                                    ? `Produk Target (${targetProductIds.length} Dipilih)`
+                                    : "Lingkup Target"}
+                                </label>
 
-                            {/* Dropdown for TENANT */}
-                            {promo.targetType === "TENANT" && (
-                              <select
-                                value={promo.targetId || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setPromos((prev) =>
-                                    prev.map((p) => (p.id === promo.id ? { ...p, targetId: val } : p))
-                                  );
-                                }}
-                                className="w-full px-2.5 py-1.5 border rounded-lg bg-white font-semibold text-slate-800"
-                              >
-                                <option value="">Pilih Mitra...</option>
-                                {localTenants.map((t) => (
-                                  <option key={t.id} value={t.id}>
-                                    {t.name} ({t.code})
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-
-                            {/* Dropdown for CATEGORY */}
-                            {promo.targetType === "CATEGORY" && (
-                              <select
-                                value={promo.targetId || ""}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  setPromos((prev) =>
-                                    prev.map((p) => (p.id === promo.id ? { ...p, targetId: val } : p))
-                                  );
-                                }}
-                                className="w-full px-2.5 py-1.5 border rounded-lg bg-white font-semibold text-slate-800"
-                              >
-                                <option value="">Pilih Kategori...</option>
-                                {categories.map((c) => (
-                                  <option key={c} value={c}>
-                                    {c}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-
-                            {/* Multi-Select Button for PRODUCT (Revisi 5) */}
-                            {promo.targetType === "PRODUCT" && (
-                              <div className="space-y-1.5">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleOpenPromoProductSelect(promo.id)}
-                                  className="w-full h-8 text-xs font-bold border-brand-orange text-brand-orange hover:bg-orange-50 flex items-center justify-center space-x-1 rounded-lg"
-                                >
-                                  <UtensilsCrossed className="w-3.5 h-3.5 mr-1" />
-                                  <span>+ Pilih Menu Produk ({targetProductIds.length})</span>
-                                </Button>
-                                {targetProductIds.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto p-1.5 bg-white border border-slate-200 rounded-lg">
-                                    {targetProductIds.map((pid) => {
-                                      const prod = filteredProducts.find((p) => p.id === pid);
-                                      return (
-                                        <span
-                                          key={pid}
-                                          className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-900 text-[10px] font-medium"
-                                        >
-                                          <span className="truncate max-w-[100px]">{prod?.name || pid}</span>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleRemoveProductFromPromo(promo.id, pid)}
-                                            className="text-orange-500 hover:text-rose-600 ml-0.5"
-                                            title="Hapus dari promo"
-                                          >
-                                            <X className="w-2.5 h-2.5" />
-                                          </button>
-                                        </span>
+                                {/* Dropdown for TENANT */}
+                                {promo.targetType === "TENANT" && (
+                                  <select
+                                    value={promo.targetId || ""}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setPromos((prev) =>
+                                        prev.map((p) => (p.id === promo.id ? { ...p, targetId: val } : p))
                                       );
-                                    })}
+                                    }}
+                                    className="w-full px-2.5 py-1.5 border rounded-lg bg-white font-semibold text-slate-800"
+                                  >
+                                    <option value="">Pilih Mitra...</option>
+                                    {localTenants.map((t) => (
+                                      <option key={t.id} value={t.id}>
+                                        {t.name} ({t.code})
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+
+                                {/* Dropdown for CATEGORY */}
+                                {promo.targetType === "CATEGORY" && (
+                                  <select
+                                    value={promo.targetId || ""}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setPromos((prev) =>
+                                        prev.map((p) => (p.id === promo.id ? { ...p, targetId: val } : p))
+                                      );
+                                    }}
+                                    className="w-full px-2.5 py-1.5 border rounded-lg bg-white font-semibold text-slate-800"
+                                  >
+                                    <option value="">Pilih Kategori...</option>
+                                    {categories.map((c) => (
+                                      <option key={c} value={c}>
+                                        {c}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+
+                                {/* Multi-Select Button for PRODUCT (Revisi 5) */}
+                                {promo.targetType === "PRODUCT" && (
+                                  <div className="space-y-1.5">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleOpenPromoProductSelect(promo.id)}
+                                      className="w-full h-8 text-xs font-bold border-brand-orange text-brand-orange hover:bg-orange-50 flex items-center justify-center space-x-1 rounded-lg"
+                                    >
+                                      <UtensilsCrossed className="w-3.5 h-3.5 mr-1" />
+                                      <span>+ Pilih Menu Produk ({targetProductIds.length})</span>
+                                    </Button>
+                                    {targetProductIds.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto p-1.5 bg-white border border-slate-200 rounded-lg">
+                                        {targetProductIds.map((pid) => {
+                                          const prod = filteredProducts.find((p) => p.id === pid);
+                                          return (
+                                            <span
+                                              key={pid}
+                                              className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded bg-orange-50 border border-orange-200 text-orange-900 text-[10px] font-medium"
+                                            >
+                                              <span className="truncate max-w-[100px]">{prod?.name || pid}</span>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRemoveProductFromPromo(promo.id, pid)}
+                                                className="text-orange-500 hover:text-rose-600 ml-0.5"
+                                                title="Hapus dari promo"
+                                              >
+                                                <X className="w-2.5 h-2.5" />
+                                              </button>
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
-                              </div>
-                            )}
 
-                            {/* ALL / Fallback */}
-                            {(!promo.targetType || promo.targetType === "ALL") && (
-                              <input
-                                type="text"
-                                disabled
-                                value="Berlaku untuk Semua Menu"
-                                className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-slate-100 text-slate-400 cursor-not-allowed"
-                              />
+                                {/* ALL / Fallback */}
+                                {(!promo.targetType || promo.targetType === "ALL") && (
+                                  <input
+                                    type="text"
+                                    disabled
+                                    value="Berlaku untuk Semua Menu"
+                                    className="w-full px-2.5 py-1.5 border rounded-lg text-xs bg-slate-100 text-slate-400 cursor-not-allowed"
+                                  />
+                                )}
+                              </>
                             )}
                           </div>
 
@@ -3329,9 +4283,1299 @@ export default function SettingsPage() {
                 </div>
               </form>
             )}
+
+            {/* TAB 7: MANAJEMEN LANGGANAN & ADD-ON (SIMULASI SAAS) */}
+            {selectedMasterTab === "Paket & Add-on (Konsep)" && (
+              <div className="p-4 sm:p-6 space-y-6">
+                {/* Header Info Banner with Quick Tier Simulator Switcher */}
+                <div className="p-4 bg-gradient-to-r from-purple-50/80 to-indigo-50/50 border border-purple-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
+                  <div className="flex items-start space-x-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200 mt-0.5">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                        <h3 className="font-bold text-sm text-slate-900">
+                          Manajemen Langganan Organisasi DagoEng
+                        </h3>
+                        <ProFeatureBadge label="SIMULASI DEMO" variant="pro" size="xs" />
+                        <span className="text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md font-semibold border border-purple-200">
+                          Scope: {isSuperAdmin ? "PLATFORM SUPER ADMIN" : "ORGANISASI (DAGO HUB)"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5 max-w-2xl leading-relaxed">
+                        Pusat pemantauan paket lisensi platform, kuota cabang fisik, kapasitas tenant kuliner, dan modul komersial. Anda dapat menguji coba simulasi perubahan tier paket secara interaktif.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Quick Simulator Tier Switcher */}
+                  <div className="flex items-center space-x-1.5 bg-white/90 p-1.5 rounded-xl border border-purple-200/80 shadow-2xs self-start sm:self-center shrink-0">
+                    <span className="text-[10px] font-bold text-slate-400 px-1.5 uppercase">Simulasi Tier:</span>
+                    {(["STARTER", "PROFESSIONAL", "ENTERPRISE"] as PlanTier[]).map((tier) => {
+                      const isCurrent = orgSub.planTier === tier;
+                      return (
+                        <button
+                          key={tier}
+                          type="button"
+                          onClick={() => {
+                            setSimulatedOrgPlan(tier);
+                            showMasterToast(`Simulasi tier organisasi diubah ke: ${PLATFORM_PLANS[tier].name}`);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                            isCurrent
+                              ? "bg-purple-600 text-white shadow-2xs"
+                              : "text-slate-600 hover:bg-slate-100"
+                          }`}
+                        >
+                          {tier === "STARTER" ? "Starter" : tier === "PROFESSIONAL" ? "Pro (Default)" : "Enterprise"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* HERO CARD: PAKET ANDA SAAT INI */}
+                <Card className="border-2 border-purple-300/80 rounded-2xl overflow-hidden shadow-xs bg-gradient-to-b from-white to-purple-50/20">
+                  <CardHeader className="p-4 sm:p-5 bg-purple-50/50 border-b border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                        <span className="text-xs font-bold text-purple-700 uppercase tracking-wider">Paket Anda Saat Ini:</span>
+                        <h4 className="font-extrabold text-slate-900 text-base">{orgSub.planName}</h4>
+                        <ProFeatureBadge
+                          label={orgSub.planTier}
+                          variant={orgSub.planTier === "ENTERPRISE" ? "enterprise" : "pro"}
+                          size="sm"
+                        />
+                      </div>
+                      <p className="text-xs text-slate-600 max-w-2xl leading-relaxed">
+                        {PLATFORM_PLANS[orgSub.planTier].tagline}. Siklus Penagihan: <strong>{orgSub.billingCycle} (Simulasi)</strong> — {PLATFORM_PLANS[orgSub.planTier].monthlyPriceDisplay}.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <span className="text-xs font-bold px-3 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full flex items-center space-x-1.5 shadow-2xs">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>Status: {orgSub.statusLabel}</span>
+                      </span>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="p-4 sm:p-5 space-y-5">
+                    {/* Key Subscription Meta */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs text-xs">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Organisasi</span>
+                        <p className="font-bold text-slate-900 mt-0.5">{orgSub.organizationName}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Mulai Berlangganan</span>
+                        <p className="font-semibold text-slate-700 mt-0.5">{orgSub.activeSince}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Jadwal Perpanjangan</span>
+                        <p className="font-semibold text-purple-700 mt-0.5">{orgSub.nextRenewalDate} (Simulasi)</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Modul Terpasang</span>
+                        <p className="font-bold text-slate-800 mt-0.5">
+                          {PLATFORM_PLANS[orgSub.planTier].includedModules.join(" + ")}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Real-time Usage vs Quotas Grid */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Kapasitas & Kuota Terpakai (Real-time vs Batas Paket)
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-medium">Berdasarkan data operasional workspace</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                        {/* 1. Outlets Quota */}
+                        <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                              Outlet Cabang Fisik
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                              Hub Level
+                            </span>
+                          </div>
+                          <div className="flex items-baseline space-x-1">
+                            <span className="text-2xl font-extrabold text-slate-900">{outlets.length}</span>
+                            <span className="text-xs text-slate-500">
+                              / {PLATFORM_PLANS[orgSub.planTier].maxOutlets === "UNLIMITED" ? "Unlimited" : `${PLATFORM_PLANS[orgSub.planTier].maxOutlets} Cabang`}
+                            </span>
+                          </div>
+                          {/* Progress Bar */}
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                typeof PLATFORM_PLANS[orgSub.planTier].maxOutlets === "number" && outlets.length >= (PLATFORM_PLANS[orgSub.planTier].maxOutlets as number)
+                                  ? "bg-amber-500"
+                                  : "bg-purple-600"
+                              }`}
+                              style={{
+                                width:
+                                  PLATFORM_PLANS[orgSub.planTier].maxOutlets === "UNLIMITED"
+                                    ? "40%"
+                                    : `${Math.min(100, (outlets.length / (PLATFORM_PLANS[orgSub.planTier].maxOutlets as number)) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <p className="text-[11px] text-slate-500 leading-tight">
+                            Singaraja, Denpasar, Renon
+                          </p>
+                        </div>
+
+                        {/* 2. Tenants Quota */}
+                        <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                              Tenant / Mitra Kuliner
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-brand-orange/10 text-brand-orange border border-brand-orange/20">
+                              Booth Level
+                            </span>
+                          </div>
+                          <div className="flex items-baseline space-x-1">
+                            <span className="text-2xl font-extrabold text-slate-900">{localTenants.length}</span>
+                            <span className="text-xs text-slate-500">
+                              / {PLATFORM_PLANS[orgSub.planTier].maxTenants === "UNLIMITED" ? "Unlimited" : `${PLATFORM_PLANS[orgSub.planTier].maxTenants} Mitra`}
+                            </span>
+                          </div>
+                          {/* Progress Bar */}
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                typeof PLATFORM_PLANS[orgSub.planTier].maxTenants === "number" && localTenants.length >= (PLATFORM_PLANS[orgSub.planTier].maxTenants as number)
+                                  ? "bg-rose-500"
+                                  : "bg-emerald-600"
+                              }`}
+                              style={{
+                                width:
+                                  PLATFORM_PLANS[orgSub.planTier].maxTenants === "UNLIMITED"
+                                    ? "35%"
+                                    : `${Math.min(100, (localTenants.length / (PLATFORM_PLANS[orgSub.planTier].maxTenants as number)) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <p className="text-[11px] text-slate-500 leading-tight">
+                            Kopi Senja, Dapur Mama, Manis Bakery, Bu Narti
+                          </p>
+                        </div>
+
+                        {/* 3. Staff Accounts */}
+                        <div className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                              Akun Staf & Karyawan
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                              Akses POS/KDS
+                            </span>
+                          </div>
+                          <div className="flex items-baseline space-x-1">
+                            <span className="text-2xl font-extrabold text-slate-900">7</span>
+                            <span className="text-xs text-slate-500">
+                              / {PLATFORM_PLANS[orgSub.planTier].maxStaff === "UNLIMITED" ? "Unlimited" : `${PLATFORM_PLANS[orgSub.planTier].maxStaff} Staf`}
+                            </span>
+                          </div>
+                          {/* Progress Bar */}
+                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-blue-600 rounded-full"
+                              style={{
+                                width:
+                                  PLATFORM_PLANS[orgSub.planTier].maxStaff === "UNLIMITED"
+                                    ? "25%"
+                                    : `${Math.min(100, (7 / (PLATFORM_PLANS[orgSub.planTier].maxStaff as number)) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <p className="text-[11px] text-slate-500 leading-tight">
+                            Kasir, Barista, Waiter, Kitchen, Inventory
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Architecture Scope Notice */}
+                    <div className="p-3 bg-slate-50 border border-slate-200/90 rounded-xl flex items-start space-x-2.5 text-xs text-slate-600">
+                      <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-[11px] text-slate-900">Pemisahan Arsitektur Kuota SaaS:</p>
+                        <p className="text-[11px] leading-relaxed text-slate-500">
+                          Kuota outlet fisik organisasi merepresentasikan gedung cabang hub fisik (Singaraja, Denpasar, Renon). Sementara jumlah tenant mitra kuliner merepresentasikan booth/gerai mandiri yang menyewa lot di dalam cabang tersebut. Keduanya tidak saling tumpang tindih.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* KOMPARASI 3 PAKET UTAMA PLATFORM */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-900">Perbandingan 3 Paket Utama Platform SaaS</h4>
+                      <p className="text-xs text-slate-500">Evaluasi spesifikasi batas kuota, modul bisnis, dan kemampuan platform pada setiap tier.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {(["STARTER", "PROFESSIONAL", "ENTERPRISE"] as PlanTier[]).map((tierKey) => {
+                      const plan = PLATFORM_PLANS[tierKey];
+                      const isCurrentPlan = orgSub.planTier === tierKey;
+
+                      return (
+                        <div
+                          key={plan.id}
+                          className={`p-4 sm:p-5 rounded-2xl bg-white border transition-all shadow-2xs flex flex-col justify-between space-y-4 ${
+                            isCurrentPlan
+                              ? "border-2 border-purple-500 ring-2 ring-purple-100 bg-purple-50/10"
+                              : "border-slate-200 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                                {tierKey === "STARTER" ? "Tier 1 — Single" : tierKey === "PROFESSIONAL" ? "Tier 2 — Hybrid Hub" : "Tier 3 — Chain"}
+                              </span>
+                              {isCurrentPlan ? (
+                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-300 shadow-2xs">
+                                  PAKET AKTIF
+                                </span>
+                              ) : (
+                                <ProFeatureBadge
+                                  label={tierKey}
+                                  variant={tierKey === "ENTERPRISE" ? "enterprise" : tierKey === "PROFESSIONAL" ? "pro" : "addon"}
+                                  size="xs"
+                                />
+                              )}
+                            </div>
+
+                            <div>
+                              <h5 className="font-extrabold text-base text-slate-900">{plan.name}</h5>
+                              <p className="text-xs text-purple-700 font-bold mt-0.5">{plan.monthlyPriceDisplay}</p>
+                              <p className="text-xs text-slate-500 mt-1 leading-relaxed">{plan.tagline}</p>
+                            </div>
+
+                            {/* Quota Specs */}
+                            <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-xl space-y-1 text-xs">
+                              <div className="flex justify-between">
+                                <span className="text-slate-500 text-[11px]">Batas Outlet:</span>
+                                <span className="font-bold text-slate-800">
+                                  {plan.maxOutlets === "UNLIMITED" ? "Unlimited" : `${plan.maxOutlets} Cabang`}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-500 text-[11px]">Batas Mitra:</span>
+                                <span className="font-bold text-slate-800">
+                                  {plan.maxTenants === "UNLIMITED" ? "Unlimited" : `${plan.maxTenants} Tenant`}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-500 text-[11px]">Batas Staf:</span>
+                                <span className="font-bold text-slate-800">
+                                  {plan.maxStaff === "UNLIMITED" ? "Unlimited" : `${plan.maxStaff} Staf`}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Features Checklist */}
+                            <div className="pt-2 border-t border-slate-100 space-y-1.5 text-xs text-slate-600">
+                              <span className="text-[11px] font-bold text-slate-700 block">Fitur & Modul Utama:</span>
+                              {plan.features.slice(0, 5).map((f, i) => (
+                                <div key={i} className="flex items-start space-x-2">
+                                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                  <span className="leading-tight">{f}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-100 space-y-2">
+                            <span className="text-[10px] text-slate-400 block font-medium">
+                              Rekomendasi: {plan.recommendedFor}
+                            </span>
+
+                            {isCurrentPlan ? (
+                              <div className="w-full py-2 bg-purple-50 text-purple-700 font-bold text-xs rounded-xl text-center border border-purple-200">
+                                Sedang Digunakan (Workspace Saat Ini)
+                              </div>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSimulatedOrgPlan(tierKey);
+                                  showMasterToast(`Simulasi beralih ke paket ${plan.name} berhasil diterapkan!`);
+                                }}
+                                className="w-full text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50 rounded-xl"
+                              >
+                                Simulasikan Beralih ke Tier Ini
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* KATALOG ADD-ON TINGKAT GERAI & HUB */}
+                <div className="space-y-3 pt-2 border-t border-slate-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-900">Katalog Fitur Add-on Fungsional (Simulasi)</h4>
+                      <p className="text-xs text-slate-500">
+                        Modul nilai tambah yang dapat diaktifkan per tenant mitra atau di tingkat hub. Uji coba status aktif/nonaktif secara interaktif.
+                      </p>
+                    </div>
+
+                    <span className="text-xs px-3 py-1 bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-full self-start sm:self-center">
+                      {tenantAddons.filter((a) => a.status === "ACTIVE").length} dari {tenantAddons.length} Add-on Aktif
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {tenantAddons.map((addon) => {
+                      const isActive = addon.status === "ACTIVE";
+                      const iconComponent =
+                        addon.code === "KDS_MULTI_STATION" ? (
+                          <UtensilsCrossed className="w-4 h-4 text-purple-600" />
+                        ) : addon.code === "ADVANCED_BOM_COGS" ? (
+                          <Package className="w-4 h-4 text-emerald-600" />
+                        ) : addon.code === "WHATSAPP_AUTO_DISPATCH" ? (
+                          <Zap className="w-4 h-4 text-amber-600" />
+                        ) : (
+                          <Tag className="w-4 h-4 text-blue-600" />
+                        );
+
+                      return (
+                        <div
+                          key={addon.id}
+                          className={`p-4 sm:p-5 rounded-2xl bg-white border transition-all shadow-2xs flex flex-col justify-between space-y-4 ${
+                            isActive
+                              ? "border-purple-200/90 ring-1 ring-purple-100"
+                              : "border-slate-200/80 opacity-90"
+                          }`}
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center space-x-2.5">
+                                <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-center shrink-0">
+                                  {iconComponent}
+                                </div>
+                                <div>
+                                  <div className="flex items-center space-x-1.5 flex-wrap">
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                      {addon.categoryTag}
+                                    </span>
+                                    <ProFeatureBadge label={addon.badgeLabel} variant={addon.badgeVariant} size="xs" />
+                                  </div>
+                                  <h5 className="font-bold text-sm text-slate-900 leading-snug">{addon.name}</h5>
+                                </div>
+                              </div>
+
+                              <div className="shrink-0 text-right">
+                                {isActive ? (
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    Aktif (Simulasi)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                    Belum Aktif
+                                  </span>
+                                )}
+                                <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
+                                  {addon.monthlyPriceDisplay}
+                                </span>
+                              </div>
+                            </div>
+
+                            <p className="text-xs text-slate-600 leading-relaxed">{addon.description}</p>
+
+                            <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                              <span className="text-[11px] font-bold text-slate-700 block">Manfaat Operasional:</span>
+                              {addon.benefits.map((benefit, idx) => (
+                                <div key={idx} className="flex items-start space-x-2 text-xs text-slate-600">
+                                  <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                                  <span className="leading-tight">{benefit}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setPreviewModalFeature({
+                                  title: addon.name,
+                                  badgeLabel: addon.badgeLabel,
+                                  badgeVariant: addon.badgeVariant,
+                                  categoryTag: addon.categoryTag,
+                                  description: addon.description,
+                                  benefits: addon.benefits,
+                                  samplePlanName: "Katalog Add-on F&B",
+                                  statusText: isActive ? "Aktif di Workspace (Simulasi Demo)" : "Tersedia untuk Pengujian Demo",
+                                })
+                              }
+                              className="text-xs text-slate-600 hover:text-slate-900 font-semibold px-2.5 h-8"
+                            >
+                              Pelajari Fitur
+                            </Button>
+
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => {
+                                toggleSimulatedTenantAddon(addon.id, "org-dago-hub");
+                                if (isActive) {
+                                  showMasterToast(`Simulasi Add-on "${addon.name}" dinonaktifkan.`);
+                                } else {
+                                  showMasterToast(`Simulasi Add-on "${addon.name}" berhasil diaktifkan!`);
+                                }
+                              }}
+                              className={`text-xs font-bold px-3.5 h-8 rounded-xl shadow-2xs transition-all ${
+                                isActive
+                                  ? "bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 hover:border-rose-300"
+                                  : "bg-purple-600 hover:bg-purple-700 text-white"
+                              }`}
+                            >
+                              {isActive ? "Simulasikan Nonaktifkan" : "Simulasikan Aktifkan"}
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ROLE SUPER ADMIN OVERSIGHT SECTION */}
+                {isSuperAdmin && (
+                  <div className="p-5 rounded-2xl bg-slate-900 text-white space-y-4 shadow-sm border border-slate-800">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <Crown className="w-5 h-5 text-amber-400" />
+                          <h4 className="font-extrabold text-sm text-white">
+                            Platform SaaS Administration & Multi-Tenant Oversight
+                          </h4>
+                          <span className="text-[10px] bg-amber-400/20 text-amber-300 border border-amber-400/40 px-2 py-0.5 rounded-full font-bold">
+                            SUPER ADMIN ONLY
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Kontrol tingkat platform untuk memantau lisensi seluruh organisasi dan konfigurasi tier komersial global.
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => showMasterToast("Simulasi sinkronisasi lisensi seluruh hub berhasil dijalankan.")}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs rounded-xl shadow-xs shrink-0"
+                      >
+                        Simulasikan Sync Seluruh Hub
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Organisasi Hub</span>
+                        <p className="text-lg font-extrabold text-white mt-1">2 <span className="text-xs text-slate-400 font-normal">Hub</span></p>
+                        <p className="text-[10px] text-emerald-400 mt-0.5">Dago Hub, Bandung Hub</p>
+                      </div>
+
+                      <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Distribusi Lisensi</span>
+                        <p className="text-lg font-extrabold text-purple-300 mt-1">1 Pro / 1 Starter</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Simulasi multi-tier aktif</p>
+                      </div>
+
+                      <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Total Tenant Mitra</span>
+                        <p className="text-lg font-extrabold text-emerald-300 mt-1">7 <span className="text-xs text-slate-400 font-normal">Mitra Booth</span></p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">Across all registered hubs</p>
+                      </div>
+
+                      <div className="p-3 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Terminal POS Kasir</span>
+                        <p className="text-lg font-extrabold text-blue-300 mt-1">8 <span className="text-xs text-slate-400 font-normal">Terminal</span></p>
+                        <p className="text-[10px] text-emerald-400 mt-0.5">Semua aktif online</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 8: MANAJEMEN WI-FI (SIMULASI TERPADU) */}
+            {selectedMasterTab === "Manajemen Wi-Fi (Simulasi)" && (
+              <div className="p-4 sm:p-6 space-y-8">
+                {/* 1. RINGKASAN & STATUS INTEGRASI */}
+                <div className="space-y-4">
+                  <div className="p-4 sm:p-5 bg-gradient-to-r from-blue-50/80 via-indigo-50/40 to-slate-50 border border-blue-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
+                    <div className="flex items-start space-x-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 border border-blue-200 mt-0.5">
+                        <Wifi className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                          <h3 className="font-bold text-sm text-slate-900">
+                            Manajemen Wi-Fi Captive Portal DagoEng
+                          </h3>
+                          <span className="text-[10px] bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded-md font-semibold">
+                            CONTOH SIMULASI DEMO
+                          </span>
+                          <span className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-semibold">
+                            STATUS: BELUM TERHUBUNG
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
+                          Pusat konfigurasi aturan voucher internet tamu F&B dan Co-working. Saat ini berjalan dalam mode <strong>simulasi mandiri</strong> tanpa sambungan router hardware nyata, guna memvalidasi logika alur operasional kasir dan reservasi.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <div className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 shadow-2xs text-right">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase block">Mode Jaringan</span>
+                        <span className="text-xs font-bold text-amber-600 flex items-center space-x-1 justify-end">
+                          <Signal className="w-3 h-3 text-amber-500" />
+                          <span>Simulasi Standalone</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Metrik Ringkasan Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Status Router</span>
+                        <Router className="w-3.5 h-3.5 text-slate-400" />
+                      </div>
+                      <p className="text-sm font-extrabold text-slate-700">BELUM TERHUBUNG</p>
+                      <p className="text-[10px] text-slate-400">Offline / Mock Environment</p>
+                    </div>
+
+                    <div className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Voucher Diterbitkan</span>
+                        <Receipt className="w-3.5 h-3.5 text-blue-500" />
+                      </div>
+                      <p className="text-base font-extrabold text-slate-900">
+                        {wifiVouchers.length} <span className="text-xs font-normal text-slate-400">Voucher</span>
+                      </p>
+                      <p className="text-[10px] text-emerald-600 font-medium">
+                        {wifiVouchers.filter((v) => v.status === "ACTIVE").length} Aktif Berlaku
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Aturan F&B</span>
+                        <Coffee className="w-3.5 h-3.5 text-brand-orange" />
+                      </div>
+                      <p className="text-base font-extrabold text-slate-900">
+                        {wifiFnBRules.filter((r) => r.isActive).length} <span className="text-xs font-normal text-slate-400">Aktif</span>
+                      </p>
+                      <p className="text-[10px] text-slate-400">Berbasis nominal struk</p>
+                    </div>
+
+                    <div className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Paket Co-working</span>
+                        <Laptop className="w-3.5 h-3.5 text-indigo-500" />
+                      </div>
+                      <p className="text-base font-extrabold text-slate-900">
+                        {wifiCwRules.filter((r) => r.isActive).length} <span className="text-xs font-normal text-slate-400">Paket</span>
+                      </p>
+                      <p className="text-[10px] text-slate-400">Aktif saat tamu check-in</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. ATURAN WI-FI F&B */}
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200">
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+                          <Coffee className="w-4 h-4 text-brand-orange" />
+                          <span>Aturan Wi-Fi F&B (Berbasis Transaksi Struk POS)</span>
+                        </h4>
+                        <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded font-bold">
+                          CONTOH SIMULASI
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Aturan penerbitan voucher otomatis pada struk kasir berdasarkan nominal belanja. Nilai nominal dan durasi di bawah adalah <strong>contoh simulasi</strong> dan belum diputuskan sebagai kebijakan final.
+                      </p>
+                    </div>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleOpenAddWifiRule}
+                      className="bg-brand-orange hover:bg-orange-600 text-white font-bold text-xs space-x-1.5 rounded-xl shadow-xs self-start sm:self-auto"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Tambah Aturan F&B</span>
+                    </Button>
+                  </div>
+
+                  {/* Pengaturan Basis Perhitungan Nominal (Pilihan Simulasi Belum Final) */}
+                  <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center space-x-2">
+                        <Sliders className="w-4 h-4 text-slate-600" />
+                        <span className="text-xs font-bold text-slate-800">Basis Perhitungan Nominal Transaksi</span>
+                        <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-medium">
+                          Pilihan Belum Final
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWifiCalcBasis("GRAND_TOTAL");
+                            setSimulatedWifiCalcBasis("GRAND_TOTAL");
+                            showMasterToast("Basis simulasi diatur ke Grand Total Pembayaran.");
+                          }}
+                          className={`px-3 py-1 text-xs rounded-lg font-semibold transition-all ${
+                            wifiCalcBasis === "GRAND_TOTAL"
+                              ? "bg-slate-900 text-white shadow-2xs"
+                              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          Grand Total (Final Bayar)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWifiCalcBasis("NET_SALES");
+                            setSimulatedWifiCalcBasis("NET_SALES");
+                            showMasterToast("Basis simulasi diatur ke Net Sales (Subtotal Produk).");
+                          }}
+                          className={`px-3 py-1 text-xs rounded-lg font-semibold transition-all ${
+                            wifiCalcBasis === "NET_SALES"
+                              ? "bg-slate-900 text-white shadow-2xs"
+                              : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          Net Sales (Subtotal Produk)
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Catatan Transparansi: Penentuan apakah batas minimum Wi-Fi dihitung dari Grand Total akhir (setelah diskon, pajak, & biaya layanan) atau dari Net Sales (subtotal produk saja) masih merupakan opsi simulasi dan belum disetujui atasan sebagai kebijakan baku.
+                    </p>
+                  </div>
+
+                  {/* Tabel Aturan F&B */}
+                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                          <th className="py-2.5 px-4">Label Aturan</th>
+                          <th className="py-2.5 px-4">Rentang Nominal Transaksi</th>
+                          <th className="py-2.5 px-4">Durasi Akses</th>
+                          <th className="py-2.5 px-4">Batas Bandwidth (Simulasi)</th>
+                          <th className="py-2.5 px-4 text-center">Status</th>
+                          <th className="py-2.5 px-4 text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {wifiFnBRules.map((rule) => {
+                          const rangeFormatted = `${formatCurrencyIDR(rule.minTransactionAmount)} — ${
+                            rule.maxTransactionAmount ? formatCurrencyIDR(rule.maxTransactionAmount) : "Tanpa Batas Atas"
+                          }`;
+
+                          return (
+                            <tr key={rule.id} className="hover:bg-slate-50/60 transition-colors">
+                              <td className="py-3 px-4">
+                                <span className="font-bold text-slate-900 block">{rule.label}</span>
+                                {rule.notes && <span className="text-[10px] text-slate-400">{rule.notes}</span>}
+                              </td>
+                              <td className="py-3 px-4 font-semibold text-slate-800">
+                                {rangeFormatted}
+                              </td>
+                              <td className="py-3 px-4 text-slate-700">
+                                <span className="font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+                                  {rule.durationMinutes >= 60
+                                    ? `${rule.durationMinutes / 60} Jam`
+                                    : `${rule.durationMinutes} Menit`}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-slate-600">
+                                {rule.bandwidthLimitDownMbps ? (
+                                  <span>{rule.bandwidthLimitDownMbps}M / {rule.bandwidthLimitUpMbps || 5}M</span>
+                                ) : (
+                                  <span className="text-slate-400 italic">Bawaan Gateway</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleWifiRuleStatus(rule.id)}
+                                  className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold transition-all ${
+                                    rule.isActive
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+                                      : "bg-slate-100 text-slate-500 border border-slate-200 hover:bg-slate-200"
+                                  }`}
+                                >
+                                  {rule.isActive ? "Aktif" : "Nonaktif"}
+                                </button>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <div className="flex items-center justify-center space-x-1.5">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleOpenEditWifiRule(rule)}
+                                    className="text-[10px] h-7 px-2 border-slate-200 text-slate-600 hover:text-slate-900"
+                                  >
+                                    <Edit2 className="w-3 h-3 mr-1" />
+                                    <span>Edit</span>
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDeleteWifiRule(rule.id)}
+                                    className="text-[10px] h-7 px-2 border-rose-200 text-rose-600 hover:bg-rose-50"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* 3. ATURAN WI-FI CO-WORKING */}
+                <div className="space-y-4">
+                  <div className="pb-2 border-b border-slate-200">
+                    <div className="flex items-center space-x-2">
+                      <h4 className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+                        <Laptop className="w-4 h-4 text-indigo-600" />
+                        <span>Aturan Wi-Fi Co-working (Terkait Booking & Check-In)</span>
+                      </h4>
+                      <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-bold">
+                        OTORISASI SAAT CHECK-IN
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Penerbitan voucher internet terikat pada status reservasi ruang kerja. Logika masa aktif dipisahkan secara ketat agar reservasi terjadwal tidak kedaluwarsa sebelum tamu tiba.
+                    </p>
+                  </div>
+
+                  {/* Informational Box Alur Aktivasi Co-working */}
+                  <div className="p-3.5 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-1.5 text-xs text-indigo-950">
+                    <p className="font-bold text-indigo-900 flex items-center space-x-1.5">
+                      <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Alur Waktu & Siklus Hidup Voucher Co-working:</span>
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-indigo-900/90 pt-1">
+                      <div className="p-2 bg-white/70 rounded-lg border border-indigo-100">
+                        <span className="font-bold block text-indigo-950">1. Penerbitan Voucher</span>
+                        Dibuat saat reservasi terkonfirmasi atau saat tamu tiba di resepsionis.
+                      </div>
+                      <div className="p-2 bg-white/70 rounded-lg border border-indigo-100">
+                        <span className="font-bold block text-indigo-950">2. Awal Masa Aktif</span>
+                        Timer durasi <strong>hanya mulai dihitung saat check-in resmi</strong> tamu divalidasi.
+                      </div>
+                      <div className="p-2 bg-white/70 rounded-lg border border-indigo-100">
+                        <span className="font-bold block text-indigo-950">3. Kedaluwarsa & Toleransi</span>
+                        Berakhir setelah durasi sewa + grace period (15–30 menit) setelah check-in.
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabel Aturan Co-working */}
+                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                          <th className="py-2.5 px-4">Paket / Ruang</th>
+                          <th className="py-2.5 px-4">Tipe Booking</th>
+                          <th className="py-2.5 px-4">Mode Durasi</th>
+                          <th className="py-2.5 px-4">Toleransi Ekstra</th>
+                          <th className="py-2.5 px-4">Kuota Perangkat</th>
+                          <th className="py-2.5 px-4 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {wifiCwRules.map((r) => (
+                          <tr key={r.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="py-3 px-4 font-bold text-slate-900">
+                              <span>{r.label}</span>
+                              <span className="block text-[10px] text-slate-400">{r.spaceType}</span>
+                            </td>
+                            <td className="py-3 px-4 text-slate-700">
+                              <span className="font-semibold">{r.bookingType}</span>
+                            </td>
+                            <td className="py-3 px-4 text-slate-700">
+                              <span className="font-medium text-slate-800">
+                                {r.durationMode === "FOLLOW_BOOKING"
+                                  ? "Sesuai Durasi Jam Booking"
+                                  : r.durationMode === "FULL_DAY_UNTIL_CLOSING"
+                                  ? "Seharian s/d Jam Tutup (18:00)"
+                                  : "Akses Tetap 30 Hari"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-slate-600">
+                              +{r.gracePeriodMinutes} Menit Grace Period
+                            </td>
+                            <td className="py-3 px-4 text-slate-700">
+                              <span className="font-bold text-slate-800">{r.maxConcurrentDevices} Perangkat</span>
+                              {r.maxConcurrentDevices > 1 && (
+                                <span className="block text-[10px] text-indigo-600 font-medium">Multi-Device Member</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Aktif
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* 4. RIWAYAT VOUCHER (SIMULASI TERPADU) */}
+                <div className="space-y-4">
+                  <div className="pb-2 border-b border-slate-200">
+                    <div className="flex items-center space-x-2">
+                      <h4 className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+                        <Receipt className="w-4 h-4 text-blue-600" />
+                        <span>Riwayat Voucher Wi-Fi (Simulasi Terpadu)</span>
+                      </h4>
+                      <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded font-bold">
+                        STABIL & BEBAS DUPLIKASI
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Voucher diikat stabil ke nomor transaksi POS atau booking Co-working. Cetak ulang struk kasir selalu menampilkan kode voucher yang sama tanpa menerbitkan voucher ganda.
+                    </p>
+                  </div>
+
+                  {/* Filter Bar */}
+                  <div className="p-3 bg-slate-50/60 border border-slate-200 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-2 flex-1 min-w-[280px]">
+                      <div className="relative flex-1 min-w-[200px]">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          value={wifiSearchQuery}
+                          onChange={(e) => setWifiSearchQuery(e.target.value)}
+                          placeholder="Cari kode voucher, no struk, booking ID, atau nama..."
+                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        />
+                      </div>
+
+                      <select
+                        value={wifiServiceFilter}
+                        onChange={(e) => setWifiServiceFilter(e.target.value as any)}
+                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      >
+                        <option value="ALL">Semua Layanan (F&B & CW)</option>
+                        <option value="FNB">Hanya F&B Kasir</option>
+                        <option value="COWORKING">Hanya Co-working</option>
+                      </select>
+
+                      <select
+                        value={wifiStatusFilter}
+                        onChange={(e) => setWifiStatusFilter(e.target.value as any)}
+                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      >
+                        <option value="ALL">Semua Status</option>
+                        <option value="ACTIVE">Aktif</option>
+                        <option value="USED">Terpakai</option>
+                        <option value="EXPIRED">Kedaluwarsa</option>
+                        <option value="CANCELLED">Dibatalkan</option>
+                      </select>
+                    </div>
+
+                    <span className="text-[11px] text-slate-500">
+                      Total <strong>{wifiVouchers.length}</strong> voucher simulasi tersimpan
+                    </span>
+                  </div>
+
+                  {/* Table Riwayat */}
+                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                            <th className="py-2.5 px-4">Kode Voucher</th>
+                            <th className="py-2.5 px-4">Layanan & Referensi</th>
+                            <th className="py-2.5 px-4">Pelanggan / Tamu</th>
+                            <th className="py-2.5 px-4">Durasi & Kuota</th>
+                            <th className="py-2.5 px-4">Waktu Terbit</th>
+                            <th className="py-2.5 px-4">Kedaluwarsa</th>
+                            <th className="py-2.5 px-4">Status</th>
+                            <th className="py-2.5 px-4 text-center">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {(() => {
+                            const filtered = wifiVouchers.filter((v) => {
+                              if (wifiServiceFilter !== "ALL" && v.serviceType !== wifiServiceFilter) return false;
+                              if (wifiStatusFilter !== "ALL" && v.status !== wifiStatusFilter) return false;
+                              if (wifiSearchQuery.trim()) {
+                                const q = wifiSearchQuery.toLowerCase();
+                                const matchCode = v.voucherCode.toLowerCase().includes(q);
+                                const matchRef = v.referenceLabel.toLowerCase().includes(q) || v.referenceId.toLowerCase().includes(q);
+                                const matchName = v.customerName.toLowerCase().includes(q);
+                                if (!matchCode && !matchRef && !matchName) return false;
+                              }
+                              return true;
+                            });
+
+                            if (filtered.length === 0) {
+                              return (
+                                <tr>
+                                  <td colSpan={8} className="py-8 text-center text-slate-400 italic">
+                                    Tidak ada data voucher simulasi yang sesuai dengan filter pencarian.
+                                  </td>
+                                </tr>
+                              );
+                            }
+
+                            return filtered.map((v) => (
+                              <tr key={v.id} className="hover:bg-slate-50/60 transition-colors">
+                                <td className="py-3 px-4 font-mono font-bold text-slate-800 flex items-center space-x-1.5">
+                                  <span>{v.voucherCode}</span>
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200">
+                                    SIMULASI
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-slate-700">
+                                  <span className="font-semibold text-slate-900 block">{v.referenceLabel}</span>
+                                  <span className="text-[10px] text-slate-400">
+                                    {v.serviceType === "FNB" ? `Tenant: ${v.tenantName || "Kopi Senja"}` : "Co-working Reservation"}
+                                    {v.transactionAmount && ` • ${formatCurrencyIDR(v.transactionAmount)}`}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-slate-700">
+                                  <span>{v.customerName}</span>
+                                  {v.customerPhone && <span className="block text-[10px] text-slate-400">{v.customerPhone}</span>}
+                                </td>
+                                <td className="py-3 px-4 text-slate-700">
+                                  <span className="font-bold text-slate-800">{v.durationFormatted}</span>
+                                  <span className="block text-[10px] text-slate-400">Maks. {v.maxDevices} Device</span>
+                                </td>
+                                <td className="py-3 px-4 text-slate-500 text-[11px]">
+                                  {new Date(v.issuedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })},{" "}
+                                  {new Date(v.issuedAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
+                                </td>
+                                <td className="py-3 px-4 text-slate-500 text-[11px]">
+                                  {new Date(v.expiresAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })},{" "}
+                                  {new Date(v.expiresAt).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      v.status === "ACTIVE"
+                                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                        : v.status === "USED"
+                                        ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                        : v.status === "EXPIRED"
+                                        ? "bg-slate-100 text-slate-600 border border-slate-200"
+                                        : "bg-rose-50 text-rose-700 border border-rose-200"
+                                    }`}
+                                  >
+                                    {v.status === "ACTIVE"
+                                      ? "Aktif"
+                                      : v.status === "USED"
+                                      ? "Terpakai"
+                                      : v.status === "EXPIRED"
+                                      ? "Kedaluwarsa"
+                                      : "Dibatalkan"}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <div className="flex items-center justify-center space-x-1.5">
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        navigator.clipboard?.writeText(v.voucherCode);
+                                        showMasterToast(`Kode voucher "${v.voucherCode}" berhasil disalin.`);
+                                      }}
+                                      className="text-[10px] h-7 px-2 rounded-lg border-slate-200 text-slate-600 hover:text-slate-900"
+                                    >
+                                      Salin
+                                    </Button>
+                                    {v.status === "ACTIVE" && (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleRevokeVoucher(v.id)}
+                                        className="text-[10px] h-7 px-2 rounded-lg border-rose-200 text-rose-600 hover:bg-rose-50"
+                                      >
+                                        Batal
+                                      </Button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ));
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. INTEGRASI ROUTER & GATEWAY (INFORMASIONAL) */}
+                <div className="space-y-4">
+                  <div className="pb-2 border-b border-slate-200">
+                    <div className="flex items-center space-x-2">
+                      <h4 className="font-bold text-sm text-slate-900 flex items-center space-x-2">
+                        <Server className="w-4 h-4 text-slate-700" />
+                        <span>Integrasi Router & Gateway (Informasional)</span>
+                      </h4>
+                      <span className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded font-bold">
+                        STATUS: BELUM TERHUBUNG
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Rencana kesiapan teknis penyambungan captive portal DagoEng ke perangkat keras jaringan.
+                    </p>
+                  </div>
+
+                  {/* Warning Security Banner */}
+                  <div className="p-4 bg-amber-50/70 border border-amber-200 rounded-xl flex items-start space-x-3 text-xs text-amber-900">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-bold text-amber-950">Prinsip Keamanan Kredensial Jaringan</p>
+                      <p className="text-amber-800 leading-relaxed text-[11px]">
+                        Sesuai standar keamanan sistem web, password router API, secret token captive portal, dan kredensial RADIUS <strong>tidak disimpan di frontend browser maupun di localStorage</strong>. Integrasi lapangan nantinya akan dijalankan melalui server backend aman / network daemon terisolasi.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Kartu Status Hardware & Kebutuhan Integrasi */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <span className="font-bold text-xs text-slate-800 flex items-center space-x-2">
+                          <Router className="w-4 h-4 text-blue-600" />
+                          <span>Status Gateway Outlet</span>
+                        </span>
+                        <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
+                          BELUM TERHUBUNG
+                        </span>
+                      </div>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-400">Outlet Fisik</span>
+                          <span className="font-semibold text-slate-700">{wifiNetworkConfig.outletName}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-400">SSID Tamu (Target)</span>
+                          <span className="font-mono font-semibold text-slate-800">{wifiNetworkConfig.ssidName}</span>
+                        </div>
+                        <div className="flex justify-between py-1 border-b border-slate-50">
+                          <span className="text-slate-400">Driver Adapter Siap</span>
+                          <span className="font-semibold text-indigo-700">MikroTik RouterOS API / UniFi</span>
+                        </div>
+                        <div className="flex justify-between py-1">
+                          <span className="text-slate-400">Captive Portal Landing</span>
+                          <span className="font-mono text-[11px] text-blue-600 underline">{wifiNetworkConfig.captivePortalUrl}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                        <span className="font-bold text-xs text-slate-800 flex items-center space-x-2">
+                          <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                          <span>Checklist Implementasi Lapangan</span>
+                        </span>
+                        <span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded font-bold">
+                          Tahap Berikutnya
+                        </span>
+                      </div>
+                      <ul className="space-y-2 text-xs text-slate-600">
+                        <li className="flex items-start space-x-2">
+                          <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center shrink-0 text-[10px]">1</span>
+                          <span>Penetapan subnet IP & VLAN khusus tamu (isolasi dari traffic internal POS & kasir).</span>
+                        </li>
+                        <li className="flex items-start space-x-2">
+                          <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center shrink-0 text-[10px]">2</span>
+                          <span>Pemasangan controller router hardware di rack server Dago Hub Singaraja.</span>
+                        </li>
+                        <li className="flex items-start space-x-2">
+                          <span className="w-4 h-4 rounded-full bg-slate-100 text-slate-500 font-bold flex items-center justify-center shrink-0 text-[10px]">3</span>
+                          <span>Konfigurasi webhook sync voucher POS ke router captive portal via backend daemon.</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </Card>
 
           {/* COMMON MASTER DATA MODALS */}
+
+          {/* MODAL: TAMBAH / EDIT ATURAN WI-FI F&B (SIMULASI) */}
+          {isWifiRuleModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 animate-in zoom-in-95">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white">
+                  <div>
+                    <h3 className="font-bold text-sm">
+                      {editingWifiRule ? "Edit Aturan Wi-Fi F&B" : "Tambah Aturan Wi-Fi F&B Baru"}
+                    </h3>
+                    <span className="text-[10px] text-amber-300 font-semibold block">CONTOH SIMULASI DEMO</span>
+                  </div>
+                  <button onClick={() => setIsWifiRuleModalOpen(false)} className="text-slate-400 hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveWifiRule} className="p-6 space-y-4 text-xs">
+                  {wifiRuleFormError && (
+                    <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl font-bold flex items-center space-x-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" />
+                      <span>{wifiRuleFormError}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700">Nama Label Aturan *</label>
+                    <input
+                      type="text"
+                      required
+                      value={wifiRuleFormLabel}
+                      onChange={(e) => setWifiRuleFormLabel(e.target.value)}
+                      placeholder="Contoh: F&B Standar (1 Jam)"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700">Min. Transaksi (Rp) *</label>
+                      <input
+                        type="number"
+                        required
+                        min={0}
+                        step={5000}
+                        value={wifiRuleFormMin}
+                        onChange={(e) => setWifiRuleFormMin(Number(e.target.value))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 font-semibold"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700">Maks. Transaksi (Rp)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={5000}
+                        value={wifiRuleFormMax}
+                        onChange={(e) => setWifiRuleFormMax(e.target.value)}
+                        placeholder="Kosongkan jika tanpa batas"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 font-semibold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700">Durasi Akses *</label>
+                      <select
+                        value={wifiRuleFormDuration}
+                        onChange={(e) => setWifiRuleFormDuration(Number(e.target.value))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-semibold text-slate-800"
+                      >
+                        <option value={30}>30 Menit</option>
+                        <option value={60}>60 Menit (1 Jam)</option>
+                        <option value={120}>120 Menit (2 Jam)</option>
+                        <option value={180}>180 Menit (3 Jam)</option>
+                        <option value={240}>240 Menit (4 Jam)</option>
+                        <option value={360}>360 Menit (6 Jam)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700">Limit Unduh (Mbps)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={wifiRuleFormBandwidthDown}
+                        onChange={(e) => setWifiRuleFormBandwidthDown(Number(e.target.value))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl font-semibold"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="font-bold text-slate-700">Limit Unggah (Mbps)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={wifiRuleFormBandwidthUp}
+                        onChange={(e) => setWifiRuleFormBandwidthUp(Number(e.target.value))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl font-semibold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-700">Catatan Internal (Opsional)</label>
+                    <textarea
+                      rows={2}
+                      value={wifiRuleFormNotes}
+                      onChange={(e) => setWifiRuleFormNotes(e.target.value)}
+                      placeholder="Keterangan aturan untuk tim operasional..."
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+
+                  <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsWifiRuleModalOpen(false)}
+                      className="rounded-xl"
+                    >
+                      Batal
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="bg-brand-orange hover:bg-orange-600 text-white font-bold rounded-xl"
+                    >
+                      {editingWifiRule ? "Simpan Perubahan" : "Simpan Aturan"}
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
           {/* MODAL: TAMBAH PRODUK BARU */}
           {isAddProdModalOpen && (
@@ -3752,7 +5996,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-[11px] text-amber-900">
-                    💡 Mitra baru akan otomatis terdaftar dengan skema bagi hasil standar 85% Mitra / 15% DAGO.
+                    Mitra baru akan otomatis terdaftar dengan skema bagi hasil standar 85% Mitra / 15% DAGO.
                   </div>
                   <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
                     <Button type="button" variant="outline" onClick={() => setIsAddTenantModalOpen(false)} className="rounded-xl">
@@ -4696,6 +6940,21 @@ export default function SettingsPage() {
           )}
 
         </div>
+      )}
+
+      {previewModalFeature && (
+        <UpgradeModal
+          isOpen={Boolean(previewModalFeature)}
+          onClose={() => setPreviewModalFeature(null)}
+          title={previewModalFeature.title}
+          badgeLabel={previewModalFeature.badgeLabel}
+          badgeVariant={previewModalFeature.badgeVariant}
+          categoryTag={previewModalFeature.categoryTag}
+          description={previewModalFeature.description}
+          benefits={previewModalFeature.benefits}
+          samplePlanName={previewModalFeature.samplePlanName}
+          statusText={previewModalFeature.statusText}
+        />
       )}
     </div>
   );

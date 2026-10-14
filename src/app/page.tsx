@@ -450,9 +450,9 @@ export default function PublicLandingPage() {
                   onChange={(e) => setSelectedService(e.target.value)}
                   className="bg-transparent text-xs font-bold text-white outline-none w-full cursor-pointer"
                 >
-                  <option value="MENU" className="bg-slate-900 text-white">🍽️ Layanan F&B (Menu & Kopi)</option>
-                  <option value="COWORKING" className="bg-slate-900 text-white">💻 Layanan Co-Working (Workspace & Meeting)</option>
-                  <option value="LOYALTY" className="bg-slate-900 text-white">🎁 Program Member Loyalty</option>
+                  <option value="MENU" className="bg-slate-900 text-white">Layanan F&B (Menu & Kopi)</option>
+                  <option value="COWORKING" className="bg-slate-900 text-white">Layanan Co-Working (Workspace & Meeting)</option>
+                  <option value="LOYALTY" className="bg-slate-900 text-white">Program Member Loyalty</option>
                 </select>
               </div>
             </div>
@@ -726,7 +726,7 @@ export default function PublicLandingPage() {
                           </h3>
                           {outlet.id === "outlet-sgr" && (
                             <span className="text-[10px] text-emerald-400 font-bold block">
-                              📍 Outlet Pusat Singaraja
+                              Outlet Pusat Singaraja
                             </span>
                           )}
                         </div>
@@ -933,7 +933,7 @@ export default function PublicLandingPage() {
                   onClick={() => handleQuickModalLogin("DAGO_OWNER")}
                   className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">🏢 Owner Dago Hub</span>
+                  <span className="block font-bold text-white group-hover:text-white">Owner Dago Hub</span>
                   <span className="text-[10px] text-slate-400 group-hover:text-white/80">Executive Org</span>
                 </button>
 
@@ -941,7 +941,7 @@ export default function PublicLandingPage() {
                   onClick={() => handleQuickModalLogin("TENANT_OWNER_KS")}
                   className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">☕ Owner Kopi Senja</span>
+                  <span className="block font-bold text-white group-hover:text-white">Owner Kopi Senja</span>
                   <span className="text-[10px] text-slate-400 group-hover:text-white/80">Tenant F&B</span>
                 </button>
 
@@ -949,7 +949,7 @@ export default function PublicLandingPage() {
                   onClick={() => handleQuickModalLogin("CASHIER_SGR")}
                   className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">🛒 Kasir POS</span>
+                  <span className="block font-bold text-white group-hover:text-white">Kasir POS</span>
                   <span className="text-[10px] text-slate-400 group-hover:text-white/80">Singaraja POS</span>
                 </button>
 
@@ -957,7 +957,7 @@ export default function PublicLandingPage() {
                   onClick={() => handleQuickModalLogin("KITCHEN_SGR")}
                   className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">🍳 Chef Dapur (KDS)</span>
+                  <span className="block font-bold text-white group-hover:text-white">Chef Dapur (KDS)</span>
                   <span className="text-[10px] text-slate-400 group-hover:text-white/80">Antrean Dapur</span>
                 </button>
 
@@ -965,7 +965,7 @@ export default function PublicLandingPage() {
                   onClick={() => handleQuickModalLogin("WAITER_SGR")}
                   className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">🤵 Pramusaji / Waiter</span>
+                  <span className="block font-bold text-white group-hover:text-white">Pramusaji / Waiter</span>
                   <span className="text-[10px] text-slate-400 group-hover:text-white/80">Denah Meja</span>
                 </button>
 
@@ -973,7 +973,7 @@ export default function PublicLandingPage() {
                   onClick={() => handleQuickModalLogin("CUSTOMER_DEMO")}
                   className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">📱 Pelanggan QR</span>
+                  <span className="block font-bold text-white group-hover:text-white">Pelanggan QR</span>
                   <span className="text-[10px] text-slate-400 group-hover:text-white/80">Customer Portal</span>
                 </button>
               </div>

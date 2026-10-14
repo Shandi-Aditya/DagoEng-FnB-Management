@@ -21,25 +21,29 @@ export function KPICard({
 }: KPICardProps) {
   const isPositive = changePercent !== undefined ? changePercent >= 0 : true;
 
-  const accentStyles = {
-    orange: "border-l-4 border-l-brand-orange",
-    cyan: "border-l-4 border-l-brand-cyan",
-    green: "border-l-4 border-l-brand-green",
-    yellow: "border-l-4 border-l-brand-yellow",
-    slate: "border-l-4 border-l-slate-400",
+  const iconAccentStyles = {
+    orange: "bg-orange-50 text-orange-600 border-orange-100/80",
+    cyan: "bg-sky-50 text-sky-600 border-sky-100/80",
+    green: "bg-emerald-50 text-emerald-600 border-emerald-100/80",
+    yellow: "bg-amber-50 text-amber-700 border-amber-100/80",
+    slate: "bg-slate-100 text-slate-700 border-slate-200/80",
   }[accentColor];
 
   return (
-    <Card className={`p-5 ${accentStyles} shadow-sm bg-white`}>
-      <div className="flex items-center justify-between mb-2">
+    <Card className="p-5 border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow bg-white rounded-xl">
+      <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
           {title}
         </span>
-        {icon && <div className="text-slate-400">{icon}</div>}
+        {icon && (
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${iconAccentStyles}`}>
+            {icon}
+          </div>
+        )}
       </div>
 
       <div className="flex items-baseline justify-between">
-        <h3 className="text-2xl font-bold text-slate-900 tracking-tight">{value}</h3>
+        <h3 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{value}</h3>
       </div>
 
       {(changePercent !== undefined || trendText) && (

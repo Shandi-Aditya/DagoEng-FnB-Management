@@ -229,7 +229,7 @@ export default function CustomersPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-slate-600 pt-1">
           <div className="p-3 bg-white/80 rounded-xl border border-slate-200/60 space-y-1">
             <p className="font-bold text-slate-800 flex items-center space-x-1.5">
-              <span>📱 1. Pendaftaran Otomatis</span>
+              <span>1. Pendaftaran Otomatis</span>
             </p>
             <p className="text-[11px] text-slate-500 leading-relaxed">
               Saat pelanggan login di QR Self-Order atau kasir memasukkan No. WhatsApp di POS, akun member langsung otomatis terbuat tanpa perlu registrasi manual.
@@ -238,16 +238,16 @@ export default function CustomersPage() {
 
           <div className="p-3 bg-white/80 rounded-xl border border-slate-200/60 space-y-1">
             <p className="font-bold text-slate-800 flex items-center space-x-1.5">
-              <span>⭐ 2. Akumulasi Poin & Tier Real-Time</span>
+              <span>2. Akumulasi Poin & Tier Real-Time</span>
             </p>
             <p className="text-[11px] text-slate-500 leading-relaxed">
-              Setiap transaksi selesai otomatis menambah 1 Poin / Rp 1.000 belanja. Tier (Bronze ➔ Platinum) naik otomatis & voucher langsung memotong poin saat checkout.
+              Setiap transaksi selesai otomatis menambah 1 Poin / Rp 1.000 belanja. Tier (Bronze ke Platinum) naik otomatis & voucher langsung memotong poin saat checkout.
             </p>
           </div>
 
           <div className="p-3 bg-white/80 rounded-xl border border-slate-200/60 space-y-1">
             <p className="font-bold text-slate-800 flex items-center space-x-1.5">
-              <span>🛡️ 3. Aksi Khusus Manager (Opsional)</span>
+              <span>3. Aksi Khusus Manager (Opsional)</span>
             </p>
             <p className="text-[11px] text-slate-500 leading-relaxed">
               Tombol aksi di tabel khusus untuk skenario luar biasa: memberi poin kompensasi komplain, penyesuaian VIP offline, atau audit riwayat loyalty.

@@ -186,44 +186,76 @@ export function OrdersReportPDFModal({
             {/* Orders Table */}
             <div className="border border-slate-200 rounded-lg overflow-hidden my-4 text-xs">
               <table className="w-full text-left">
-                <thead className="bg-slate-900 text-white text-[11px] font-bold uppercase">
+                <thead className="bg-slate-900 text-white text-[10px] font-bold uppercase">
                   <tr>
-                    <th className="p-2.5">No. Pesanan</th>
-                    <th className="p-2.5">Meja</th>
-                    <th className="p-2.5">Pelanggan</th>
-                    <th className="p-2.5">Rincian Item</th>
-                    <th className="p-2.5 text-right">Total (Rp)</th>
-                    <th className="p-2.5 text-center">Status</th>
-                    <th className="p-2.5 text-center">Bayar</th>
+                    <th className="p-2">No. Pesanan</th>
+                    <th className="p-2">Meja</th>
+                    <th className="p-2">Pelanggan</th>
+                    <th className="p-2">Rincian Item</th>
+                    <th className="p-2 text-right">Total (Rp)</th>
+                    <th className="p-2 text-center">Status Operasional</th>
+                    <th className="p-2 text-center">Status Pembayaran</th>
+                    <th className="p-2 text-center">Metode Bayar</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-slate-700">
                   {orders.map((o) => (
                     <tr key={o.id} className="hover:bg-slate-50">
-                      <td className="p-2.5 font-bold font-mono text-slate-900">{o.orderNumber}</td>
-                      <td className="p-2.5 font-medium">{o.tableNumber}</td>
-                      <td className="p-2.5 font-medium">{o.customerName}</td>
-                      <td className="p-2.5 text-[11px] text-slate-600">
+                      <td className="p-2 font-bold font-mono text-slate-900">{o.orderNumber}</td>
+                      <td className="p-2 font-medium">{o.tableNumber}</td>
+                      <td className="p-2 font-medium">{o.customerName}</td>
+                      <td className="p-2 text-[11px] text-slate-600">
                         {o.items.map((i) => `${i.quantity}x ${i.productName}`).join(", ")}
                       </td>
-                      <td className="p-2.5 text-right font-mono font-bold text-slate-900">
+                      <td className="p-2 text-right font-mono font-bold text-slate-900">
                         {formatCurrencyIDR(o.total)}
                       </td>
-                      <td className="p-2.5 text-center">
+                      <td className="p-2 text-center">
                         <span
                           className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
                             o.status === "COMPLETED"
                               ? "bg-emerald-100 text-emerald-800"
+                              : o.status === "SERVED"
+                              ? "bg-teal-100 text-teal-800"
                               : o.status === "COOKING"
                               ? "bg-amber-100 text-amber-800"
                               : "bg-blue-100 text-blue-800"
                           }`}
                         >
-                          {o.status}
+                          {o.status === "COMPLETED"
+                            ? "Selesai"
+                            : o.status === "SERVED"
+                            ? "Siap Disajikan"
+                            : o.status === "COOKING"
+                            ? "Sedang Dimasak"
+                            : o.status === "KITCHEN_RECEIVED"
+                            ? "Diterima Dapur"
+                            : o.status === "CONFIRMED"
+                            ? "Dikonfirmasi"
+                            : o.status === "NEW"
+                            ? "Baru"
+                            : o.status}
                         </span>
                       </td>
-                      <td className="p-2.5 text-center font-mono text-[10px] font-bold text-slate-600">
-                        {o.paymentMethod || "QRIS"}
+                      <td className="p-2 text-center">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            o.paymentStatus === "PAID"
+                              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                              : o.paymentStatus === "REFUNDED"
+                              ? "bg-purple-100 text-purple-800 border border-purple-300"
+                              : "bg-rose-100 text-rose-800 border border-rose-300"
+                          }`}
+                        >
+                          {o.paymentStatus === "PAID"
+                            ? "LUNAS"
+                            : o.paymentStatus === "REFUNDED"
+                            ? "REFUND"
+                            : "BELUM DIBAYAR"}
+                        </span>
+                      </td>
+                      <td className="p-2 text-center font-mono text-[10px] font-bold text-slate-600">
+                        {o.paymentMethod || "-"}
                       </td>
                     </tr>
                   ))}

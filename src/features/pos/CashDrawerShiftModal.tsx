@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { X, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ProFeatureBadge } from "@/components/premium";
 
 interface CashDrawerShiftModalProps {
   isOpen: boolean;
@@ -121,28 +122,28 @@ export function CashDrawerShiftModal({
   const generateWhatsAppTemplate = () => {
     const formatNum = (num: number) => num.toLocaleString("id-ID");
 
-    return `📊 *LAPORAN CLOSING SHIFT & REKAP KEUANGAN*
-📍 *Outlet:* ${outletName}
-📅 *Waktu:* ${dateTimeStr}
-👤 *Kasir:* ${confirmCashierName || cashierName}
+    return `*LAPORAN CLOSING SHIFT & REKAP KEUANGAN*
+Outlet: ${outletName}
+Waktu: ${dateTimeStr}
+Kasir: ${confirmCashierName || cashierName}
 
-━━━━━━━━━━━━━━━━━━━━
-💰 *RINGKASAN PENJUALAN*
+----------------------------------------
+*RINGKASAN PENJUALAN*
 • Total Transaksi: ${totalTransactionsCount} Struk
 • Omset Kotor: Rp ${formatNum(totalGrossSales)}
 • Pajak PB1 (${taxRatePercent}%): Rp ${formatNum(estimatedTax)}
 • *Omset Bersih:* *Rp ${formatNum(totalNetSales)}*
 
-💳 *METODE PEMBAYARAN*
-• 📲 QRIS Dinamis: Rp ${formatNum(finalQrisSales)}
-• 💵 Tunai (Cash): Rp ${formatNum(totalCashSales)}
-• 💳 Kartu EDC: Rp ${formatNum(finalEdcSales)}
+*METODE PEMBAYARAN*
+• QRIS Dinamis: Rp ${formatNum(finalQrisSales)}
+• Tunai (Cash): Rp ${formatNum(totalCashSales)}
+• Kartu EDC: Rp ${formatNum(finalEdcSales)}
 
-🤝 *ESTIMASI BAGI HASIL*
+*ESTIMASI BAGI HASIL*
 • *Mitra / Owner (${tenantSharePercent}%):* Rp ${formatNum(tenantTotalShare)}
 • *Manajemen Dago (${dagoSharePercent}%):* Rp ${formatNum(dagoTotalShare)}
-━━━━━━━━━━━━━━━━━━━━
-📄 *DOKUMEN RESMI:*
+----------------------------------------
+*DOKUMEN RESMI:*
 • File Rekapitulasi PDF terlampir di bawah ini (Auto-Generated).
 _Sent via POS DagoEng Platform_`;
   };
@@ -224,7 +225,7 @@ _Sent via POS DagoEng Platform_`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-150">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 flex flex-col animate-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100">
@@ -312,6 +313,10 @@ _Sent via POS DagoEng Platform_`;
                 <span>Confirm</span>
               )}
             </Button>
+            <div className="flex items-center justify-center space-x-1.5 text-[10px] text-slate-500 pt-1.5">
+              <span>Auto-Dispatch WhatsApp Closing:</span>
+              <ProFeatureBadge label="ADD-ON" variant="addon" size="xs" />
+            </div>
           </div>
         </div>
       </div>

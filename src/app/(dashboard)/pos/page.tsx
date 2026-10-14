@@ -29,7 +29,7 @@ import { PaymentModal } from "@/features/pos/PaymentModal";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import { CashDrawerShiftModal } from "@/features/pos/CashDrawerShiftModal";
 import { formatCurrencyIDR } from "@/lib/utils";
-import { isTenantActive, DEFAULT_FNB_TENANTS, getTenantName } from "@/lib/tenant";
+import { isTenantActive, DEFAULT_FNB_TENANTS, getAllFnbTenants, getTenantName } from "@/lib/tenant";
 import {
   isCoworkingDateOpen,
   checkCoworkingBookingConflict,
@@ -121,7 +121,7 @@ export default function POSPage() {
   const { filteredProducts: masterProducts, categories } = useProducts();
   const { filteredMembers: membersList, addPoints, redeemPoints } = useLoyalty();
   const { logActivity } = useActivityLog();
-  const { settings } = useSettings();
+  const { settings, redeemPromo } = useSettings();
   const { spaces: cwSpaces, bookings: cwBookings, bookSpace: cwBookSpace } = useCoworking();
   const { activeShift, openShift, closeShift, recordShiftTransaction } = useEmployeeShift();
 
@@ -177,8 +177,9 @@ export default function POSPage() {
 
   // Filter Active Mitra (Tenant) - Priority Filter Utama
   const activeTenants = useMemo(() => {
-    if (!isMounted) return DEFAULT_FNB_TENANTS;
-    return DEFAULT_FNB_TENANTS.filter((t) => isTenantActive(t.id));
+    const all = getAllFnbTenants();
+    if (!isMounted) return all;
+    return all.filter((t) => isTenantActive(t.id));
   }, [tenantSettingsVersion, isMounted]);
 
   // Primary Filter: Selected Mitra/Tenant
@@ -601,7 +602,12 @@ export default function POSPage() {
       };
     }
 
-    // 5. Cross-Module: Record shift cash and non-cash sales metrics
+    // 5. Deduct Promo Quota upon verified payment
+    if (selectedPromoId) {
+      redeemPromo(selectedPromoId, selectedMember?.phone || user?.id || "walk-in-customer");
+    }
+
+    // 6. Cross-Module: Record shift cash and non-cash sales metrics
     recordShiftTransaction(
       paymentData.method === "CASH" ? grandTotal : 0,
       paymentData.method !== "CASH" ? grandTotal : 0,
@@ -872,6 +878,10 @@ export default function POSPage() {
       return;
     }
 
+    if (cwAppliedPromo?.id) {
+      redeemPromo(cwAppliedPromo.id, effectiveGuestPhone || "cw-guest");
+    }
+
     if (cwCustomerType === "MEMBER" && cwSelectedMember) {
       const earnedPoints = Math.floor(cwPricing.total / 1000);
       if (earnedPoints > 0) {
@@ -1069,7 +1079,7 @@ export default function POSPage() {
                       : "bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900"
                       }`}
                   >
-                    <span>🏢</span>
+                    <Building className="w-3.5 h-3.5" />
                     <span>Semua Mitra</span>
                   </button>
 
@@ -1243,7 +1253,7 @@ export default function POSPage() {
                       </label>
                       {availableTables.length === 0 ? (
                         <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-[10px] text-rose-700 font-bold">
-                          ⚠️ Semua meja terisi/reservasi!
+                          Semua meja terisi/reservasi!
                         </div>
                       ) : (
                         <select
@@ -1305,7 +1315,8 @@ export default function POSPage() {
                   <div className="p-2.5 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 rounded-xl border border-amber-200 text-xs flex items-center justify-between shadow-xs">
                     <div className="space-y-0.5">
                       <div className="flex items-center space-x-1.5 font-bold text-slate-900">
-                        <span className="text-amber-800">👑 {selectedMember.name}</span>
+                        <Crown className="w-3.5 h-3.5 text-amber-600" />
+                        <span className="text-amber-800">{selectedMember.name}</span>
                         <span className="text-[9px] bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded font-mono">
                           {selectedMember.tier}
                         </span>
@@ -1666,7 +1677,7 @@ export default function POSPage() {
                               : "bg-rose-50 text-rose-700 border-rose-200"
                               }`}
                           >
-                            {avail.isAvailable ? "🟢 Tersedia" : "🔴 Terisi"}
+                            {avail.isAvailable ? "Tersedia" : "Terisi"}
                           </span>
                         </div>
 
@@ -1774,28 +1785,24 @@ export default function POSPage() {
                       hours: 2,
                       title: "Paket 2 Jam",
                       tag: "Minimal",
-                      icon: "⚡",
                       price: (selectedSpace?.hourlyRate || 15000) * 2,
                     },
                     {
                       hours: 3,
                       title: "Paket 3 Jam",
                       tag: "Fokus Kerja",
-                      icon: "💼",
                       price: (selectedSpace?.hourlyRate || 15000) * 3,
                     },
                     {
                       hours: 4,
                       title: "Paket 4 Jam",
                       tag: "Setengah Hari",
-                      icon: "☕",
                       price: (selectedSpace?.hourlyRate || 15000) * 4,
                     },
                     {
                       hours: 8,
                       title: "Paket 8 Jam",
                       tag: "Full Day",
-                      icon: "🚀",
                       price: selectedSpace?.dailyRate || (selectedSpace?.hourlyRate || 15000) * 8,
                     },
                   ].map((pkg) => {
@@ -1811,9 +1818,8 @@ export default function POSPage() {
                           }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-[11px] flex items-center gap-1">
-                            <span>{pkg.icon}</span>
-                            <span>{pkg.title}</span>
+                          <span className="font-bold text-[11px]">
+                            {pkg.title}
                           </span>
                           <span
                             className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${isPkgActive ? "bg-white/20 text-white" : "bg-slate-200/80 text-slate-600"

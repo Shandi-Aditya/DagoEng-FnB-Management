@@ -15,6 +15,7 @@ import {
   Clock,
   DollarSign,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   ShieldAlert,
   ShieldCheck,
@@ -26,6 +27,9 @@ import {
   FileSpreadsheet,
   FileText,
   Edit2,
+  Eye,
+  RotateCcw,
+  Filter,
   Lock,
   CheckSquare,
   Square,
@@ -193,15 +197,70 @@ export default function EmployeesPage() {
   // Modal State: PDF Closing Report
   const [isPDFOpen, setIsPDFOpen] = useState(false);
 
+  // Employee Filters & Detailed Modals
+  const [deptFilter, setDeptFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [detailEmp, setDetailEmp] = useState<EmployeeProfile | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletingEmp, setDeletingEmp] = useState<EmployeeProfile | null>(null);
+
+  const getDepartmentBadgeStyle = (dept: string) => {
+    switch (dept) {
+      case "Management":
+        return "bg-indigo-50 text-indigo-700 border-indigo-200";
+      case "Cashier":
+        return "bg-amber-50 text-amber-700 border-amber-200";
+      case "Kitchen":
+        return "bg-orange-50 text-orange-700 border-orange-200";
+      case "Barista":
+        return "bg-amber-50 text-amber-800 border-amber-200";
+      case "Service":
+        return "bg-sky-50 text-sky-700 border-sky-200";
+      case "Inventory":
+        return "bg-purple-50 text-purple-700 border-purple-200";
+      default:
+        return "bg-slate-100 text-slate-700 border-slate-200";
+    }
+  };
+
+  const getStatusBadgeStyle = (status: string) => {
+    switch (status) {
+      case "AKTIF":
+        return "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100";
+      case "CUTI":
+        return "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100";
+      case "NON-AKTIF":
+        return "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200";
+      default:
+        return "bg-slate-100 text-slate-700 border-slate-200";
+    }
+  };
+
   const displayedEmployees = filteredEmployees.filter((e) => {
     const q = searchQuery.toLowerCase();
-    return (
+    const matchQuery =
+      !q ||
       e.name.toLowerCase().includes(q) ||
       e.role.toLowerCase().includes(q) ||
       e.employeeNumber.toLowerCase().includes(q) ||
-      e.department.toLowerCase().includes(q)
-    );
+      e.department.toLowerCase().includes(q);
+    const matchDept = deptFilter === "ALL" || e.department === deptFilter;
+    const matchStatus = statusFilter === "ALL" || e.status === statusFilter;
+    return matchQuery && matchDept && matchStatus;
   });
+
+  const handleConfirmDelete = () => {
+    if (!deletingEmp) return;
+    deleteEmployee(deletingEmp.id);
+    showToast(`Data staf "${deletingEmp.name}" berhasil dihapus.`);
+    setIsDeleteModalOpen(false);
+    setDeletingEmp(null);
+    if (isEditModalOpen && editingEmp?.id === deletingEmp.id) {
+      setIsEditModalOpen(false);
+      setEditingEmp(null);
+    }
+  };
 
   const handleOpenAddModal = () => {
     setNewName("");
@@ -341,7 +400,7 @@ export default function EmployeesPage() {
             size="sm"
             variant="outline"
             onClick={handleExportExcel}
-            className="text-xs space-x-1.5 border-emerald-300 text-emerald-800 hover:bg-emerald-50 font-bold shadow-2xs"
+            className="text-xs space-x-1.5 border-slate-200/90 text-slate-700 hover:bg-slate-50 font-semibold shadow-2xs"
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
             <span>Export Excel</span>
@@ -351,35 +410,37 @@ export default function EmployeesPage() {
             size="sm"
             variant="outline"
             onClick={handleExportCSV}
-            className="text-xs space-x-1.5 border-slate-300 text-slate-700 font-bold hover:bg-slate-50 shadow-2xs"
+            className="text-xs space-x-1.5 border-slate-200/90 text-slate-700 font-semibold hover:bg-slate-50 shadow-2xs"
           >
-            <Download className="w-3.5 h-3.5 text-slate-600" />
+            <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>Export CSV</span>
           </Button>
 
           <Button
             size="sm"
+            variant="outline"
             onClick={() => setIsHRReportPDFOpen(true)}
-            className="text-xs space-x-1.5 bg-brand-orange hover:bg-orange-600 text-white font-bold shadow-sm"
+            className="text-xs space-x-1.5 border-slate-200/90 text-slate-700 font-semibold hover:bg-slate-50 shadow-2xs"
           >
-            <FileText className="w-3.5 h-3.5 text-white" />
+            <FileText className="w-3.5 h-3.5 text-slate-500" />
             <span>Cetak PDF Laporan</span>
           </Button>
 
           {activeShift ? (
             <Button
               size="sm"
+              variant="outline"
               onClick={handleOpenCloseModal}
-              className="text-xs bg-red-600 hover:bg-red-700 text-white shadow-xs font-semibold"
+              className="text-xs border-rose-200 bg-rose-50/70 text-rose-700 hover:bg-rose-100/80 shadow-2xs font-semibold"
             >
-              <Clock className="w-3.5 h-3.5 mr-1" />
-              <span>Tutup & Rekonsiliasi Shift</span>
+              <Clock className="w-3.5 h-3.5 mr-1 text-rose-600" />
+              <span>Tutup Shift</span>
             </Button>
           ) : (
             <Button
               size="sm"
               onClick={() => setIsOpenShiftModalOpen(true)}
-              className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold"
+              className="text-xs bg-brand-orange hover:bg-orange-600 text-white shadow-xs font-semibold"
             >
               <Clock className="w-3.5 h-3.5 mr-1" />
               <span>Buka Shift Baru</span>
@@ -389,7 +450,7 @@ export default function EmployeesPage() {
           <Button
             size="sm"
             onClick={handleOpenAddModal}
-            className="text-xs font-bold space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
+            className="text-xs font-semibold space-x-1.5 bg-slate-900 hover:bg-slate-800 text-white shadow-xs"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>Tambah Karyawan</span>
@@ -403,8 +464,8 @@ export default function EmployeesPage() {
           onClick={() => setActiveTab("SHIFTS")}
           className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center space-x-1.5 whitespace-nowrap ${
             activeTab === "SHIFTS"
-              ? "border-brand-orange text-brand-orange"
-              : "border-transparent text-slate-500 hover:text-slate-700"
+              ? "border-brand-orange text-orange-950"
+              : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
         >
           <Clock className="w-4 h-4" />
@@ -414,8 +475,8 @@ export default function EmployeesPage() {
           onClick={() => setActiveTab("EMPLOYEES")}
           className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center space-x-1.5 whitespace-nowrap ${
             activeTab === "EMPLOYEES"
-              ? "border-brand-orange text-brand-orange"
-              : "border-transparent text-slate-500 hover:text-slate-700"
+              ? "border-brand-orange text-orange-950"
+              : "border-transparent text-slate-500 hover:text-slate-800"
           }`}
         >
           <Users className="w-4 h-4" />
@@ -581,95 +642,205 @@ export default function EmployeesPage() {
 
       {activeTab === "EMPLOYEES" && (
         <div className="space-y-4">
-          {/* Search Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
-            <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Cari staf, role, nomor ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-orange"
-              />
+          {/* Search Bar & Multi-filter Controls */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/90 shadow-2xs">
+            <div className="flex flex-wrap items-center gap-2.5 flex-1">
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Cari nama, NIK, peran..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50/70 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20 text-slate-800 font-medium"
+                />
+              </div>
+
+              {/* Department Filter */}
+              <div className="flex items-center space-x-1">
+                <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <select
+                  value={deptFilter}
+                  onChange={(e) => setDeptFilter(e.target.value)}
+                  className="px-2.5 py-1.5 bg-slate-50/70 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                >
+                  <option value="ALL">Semua Departemen</option>
+                  <option value="Management">Management</option>
+                  <option value="Cashier">Cashier</option>
+                  <option value="Kitchen">Kitchen</option>
+                  <option value="Barista">Barista</option>
+                  <option value="Service">Service</option>
+                  <option value="Inventory">Inventory</option>
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-2.5 py-1.5 bg-slate-50/70 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+              >
+                <option value="ALL">Semua Status Kerja</option>
+                <option value="AKTIF">Aktif Saja</option>
+                <option value="CUTI">Sedang Cuti</option>
+                <option value="NON-AKTIF">Non-Aktif</option>
+              </select>
+
+              {(searchQuery || deptFilter !== "ALL" || statusFilter !== "ALL") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("");
+                    setDeptFilter("ALL");
+                    setStatusFilter("ALL");
+                  }}
+                  className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors border border-dashed border-slate-300"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reset Filter</span>
+                </button>
+              )}
             </div>
-            <p className="text-xs text-slate-500 font-medium">
-              Menampilkan {displayedEmployees.length} dari {filteredEmployees.length} staf di {activeOutlet?.name}
-            </p>
+
+            <div className="text-right">
+              <span className="text-xs font-semibold text-slate-500">
+                Menampilkan <strong className="text-slate-900">{displayedEmployees.length}</strong> dari{" "}
+                <strong className="text-slate-900">{filteredEmployees.length}</strong> staf ({activeOutlet?.name || "Singaraja"})
+              </span>
+            </div>
           </div>
 
           {/* Employee Directory Table */}
-          <Card className="shadow-xs border border-slate-200 overflow-hidden">
+          <Card className="shadow-2xs border border-slate-200/90 rounded-2xl overflow-hidden">
             <CardContent className="p-0">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-slate-600 min-w-[760px]">
-                  <thead className="bg-slate-50 text-slate-700 uppercase font-semibold text-[11px] border-b border-slate-200">
+                <table className="w-full text-left text-xs text-slate-600 min-w-[780px]">
+                  <thead className="bg-slate-50/80 text-slate-500 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-200">
                     <tr>
-                      <th className="px-4 py-3">Nama & No Pegawai</th>
-                      <th className="px-4 py-3">Departemen & Role</th>
-                      <th className="px-4 py-3">Jadwal Shift Roster</th>
-                      <th className="px-4 py-3">Hak Akses & Izin</th>
-                      <th className="px-4 py-3">Kontrak & Kontak</th>
-                      <th className="px-4 py-3 text-center">Status Kerja</th>
-                      <th className="px-4 py-3 text-right">Aksi</th>
+                      <th className="px-4 py-3.5">Nama & NIK</th>
+                      <th className="px-4 py-3.5">Departemen & Jabatan</th>
+                      <th className="px-4 py-3.5">Jadwal Shift Roster</th>
+                      <th className="px-4 py-3.5">Hak Akses & Izin</th>
+                      <th className="px-4 py-3.5">Kontak & Surel</th>
+                      <th className="px-4 py-3.5 text-center">Status Kerja</th>
+                      <th className="px-4 py-3.5 text-right">Aksi Manajemen</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {displayedEmployees.map((emp) => {
-                      const userPerms = emp.permissions || ROLE_DEFAULT_PERMISSIONS[emp.role] || ["pos_access"];
-                      return (
-                        <tr key={emp.id} className="hover:bg-slate-50/80 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="font-bold text-slate-900">{emp.name}</div>
-                            <div className="text-[11px] font-mono text-brand-orange">{emp.employeeNumber}</div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="font-semibold text-slate-800">{emp.role}</div>
-                            <div className="text-[10px] text-slate-500 uppercase">{emp.department}</div>
-                          </td>
-                          <td className="px-4 py-3 font-medium text-slate-700">
-                            {emp.assignedShift}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-800">
-                              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>{userPerms.length} Izin Aktif</span>
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="text-slate-800">{emp.contact}</div>
-                            <div className="text-[10px] text-slate-400">{emp.email}</div>
-                          </td>
-                          <td className="px-4 py-3 text-center">
+                    {displayedEmployees.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-12 text-center">
+                          <div className="max-w-sm mx-auto space-y-2">
+                            <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                              <Users className="w-5 h-5" />
+                            </div>
+                            <p className="font-bold text-slate-700 text-xs">
+                              Tidak ada data staf yang cocok dengan kriteria pencarian
+                            </p>
+                            <p className="text-[11px] text-slate-400">
+                              Coba periksa ejaan kata kunci pencarian atau bersihkan filter departemen dan status.
+                            </p>
                             <button
-                              onClick={() => toggleEmployeeStatus(emp.id)}
-                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer transition-colors border ${
-                                emp.status === "AKTIF"
-                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200"
-                                  : emp.status === "CUTI"
-                                  ? "bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200"
-                                  : "bg-red-100 text-red-800 border-red-300 hover:bg-red-200"
-                              }`}
-                              title="Klik untuk ubah status kerja (Aktif / Cuti / Non-Aktif)"
+                              type="button"
+                              onClick={() => {
+                                setSearchQuery("");
+                                setDeptFilter("ALL");
+                                setStatusFilter("ALL");
+                              }}
+                              className="mt-2 px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
                             >
-                              {emp.status}
+                              Reset Semua Filter
                             </button>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleOpenEditModal(emp)}
-                              className="h-7 text-xs font-bold px-3 border-slate-200 hover:bg-orange-50 hover:text-brand-orange hover:border-brand-orange/40 text-slate-700 rounded-lg shadow-2xs"
-                              title="Edit Profil, Shift, Hak Akses & opsi hapus"
-                            >
-                              <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-500 group-hover:text-brand-orange" />
-                              <span>Edit</span>
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      displayedEmployees.map((emp) => {
+                        const userPerms = emp.permissions || ROLE_DEFAULT_PERMISSIONS[emp.role] || ["pos_access"];
+                        return (
+                          <tr key={emp.id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="px-4 py-3.5">
+                              <div className="font-bold text-slate-900">{emp.name}</div>
+                              <div className="text-[11px] font-mono text-brand-orange font-semibold">{emp.employeeNumber}</div>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border mb-0.5 ${getDepartmentBadgeStyle(
+                                  emp.department
+                                )}`}
+                              >
+                                {emp.department}
+                              </span>
+                              <div className="font-semibold text-slate-800 text-xs">{emp.role}</div>
+                            </td>
+                            <td className="px-4 py-3.5 font-medium text-slate-700">
+                              <span className="inline-flex items-center text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md text-[11px]">
+                                {emp.assignedShift}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg border border-emerald-200 bg-emerald-50 text-[11px] font-bold text-emerald-800">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>{userPerms.length} Izin Aktif</span>
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <div className="font-medium text-slate-800">{emp.contact}</div>
+                              <div className="text-[10px] text-slate-400 font-mono">{emp.email}</div>
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <button
+                                onClick={() => toggleEmployeeStatus(emp.id)}
+                                className={`px-2.5 py-1 rounded-full text-[10px] font-bold cursor-pointer transition-colors border ${getStatusBadgeStyle(
+                                  emp.status
+                                )}`}
+                                title="Klik untuk ubah status kerja (Aktif / Cuti / Non-Aktif)"
+                              >
+                                ● {emp.status}
+                              </button>
+                            </td>
+                            <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center space-x-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setDetailEmp(emp);
+                                    setIsDetailModalOpen(true);
+                                  }}
+                                  className="h-7 text-xs font-bold px-2 border-slate-200 hover:bg-slate-100 text-slate-700 rounded-lg shadow-2xs"
+                                  title="Lihat Detail Profil & Akses Karyawan"
+                                >
+                                  <Eye className="w-3.5 h-3.5 text-slate-500" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleOpenEditModal(emp)}
+                                  className="h-7 text-xs font-bold px-2.5 border-slate-200 hover:bg-orange-50 hover:text-brand-orange hover:border-brand-orange/40 text-slate-700 rounded-lg shadow-2xs"
+                                  title="Edit Profil, Shift & Hak Akses"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5 mr-1 text-slate-500" />
+                                  <span>Edit</span>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setDeletingEmp(emp);
+                                    setIsDeleteModalOpen(true);
+                                  }}
+                                  className="h-7 text-xs font-bold px-2 border-rose-200 hover:bg-rose-50 text-rose-600 rounded-lg shadow-2xs"
+                                  title="Hapus Data Karyawan"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1060,12 +1231,8 @@ export default function EmployeesPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    if (window.confirm(`Apakah Anda yakin ingin menghapus data karyawan "${editingEmp.name}"?`)) {
-                      deleteEmployee(editingEmp.id);
-                      setIsEditModalOpen(false);
-                      setEditingEmp(null);
-                      showToast(`Data staf "${editingEmp.name}" berhasil dihapus.`);
-                    }
+                    setDeletingEmp(editingEmp);
+                    setIsDeleteModalOpen(true);
                   }}
                   className="text-rose-600 hover:bg-rose-50 hover:text-rose-700 border-rose-200 rounded-xl font-bold flex items-center space-x-1.5 h-9 px-3 text-xs"
                 >
@@ -1093,6 +1260,194 @@ export default function EmployeesPage() {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Detail Karyawan & Hak Akses */}
+      {isDetailModalOpen && detailEmp && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] flex flex-col border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-900 text-white shrink-0">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-brand-orange">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Detail Profil Karyawan</h3>
+                  <p className="text-[10px] text-slate-400 font-mono">{detailEmp.employeeNumber}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsDetailModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-white rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 text-xs">
+              {/* Profile Card */}
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h4 className="text-base font-bold text-slate-900">{detailEmp.name}</h4>
+                    <p className="text-xs text-slate-500 font-medium">{detailEmp.role}</p>
+                  </div>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusBadgeStyle(
+                      detailEmp.status
+                    )}`}
+                  >
+                    ● {detailEmp.status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 pt-2 border-t border-slate-200/60 text-[11px]">
+                  <div>
+                    <span className="text-slate-400 block">Departemen:</span>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border mt-0.5 ${getDepartmentBadgeStyle(
+                        detailEmp.department
+                      )}`}
+                    >
+                      {detailEmp.department}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Shift Roster:</span>
+                    <span className="font-semibold text-slate-800">{detailEmp.assignedShift}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">No. WhatsApp:</span>
+                    <span className="font-medium text-slate-800 font-mono">{detailEmp.contact}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Alamat Email:</span>
+                    <span className="font-medium text-slate-800 font-mono">{detailEmp.email || "-"}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Tanggal Bergabung:</span>
+                    <span className="font-medium text-slate-800">{detailEmp.joinedDate}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block">Penempatan Gerai:</span>
+                    <span className="font-semibold text-brand-orange">{activeOutlet?.name || "Singaraja"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Active Permissions List */}
+              <div className="space-y-2">
+                <h5 className="font-bold text-slate-800 text-xs flex items-center justify-between">
+                  <span className="flex items-center space-x-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    <span>Daftar Hak Akses & Izin Aktif</span>
+                  </span>
+                  <span className="text-[10px] font-mono bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-full font-bold">
+                    {(detailEmp.permissions || ROLE_DEFAULT_PERMISSIONS[detailEmp.role] || ["pos_access"]).length} Izin
+                  </span>
+                </h5>
+
+                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                  {ALL_PERMISSIONS.map((perm) => {
+                    const hasPerm = (
+                      detailEmp.permissions ||
+                      ROLE_DEFAULT_PERMISSIONS[detailEmp.role] || ["pos_access"]
+                    ).includes(perm.id);
+
+                    if (!hasPerm) return null;
+
+                    return (
+                      <div
+                        key={perm.id}
+                        className="p-2.5 rounded-xl border border-emerald-100 bg-emerald-50/40 flex items-start space-x-2"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-800 text-[11px]">{perm.label}</span>
+                            <span className="text-[9px] font-mono text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200">
+                              {perm.category}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">{perm.desc}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setIsDetailModalOpen(false);
+                  handleOpenEditModal(detailEmp);
+                }}
+                className="text-xs font-bold space-x-1 border-slate-300 rounded-xl"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                <span>Ubah Data Staf</span>
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setIsDetailModalOpen(false)}
+                className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl px-5"
+              >
+                Tutup
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Hapus Karyawan yang Konsisten */}
+      {isDeleteModalOpen && deletingEmp && (
+        <div className="fixed inset-0 z-60 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-bold text-slate-900">Konfirmasi Penghapusan Karyawan</h3>
+              <p className="text-xs text-slate-500">
+                Apakah Anda yakin ingin menghapus data karyawan{" "}
+                <strong className="text-slate-900">{deletingEmp.name}</strong> ({deletingEmp.role} — {deletingEmp.employeeNumber})?
+              </p>
+            </div>
+
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 space-y-1">
+              <p className="font-semibold">Perhatian:</p>
+              <p>• Data profil dan hak akses staf akan dihapus dari direktori aktif.</p>
+              <p>• Riwayat shift dan transaksi yang sudah selesai tetap tersimpan untuk audit trail.</p>
+            </div>
+
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setDeletingEmp(null);
+                }}
+                className="rounded-xl text-xs"
+              >
+                Batal
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleConfirmDelete}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs px-4 space-x-1"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Ya, Hapus Karyawan</span>
+              </Button>
+            </div>
           </div>
         </div>
       )}
