@@ -11,65 +11,97 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // DagoEng Official Brand Accents (Revisi 10: Softer, elegant palette)
+        // DAGO Creative Hub Global Design System (Sage Green / Olive Theme)
         brand: {
-          orange: "#EA580C", // Softer warm terracotta orange
-          cyan: "#0284C7",   // Calm ocean sky cyan
-          green: "#059669",  // Elegant emerald green
-          yellow: "#D97706", // Soft warm amber
+          sage: "#3B7A57",       // Primary Sage Green (Light)
+          sageBright: "#52B788", // Primary Sage Green Bright (Dark)
+          sageHover: "#2E6144",
+          olive: "#556B2F",
+          // Harmonized with Sage Green Global Design System (no eye-straining random orange/yellow)
+          orange: "hsl(var(--primary))",
+          cyan: "hsl(var(--primary))",
+          green: "#059669",
+          yellow: "hsl(var(--primary))",
         },
-        // Semantic Tokens
+        // Semantic Tokens driven by CSS Variables
         primary: {
-          DEFAULT: "#EA580C", // Softer warm terracotta
-          hover: "#C2410C",
-          light: "#FFF7ED",
-          foreground: "#FFFFFF",
+          DEFAULT: "hsl(var(--primary))",
+          hover: "hsl(var(--primary-hover))",
+          light: "hsl(var(--primary-light))",
+          foreground: "hsl(var(--primary-foreground))",
         },
+        secondary: {
+          DEFAULT: "hsl(var(--secondary))",
+          foreground: "hsl(var(--secondary-foreground))",
+        },
+        card: {
+          DEFAULT: "hsl(var(--card))",
+          foreground: "hsl(var(--card-foreground))",
+        },
+        popover: {
+          DEFAULT: "hsl(var(--popover))",
+          foreground: "hsl(var(--popover-foreground))",
+        },
+        muted: {
+          DEFAULT: "hsl(var(--muted))",
+          foreground: "hsl(var(--muted-foreground))",
+        },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
+        destructive: {
+          DEFAULT: "hsl(var(--destructive))",
+          foreground: "hsl(var(--destructive-foreground))",
+        },
+        border: {
+          DEFAULT: "hsl(var(--border))",
+          focus: "hsl(var(--ring))",
+        },
+        input: "hsl(var(--input))",
+        ring: "hsl(var(--ring))",
+        // Semantic Status Colors
         info: {
-          DEFAULT: "#0284C7", // Calm ocean sky cyan
+          DEFAULT: "hsl(var(--info))",
           light: "#F0F9FF",
           foreground: "#FFFFFF",
         },
         success: {
-          DEFAULT: "#059669", // Elegant emerald green
+          DEFAULT: "hsl(var(--success))",
           light: "#ECFDF5",
           foreground: "#FFFFFF",
         },
         warning: {
-          DEFAULT: "#D97706", // Soft warm amber
+          DEFAULT: "hsl(var(--warning))",
           light: "#FFFBEB",
           foreground: "#1E293B",
         },
         danger: {
-          DEFAULT: "#EF4444",
+          DEFAULT: "hsl(var(--destructive))",
           light: "#FEE2E2",
           foreground: "#FFFFFF",
         },
         // Clean Neutral SaaS Base
         background: {
-          DEFAULT: "#F8FAFC", // Off-white / slate-50
-          paper: "#FFFFFF",
-          subtle: "#F1F5F9",
+          DEFAULT: "hsl(var(--background))",
+          paper: "hsl(var(--card))",
+          subtle: "hsl(var(--background-alt))",
         },
         foreground: {
-          DEFAULT: "#0F172A", // Slate 900
-          muted: "#64748B",   // Slate 500
-          subtle: "#94A3B8",  // Slate 400
-        },
-        border: {
-          DEFAULT: "#E2E8F0", // Slate 200
-          focus: "#0F172A",
+          DEFAULT: "hsl(var(--foreground))",
+          muted: "hsl(var(--muted-foreground))",
+          subtle: "hsl(var(--muted-foreground))",
         },
         surface: {
-          DEFAULT: "#FFFFFF",
-          raised: "#FFFFFF",
+          DEFAULT: "hsl(var(--card))",
+          raised: "hsl(var(--card))",
           overlay: "rgba(15, 23, 42, 0.6)",
         },
       },
       borderRadius: {
-        lg: "12px",
-        md: "8px",
-        sm: "6px",
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
       },
       boxShadow: {
         "2xs": "0 1px 2px 0 rgba(0, 0, 0, 0.03)",

@@ -57,17 +57,17 @@ export function OrdersReportPDFModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/80 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
+      <div className="bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800">
         {/* Top Control Bar */}
         <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 flex-shrink-0">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-brand-orange/20 text-brand-orange flex items-center justify-center font-bold">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
               <FileText className="w-4 h-4" />
             </div>
             <div>
               <h3 className="text-sm font-bold text-white flex items-center space-x-2">
                 <span>Dokumen PDF Laporan Transaksi Pesanan</span>
-                <span className="text-[10px] bg-brand-orange text-white px-2 py-0.2 rounded-full font-mono">
+                <span className="text-[10px] bg-[#3B7A57] text-white px-2 py-0.2 rounded-full font-mono">
                   RESMI
                 </span>
               </h3>
@@ -81,7 +81,7 @@ export function OrdersReportPDFModal({
             <Button
               size="sm"
               onClick={handlePrint}
-              className="text-xs bg-brand-orange hover:bg-orange-600 text-white font-bold space-x-1.5 shadow-sm"
+              className="text-xs bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold space-x-1.5 shadow-sm"
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Cetak / Simpan PDF</span>
@@ -96,7 +96,7 @@ export function OrdersReportPDFModal({
         </div>
 
         {/* Printable Paper Canvas */}
-        <div className="p-6 sm:p-8 overflow-y-auto flex-1 bg-slate-100/70">
+        <div className="p-6 sm:p-8 overflow-y-auto flex-1 bg-slate-100/70 dark:bg-[#0F172A]">
           <div
             ref={printContentRef}
             className="max-w-3xl mx-auto bg-white p-8 rounded-xl shadow-md border border-slate-200 text-slate-800 print:m-0 print:p-0 print:shadow-none print:border-none"
@@ -117,7 +117,7 @@ export function OrdersReportPDFModal({
                   <h1 className="text-lg font-black text-slate-950 tracking-tight">
                     DAGOENG CREATIVE HUB
                   </h1>
-                  <p className="text-xs font-semibold text-brand-orange">
+                  <p className="text-xs font-semibold text-[#3B7A57] dark:text-[#52B788]">
                     F&B Management & Unified Commercial Platform
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">

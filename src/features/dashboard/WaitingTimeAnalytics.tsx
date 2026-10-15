@@ -69,15 +69,15 @@ export function WaitingTimeAnalytics() {
           </div>
 
           {/* Average Cooking Time */}
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-            <div className="flex items-center justify-between text-slate-500 text-[11px] font-semibold">
+          <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px] font-semibold">
               <span>Avg Cooking Time</span>
-              <Activity className="w-3.5 h-3.5 text-brand-orange" />
+              <Activity className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
             </div>
-            <p className="text-xl font-bold text-slate-900 mt-1" suppressHydrationWarning>
+            <p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1" suppressHydrationWarning>
               {formatMinutesToHuman(analysis.avgCookingMinutes)}
             </p>
-            <p className="text-[10px] text-slate-400 mt-0.5">
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
               Durasi dapur memasak
             </p>
           </div>

@@ -4,10 +4,11 @@ import React from "react";
 import Image from "next/image";
 import { POSReceiptData } from "./types";
 import { formatCurrencyIDR } from "@/lib/utils";
-import { X, Printer, Share2, CheckCircle2, RotateCcw, Store } from "lucide-react";
+import { X, Printer, Share2, CheckCircle2, RotateCcw, Store, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FNB_TENANTS, getAllStoredTenantSettings, getTenantName } from "@/lib/tenant";
 import { getOrCreateSimulatedWifiVoucher, getSimulatedWifiCalcBasis } from "@/lib/wifi";
+import { isAddonActive } from "@/lib/subscription";
 
 interface ReceiptModalProps {
   isOpen?: boolean;
@@ -92,7 +93,7 @@ export function ReceiptModal({
     return Array.from(map.entries()).map(([tenantId, data]) => ({ tenantId, ...data }));
   }, [receiptData.items]);
 
-  // Ambil atau buat voucher Wi-Fi stabil untuk transaksi ini jika memenuhi batas nominal aturan simulasi
+  // Ambil atau buat voucher Wi-Fi resmi untuk transaksi ini jika memenuhi batas nominal aturan sistem
   const simulatedWifiVoucher = React.useMemo(() => {
     if (!receiptData.orderNumber) return null;
     const calcBasis = getSimulatedWifiCalcBasis();
@@ -143,26 +144,26 @@ export function ReceiptModal({
         }
       `}</style>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-150">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
           {/* Modal Top Bar */}
-          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50 print:hidden">
+          <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-850 print:hidden">
             <div className="flex items-center space-x-2">
-              <CheckCircle2 className="w-5 h-5 text-brand-green" />
-              <span className="font-bold text-xs text-slate-800">
+              <CheckCircle2 className="w-5 h-5 text-primary" />
+              <span className="font-bold text-xs text-slate-800 dark:text-slate-200">
                 Transaksi Berhasil & Tercatat
               </span>
             </div>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {/* Scrollable Receipt Preview (Formatted as 58mm/80mm Thermal Receipt) */}
-          <div className="p-6 overflow-y-auto flex-1 bg-slate-100/50 flex justify-center">
+          <div className="p-6 overflow-y-auto flex-1 bg-slate-100/60 dark:bg-slate-950 flex justify-center">
             <div
               id="thermal-receipt"
               className="w-full max-w-[340px] bg-white p-5 rounded-lg shadow-sm border border-slate-200 font-mono text-slate-900 text-xs space-y-4 print:w-full print:shadow-none print:border-none"
@@ -288,13 +289,13 @@ export function ReceiptModal({
                   <span>{formatCurrencyIDR(receiptData.subtotal)}</span>
                 </div>
                 {receiptData.loyaltyMember && (
-                  <div className="p-1.5 bg-orange-50 rounded border border-orange-200 text-[10px] space-y-0.5 my-1">
+                  <div className="p-1.5 bg-primary/10 rounded border border-primary/20 text-[10px] space-y-0.5 my-1">
                     <div className="flex justify-between font-bold text-slate-800">
                       <span>Loyalty Member: {receiptData.loyaltyMember.name}</span>
-                      <span className="text-brand-orange">Tier {receiptData.loyaltyMember.tier}</span>
+                      <span className="text-primary font-bold">Tier {receiptData.loyaltyMember.tier}</span>
                     </div>
                     {receiptData.loyaltyMember.voucherTitle && (
-                      <p className="text-emerald-700 font-medium">
+                      <p className="text-primary font-medium">
                         • {receiptData.loyaltyMember.voucherTitle} (-{receiptData.loyaltyMember.pointsUsed} Pts)
                       </p>
                     )}
@@ -356,18 +357,18 @@ export function ReceiptModal({
 
               {/* Receipt Footer */}
               <div className="text-center text-[10px] text-slate-500 space-y-2 pt-2 border-t border-dashed border-slate-300">
-                {/* Blok Voucher Wi-Fi Tamu (Simulasi Aman - Hanya Tampil Jika Memenuhi Batas Nominal Transaksi) */}
+                {/* Blok Voucher Wi-Fi Tamu (Hanya Tampil Jika Memenuhi Batas Nominal Transaksi) */}
                 {simulatedWifiVoucher && (
-                  <div className="my-2 p-2 rounded-lg border border-dashed border-purple-300 bg-purple-50/70 text-center space-y-1">
+                  <div className="my-2 p-2 rounded-lg border border-dashed border-primary/30 bg-primary/5 text-center space-y-1">
                     <div className="flex items-center justify-center space-x-1">
-                      <span className="text-[10px] font-black text-purple-900 uppercase tracking-wider">
+                      <span className="text-[10px] font-black text-slate-800 uppercase tracking-wider">
                         Kode Akses Wi-Fi Tamu
                       </span>
-                      <span className="text-[8px] bg-purple-200 text-purple-800 px-1 py-0.5 rounded font-bold">
-                        SIMULASI
+                      <span className="text-[8px] bg-primary/20 text-primary border border-primary/30 px-1 py-0.5 rounded font-bold uppercase">
+                        AKTIF
                       </span>
                     </div>
-                    <p className="font-mono text-sm font-black text-purple-700 tracking-wider">
+                    <p className="font-mono text-sm font-black text-primary tracking-wider">
                       {simulatedWifiVoucher.voucherCode}
                     </p>
                     <div className="flex justify-between text-[9px] text-slate-600 px-1">
@@ -375,7 +376,7 @@ export function ReceiptModal({
                       <span>SSID: <strong>DagoEng-Guest</strong></span>
                     </div>
                     <p className="text-[8px] text-slate-400 italic">
-                      *Simulasi kode terikat struk #{receiptData.orderNumber}
+                      *Kode akses resmi terikat struk #{receiptData.orderNumber}
                     </p>
                   </div>
                 )}
@@ -399,22 +400,47 @@ export function ReceiptModal({
           </div>
 
           {/* Modal Actions */}
-          <div className="p-4 border-t border-slate-100 bg-white flex items-center justify-between gap-2 print:hidden">
+          <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-850 flex flex-wrap items-center justify-between gap-2 print:hidden">
             <Button
               type="button"
               variant="outline"
               onClick={handlePrint}
-              className="flex-1 text-xs font-bold space-x-1.5"
+              className="flex-1 min-w-[130px] text-xs font-bold space-x-1.5 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
             >
-              <Printer className="w-4 h-4 text-slate-600" />
-              <span>Cetak Struk Thermal</span>
+              <Printer className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+              <span>Cetak Thermal</span>
             </Button>
+
+            {isAddonActive("WHATSAPP_AUTO_DISPATCH") && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  const phone = receiptData.customerPhone ? receiptData.customerPhone.replace(/[^0-9]/g, "") : "";
+                  const text = encodeURIComponent(
+                    `*STRUK PEMBAYARAN ${brandName.toUpperCase()}*\n` +
+                    `No: #${receiptData.orderNumber}\n` +
+                    `Pelanggan: ${receiptData.customerName || "Tamu"}\n` +
+                    `Total: ${formatCurrencyIDR(receiptData.grandTotal)}\n` +
+                    `Metode: ${receiptData.paymentMethod}\n` +
+                    (simulatedWifiVoucher ? `Kode Wi-Fi: ${simulatedWifiVoucher.voucherCode} (${simulatedWifiVoucher.durationFormatted})\n` : "") +
+                    `\nTerima kasih telah berkunjung!`
+                  );
+                  window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
+                }}
+                className="flex-1 min-w-[130px] text-xs font-bold space-x-1.5 border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 dark:bg-primary/20 dark:hover:bg-primary/30"
+                title="Kirim e-Receipt via WhatsApp (Add-on Aktif)"
+              >
+                <MessageSquare className="w-4 h-4 text-primary" />
+                <span>Kirim WA</span>
+              </Button>
+            )}
 
             {onNewTransaction ? (
               <Button
                 type="button"
                 onClick={onNewTransaction}
-                className="flex-1 text-xs font-bold space-x-1.5 bg-brand-orange hover:bg-orange-600 text-white"
+                className="flex-1 min-w-[130px] text-xs font-bold space-x-1.5 bg-primary hover:bg-primary/90 text-white shadow-sm"
               >
                 <RotateCcw className="w-4 h-4" />
                 <span>Pesanan Baru</span>
@@ -423,7 +449,7 @@ export function ReceiptModal({
               <Button
                 type="button"
                 onClick={onClose}
-                className="flex-1 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white"
+                className="flex-1 min-w-[130px] text-xs font-bold bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white"
               >
                 <span>Tutup</span>
               </Button>

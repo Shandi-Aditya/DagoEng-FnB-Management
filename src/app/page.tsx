@@ -33,10 +33,15 @@ import {
   Mail,
   Instagram,
   MessageCircle,
+  Calendar,
+  PlusCircle,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { PublicCommunityEvent } from "@/types/event";
 
 // Hero Slides Data
 const HERO_SLIDES = [
@@ -89,6 +94,28 @@ export default function PublicLandingPage() {
   const [selectedOutlet, setSelectedOutlet] = useState("outlet-sgr");
   const [selectedService, setSelectedService] = useState("MENU");
 
+  // Community Events State for Landing Page
+  const [communityEvents, setCommunityEvents] = useState<PublicCommunityEvent[]>([]);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
+
+  useEffect(() => {
+    const fetchLandingEvents = async () => {
+      try {
+        const res = await fetch("/api/events");
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          // Display top 3 upcoming approved events
+          setCommunityEvents(json.data.slice(0, 3));
+        }
+      } catch (err) {
+        console.error("Failed to load landing events", err);
+      } finally {
+        setIsLoadingEvents(false);
+      }
+    };
+    fetchLandingEvents();
+  }, []);
+
   // Scroll detection & Active Section Spy
   useEffect(() => {
     const handleScroll = () => {
@@ -97,7 +124,7 @@ export default function PublicLandingPage() {
 
       if (isManualScrollingRef.current) return;
 
-      const sectionIds = ["services", "about", "outlets", "contact"];
+      const sectionIds = ["services", "events", "about", "outlets", "contact"];
       let current = "";
       for (const id of sectionIds) {
         const el = document.getElementById(id);
@@ -205,6 +232,7 @@ export default function PublicLandingPage() {
           <nav className="hidden lg:flex items-center space-x-1 p-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 text-xs font-semibold text-slate-300">
             {[
               { id: "services", label: "Layanan" },
+              { id: "events", label: "Event" },
               { id: "about", label: "Tentang" },
               { id: "outlets", label: "Cabang" },
               { id: "contact", label: "Kontak" },
@@ -215,7 +243,7 @@ export default function PublicLandingPage() {
                   key={item.id}
                   onClick={() => scrollToSection(item.id)}
                   className={`px-4 py-2 rounded-full transition-all duration-200 ease-out select-none ${isActive
-                    ? "bg-brand-orange text-white font-bold shadow-md shadow-orange-500/25"
+                    ? "bg-primary text-white font-bold shadow-md shadow-primary/25"
                     : "text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/15"
                     }`}
                 >
@@ -225,12 +253,14 @@ export default function PublicLandingPage() {
             })}
           </nav>
 
-          {/* Action Buttons */}
+          {/* Action Buttons & Theme Toggle */}
           <div className="hidden sm:flex items-center space-x-3">
+            <ThemeToggle variant="pill" />
+
             <Link href="/customer">
               <Button
                 size="sm"
-                className="text-xs h-10 px-5 font-black bg-brand-orange text-white hover:bg-orange-600 shadow-lg shadow-orange-500/25 rounded-xl transition-all duration-300 hover:scale-105 hover:shadow-orange-500/40 active:scale-95 border border-orange-400/40 group"
+                className="text-xs h-10 px-5 font-black bg-primary text-white hover:bg-primary/90 shadow-lg shadow-primary/25 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 border border-primary/40 group"
               >
                 <UtensilsCrossed className="w-3.5 h-3.5 mr-1.5 transition-transform duration-300 group-hover:rotate-12" />
                 <span>Customer Portal</span>
@@ -244,15 +274,16 @@ export default function PublicLandingPage() {
               size="sm"
               className="text-xs h-10 px-4 font-bold bg-white/5 backdrop-blur-md border-white/20 text-slate-200 hover:bg-white/15 hover:text-white hover:border-white/40 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 group"
             >
-              <LogIn className="w-3.5 h-3.5 mr-1.5 text-brand-orange transition-transform duration-300 group-hover:translate-x-0.5" />
+              <LogIn className="w-3.5 h-3.5 mr-1.5 text-primary transition-transform duration-300 group-hover:translate-x-0.5" />
               <span>{user ? `Akun: ${user.name.split(" ")[0]}` : "Masuk Sistem"}</span>
             </Button>
           </div>
 
-          {/* Mobile Menu Toggle Button */}
+          {/* Mobile Menu Toggle Button & Theme Toggle */}
           <div className="flex sm:hidden items-center space-x-2">
+            <ThemeToggle />
             <Link href="/customer">
-              <Button size="sm" className="text-[11px] h-8 px-3 font-bold bg-brand-orange text-white rounded-lg shadow-sm hover:scale-105 active:scale-95 transition-all">
+              <Button size="sm" className="text-[11px] h-8 px-3 font-bold bg-primary text-white rounded-lg shadow-sm hover:scale-105 active:scale-95 transition-all">
                 Portal
               </Button>
             </Link>
@@ -273,6 +304,7 @@ export default function PublicLandingPage() {
             <div className="flex flex-col space-y-1.5 text-sm font-semibold text-slate-300">
               {[
                 { id: "services", label: "Layanan (F&B & Coworking)" },
+                { id: "events", label: "Event Komunitas" },
                 { id: "about", label: "Tentang Dago" },
                 { id: "outlets", label: "Cabang Outlet" },
                 { id: "contact", label: "Kontak & Medsos" },
@@ -286,7 +318,7 @@ export default function PublicLandingPage() {
                       scrollToSection(item.id);
                     }}
                     className={`p-2.5 rounded-xl text-left transition-all duration-200 ${isActive
-                      ? "bg-brand-orange text-white font-bold shadow-sm shadow-orange-500/20"
+                      ? "bg-primary text-white font-bold shadow-sm shadow-primary/20"
                       : "hover:bg-white/5 hover:text-white"
                       }`}
                   >
@@ -298,7 +330,7 @@ export default function PublicLandingPage() {
 
             <div className="pt-3 border-t border-white/10 flex flex-col gap-2">
               <Link href="/customer" onClick={() => setMobileMenuOpen(false)}>
-                <Button className="w-full bg-brand-orange text-white font-bold text-xs h-10 rounded-xl hover:scale-[1.02] active:scale-95 transition-all">
+                <Button className="w-full bg-primary text-white font-bold text-xs h-10 rounded-xl hover:scale-[1.02] active:scale-95 transition-all">
                   Buka Customer Portal
                 </Button>
               </Link>
@@ -577,6 +609,161 @@ export default function PublicLandingPage() {
             </div>
 
           </div>
+
+        </div>
+      </section>
+
+      {/* 4B. SECTION: EVENT KOMUNITAS (INFORMASI & PENGAJUAN PUBLIK) */}
+      <section id="events" className="py-24 bg-[#090D15] relative scroll-mt-20 border-t border-white/5">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+
+          {/* Section Header */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-white/10">
+            <div className="space-y-3 max-w-2xl">
+              <div className="inline-flex items-center space-x-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider">
+                <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Agenda & Komunitas Kreatif</span>
+              </div>
+              <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">
+                Event Komunitas & Ruang Kolaborasi
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                Temukan lokakarya, perjumpaan komunitas, dan sharing session menarik yang diselenggarakan oleh komunitas lokal di Dago Creative Hub.
+              </p>
+            </div>
+
+            {/* CTA Buttons */}
+            <div className="flex flex-wrap items-center gap-3">
+              <Link href="/events/submit">
+                <Button className="h-10 px-4 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-900/20 transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5 border border-emerald-600/40">
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span>Pasang Event Komunitas</span>
+                </Button>
+              </Link>
+              <Link href="/events">
+                <Button
+                  variant="outline"
+                  className="h-10 px-4 bg-white/5 text-slate-200 border-white/20 hover:bg-white/15 hover:text-white text-xs font-bold rounded-xl transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5"
+                >
+                  <span>Lihat Semua Event</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {/* Events Grid */}
+          {isLoadingEvents ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-96 rounded-3xl bg-slate-900/60 border border-white/10 animate-pulse" />
+              ))}
+            </div>
+          ) : communityEvents.length === 0 ? (
+            <div className="p-12 text-center rounded-3xl bg-slate-900/40 border border-white/10 max-w-xl mx-auto space-y-4">
+              <Calendar className="w-12 h-12 text-slate-500 mx-auto" />
+              <h3 className="text-lg font-bold text-white">Belum Ada Agenda Komunitas Mendatang</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Punya rencana mengadakan lokakarya, meetup, atau sesi sharing? Pasang pengajuan event komunitasmu di sini secara gratis.
+              </p>
+              <Link href="/events/submit">
+                <Button className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-5 py-2.5 rounded-xl">
+                  Pasang Event Sekarang
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {communityEvents.map((evt) => (
+                <div
+                  key={evt.id}
+                  className="group rounded-3xl bg-slate-900/80 border border-white/10 hover:border-emerald-500/50 hover:bg-gradient-to-b hover:from-emerald-950/20 hover:via-slate-900 hover:to-slate-900 transition-all duration-300 shadow-xl overflow-hidden flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Poster Header */}
+                    <div className="relative h-48 w-full bg-slate-950 overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={evt.posterUrl}
+                        alt={evt.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent" />
+
+                      {/* Category Badge */}
+                      <div className="absolute top-3 left-3">
+                        <Badge className="bg-slate-950/80 backdrop-blur-md text-white border-0 text-[10px] font-bold">
+                          {evt.category}
+                        </Badge>
+                      </div>
+
+                      {/* Pricing Tag */}
+                      <div className="absolute top-3 right-3">
+                        <span
+                          className={`text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm backdrop-blur-md ${
+                            evt.isPaid
+                              ? "bg-amber-500/90 text-white"
+                              : "bg-emerald-600/90 text-white"
+                          }`}
+                        >
+                          {evt.isPaid ? formatCurrencyIDR(evt.price) : "GRATIS"}
+                        </span>
+                      </div>
+
+                      {/* Organizer */}
+                      <div className="absolute bottom-2.5 left-3 text-[11px] font-medium text-slate-200">
+                        Oleh: <span className="font-bold text-white">{evt.organizerName}</span>
+                      </div>
+                    </div>
+
+                    {/* Card Content */}
+                    <div className="p-6 space-y-3">
+                      <h3 className="font-bold text-base text-white line-clamp-2 leading-snug group-hover:text-emerald-400 transition-colors">
+                        {evt.title}
+                      </h3>
+
+                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                        {evt.description}
+                      </p>
+
+                      <div className="pt-2 space-y-1.5 text-xs text-slate-300 border-t border-white/10">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                          <span className="truncate">
+                            {new Date(evt.startDate).toLocaleDateString("id-ID", {
+                              weekday: "short",
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-slate-400 text-[11px]">
+                          <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-500" />
+                          <span className="truncate">{evt.location}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card Action */}
+                  <div className="p-6 pt-0">
+                    <Link href={`/events/${evt.id}`}>
+                      <Button
+                        variant="outline"
+                        className="w-full text-xs font-bold border-white/15 text-slate-200 hover:bg-[#3B7A57] hover:text-white hover:border-[#3B7A57] rounded-xl justify-between transition-all group/btn"
+                      >
+                        <span>Lihat Detail Event</span>
+                        <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
         </div>
       </section>

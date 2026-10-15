@@ -41,7 +41,7 @@ describe("Subscription Management & Simulated Plans", () => {
     expect(sub.organizationName).toBe("Dago Creative Hub");
     expect(sub.planTier).toBe("PROFESSIONAL");
     expect(sub.status).toBe("ACTIVE");
-    expect(sub.isSimulated).toBe(true);
+    expect(sub.isSimulated).toBe(false);
   });
 
   it("should allow changing simulated plan tier to ENTERPRISE and persist", () => {

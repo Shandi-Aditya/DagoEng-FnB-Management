@@ -957,17 +957,17 @@ export default function POSPage() {
       )}
 
       {/* Top Bar with POS Mode Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
         <div className="space-y-1">
           <div className="flex items-center space-x-2">
-            <Calculator className="w-5 h-5 text-brand-orange" />
-            <h2 className="text-lg font-bold text-slate-900">
+            <Calculator className="w-5 h-5 text-primary dark:text-emerald-400" />
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
               Point of Sale (POS) Kasir — {activeOutlet?.name || "Singaraja"}
             </h2>
           </div>
-          <p className="text-xs text-slate-500">
-            Kasir Bertugas: <strong className="text-slate-800">{user?.name}</strong> • Scope:{" "}
-            <strong className="text-brand-orange font-mono">{activeOutlet?.name || "Singaraja"}</strong>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Kasir Bertugas: <strong className="text-slate-800 dark:text-slate-200">{user?.name}</strong> • Scope:{" "}
+            <strong className="text-primary dark:text-emerald-400 font-mono">{activeOutlet?.name || "Singaraja"}</strong>
           </p>
         </div>
 
@@ -1006,19 +1006,19 @@ export default function POSPage() {
           )}
 
           {/* POS Mode Switcher */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200 dark:border-slate-700">
             <button
               type="button"
               onClick={() => setPosMode("FNB")}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${posMode === "FNB"
-                ? "bg-brand-orange text-white shadow-sm"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-primary text-white shadow-sm"
+                : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                 }`}
             >
               <Utensils className="w-3.5 h-3.5" />
               <span>Kuliner F&B</span>
               {cartItems.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 bg-white text-brand-orange rounded-full text-[10px] font-black">
+                <span className="ml-1 px-1.5 py-0.2 bg-white text-primary rounded-full text-[10px] font-black">
                   {cartItems.reduce((s, i) => s + i.quantity, 0)}
                 </span>
               )}
@@ -1027,8 +1027,8 @@ export default function POSPage() {
               type="button"
               onClick={() => setPosMode("COWORKING")}
               className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${posMode === "COWORKING"
-                ? "bg-slate-900 text-white shadow-sm"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-primary text-white shadow-sm"
+                : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                 }`}
             >
               <Laptop className="w-3.5 h-3.5" />
@@ -1291,14 +1291,14 @@ export default function POSPage() {
 
                   {/* Loyalty Member Selector */}
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-600 flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 flex items-center justify-between">
                       <span>Member Loyalty:</span>
-                      <Crown className="w-3 h-3 text-amber-500" />
+                      <Crown className="w-3 h-3 text-primary" />
                     </label>
                     <select
                       value={selectedMemberId}
                       onChange={(e) => handleSelectMember(e.target.value)}
-                      className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white font-medium focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                      className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:ring-1 focus:ring-primary"
                     >
                       <option value="">Guest (Non-Member)</option>
                       {membersList.map((m) => (
@@ -1312,17 +1312,17 @@ export default function POSPage() {
 
                 {/* Member Points Card & Voucher Trigger */}
                 {selectedMember && (
-                  <div className="p-2.5 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 rounded-xl border border-amber-200 text-xs flex items-center justify-between shadow-xs">
+                  <div className="p-2.5 bg-primary/10 dark:bg-primary/15 rounded-xl border border-primary/20 dark:border-primary/30 text-xs flex items-center justify-between shadow-xs">
                     <div className="space-y-0.5">
-                      <div className="flex items-center space-x-1.5 font-bold text-slate-900">
-                        <Crown className="w-3.5 h-3.5 text-amber-600" />
-                        <span className="text-amber-800">{selectedMember.name}</span>
-                        <span className="text-[9px] bg-amber-200 text-amber-900 px-1.5 py-0.2 rounded font-mono">
+                      <div className="flex items-center space-x-1.5 font-bold text-slate-900 dark:text-slate-100">
+                        <Crown className="w-3.5 h-3.5 text-primary" />
+                        <span className="text-slate-900 dark:text-slate-100">{selectedMember.name}</span>
+                        <span className="text-[9px] bg-primary/20 text-primary dark:bg-primary/30 px-1.5 py-0.2 rounded font-mono font-bold">
                           {selectedMember.tier}
                         </span>
                       </div>
-                      <p className="text-[11px] text-slate-600">
-                        Saldo Poin: <strong className="font-mono text-brand-orange">{selectedMember.points} Pts</strong>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                        Saldo Poin: <strong className="font-mono text-primary font-bold">{selectedMember.points} Pts</strong>
                       </p>
                     </div>
 
@@ -1523,7 +1523,7 @@ export default function POSPage() {
                   </select>
 
                   {activePromo && activePromo.minimumAmount && subtotal < activePromo.minimumAmount && (
-                    <p className="text-[10px] text-amber-600 font-medium">
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
                       * Belum mencapai min. belanja Rp {activePromo.minimumAmount.toLocaleString("id-ID")}.
                     </p>
                   )}

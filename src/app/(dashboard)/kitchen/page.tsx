@@ -24,6 +24,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { soundChime } from "@/lib/audio-chime";
 import { ProFeatureBadge } from "@/components/premium";
+import { isAddonActive } from "@/lib/subscription";
 
 export default function KitchenKDSPage() {
   const { activeOutlet, activeOutletId } = useOutlet();
@@ -31,6 +32,8 @@ export default function KitchenKDSPage() {
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
   const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(true);
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("ALL");
+  const [selectedStationFilter, setSelectedStationFilter] = useState<"ALL" | "BARISTA" | "KITCHEN" | "PASTRY">("ALL");
+  const isMultiStationActive = isAddonActive("KDS_MULTI_STATION");
   const prevOrderCountRef = useRef<number>(filteredOrders.length);
 
   // Real-time second tick for active SLA timers
@@ -51,10 +54,26 @@ export default function KitchenKDSPage() {
           o.status === "READY"
       )
       .filter((o) => {
-        if (selectedTypeFilter === "ALL") return true;
-        return o.orderType === selectedTypeFilter;
+        if (selectedTypeFilter !== "ALL" && o.orderType !== selectedTypeFilter) return false;
+        if (isMultiStationActive && selectedStationFilter !== "ALL") {
+          const hasStationItem = o.items.some((it) => {
+            const name = it.productName.toLowerCase();
+            if (selectedStationFilter === "BARISTA") {
+              return name.includes("kopi") || name.includes("tea") || name.includes("latte") || name.includes("espresso") || name.includes("ice") || name.includes("matcha");
+            }
+            if (selectedStationFilter === "PASTRY") {
+              return name.includes("croissant") || name.includes("pastry") || name.includes("cake") || name.includes("toast");
+            }
+            if (selectedStationFilter === "KITCHEN") {
+              return !name.includes("kopi") && !name.includes("tea") && !name.includes("latte") && !name.includes("espresso") && !name.includes("croissant") && !name.includes("pastry");
+            }
+            return true;
+          });
+          if (!hasStationItem) return false;
+        }
+        return true;
       });
-  }, [filteredOrders, selectedTypeFilter]);
+  }, [filteredOrders, selectedTypeFilter, isMultiStationActive, selectedStationFilter]);
 
   // Ring bell when new ticket arrives
   useEffect(() => {
@@ -172,16 +191,16 @@ export default function KitchenKDSPage() {
   return (
     <div className="space-y-4">
       {/* KDS Header with Live Controls & SLA Metrics */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-200 gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-200 dark:border-slate-800 gap-3">
         <div>
-          <h2 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
-            <UtensilsCrossed className="w-5 h-5 text-brand-orange" />
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+            <UtensilsCrossed className="w-5 h-5 text-primary dark:text-emerald-400" />
             <span>Kitchen Display System (KDS Live)</span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
               Outlet: {activeOutlet?.name || "Singaraja"}
             </span>
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Real-time visual order pipeline, SLA timer per tiket, dan stasiun persiapan dapur
           </p>
         </div>
@@ -195,11 +214,11 @@ export default function KitchenKDSPage() {
             onClick={() => setIsSoundEnabled(!isSoundEnabled)}
             className={`h-8 px-2.5 text-xs font-bold space-x-1 border rounded-xl ${
               isSoundEnabled
-                ? "bg-amber-50 text-amber-900 border-amber-300"
-                : "bg-slate-100 text-slate-500 border-slate-200"
+                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
+                : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
             }`}
           >
-            {isSoundEnabled ? <Volume2 className="w-3.5 h-3.5 text-brand-orange" /> : <VolumeX className="w-3.5 h-3.5" />}
+            {isSoundEnabled ? <Volume2 className="w-3.5 h-3.5 text-primary dark:text-emerald-400" /> : <VolumeX className="w-3.5 h-3.5" />}
             <span>{isSoundEnabled ? "Audio On" : "Mute"}</span>
           </Button>
 
@@ -208,14 +227,14 @@ export default function KitchenKDSPage() {
             size="sm"
             variant="ghost"
             onClick={handleTestChime}
-            className="h-8 px-2.5 text-xs text-slate-500 hover:text-slate-800 rounded-xl"
+            className="h-8 px-2.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-xl"
             title="Tes bunyi bel pesanan dapur"
           >
-            <Bell className="w-3.5 h-3.5 mr-1 text-slate-500" />
+            <Bell className="w-3.5 h-3.5 mr-1 text-slate-500 dark:text-slate-400" />
             <span>Tes Bell</span>
           </Button>
 
-          <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl font-bold">
+          <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 rounded-xl font-bold">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
             <span>{activeOrders.length} Tiket Aktif</span>
           </div>
@@ -223,9 +242,9 @@ export default function KitchenKDSPage() {
       </div>
 
       {/* Filter Tabs & Target SLA Indicator */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-2.5 rounded-xl border border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white dark:bg-slate-800/90 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
         <div className="flex items-center space-x-1 text-xs">
-          <span className="text-slate-400 font-semibold px-2 flex items-center space-x-1">
+          <span className="text-slate-400 dark:text-slate-500 font-semibold px-2 flex items-center space-x-1">
             <Filter className="w-3 h-3" />
             <span>Tipe:</span>
           </span>
@@ -235,8 +254,8 @@ export default function KitchenKDSPage() {
               onClick={() => setSelectedTypeFilter(type)}
               className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
                 selectedTypeFilter === type
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "text-slate-600 hover:bg-slate-100"
+                  ? "bg-primary text-white shadow-xs font-bold"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-750 dark:hover:bg-slate-700"
               }`}
             >
               {type === "ALL" && "Semua Pesanan"}
@@ -244,10 +263,36 @@ export default function KitchenKDSPage() {
               {type === "TAKE_AWAY" && "Takeaway / Delivery"}
             </button>
           ))}
-          <div className="hidden lg:flex items-center space-x-1.5 pl-2.5 ml-1 border-l border-slate-200">
-            <span className="text-[11px] text-slate-500 font-medium">Stasiun: Central Kitchen</span>
-            <ProFeatureBadge label="MULTI-STATION PRO" variant="pro" size="xs" />
-          </div>
+          {isMultiStationActive ? (
+            <div className="hidden lg:flex items-center space-x-1 pl-2.5 ml-1 border-l border-slate-200">
+              <span className="text-[11px] text-purple-700 font-bold mr-1">Stasiun:</span>
+              {(
+                [
+                  { id: "ALL", label: "Semua" },
+                  { id: "BARISTA", label: "Barista" },
+                  { id: "KITCHEN", label: "Kitchen Panas" },
+                  { id: "PASTRY", label: "Pastry" },
+                ] as const
+              ).map((st) => (
+                <button
+                  key={st.id}
+                  onClick={() => setSelectedStationFilter(st.id)}
+                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                    selectedStationFilter === st.id
+                      ? "bg-purple-700 text-white shadow-2xs"
+                      : "bg-purple-50 text-purple-800 hover:bg-purple-100"
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
+              <ProFeatureBadge label="ROUTING AKTIF" variant="addon" size="xs" />
+            </div>
+          ) : (
+            <div className="hidden lg:flex items-center space-x-1.5 pl-2.5 ml-1 border-l border-slate-200">
+              <span className="text-[11px] text-slate-500 font-medium">Stasiun: Central Kitchen (Single Line)</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center space-x-3 text-xs text-slate-600 pr-2">
@@ -308,25 +353,25 @@ export default function KitchenKDSPage() {
                           }`}
                         >
                           {/* Card Header: Table + Live Timer */}
-                          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                            <div>
-                              <span className="font-bold text-xs text-slate-900 block">
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                            <div className="min-w-0 pr-2">
+                              <span className="font-bold text-xs text-slate-900 dark:text-slate-100 block truncate">
                                 {order.orderNumber}
                               </span>
-                              <span className="text-[10px] text-slate-400 font-medium">
+                              <span className="text-[10px] text-slate-500 dark:text-slate-300 font-medium block truncate">
                                 {order.customerName || "Customer"}
                               </span>
                             </div>
-                            <span className="font-bold text-xs px-2.5 py-0.5 rounded-md bg-brand-orange text-white shadow-xs">
+                            <span className="font-bold text-xs px-2.5 py-0.5 rounded-md bg-primary text-white shadow-xs whitespace-nowrap shrink-0">
                               Meja {order.tableNumber}
                             </span>
                           </div>
 
                           {/* SLA Timer Badge */}
-                          <div className="py-2 flex items-center justify-between">
+                          <div className="py-2 flex items-center justify-between gap-1 overflow-hidden">
                             <span
                               suppressHydrationWarning
-                              className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ${
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap shrink-0 ${
                                 isDelayed
                                   ? "bg-rose-50 text-rose-700 animate-pulse border border-rose-300"
                                   : isAtRisk
@@ -334,16 +379,16 @@ export default function KitchenKDSPage() {
                                   : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                               }`}
                             >
-                              <Clock className="w-3 h-3 mr-1" />
+                              <Clock className="w-3 h-3 mr-1 shrink-0" />
                               {formatMinutesToHuman(metrics.totalCustomerWaitingMinutes)}
                               <span className="ml-1 text-[9px] uppercase">
                                 ({metrics.slaStatus.replace("_", " ")})
                               </span>
                             </span>
 
-                            <div className="flex items-center space-x-1.5">
+                            <div className="flex items-center space-x-1 whitespace-nowrap shrink-0">
                               <span
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border whitespace-nowrap ${
                                   order.paymentStatus === "PAID"
                                     ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                     : "bg-amber-50 text-amber-700 border-amber-200"
@@ -351,7 +396,7 @@ export default function KitchenKDSPage() {
                               >
                                 {order.paymentStatus === "PAID" ? "LUNAS" : "BELUM LUNAS"}
                               </span>
-                              <span className="text-[10px] text-slate-500 font-semibold uppercase px-1.5 py-0.5 bg-slate-100 rounded">
+                              <span className="text-[10px] text-slate-600 dark:text-slate-200 font-semibold uppercase px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded whitespace-nowrap">
                                 {order.orderType === "DINE_IN" ? "Dine In" : "Takeaway"}
                               </span>
                             </div>

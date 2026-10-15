@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
 export default function WaiterMobilePage() {
   const { activeOutlet, activeOutletId } = useOutlet();
@@ -62,45 +63,48 @@ export default function WaiterMobilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 max-w-lg mx-auto flex flex-col justify-between border-x border-slate-200 shadow-xl font-sans">
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 max-w-lg mx-auto flex flex-col justify-between border-x border-slate-200 dark:border-slate-800 shadow-xl font-sans transition-colors duration-200">
       <div>
         {/* Sticky Header */}
         <div className="p-4 bg-slate-900 text-white sticky top-0 z-30 flex items-center justify-between shadow-md">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl bg-brand-orange text-white flex items-center justify-center font-bold">
+            <div className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center font-bold">
               <UtensilsCrossed className="w-4 h-4" />
             </div>
             <div>
               <h1 className="font-bold text-xs leading-none text-white flex items-center space-x-1.5">
                 <span>Pramusaji / Waiter Floor</span>
-                <span className="text-[9px] bg-brand-orange/30 text-brand-orange border border-brand-orange/40 px-1.5 py-0.2 rounded font-mono">
+                <span className="text-[9px] bg-primary/30 text-emerald-300 border border-primary/40 px-1.5 py-0.2 rounded font-mono">
                   LIVE
                 </span>
               </h1>
               <p className="text-[10px] text-slate-400 mt-0.5 flex items-center space-x-1">
-                <Store className="w-3 h-3 text-brand-orange" />
+                <Store className="w-3.5 h-3.5 text-primary" />
                 <span>Outlet: <strong>{activeOutlet?.name || "Singaraja"}</strong></span>
               </p>
             </div>
           </div>
 
-          <Link
-            href="/dashboard"
-            className="text-[11px] text-slate-300 hover:text-white font-semibold flex items-center space-x-1 bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700"
-          >
-            <ArrowLeft className="w-3 h-3" />
-            <span>Dashboard</span>
-          </Link>
+          <div className="flex items-center space-x-2">
+            <ThemeToggle />
+            <Link
+              href="/dashboard"
+              className="text-[11px] text-slate-300 hover:text-white font-semibold flex items-center space-x-1 bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700"
+            >
+              <ArrowLeft className="w-3 h-3" />
+              <span>Dashboard</span>
+            </Link>
+          </div>
         </div>
 
         {/* Filter Area Tabs */}
-        <div className="p-3 bg-white border-b border-slate-200 flex items-center space-x-1.5 overflow-x-auto text-xs font-semibold">
+        <div className="p-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center space-x-1.5 overflow-x-auto text-xs font-semibold">
           <button
             onClick={() => setFilterArea("ALL")}
             className={`px-3 py-1 rounded-lg transition-colors whitespace-nowrap ${
               filterArea === "ALL"
-                ? "bg-slate-900 text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                ? "bg-primary text-white shadow-xs font-bold"
+                : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
             }`}
           >
             Semua Area ({allOutletTables.length})
@@ -111,8 +115,8 @@ export default function WaiterMobilePage() {
               onClick={() => setFilterArea(a.id)}
               className={`px-3 py-1 rounded-lg transition-colors whitespace-nowrap ${
                 filterArea === a.id
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  ? "bg-primary text-white shadow-xs font-bold"
+                  : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
               }`}
             >
               {a.name} ({a.tables.length})

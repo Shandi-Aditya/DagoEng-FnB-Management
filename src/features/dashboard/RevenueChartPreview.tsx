@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { useOrders } from "@/contexts/OrderContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
   ResponsiveContainer,
@@ -24,7 +25,15 @@ type ChartViewMode = "weekly" | "hourly" | "promo_impact";
 export function RevenueChartPreview() {
   const { filteredOrders } = useOrders();
   const { user } = useAuth();
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   const [viewMode, setViewMode] = useState<ChartViewMode>("weekly");
+
+  const gridColor = isDark ? "#334155" : "#f1f5f9";
+  const axisColor = isDark ? "#94a3b8" : "#64748b";
+  const tooltipBg = isDark ? "#0f172a" : "#ffffff";
+  const tooltipBorder = isDark ? "#334155" : "#e2e8f0";
+  const primarySage = isDark ? "#52B788" : "#3B7A57";
 
   // Calculate dynamic weekly data based strictly on filteredOrders
   const weeklyData = useMemo(() => {
@@ -152,17 +161,17 @@ export function RevenueChartPreview() {
   const overallMargin = totalWeeklyRev > 0 ? Math.round(((totalWeeklyRev - totalWeeklyCogs) / totalWeeklyRev) * 100) : 0;
 
   return (
-    <Card className="col-span-2 shadow-sm border border-slate-200">
-      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 gap-3 border-b border-slate-100">
+    <Card className="col-span-2 shadow-sm border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 gap-3 border-b border-slate-100 dark:border-slate-800">
         <div>
-          <CardTitle className="text-sm font-bold flex items-center space-x-2 text-slate-900">
-            <BarChart3 className="w-4 h-4 text-brand-orange" />
+          <CardTitle className="text-sm font-bold flex items-center space-x-2 text-slate-900 dark:text-slate-100">
+            <BarChart3 className="w-4 h-4 text-primary" />
             <span>Performa Penjualan & Analisis Margin</span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-brand-orange border border-orange-200">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 dark:bg-primary/20 dark:text-primary-light dark:border-primary/30">
               Live Interactive
             </span>
           </CardTitle>
-          <CardDescription className="text-xs text-slate-500 mt-0.5">
+          <CardDescription className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             {viewMode === "weekly" && "Tren 7 Hari Terakhir (Revenue Bruto vs COGS & Diskon Promo)"}
             {viewMode === "hourly" && "Analisis Jam Sibuk Penjualan (Hourly Order Traffic & Velocity)"}
             {viewMode === "promo_impact" && "Efektivitas Campaign Promo terhadap Omzet & Diskon"}
@@ -170,38 +179,38 @@ export function RevenueChartPreview() {
         </div>
 
         {/* View Mode Toggle Buttons */}
-        <div className="flex items-center space-x-1 p-1 bg-slate-100 rounded-lg border border-slate-200 text-xs font-semibold">
+        <div className="flex items-center space-x-1 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold">
           <button
             onClick={() => setViewMode("weekly")}
             className={`px-2.5 py-1 rounded-md transition-colors flex items-center space-x-1 ${
               viewMode === "weekly"
-                ? "bg-white text-slate-900 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
             }`}
           >
-            <TrendingUp className="w-3 h-3 text-brand-orange" />
+            <TrendingUp className="w-3 h-3 text-primary" />
             <span>7 Hari</span>
           </button>
           <button
             onClick={() => setViewMode("hourly")}
             className={`px-2.5 py-1 rounded-md transition-colors flex items-center space-x-1 ${
               viewMode === "hourly"
-                ? "bg-white text-slate-900 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
             }`}
           >
-            <Clock className="w-3 h-3 text-blue-600" />
+            <Clock className="w-3 h-3 text-sky-600 dark:text-sky-400" />
             <span>Jam Sibuk</span>
           </button>
           <button
             onClick={() => setViewMode("promo_impact")}
             className={`px-2.5 py-1 rounded-md transition-colors flex items-center space-x-1 ${
               viewMode === "promo_impact"
-                ? "bg-white text-slate-900 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
+                ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-xs"
+                : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
             }`}
           >
-            <Tag className="w-3 h-3 text-emerald-600" />
+            <Tag className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
             <span>Promo Impact</span>
           </button>
         </div>
@@ -213,18 +222,18 @@ export function RevenueChartPreview() {
           {viewMode === "weekly" && (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={weeklyData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={{ stroke: "#e2e8f0" }} />
-                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={formatYAxisValue} axisLine={false} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: axisColor }} axisLine={{ stroke: isDark ? "#334155" : "#e2e8f0" }} />
+                <YAxis tick={{ fontSize: 11, fill: axisColor }} tickFormatter={formatYAxisValue} axisLine={false} />
                 <Tooltip
                   formatter={(value: any, name: string) => {
                     const num = Number(value) || 0;
                     return [formatCurrencyIDR(num), name];
                   }}
-                  contentStyle={{ backgroundColor: "#ffffff", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
+                  contentStyle={{ backgroundColor: tooltipBg, borderRadius: "10px", border: `1px solid ${tooltipBorder}`, color: isDark ? "#f8fafc" : "#0f172a", fontSize: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}
                 />
                 <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                <Bar dataKey="revenue" name="Omzet Bruto" fill="#F97316" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                <Bar dataKey="revenue" name="Omzet Bruto" fill={primarySage} radius={[4, 4, 0, 0]} maxBarSize={36} />
                 <Bar dataKey="cogs" name="Beban HPP (COGS)" fill="#94A3B8" radius={[4, 4, 0, 0]} maxBarSize={36} />
                 <Line type="monotone" dataKey="discount" name="Potongan Promo" stroke="#10B981" strokeWidth={2.5} dot={{ r: 3, fill: "#10B981" }} />
               </ComposedChart>
@@ -236,23 +245,23 @@ export function RevenueChartPreview() {
               <ComposedChart data={hourlyData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.0}/>
+                    <stop offset="5%" stopColor={primarySage} stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor={primarySage} stopOpacity={0.0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="hour" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={{ stroke: "#e2e8f0" }} />
-                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={formatYAxisValue} axisLine={false} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
+                <XAxis dataKey="hour" tick={{ fontSize: 11, fill: axisColor }} axisLine={{ stroke: isDark ? "#334155" : "#e2e8f0" }} />
+                <YAxis tick={{ fontSize: 11, fill: axisColor }} tickFormatter={formatYAxisValue} axisLine={false} />
                 <Tooltip
                   formatter={(value: any, name: string) => {
                     const num = Number(value) || 0;
                     if (name === "Omzet per Jam") return [formatCurrencyIDR(num), name];
                     return [value, name];
                   }}
-                  contentStyle={{ backgroundColor: "#ffffff", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
+                  contentStyle={{ backgroundColor: tooltipBg, borderRadius: "10px", border: `1px solid ${tooltipBorder}`, color: isDark ? "#f8fafc" : "#0f172a", fontSize: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}
                 />
                 <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                <Area type="monotone" dataKey="revenue" name="Omzet per Jam" stroke="#2563EB" fillOpacity={1} fill="url(#colorRev)" />
+                <Area type="monotone" dataKey="revenue" name="Omzet per Jam" stroke={primarySage} fillOpacity={1} fill="url(#colorRev)" />
               </ComposedChart>
             </ResponsiveContainer>
           )}
@@ -260,15 +269,15 @@ export function RevenueChartPreview() {
           {viewMode === "promo_impact" && (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={promoData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={{ stroke: "#e2e8f0" }} />
-                <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickFormatter={formatYAxisValue} axisLine={false} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: axisColor }} axisLine={{ stroke: isDark ? "#334155" : "#e2e8f0" }} />
+                <YAxis tick={{ fontSize: 11, fill: axisColor }} tickFormatter={formatYAxisValue} axisLine={false} />
                 <Tooltip
                   formatter={(value: any, name: string) => [formatCurrencyIDR(Number(value) || 0), name]}
-                  contentStyle={{ backgroundColor: "#ffffff", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "12px" }}
+                  contentStyle={{ backgroundColor: tooltipBg, borderRadius: "10px", border: `1px solid ${tooltipBorder}`, color: isDark ? "#f8fafc" : "#0f172a", fontSize: "12px" }}
                 />
                 <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />
-                <Bar dataKey="revenue" name="Total Omzet" fill="#F97316" radius={[6, 6, 0, 0]} maxBarSize={60} />
+                <Bar dataKey="revenue" name="Total Omzet" fill={primarySage} radius={[6, 6, 0, 0]} maxBarSize={60} />
                 <Bar dataKey="discount" name="Total Diskon Promo" fill="#10B981" radius={[6, 6, 0, 0]} maxBarSize={60} />
               </ComposedChart>
             </ResponsiveContainer>
@@ -276,25 +285,25 @@ export function RevenueChartPreview() {
         </div>
 
         {/* Dynamic Metric Highlights at the Bottom of Chart */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-100 text-xs">
-          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Total Revenue (7 Hari)</span>
-            <span className="font-bold text-slate-800 text-sm">{formatCurrencyIDR(totalWeeklyRev)}</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+          <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60">
+            <span className="text-slate-400 dark:text-slate-400 block text-[10px] font-semibold uppercase">Total Revenue (7 Hari)</span>
+            <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">{formatCurrencyIDR(totalWeeklyRev)}</span>
           </div>
 
-          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Gross Margin</span>
-            <span className="font-bold text-emerald-600 text-sm">{overallMargin}%</span>
+          <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60">
+            <span className="text-slate-400 dark:text-slate-400 block text-[10px] font-semibold uppercase">Gross Margin</span>
+            <span className="font-bold text-emerald-600 dark:text-emerald-400 text-sm">{overallMargin}%</span>
           </div>
 
-          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Total Diskon Promo</span>
-            <span className="font-bold text-brand-orange text-sm">{formatCurrencyIDR(totalWeeklyDisc)}</span>
+          <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60">
+            <span className="text-slate-400 dark:text-slate-400 block text-[10px] font-semibold uppercase">Total Diskon Promo</span>
+            <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">{formatCurrencyIDR(totalWeeklyDisc)}</span>
           </div>
 
-          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-100">
-            <span className="text-slate-400 block text-[10px] font-semibold uppercase">Status Sinkronisasi</span>
-            <span className="font-bold text-brand-cyan text-sm flex items-center space-x-1 mt-0.5">
+          <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700/60">
+            <span className="text-slate-400 dark:text-slate-400 block text-[10px] font-semibold uppercase">Status Sinkronisasi</span>
+            <span className="font-bold text-primary dark:text-primary-light text-sm flex items-center space-x-1 mt-0.5">
               <Sparkles className="w-3 h-3 animate-spin" />
               <span>Context Sync</span>
             </span>

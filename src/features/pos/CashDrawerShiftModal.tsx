@@ -226,16 +226,16 @@ _Sent via POS DagoEng Platform_`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 flex flex-col animate-in zoom-in-95 duration-150">
+      <div className="bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col animate-in zoom-in-95 duration-150 text-slate-900 dark:text-slate-100">
         {/* Header */}
-        <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100">
-          <h3 className="font-bold text-sm text-slate-800">
+        <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
+          <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">
             Close Cashier Session
           </h3>
           <button
             onClick={onClose}
             disabled={isClosing}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -244,9 +244,9 @@ _Sent via POS DagoEng Platform_`;
         {/* Content Body */}
         <div className="p-6 space-y-4 text-xs">
           {/* Warning Banner */}
-          <div className="p-3.5 bg-amber-50/90 border border-amber-200/80 rounded-xl text-[11px] leading-relaxed text-amber-900">
+          <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 rounded-xl text-[11px] leading-relaxed text-amber-900 dark:text-amber-200">
             <span>Pastikan semua transaksi sudah selesai. </span>
-            <span className="text-red-600 font-semibold">
+            <span className="text-red-600 dark:text-red-400 font-semibold">
               Anda tidak akan bisa mengubah transaksi yang sudah dicatat setelah menutup cashier session.
             </span>
           </div>
@@ -255,8 +255,8 @@ _Sent via POS DagoEng Platform_`;
           <div className="space-y-3.5 pt-1">
             {/* Cashier Name Confirmation */}
             <div className="space-y-1.5">
-              <label className="text-[11px] text-slate-600 font-medium block">
-                Tolong masukkan nama Anda (<span className="text-blue-600">kasir</span>) sebagai konfirmasi
+              <label className="text-[11px] text-slate-600 dark:text-slate-400 font-medium block">
+                Tolong masukkan nama Anda (<span className="text-[#3B7A57] dark:text-[#52B788] font-bold">kasir</span>) sebagai konfirmasi
               </label>
               <input
                 type="text"
@@ -264,13 +264,13 @@ _Sent via POS DagoEng Platform_`;
                 onChange={(e) => setConfirmCashierName(e.target.value)}
                 placeholder="Konfirmasi nama kasir yang menutup sesi"
                 disabled={isClosing}
-                className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 shadow-2xs"
+                className="w-full px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#3B7A57] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
               />
             </div>
 
             {/* Cash in Drawer */}
             <div className="space-y-1.5">
-              <label className="text-[11px] text-slate-600 font-medium block">
+              <label className="text-[11px] text-slate-600 dark:text-slate-400 font-medium block">
                 (Uang Tunai di Laci)
               </label>
               <div className="relative">
@@ -281,19 +281,19 @@ _Sent via POS DagoEng Platform_`;
                   onChange={handleCashInputChange}
                   placeholder="0"
                   disabled={isClosing}
-                  className="w-full pl-10 pr-3.5 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white text-slate-900 shadow-2xs"
+                  className="w-full pl-10 pr-3.5 py-2 text-xs font-mono border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#3B7A57] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
                 />
               </div>
             </div>
           </div>
 
           {/* Server Timestamp */}
-          <div className="pt-2 text-center text-slate-500 text-[11px] space-y-0.5">
+          <div className="pt-2 text-center text-slate-500 dark:text-slate-400 text-[11px] space-y-0.5">
             <p>
               Kasir ditutup pada{" "}
-              <strong className="text-slate-800 font-bold">{currentTimeStr || "Waktu Server"}</strong>
+              <strong className="text-slate-800 dark:text-slate-200 font-bold">{currentTimeStr || "Waktu Server"}</strong>
             </p>
-            <p className="text-[10px] text-slate-400">Waktu Server</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500">Waktu Server</p>
           </div>
 
           {/* Confirm Button */}
@@ -302,7 +302,7 @@ _Sent via POS DagoEng Platform_`;
               type="button"
               disabled={isClosing || !confirmCashierName.trim()}
               onClick={handleConfirmCloseSession}
-              className="w-full py-2.5 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm transition-all active:scale-98 flex items-center justify-center space-x-2"
+              className="w-full py-2.5 text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-sm transition-all active:scale-98 flex items-center justify-center space-x-2"
             >
               {isClosing ? (
                 <>

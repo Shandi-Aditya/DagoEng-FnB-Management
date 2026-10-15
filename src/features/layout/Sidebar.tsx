@@ -30,6 +30,7 @@ import {
   Laptop,
   Building2,
   ShieldCheck,
+  Calendar,
 } from "lucide-react";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -43,11 +44,12 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Users: <Users className="w-4 h-4" />,
   BarChart3: <BarChart3 className="w-4 h-4" />,
   UserCheck: <UserCheck className="w-4 h-4" />,
-  Sparkles: <Sparkles className="w-4 h-4 text-brand-orange" />,
+  Sparkles: <Sparkles className="w-4 h-4 text-primary dark:text-primary-light" />,
   ShieldCheck: <ShieldCheck className="w-4 h-4 text-emerald-600" />,
   Settings: <Settings className="w-4 h-4" />,
   Laptop: <Laptop className="w-4 h-4 text-blue-600" />,
   Building2: <Building2 className="w-4 h-4 text-purple-600" />,
+  Calendar: <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
 };
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
@@ -104,10 +106,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   };
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between h-full select-none">
+    <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between h-full select-none transition-colors duration-200">
       {/* Brand Header */}
       <div>
-        <div className="p-5 border-b border-slate-100 flex items-center space-x-3">
+        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center space-x-3">
           <div className="w-8 h-10 relative flex-shrink-0">
             <Image
               src="/logo-dago.png"
@@ -119,10 +121,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
             />
           </div>
           <div>
-            <h1 className="font-bold text-sm tracking-tight text-slate-900 leading-tight">
-              DAGO <span className="text-brand-orange">Creative Hub</span>
+            <h1 className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
+              DAGO <span className="text-primary dark:text-emerald-400">Creative Hub</span>
             </h1>
-            <p className="text-[10px] text-slate-400 font-medium tracking-wide">
+            <p className="text-[10px] text-slate-400 dark:text-slate-400 font-medium tracking-wide">
               {user?.tenant ? getTenantName(user.tenant.id) : "Platform & Management"}
             </p>
           </div>
@@ -130,9 +132,9 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
 
         {/* Dynamic Multi-Business Navigation */}
         <nav className="p-3 space-y-1">
-          <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+          <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between">
             <span>Menu ({user?.role.name})</span>
-            <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-600">
+            <span className="text-[9px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono text-slate-600 dark:text-slate-400">
               {user?.scopeLevel}
             </span>
           </div>
@@ -146,15 +148,15 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 onClick={onNavigate}
                 className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all group ${
                   isActive
-                    ? "bg-orange-50/90 text-orange-950 font-bold border border-orange-200/70 shadow-2xs"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    ? "bg-primary/10 dark:bg-primary/20 text-primary dark:text-emerald-300 font-bold border border-primary/20 dark:border-primary/30 shadow-2xs"
+                    : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-100"
                 }`}
               >
                 <div className="flex items-center space-x-2.5">
-                  <span className={isActive ? "text-orange-600" : "text-slate-400 group-hover:text-slate-600"}>
+                  <span className={isActive ? "text-primary dark:text-emerald-400" : "text-slate-400 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"}>
                     {ICON_MAP[item.icon]}
                   </span>
-                  <span className={isActive ? "text-slate-900" : ""}>{item.name}</span>
+                  <span className={isActive ? "text-slate-900 dark:text-slate-100" : ""}>{item.name}</span>
                 </div>
                 {item.module !== "CORE" && (
                   <div className="flex items-center space-x-1.5">
@@ -162,7 +164,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                       <ProFeatureBadge label="PRO" variant="pro" size="xs" />
                     )}
                     <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
-                      isActive ? "bg-orange-100/70 text-orange-800 font-semibold" : "text-slate-400 font-normal"
+                      isActive ? "bg-primary/20 dark:bg-primary/30 text-primary dark:text-emerald-300 font-semibold" : "text-slate-400 dark:text-slate-400 font-normal"
                     }`}>
                       {item.module}
                     </span>
@@ -175,15 +177,15 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
       </div>
 
       {/* User Footer & Logout */}
-      <div className="p-3 border-t border-slate-100 bg-slate-50/50">
-        <div className="p-2 rounded-lg bg-white border border-slate-200 flex items-center justify-between mb-2">
+      <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+        <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between mb-2">
           <div className="flex items-center space-x-2 overflow-hidden">
-            <div className="w-7 h-7 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-xs text-slate-700 flex-shrink-0">
+            <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center font-bold text-xs text-slate-700 dark:text-slate-200 flex-shrink-0">
               {user?.name.charAt(0) || "U"}
             </div>
             <div className="truncate">
-              <p className="text-xs font-semibold text-slate-800 truncate">{user?.name}</p>
-              <p className="text-[10px] text-slate-400 truncate">
+              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{user?.name}</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-400 truncate">
                 {user?.tenant ? (getTenantName(user.tenant.id) || user.tenant.name) : user?.organization?.name || "Dago Hub"}
               </p>
             </div>
@@ -192,7 +194,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
 
         <button
           onClick={handleLogoutClick}
-          className="w-full flex items-center justify-center space-x-2 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+          className="w-full flex items-center justify-center space-x-2 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-colors"
         >
           <LogOut className="w-3.5 h-3.5" />
           <span>{isCashier ? "Tutup Sesi / Keluar" : "Keluar Sesi"}</span>

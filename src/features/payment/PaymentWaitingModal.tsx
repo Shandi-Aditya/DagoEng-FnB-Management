@@ -190,12 +190,12 @@ export function PaymentWaitingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200/90 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[94vh]">
+      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl border border-slate-200/90 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[94vh]">
         
         {/* Modal Top Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white flex items-center justify-between border-b border-slate-700/80">
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white flex items-center justify-between border-b border-slate-700/80">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl bg-brand-orange/20 text-brand-orange flex items-center justify-center font-bold border border-brand-orange/30">
+            <div className="w-8 h-8 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-bold border border-primary/30">
               {isPaidSuccess ? (
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
               ) : (
@@ -239,32 +239,32 @@ export function PaymentWaitingModal({
                 <Badge className="bg-emerald-500 text-white font-bold text-xs px-3 py-0.5">
                   LUNAS & TERVERIFIKASI
                 </Badge>
-                <h4 className="font-black text-xl text-slate-900">Pembayaran Berhasil!</h4>
-                <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                <h4 className="font-black text-xl text-slate-900 dark:text-slate-100">Pembayaran Berhasil!</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
                   {activeItem.type === "COWORKING"
                     ? `Reservasi ruang kerja ${activeItem.subtitle} atas nama ${activeItem.customerName} telah lunas dan siap digunakan!`
                     : `Pesanan #${activeItem.itemCode} telah diteruskan ke Dapur (KDS) dan sedang mulai disiapkan.`}
                 </p>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2 text-xs text-left">
-                <div className="flex justify-between text-slate-600">
+              <div className="p-4 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2 text-xs text-left">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
                   <span>Metode Pembayaran</span>
-                  <span className="font-bold text-slate-900">{methodLabel}</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">{methodLabel}</span>
                 </div>
-                <div className="flex justify-between text-slate-600">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
                   <span>Total Tagihan Lunas</span>
-                  <span className="font-black text-emerald-600">{formatCurrencyIDR(activeItem.total)}</span>
+                  <span className="font-black text-primary">{formatCurrencyIDR(activeItem.total)}</span>
                 </div>
-                <div className="flex justify-between text-slate-600">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
                   <span>Pelanggan</span>
-                  <span className="font-bold text-slate-900">{activeItem.customerName}</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100">{activeItem.customerName}</span>
                 </div>
               </div>
 
               <Button
                 onClick={onClose}
-                className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs rounded-2xl shadow-md"
+                className="w-full h-11 bg-primary hover:bg-primary/90 text-white font-black text-xs rounded-2xl shadow-md"
               >
                 <span>Lihat Status di Tab Pesanan & Booking</span>
                 <ArrowRight className="w-4 h-4 ml-1.5" />
@@ -276,26 +276,26 @@ export function PaymentWaitingModal({
             /* ==================================================== */
             <>
               {/* Countdown Banner */}
-              <div className="p-3.5 bg-amber-50/90 rounded-2xl border border-amber-200/90 space-y-2">
+              <div className="p-3.5 bg-primary/10 dark:bg-primary/15 rounded-2xl border border-primary/30 space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-1.5 text-amber-800 font-bold">
-                    <Clock className="w-4 h-4 text-amber-600 animate-spin" />
+                  <div className="flex items-center space-x-1.5 text-primary font-bold">
+                    <Clock className="w-4 h-4 text-primary animate-spin" />
                     <span>Selesaikan Pembayaran Dalam:</span>
                   </div>
-                  <span className="font-mono font-black text-amber-950 text-sm bg-amber-200/80 px-2 py-0.5 rounded-md">
+                  <span className="font-mono font-black text-primary text-sm bg-primary/20 px-2 py-0.5 rounded-md">
                     {formatTimer(secondsRemaining)}
                   </span>
                 </div>
-                <div className="w-full bg-amber-200/60 h-1.5 rounded-full overflow-hidden">
+                <div className="w-full bg-primary/20 h-1.5 rounded-full overflow-hidden">
                   <div
-                    className="bg-amber-500 h-full rounded-full transition-all duration-1000"
+                    className="bg-primary h-full rounded-full transition-all duration-1000"
                     style={{ width: `${timerProgress}%` }}
                   />
                 </div>
               </div>
 
               {/* Tagihan Box */}
-              <div className="p-4 bg-slate-900 text-white rounded-2xl flex items-center justify-between shadow-xs">
+              <div className="p-4 bg-slate-900 dark:bg-slate-850 text-white rounded-2xl flex items-center justify-between shadow-xs border border-slate-800">
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
                     Total Tagihan {activeItem.type === "COWORKING" ? "Booking Ruang" : "Pesanan F&B"}
@@ -304,7 +304,7 @@ export function PaymentWaitingModal({
                     {formatCurrencyIDR(activeItem.total)}
                   </div>
                 </div>
-                <Badge className="bg-brand-orange text-white font-bold text-[10px] px-2.5 py-1">
+                <Badge className="bg-primary text-white font-bold text-[10px] px-2.5 py-1">
                   {methodLabel}
                 </Badge>
               </div>
@@ -312,21 +312,21 @@ export function PaymentWaitingModal({
               {/* Payment Component based on method */}
               {activeItem.paymentMethod === "CASH" ? (
                 /* ---------------- CASH INSTRUCTIONS ---------------- */
-                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-3 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
+                <div className="p-5 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-200/90 dark:border-slate-800 space-y-3 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center mx-auto">
                     <Banknote className="w-6 h-6" />
                   </div>
                   <div>
-                    <h5 className="font-bold text-slate-900 text-sm">Pembayaran Tunai di Kasir</h5>
-                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    <h5 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Pembayaran Tunai di Kasir</h5>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
                       Silakan menuju meja kasir / resepsionis dan tunjukkan kode berikut untuk menyelesaikan pembayaran tunai.
                     </p>
                   </div>
-                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 font-mono text-xs font-black text-slate-800 flex items-center justify-between">
+                  <div className="p-2.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 font-mono text-xs font-black text-slate-800 dark:text-slate-100 flex items-center justify-between">
                     <span>{activeItem.itemCode}</span>
                     <button
                       onClick={handleCopyReference}
-                      className="text-brand-orange hover:text-orange-600 flex items-center space-x-1 text-[11px] font-bold"
+                      className="text-primary hover:text-primary/80 flex items-center space-x-1 text-[11px] font-bold"
                     >
                       {copiedRef ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                       <span>{copiedRef ? "Tersalin" : "Salin"}</span>
@@ -335,21 +335,21 @@ export function PaymentWaitingModal({
                 </div>
               ) : activeItem.paymentMethod === "EDC" ? (
                 /* ---------------- EDC INSTRUCTIONS ---------------- */
-                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-3 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center mx-auto">
+                <div className="p-5 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-200/90 dark:border-slate-800 space-y-3 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 flex items-center justify-center mx-auto">
                     <CreditCard className="w-6 h-6" />
                   </div>
                   <div>
-                    <h5 className="font-bold text-slate-900 text-sm">Pembayaran Kartu Debit / Kredit</h5>
-                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                    <h5 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Pembayaran Kartu Debit / Kredit</h5>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
                       Silakan hubungi kasir atau waiter untuk tap/gesek kartu pada mesin EDC Dago Creative Hub.
                     </p>
                   </div>
-                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 font-mono text-xs font-black text-slate-800 flex items-center justify-between">
+                  <div className="p-2.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 font-mono text-xs font-black text-slate-800 dark:text-slate-100 flex items-center justify-between">
                     <span>{activeItem.itemCode}</span>
                     <button
                       onClick={handleCopyReference}
-                      className="text-brand-orange hover:text-orange-600 flex items-center space-x-1 text-[11px] font-bold"
+                      className="text-primary hover:text-primary/80 flex items-center space-x-1 text-[11px] font-bold"
                     >
                       {copiedRef ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                       <span>{copiedRef ? "Tersalin" : "Salin"}</span>
@@ -358,12 +358,12 @@ export function PaymentWaitingModal({
                 </div>
               ) : (
                 /* ---------------- QRIS DINAMIS COMPONENT ---------------- */
-                <div className="p-5 bg-slate-50 rounded-3xl border border-slate-200/90 flex flex-col items-center space-y-3.5 shadow-2xs">
+                <div className="p-5 bg-slate-50 dark:bg-slate-850 rounded-3xl border border-slate-200/90 dark:border-slate-800 flex flex-col items-center space-y-3.5 shadow-2xs">
                   
                   {/* QRIS Header Branding */}
-                  <div className="flex items-center justify-between w-full border-b border-slate-200 pb-2 text-[10px]">
-                    <div className="flex items-center space-x-1.5 font-bold text-slate-800">
-                      <Store className="w-3.5 h-3.5 text-brand-orange" />
+                  <div className="flex items-center justify-between w-full border-b border-slate-200 dark:border-slate-700 pb-2 text-[10px]">
+                    <div className="flex items-center space-x-1.5 font-bold text-slate-800 dark:text-slate-200">
+                      <Store className="w-3.5 h-3.5 text-primary" />
                       <span>Dago Creative Hub Singaraja</span>
                     </div>
                     <span className="font-mono text-slate-400 font-medium">NMID: ID10202609240001</span>
@@ -428,7 +428,7 @@ export function PaymentWaitingModal({
 
                       {/* Center Brand Badge */}
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-8 h-8 rounded-lg bg-brand-orange text-white flex items-center justify-center font-black text-[10px] shadow-md border-2 border-white">
+                        <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-black text-[10px] shadow-md border-2 border-white">
                           DAGO
                         </div>
                       </div>
@@ -440,7 +440,7 @@ export function PaymentWaitingModal({
                   </div>
 
                   {/* Webhook Status Pulse Indicator */}
-                  <div className="flex items-center space-x-2 text-[11px] text-slate-600 bg-white px-3 py-1.5 rounded-full border border-slate-200">
+                  <div className="flex items-center space-x-2 text-[11px] text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
                     <span className="flex h-2 w-2 relative">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
@@ -448,22 +448,22 @@ export function PaymentWaitingModal({
                     <span className="font-medium">Menunggu notifikasi pembayaran dari jaringan perbankan...</span>
                   </div>
 
-                  <p className="text-[11px] text-slate-500 text-center leading-relaxed">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center leading-relaxed">
                     Buka aplikasi <strong>BCA, Livin&apos;, GoPay, OVO, Dana, ShopeePay</strong> atau m-Banking Anda, lalu scan QRIS di atas.
                   </p>
                 </div>
               )}
 
               {/* Order / Booking Summary */}
-              <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 text-xs space-y-1.5">
-                <span className="font-bold text-slate-800 block">
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs space-y-1.5">
+                <span className="font-bold text-slate-800 dark:text-slate-200 block">
                   Rincian {activeItem.type === "COWORKING" ? "Booking Ruang Kerja" : "Menu Pesanan"}
                 </span>
-                <div className="space-y-1 divide-y divide-slate-100 max-h-28 overflow-y-auto">
+                <div className="space-y-1 divide-y divide-slate-100 dark:divide-slate-800 max-h-28 overflow-y-auto">
                   {activeItem.itemsBreakdown?.map((it, idx) => (
-                    <div key={idx} className="pt-1 flex justify-between text-slate-600">
+                    <div key={idx} className="pt-1 flex justify-between text-slate-600 dark:text-slate-400">
                       <span>{it.qty ? `${it.qty}x ` : ""}{it.label}</span>
-                      <span className="font-bold text-slate-900">{formatCurrencyIDR(it.price)}</span>
+                      <span className="font-bold text-slate-900 dark:text-slate-100">{formatCurrencyIDR(it.price)}</span>
                     </div>
                   ))}
                 </div>
@@ -495,9 +495,9 @@ export function PaymentWaitingModal({
 
                 {/* 2. Cancellation Action */}
                 {showCancelConfirm ? (
-                  <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl space-y-2 text-xs text-rose-900 animate-in fade-in">
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-2xl space-y-2 text-xs text-rose-900 dark:text-rose-200 animate-in fade-in">
                     <p className="font-bold">Konfirmasi Batalkan {activeItem.type === "COWORKING" ? "Booking Ini" : "Pesanan Ini"}?</p>
-                    <p className="text-[11px] text-rose-700">
+                    <p className="text-[11px] text-rose-700 dark:text-rose-300">
                       {activeItem.itemCode} akan dibatalkan dan alokasi meja/ruangan akan dibebaskan.
                     </p>
                     <div className="flex space-x-2 justify-end pt-1">
@@ -506,7 +506,7 @@ export function PaymentWaitingModal({
                         size="sm"
                         variant="outline"
                         onClick={() => setShowCancelConfirm(false)}
-                        className="h-8 text-xs border-slate-300"
+                        className="h-8 text-xs border-slate-300 dark:border-slate-700 dark:text-slate-300"
                       >
                         Kembali
                       </Button>
@@ -526,7 +526,7 @@ export function PaymentWaitingModal({
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowCancelConfirm(true)}
-                    className="w-full h-8 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 font-bold rounded-xl"
+                    className="w-full h-8 text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-bold rounded-xl"
                   >
                     Batalkan {activeItem.type === "COWORKING" ? "Booking" : "Pesanan"} Ini
                   </Button>

@@ -152,7 +152,7 @@ export const DEFAULT_TENANT_ADDONS: TenantAddonItem[] = [
     benefits: [
       "Auto-deduction gramatur bahan baku per resep menu presisi",
       "Kalkulasi margin laba kotor & HPP real-time per transaksi",
-      "Simulasi AI formula takaran bahan baku otomatis",
+      "Kalkulasi AI formula takaran bahan baku otomatis",
       "Pencegahan kebocoran stok bahan baku mahal",
     ],
   },
@@ -209,11 +209,11 @@ export function getSimulatedOrgSubscription(): OrgSubscriptionState {
     planTier: "PROFESSIONAL",
     planName: PLATFORM_PLANS.PROFESSIONAL.name,
     status: "ACTIVE",
-    statusLabel: "Aktif (Simulasi Demo)",
+    statusLabel: "Aktif",
     billingCycle: "TAHUNAN",
     activeSince: "14 Januari 2026",
     nextRenewalDate: "14 Oktober 2027",
-    isSimulated: true,
+    isSimulated: false,
     notes: "Paket tier saat ini dikonfigurasi sebagai Professional Hybrid Hub untuk mengoperasikan unit bisnis F&B multi-mitra dan Co-working Space.",
   };
 
@@ -251,8 +251,8 @@ export function setSimulatedOrgPlan(tier: PlanTier): OrgSubscriptionState {
     planTier: tier,
     planName: plan.name,
     status: "ACTIVE",
-    statusLabel: "Aktif (Simulasi Demo)",
-    isSimulated: true,
+    statusLabel: "Aktif",
+    isSimulated: false,
   };
 
   memoryOrgSub = updated;
@@ -347,4 +347,12 @@ export function toggleSimulatedTenantAddon(addonId: string, scopeId?: string): T
   }
 
   return updated;
+}
+
+/**
+ * Checks if a specific add-on is active in the workspace or given scope.
+ */
+export function isAddonActive(addonCode: string, scopeId?: string): boolean {
+  const addons = getSimulatedTenantAddons(scopeId);
+  return addons.some((a) => a.code === addonCode && a.status === "ACTIVE");
 }

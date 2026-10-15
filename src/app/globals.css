@@ -4,32 +4,386 @@
 
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --bg-main: #F8FAFC;
+    --card-bg: #FFFFFF;
+    --card-bg-subtle: #F1F5F9;
+    --text-main: #0F172A;
+    --text-muted: #64748B;
+    --border-main: #E2E8F0;
+    --accent-color: #3B7A57;
+
+    --background: 210 40% 98%; /* #F8FAFC */
+    --background-alt: 210 20% 96%; /* #F4F5F7 */
+    --foreground: 222 47% 17%; /* #1E293B */
+    
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 222 47% 17%;
+    
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 21 90% 48%;
-    --primary-foreground: 210 40% 98%;
+    --popover-foreground: 222 47% 17%;
+    
+    /* Sage Green / Olive Brand Accent (Light: #3B7A57) */
+    --primary: 146 35% 36%;
+    --primary-hover: 146 35% 28%;
+    --primary-light: 146 35% 94%;
+    --primary-foreground: 0 0% 100%;
+    
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
+    
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
+    
+    --accent: 146 35% 94%;
+    --accent-foreground: 146 35% 22%;
+    
+    --destructive: 347 77% 50%;
     --destructive-foreground: 210 40% 98%;
+    
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 146 35% 36%;
+    
+    --success: 160 84% 31%;
+    --warning: 38 92% 44%;
+    --info: 199 89% 48%;
+    
     --radius: 0.625rem;
+  }
+
+  .dark {
+    --bg-main: #0F172A;
+    --card-bg: #1E293B; /* Senada #1E293B / #161F31 */
+    --card-bg-subtle: #161F31;
+    --text-main: #E2E8F0;
+    --text-muted: #CBD5E1;
+    --border-main: #334155;
+    --accent-color: #52B788;
+
+    --background: 222 47% 11%; /* #0F172A */
+    --background-alt: 217 33% 15%; /* #162032 */
+    --foreground: 214 32% 91%; /* #E2E8F0 */
+    
+    --card: 222 47% 17%; /* #1E293B */
+    --card-foreground: 214 32% 91%;
+    
+    --popover: 222 47% 17%;
+    --popover-foreground: 214 32% 91%;
+    
+    /* Sage Green Bright (Dark: #52B788) */
+    --primary: 152 40% 52%;
+    --primary-hover: 152 40% 44%;
+    --primary-light: 152 40% 18%;
+    --primary-foreground: 222 47% 11%; /* #0F172A */
+    
+    --secondary: 217 33% 22%;
+    --secondary-foreground: 210 40% 98%;
+    
+    --muted: 217 33% 22%;
+    --muted-foreground: 215 25% 80%;
+    
+    --accent: 152 40% 20%;
+    --accent-foreground: 152 40% 88%;
+    
+    --destructive: 347 77% 55%;
+    --destructive-foreground: 210 40% 98%;
+    
+    --border: 217 33% 27%;
+    --input: 217 33% 27%;
+    --ring: 152 40% 52%;
+    
+    --success: 160 84% 39%;
+    --warning: 38 92% 50%;
+    --info: 199 89% 56%;
   }
 }
 
+/* ========================================================
+   GLOBAL ZERO-TOLERANCE DARK MODE OVERRIDE SYSTEM
+   Forces containers, cards, dialogs, modals, tables, inputs,
+   dropdowns, and panels to consistent dark tones:
+   #1E293B (cards/modals) and #161F31 (subtle panels/headers).
+   Standardizes text to #E2E8F0 (primary) and #94A3B8 (secondary).
+   Eliminates blinding white card leaks & random bright accents.
+   ======================================================== */
+
+.dark,
+.dark body {
+  background-color: #0F172A !important;
+  color: #E2E8F0 !important;
+}
+
+/* 1. All White / Light Background Utilities Overrides */
+.dark .bg-white,
+.dark .bg-card,
+.dark [data-card],
+.dark .card,
+.dark .bg-popover {
+  background-color: #1E293B !important;
+  color: #E2E8F0 !important;
+}
+
+.dark .bg-white\/98,
+.dark .bg-white\/95,
+.dark .bg-white\/90,
+.dark .bg-white\/85,
+.dark .bg-white\/80,
+.dark .bg-white\/75,
+.dark .bg-white\/70,
+.dark .bg-white\/60,
+.dark .bg-white\/50 {
+  background-color: rgba(30, 41, 59, 0.95) !important;
+}
+
+.dark .bg-slate-50,
+.dark .bg-gray-50,
+.dark .bg-zinc-50,
+.dark .bg-neutral-50,
+.dark .bg-stone-50,
+.dark .bg-slate-50\/50,
+.dark .bg-slate-50\/60,
+.dark .bg-slate-50\/70,
+.dark .bg-slate-50\/80,
+.dark .bg-slate-50\/90 {
+  background-color: #161F31 !important;
+}
+
+.dark .bg-slate-100,
+.dark .bg-gray-100,
+.dark .bg-zinc-100,
+.dark .bg-neutral-100,
+.dark .bg-stone-100,
+.dark .bg-slate-100\/50,
+.dark .bg-slate-100\/60,
+.dark .bg-slate-100\/80 {
+  background-color: #1A2438 !important;
+}
+
+/* 2. Containers, Modals, Dialogs & Dropdowns */
+.dark [role="dialog"],
+.dark .modal,
+.dark dialog,
+.dark .fixed > div.bg-white,
+.dark [data-radix-popper-content-wrapper] > div,
+.dark [role="menu"],
+.dark [role="listbox"],
+.dark [role="tooltip"],
+.dark .shadow-dropdown,
+.dark .shadow-2xl.bg-white,
+.dark .shadow-xl.bg-white {
+  background-color: #1E293B !important;
+  border-color: #334155 !important;
+  color: #E2E8F0 !important;
+}
+
+/* 3. Input Controls, Textarea, Select */
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="range"]),
+.dark textarea,
+.dark select {
+  background-color: #0F172A !important;
+  border-color: #334155 !important;
+  color: #E2E8F0 !important;
+}
+
+.dark select option {
+  background-color: #1E293B !important;
+  color: #E2E8F0 !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748B !important;
+}
+
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+  border-color: #52B788 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(82, 183, 136, 0.25) !important;
+}
+
+/* 4. Table Elements & Zebra Striping */
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+th {
+  white-space: nowrap !important;
+  letter-spacing: 0.04em;
+  font-weight: 700 !important;
+}
+
+.dark table {
+  color: #E2E8F0 !important;
+}
+
+.dark thead,
+.dark thead tr,
+.dark th {
+  background-color: #161F31 !important;
+  color: #F1F5F9 !important;
+  border-color: #334155 !important;
+}
+
+.dark tbody tr {
+  background-color: #1E293B !important;
+  border-color: #334155 !important;
+  color: #E2E8F0 !important;
+  transition: background-color 0.15s ease;
+}
+
+.dark tbody tr:nth-child(even) {
+  background-color: #182234 !important;
+}
+
+.dark tbody tr:hover {
+  background-color: #24344D !important;
+}
+
+.dark td {
+  border-color: #334155 !important;
+}
+
+.dark tfoot,
+.dark tfoot tr,
+.dark tfoot td {
+  background-color: #161F31 !important;
+  border-color: #334155 !important;
+  color: #E2E8F0 !important;
+}
+
+/* Universal Status Pill & Badge Wrapping Prevention */
+.badge,
+[data-badge],
+span.whitespace-nowrap,
+span[class*="rounded-full"],
+span[class*="rounded-md"],
+span[class*="rounded-lg"],
+span[class*="text-[10px]"],
+span[class*="text-[11px]"] {
+  white-space: nowrap;
+}
+
+/* Number & Price Formatting */
+.font-mono {
+  white-space: nowrap;
+}
+
+/* 5. Border Normalization */
+.dark .border-slate-200,
+.dark .border-slate-200\/80,
+.dark .border-slate-200\/90,
+.dark .border-slate-100,
+.dark .border-slate-300,
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-300,
+.dark .divide-slate-50,
+.dark .divide-slate-100,
+.dark .divide-slate-200,
+.dark .divide-gray-100,
+.dark .divide-gray-200 {
+  border-color: #334155 !important;
+}
+
+/* 6. Typography Hierarchy & Contrast Standardization */
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-zinc-900,
+.dark .text-zinc-800,
+.dark .text-neutral-900,
+.dark .text-black,
+.dark h1,
+.dark h2,
+.dark h3,
+.dark h4,
+.dark h5,
+.dark h6 {
+  color: #F8FAFC !important;
+}
+
+.dark .text-slate-700,
+.dark .text-gray-700,
+.dark .text-zinc-700 {
+  color: #E2E8F0 !important;
+}
+
+.dark .text-slate-600,
+.dark .text-slate-500,
+.dark .text-slate-400,
+.dark .text-gray-600,
+.dark .text-gray-500,
+.dark .text-gray-400,
+.dark .text-zinc-600,
+.dark .text-zinc-500,
+.dark .text-zinc-400,
+.dark .text-muted,
+.dark .text-muted-foreground,
+.dark label {
+  color: #CBD5E1 !important;
+}
+
+/* 7. Eliminate Random Orange, Yellow, Purple Leaks & Unify with Sage Green */
+.dark .text-brand-orange,
+.dark .text-orange-500,
+.dark .text-orange-600,
+.dark .text-orange-400,
+.dark .text-amber-500,
+.dark .text-amber-600,
+.dark .text-amber-400,
+.dark .text-yellow-500,
+.dark .text-yellow-400,
+.dark .text-purple-600,
+.dark .text-purple-500 {
+  color: #52B788 !important;
+}
+
+.dark .bg-brand-orange,
+.dark .bg-orange-500,
+.dark .bg-orange-600,
+.dark .bg-purple-600 {
+  background-color: #3B7A57 !important;
+  color: #FFFFFF !important;
+}
+
+.dark .bg-orange-50,
+.dark .bg-orange-50\/20,
+.dark .bg-orange-50\/50,
+.dark .bg-orange-50\/70,
+.dark .bg-amber-50,
+.dark .bg-amber-50\/50,
+.dark .bg-amber-50\/90,
+.dark .bg-yellow-50,
+.dark .bg-purple-50,
+.dark .bg-purple-100 {
+  background-color: rgba(82, 183, 136, 0.12) !important;
+}
+
+.dark .border-orange-200,
+.dark .border-orange-100,
+.dark .border-amber-200,
+.dark .border-yellow-200,
+.dark .border-purple-200 {
+  border-color: rgba(82, 183, 136, 0.28) !important;
+}
+
+.dark .text-amber-800,
+.dark .text-amber-900,
+.dark .text-amber-950,
+.dark .text-orange-800,
+.dark .text-orange-900,
+.dark .text-purple-800,
+.dark .text-purple-900 {
+  color: #E2E8F0 !important;
+}
+
 body {
-  background-color: #F8FAFC;
-  color: #0F172A;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
   font-feature-settings: "cv02", "cv03", "cv04", "cv11", "rlig" 1, "calt" 1;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -37,10 +391,17 @@ body {
 
 /* Glassmorphism Classes */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(226, 232, 240, 0.8);
+}
+
+.dark .glass-panel {
+  background: rgba(30, 41, 59, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(51, 65, 85, 0.65);
 }
 
 .glass-panel-dark {
@@ -62,7 +423,7 @@ body {
   inset: -1px;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, rgba(234, 88, 12, 0.35), transparent 60%);
+  background: linear-gradient(135deg, rgba(59, 122, 87, 0.35), transparent 60%);
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
@@ -70,6 +431,10 @@ body {
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.3s ease;
+}
+
+.dark .glow-card::before {
+  background: linear-gradient(135deg, rgba(82, 183, 136, 0.4), transparent 60%);
 }
 
 .glow-card:hover::before {
@@ -92,12 +457,24 @@ body {
   animation: shimmer 1.6s infinite ease-in-out;
 }
 
+.dark .animate-shimmer {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite ease-in-out;
+}
+
 /* Grid Pattern Background for Landing */
 .bg-grid-pattern {
   background-size: 32px 32px;
   background-image: 
     linear-gradient(to right, rgba(226, 232, 240, 0.6) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(226, 232, 240, 0.6) 1px, transparent 1px);
+}
+
+.dark .bg-grid-pattern {
+  background-image: 
+    linear-gradient(to right, rgba(51, 65, 85, 0.4) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(51, 65, 85, 0.4) 1px, transparent 1px);
 }
 
 /* Custom Scrollbars */
@@ -117,4 +494,12 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94A3B8;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748B;
 }

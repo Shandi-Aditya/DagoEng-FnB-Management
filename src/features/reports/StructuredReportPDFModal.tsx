@@ -88,14 +88,14 @@ export default function StructuredReportPDFModal({
       `}</style>
 
       <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white print:static">
-        <div className="bg-white rounded-2xl max-w-4xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 print:border-none print:shadow-none print:max-w-none flex flex-col max-h-[90vh]">
+        <div className="bg-white dark:bg-[#1E293B] rounded-2xl max-w-4xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 print:border-none print:shadow-none print:max-w-none flex flex-col max-h-[90vh]">
           
           {/* Non-Printable Header Bar */}
-          <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50 print:hidden shrink-0">
+          <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 print:hidden shrink-0">
             <div className="flex items-center space-x-2">
-              <FileText className="w-5 h-5 text-purple-600" />
-              <h3 className="font-bold text-slate-800 text-sm">Preview PDF Laporan Manajemen</h3>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">
+              <FileText className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788]" />
+              <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">Preview PDF Laporan Manajemen</h3>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300">
                 {reportType}
               </span>
             </div>
@@ -103,7 +103,7 @@ export default function StructuredReportPDFModal({
               <Button
                 size="sm"
                 onClick={handlePrint}
-                className="text-xs bg-purple-600 hover:bg-purple-700 text-white space-x-1"
+                className="text-xs bg-[#3B7A57] hover:bg-[#2E6044] text-white space-x-1"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Cetak / Simpan PDF</span>
@@ -118,7 +118,7 @@ export default function StructuredReportPDFModal({
           </div>
 
           {/* Printable Document Body */}
-          <div className="overflow-y-auto p-6 flex-1 bg-slate-100 flex justify-center print:p-0 print:bg-white print:overflow-visible">
+          <div className="overflow-y-auto p-6 flex-1 bg-slate-100 dark:bg-[#0F172A] flex justify-center print:p-0 print:bg-white print:overflow-visible">
             <div
               id="structured-pdf-report"
               ref={printRef}
@@ -140,7 +140,7 @@ export default function StructuredReportPDFModal({
                     </div>
                     <div>
                       <h1 className="text-xl font-extrabold tracking-tight text-slate-900 leading-tight">
-                        DAGO <span className="text-brand-orange">CREATIVE HUB</span>
+                        DAGO <span className="text-[#3B7A57] dark:text-[#52B788]">CREATIVE HUB</span>
                       </h1>
                       <p className="text-[11px] text-slate-500 font-medium">Integrated F&B, Co-working & Commercial Management</p>
                     </div>

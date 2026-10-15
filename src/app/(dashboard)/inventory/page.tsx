@@ -501,15 +501,15 @@ export default function InventoryPage() {
           <p className="text-[11px] text-rose-600 font-medium mt-1">Stok &lt; 40% batas minimum reorder</p>
         </Card>
 
-        <Card className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-xs hover:border-slate-300 transition-all">
+        <Card className="p-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs hover:border-slate-300 dark:hover:border-slate-700 transition-all">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-500">Mendekati Batas Minimum</p>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Mendekati Batas Minimum</p>
+            <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary dark:bg-primary/20 flex items-center justify-center">
               <TrendingDown className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-bold font-mono text-amber-600 mt-2 tracking-tight">{lowCount} Item</p>
-          <p className="text-[11px] text-amber-700 font-medium mt-1">Perlu reorder dalam minggu operasional ini</p>
+          <p className="text-2xl font-bold font-mono text-slate-900 dark:text-slate-100 mt-2 tracking-tight">{lowCount} Item</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-1">Perlu reorder dalam minggu operasional ini</p>
         </Card>
 
         <Card className="p-4 bg-white border border-slate-200/80 rounded-2xl shadow-xs hover:border-slate-300 transition-all">
@@ -715,18 +715,18 @@ export default function InventoryPage() {
 
                       return (
                         <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="py-3 px-4 font-bold text-slate-900">
+                          <td className="py-3 px-4 font-bold text-slate-900 whitespace-nowrap">
                             <span>{item.name}</span>
-                            <div className="text-[10px] text-slate-400 font-normal mt-0.5">
+                            <div className="text-[10px] text-slate-500 dark:text-slate-300 font-normal mt-0.5">
                               Update: {item.lastUpdated}
                             </div>
                           </td>
-                          <td className="py-3 px-3">
-                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200/60">
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 dark:text-slate-200 border border-slate-200/60 whitespace-nowrap">
                               {item.category}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-right">
+                          <td className="py-3 px-4 text-right whitespace-nowrap">
                             <div className="flex flex-col items-end">
                               <span
                                 className={`font-mono font-bold text-sm ${
@@ -759,41 +759,41 @@ export default function InventoryPage() {
                               </div>
                             </div>
                           </td>
-                          <td className="py-3 px-3 text-right">
-                            <span className="text-slate-600 font-mono text-xs">
+                          <td className="py-3 px-3 text-right whitespace-nowrap">
+                            <span className="text-slate-700 dark:text-slate-200 font-mono text-xs">
                               {item.min.toLocaleString("id-ID")}{" "}
-                              <span className="text-[10px] text-slate-400 font-normal">{item.unit}</span>
+                              <span className="text-[10px] text-slate-500 dark:text-slate-300 font-normal">{item.unit}</span>
                             </span>
                           </td>
-                          <td className="py-3 px-3 text-right font-mono font-medium text-slate-800">
+                          <td className="py-3 px-3 text-right font-mono font-medium text-slate-800 dark:text-slate-100 whitespace-nowrap">
                             {formatCurrencyIDR(item.costPerUnit)}
                           </td>
-                          <td className="py-3 px-4 text-slate-600 font-medium">{item.supplier}</td>
-                          <td className="py-3 px-3 text-center">
+                          <td className="py-3 px-4 text-slate-700 dark:text-slate-200 font-medium whitespace-nowrap">{item.supplier}</td>
+                          <td className="py-3 px-3 text-center whitespace-nowrap">
                             {isOutOfStock ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
                                 <Ban className="w-3 h-3 text-rose-500 shrink-0" />
                                 <span>Habis</span>
                               </span>
                             ) : isCritical ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 whitespace-nowrap">
                                 <AlertTriangle className="w-3 h-3 text-rose-500 shrink-0" />
                                 <span>Kritis</span>
                               </span>
                             ) : isLow ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200 whitespace-nowrap">
                                 <TrendingDown className="w-3 h-3 text-amber-600 shrink-0" />
                                 <span>Menipis</span>
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
                                 <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
                                 <span>Aman</span>
                               </span>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-center">
-                            <div className="flex items-center justify-center space-x-1.5">
+                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center space-x-1.5 whitespace-nowrap shrink-0">
                               <button
                                 onClick={() => {
                                   setAdjItemId(item.id);
@@ -1492,7 +1492,7 @@ export default function InventoryPage() {
                 <div className="w-7 h-7 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100">
                   <Sparkles className="w-4 h-4 text-purple-600" />
                 </div>
-                <span>Simulasi Pengurangan Resep Menu (BOM)</span>
+                <span>Kalkulasi & Pemotongan Resep Menu (BOM)</span>
               </h3>
               <button
                 onClick={() => setIsBOMSimulatorModalOpen(false)}

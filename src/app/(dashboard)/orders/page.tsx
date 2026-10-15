@@ -394,14 +394,14 @@ export default function OrdersPage() {
 
                     return (
                       <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3 font-bold text-slate-900">{o.orderNumber}</td>
-                        <td className="p-3 font-semibold">
+                        <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{o.orderNumber}</td>
+                        <td className="p-3 font-semibold whitespace-nowrap">
                           <p className="text-slate-900 font-bold">{o.tableNumber}</p>
-                          <p className="text-[10px] text-slate-400 font-normal">{o.customerName}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-300 font-medium">{o.customerName}</p>
                         </td>
-                        <td className="p-3">
+                        <td className="p-3 whitespace-nowrap">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap inline-flex items-center ${
                               isCompleted
                                 ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
                                 : o.status === "SERVED"
@@ -412,9 +412,9 @@ export default function OrdersPage() {
                             {o.status.replace("_", " ")}
                           </span>
                         </td>
-                        <td className="p-3">
+                        <td className="p-3 whitespace-nowrap">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap inline-flex items-center ${
                               o.paymentStatus === "PAID"
                                 ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
                                 : o.paymentStatus === "REFUNDED"
@@ -425,12 +425,12 @@ export default function OrdersPage() {
                             {o.paymentStatus === "PAID" ? "LUNAS" : o.paymentStatus === "REFUNDED" ? "REFUND" : "BELUM LUNAS"}
                           </span>
                         </td>
-                        <td className="p-3 font-mono font-semibold" suppressHydrationWarning>
+                        <td className="p-3 font-mono font-semibold whitespace-nowrap" suppressHydrationWarning>
                           {formatMinutesToHuman(metrics.totalCustomerWaitingMinutes)}
                         </td>
-                        <td className="p-3">
+                        <td className="p-3 whitespace-nowrap">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap inline-flex items-center ${
                               isDelayed
                                 ? "bg-red-100 text-red-700 border border-red-200"
                                 : metrics.slaStatus === "AT_RISK"
@@ -441,16 +441,16 @@ export default function OrdersPage() {
                             {metrics.slaStatus.replace("_", " ")}
                           </span>
                         </td>
-                        <td className="p-3 font-bold text-slate-900">{formatCurrencyIDR(o.total)}</td>
-                        <td className="p-3">
+                        <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{formatCurrencyIDR(o.total)}</td>
+                        <td className="p-3 whitespace-nowrap">
                           <span
-                            className="text-[10px] font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200"
+                            className="text-[10px] font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 whitespace-nowrap"
                           >
                             {o.paymentMethod || "-"}
                           </span>
                         </td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end space-x-1.5">
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap shrink-0">
                             {!isCompleted && o.status !== "CANCELLED" && (
                               <Button
                                 size="sm"
@@ -484,33 +484,33 @@ export default function OrdersPage() {
 
       {/* Order Detail & Lifecycle History Modal */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150 p-6 space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-150 p-6 space-y-5">
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <div className="flex items-center space-x-2">
-                  <h3 className="text-base font-bold text-slate-900">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
                     Timeline Lifecycle: {selectedOrder.orderNumber}
                   </h3>
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                       selectedOrder.status === "COMPLETED"
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-brand-orange/10 text-brand-orange"
+                        ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
+                        : "bg-primary/10 text-primary border border-primary/20"
                     }`}
                   >
                     {selectedOrder.status}
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Meja {selectedOrder.tableNumber} • {selectedOrder.customerName} • Total:{" "}
-                  <strong className="text-slate-900">{formatCurrencyIDR(selectedOrder.total)}</strong>
+                  <strong className="text-slate-900 dark:text-slate-100">{formatCurrencyIDR(selectedOrder.total)}</strong>
                 </p>
               </div>
               <button
                 onClick={() => setSelectedOrder(null)}
-                className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -521,21 +521,21 @@ export default function OrdersPage() {
               const m = calculateOrderMetrics(selectedOrder);
               return (
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="p-2.5 rounded-lg bg-cyan-50 border border-cyan-100">
-                    <p className="text-[10px] text-cyan-700 font-bold uppercase">Kitchen Queue</p>
-                    <p className="text-sm font-bold text-cyan-950 mt-0.5" suppressHydrationWarning>
+                  <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20">
+                    <p className="text-[10px] text-primary font-bold uppercase">Kitchen Queue</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5" suppressHydrationWarning>
                       {formatMinutesToHuman(m.kitchenQueueMinutes)}
                     </p>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-orange-50 border border-orange-100">
-                    <p className="text-[10px] text-orange-700 font-bold uppercase">Cooking Time</p>
-                    <p className="text-sm font-bold text-orange-950 mt-0.5" suppressHydrationWarning>
+                  <div className="p-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <p className="text-[10px] text-slate-600 dark:text-slate-400 font-bold uppercase">Cooking Time</p>
+                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5" suppressHydrationWarning>
                       {formatMinutesToHuman(m.cookingMinutes)}
                     </p>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-100">
-                    <p className="text-[10px] text-emerald-700 font-bold uppercase">Serving Time</p>
-                    <p className="text-sm font-bold text-emerald-950 mt-0.5" suppressHydrationWarning>
+                  <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40">
+                    <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase">Serving Time</p>
+                    <p className="text-sm font-bold text-emerald-950 dark:text-emerald-300 mt-0.5" suppressHydrationWarning>
                       {formatMinutesToHuman(m.servingMinutes)}
                     </p>
                   </div>
@@ -544,23 +544,23 @@ export default function OrdersPage() {
             })()}
 
             {/* Ordered Items Summary & Financial Breakdown */}
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-3">
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-100 dark:border-slate-800 space-y-3">
               <div>
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide mb-2">
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-2">
                   Item Pesanan ({selectedOrder.items.length}):
                 </h4>
                 <div className="space-y-1.5">
                   {selectedOrder.items.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs text-slate-700">
+                    <div key={idx} className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-300">
                       <div>
-                        <span className="font-bold text-slate-900">{item.quantity}x</span> {item.productName}
+                        <span className="font-bold text-slate-900 dark:text-slate-100">{item.quantity}x</span> {item.productName}
                         {item.modifiers && item.modifiers.length > 0 && (
                           <span className="text-[10px] text-slate-400 ml-1">
                             ({item.modifiers.join(", ")})
                           </span>
                         )}
                       </div>
-                      <span className="font-medium text-slate-900">
+                      <span className="font-medium text-slate-900 dark:text-slate-100">
                         {formatCurrencyIDR(item.unitPrice * item.quantity)}
                       </span>
                     </div>
@@ -574,32 +574,32 @@ export default function OrdersPage() {
                 const discountAmount = selectedOrder.discount ?? Math.max(0, (selectedOrder.subtotal + (selectedOrder.tax || 0)) - selectedOrder.total);
 
                 return (
-                  <div className="pt-2.5 border-t border-slate-200/80 space-y-1 text-xs">
-                    <div className="flex justify-between text-slate-600">
+                  <div className="pt-2.5 border-t border-slate-200/80 dark:border-slate-700 space-y-1 text-xs">
+                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
                       <span>Subtotal:</span>
-                      <span className="font-semibold text-slate-800">{formatCurrencyIDR(selectedOrder.subtotal)}</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">{formatCurrencyIDR(selectedOrder.subtotal)}</span>
                     </div>
                     {promoName && (
-                      <div className="flex justify-between text-slate-700">
+                      <div className="flex justify-between text-slate-700 dark:text-slate-300">
                         <span>Promo:</span>
-                        <span className="font-bold text-purple-700">{promoName}</span>
+                        <span className="font-bold text-primary">{promoName}</span>
                       </div>
                     )}
                     {discountAmount > 0 && (
-                      <div className="flex justify-between text-emerald-700 font-medium">
+                      <div className="flex justify-between text-emerald-700 dark:text-emerald-400 font-medium">
                         <span>Discount:</span>
                         <span>-{formatCurrencyIDR(discountAmount)}</span>
                       </div>
                     )}
                     {selectedOrder.tax > 0 && (
-                      <div className="flex justify-between text-slate-500">
+                      <div className="flex justify-between text-slate-500 dark:text-slate-400">
                         <span>Pajak Restoran:</span>
                         <span>+{formatCurrencyIDR(selectedOrder.tax)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between font-bold text-slate-900 pt-1 border-t border-slate-200 text-sm">
+                    <div className="flex justify-between font-bold text-slate-900 dark:text-slate-100 pt-1 border-t border-slate-200 dark:border-slate-700 text-sm">
                       <span>Total:</span>
-                      <span className="text-brand-orange">{formatCurrencyIDR(selectedOrder.total)}</span>
+                      <span className="text-primary">{formatCurrencyIDR(selectedOrder.total)}</span>
                     </div>
                   </div>
                 );
@@ -608,16 +608,16 @@ export default function OrdersPage() {
 
             {/* Step Timeline */}
             <div className="space-y-3">
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
                 Riwayat Perubahan Status:
               </h4>
-              <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+              <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-700">
                 {selectedOrder.statusHistory.map((item, idx) => (
                   <div key={idx} className="relative">
-                    <span className="absolute -left-6 top-1 w-3 h-3 rounded-full bg-brand-orange border-2 border-white ring-2 ring-orange-100" />
+                    <span className="absolute -left-6 top-1 w-3 h-3 rounded-full bg-primary border-2 border-white dark:border-slate-800 ring-2 ring-primary/20" />
                     <div className="text-xs">
                       <div className="flex items-center space-x-2">
-                        <span className="font-bold text-slate-900">
+                        <span className="font-bold text-slate-900 dark:text-slate-100">
                           {item.toStatus.replace("_", " ")}
                         </span>
                         <span className="text-[10px] text-slate-400 font-mono">

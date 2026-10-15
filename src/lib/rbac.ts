@@ -167,6 +167,14 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
   },
   {
+    name: "Event Komunitas",
+    href: "/events-admin",
+    icon: "Calendar",
+    module: "CORE",
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+    minScope: "ORGANIZATION",
+  },
+  {
     name: "Audit Trail & Log",
     href: "/activity-log",
     icon: "ShieldCheck",

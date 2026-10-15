@@ -85,6 +85,7 @@ export interface POSReceiptData {
   outletPhone: string;
   tableNumber: string;
   customerName: string;
+  customerPhone?: string;
   orderType: "DINE_IN" | "TAKEAWAY" | "DELIVERY";
   items: {
     name: string;

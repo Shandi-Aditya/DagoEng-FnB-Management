@@ -95,52 +95,52 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-850">
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center text-brand-orange">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
               <Coffee className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-slate-900">{product.name}</h3>
-              <p className="text-xs text-slate-500 font-medium">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">{product.name}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                 Kustomisasi Varian & Tambahan Resep
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Scrollable Content */}
-        <div className="p-5 overflow-y-auto space-y-5 flex-1 divide-y divide-slate-100">
+        <div className="p-5 overflow-y-auto space-y-5 flex-1 divide-y divide-slate-100 dark:divide-slate-800">
           {/* Base Product Price & Description */}
           <div className="pb-2">
             <div className="flex items-baseline justify-between">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                 {product.category}
               </span>
-              <span className="text-base font-bold text-brand-orange font-mono">
+              <span className="text-base font-bold text-primary font-mono">
                 {formatCurrencyIDR(product.basePrice)}
               </span>
             </div>
             {product.description && (
-              <p className="text-xs text-slate-600 mt-1 leading-relaxed">{product.description}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">{product.description}</p>
             )}
           </div>
 
           {/* 1. Variants Selection (if any) */}
           {product.variants && product.variants.length > 0 && (
             <div className="pt-4 space-y-2">
-              <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
                 <span>Pilih Ukuran / Varian:</span>
-                <span className="text-[10px] text-brand-orange bg-orange-50 px-1.5 py-0.5 rounded font-medium">
+                <span className="text-[10px] text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded font-medium">
                   Wajib 1 Pilihan
                 </span>
               </label>
@@ -154,12 +154,12 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
                       onClick={() => setSelectedVariant(v)}
                       className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all ${
                         isSelected
-                          ? "border-brand-orange bg-orange-50/50 text-slate-900 ring-1 ring-brand-orange"
-                          : "border-slate-200 bg-white hover:border-slate-300 text-slate-700"
+                          ? "border-primary bg-primary/10 text-slate-900 dark:text-slate-100 ring-1 ring-primary"
+                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300"
                       }`}
                     >
                       <span className="text-xs font-semibold">{v.name}</span>
-                      <span className="text-xs font-mono font-bold text-slate-600">
+                      <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">
                         {v.priceAdjustment > 0 ? `+${formatCurrencyIDR(v.priceAdjustment)}` : "Include"}
                       </span>
                     </button>
@@ -173,12 +173,12 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
           {product.modifierGroups?.map((group) => (
             <div key={group.id} className="pt-4 space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-800">{group.name}</label>
+                <label className="text-xs font-bold text-slate-800 dark:text-slate-200">{group.name}</label>
                 <span
                   className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                     group.isRequired
-                      ? "bg-amber-100 text-amber-800"
-                      : "bg-slate-100 text-slate-500"
+                      ? "bg-primary/15 text-primary border border-primary/20"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                   }`}
                 >
                   {group.isRequired ? "Wajib" : "Opsional"}
@@ -197,23 +197,23 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
                       }
                       className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all ${
                         isChecked
-                          ? "border-brand-cyan bg-cyan-50/40 text-slate-900 ring-1 ring-brand-cyan"
-                          : "border-slate-200 bg-white hover:border-slate-300 text-slate-700"
+                          ? "border-primary bg-primary/10 text-slate-900 dark:text-slate-100 ring-1 ring-primary"
+                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300"
                       }`}
                     >
                       <div className="flex items-center space-x-2">
                         <div
                           className={`w-4 h-4 rounded flex items-center justify-center border text-[10px] ${
                             isChecked
-                              ? "bg-brand-cyan border-brand-cyan text-white"
-                              : "border-slate-300 bg-white"
+                              ? "bg-primary border-primary text-white"
+                              : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
                           }`}
                         >
                           {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
                         </div>
                         <span className="text-xs font-medium">{opt.name}</span>
                       </div>
-                      <span className="text-xs font-mono font-bold text-slate-600">
+                      <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">
                         {((Number(opt.price) || Number((opt as any).priceAdjustment) || 0) > 0)
                           ? `+${formatCurrencyIDR(Number(opt.price) || Number((opt as any).priceAdjustment) || 0)}`
                           : "Gratis"}
@@ -227,7 +227,7 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
 
           {/* 3. Special Notes for Kitchen */}
           <div className="pt-4 space-y-1.5">
-            <label className="text-xs font-bold text-slate-800">
+            <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
               Catatan Khusus Barista / Dapur:
             </label>
             <input
@@ -235,28 +235,28 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Contoh: Pisahkan es batu, sambal dipisah..."
-              className="w-full text-xs px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange"
+              className="w-full text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
         </div>
 
         {/* Footer: Quantity Stepper & Add Button */}
-        <div className="px-5 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-4">
-          <div className="flex items-center space-x-2 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+        <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex items-center justify-between gap-4">
+          <div className="flex items-center space-x-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-1 shadow-sm">
             <button
               type="button"
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95 transition-all"
             >
               <Minus className="w-3.5 h-3.5" />
             </button>
-            <span className="w-8 text-center text-xs font-bold font-mono text-slate-900">
+            <span className="w-8 text-center text-xs font-bold font-mono text-slate-900 dark:text-slate-100">
               {quantity}
             </span>
             <button
               type="button"
               onClick={() => setQuantity((q) => q + 1)}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 hover:bg-slate-100 active:scale-95 transition-all"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95 transition-all"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -265,7 +265,7 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
           <Button
             type="button"
             onClick={handleConfirmAdd}
-            className="flex-1 text-xs font-bold h-10 space-x-2 shadow-md"
+            className="flex-1 text-xs font-bold h-10 space-x-2 shadow-md bg-primary hover:bg-primary/90 text-white"
           >
             <span>Tambahkan ke Keranjang</span>
             <span className="font-mono bg-black/15 px-2 py-0.5 rounded">

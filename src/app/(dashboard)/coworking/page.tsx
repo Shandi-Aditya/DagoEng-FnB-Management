@@ -672,39 +672,39 @@ export default function CoworkingPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700">
                   {bookings.map((b) => (
-                    <tr key={b.id} className="hover:bg-slate-50">
-                      <td className="p-3 font-semibold text-slate-900">
-                        <p className="font-mono text-blue-600 font-bold">{b.bookingCode}</p>
+                    <tr key={b.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="p-3 font-semibold text-slate-900 whitespace-nowrap">
+                        <p className="font-mono text-blue-600 dark:text-blue-400 font-bold">{b.bookingCode}</p>
                         <p>{b.guestName} {b.company ? `(${b.company})` : ""}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">{b.guestPhone}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-300 font-mono">{b.guestPhone}</p>
                       </td>
-                      <td className="p-3">
-                        <span className="font-bold text-slate-900">{b.spaceName}</span>
-                        <span className="text-[10px] text-slate-400 block">{b.spaceType}</span>
+                      <td className="p-3 whitespace-nowrap">
+                        <span className="font-bold text-slate-900 dark:text-slate-100">{b.spaceName}</span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-300 block">{b.spaceType}</span>
                       </td>
-                      <td className="p-3">
-                        <p className="font-semibold text-slate-900">
+                      <td className="p-3 whitespace-nowrap">
+                        <p className="font-semibold text-slate-900 dark:text-slate-100">
                           {b.endDate && b.endDate !== b.date ? `${b.date} s/d ${b.endDate}` : b.date}
                         </p>
-                        <p className="text-[10px] text-slate-500 font-medium">
+                        <p className="text-[10px] text-slate-500 dark:text-slate-300 font-medium">
                           {b.bookingType === "HOURLY"
                             ? `Jam: ${b.startTime} ${b.endTime ? `– ${b.endTime}` : ""} (${b.duration} Jam)`
                             : `Durasi: ${b.duration} Hari ${b.endTime ? `(${b.startTime} – ${b.endTime})` : ""}`}
                         </p>
                       </td>
-                      <td className="p-3">
-                        <p className="font-bold font-mono text-slate-900">{formatCurrencyIDR(b.totalAmount)}</p>
-                        <p className="text-[10px] text-slate-500">{b.paymentMethod}</p>
-                        {b.paymentRef && <p className="text-[9px] text-slate-400 font-mono">Ref: {b.paymentRef}</p>}
+                      <td className="p-3 whitespace-nowrap">
+                        <p className="font-bold font-mono text-slate-900 dark:text-slate-100">{formatCurrencyIDR(b.totalAmount)}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-300">{b.paymentMethod}</p>
+                        {b.paymentRef && <p className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">Ref: {b.paymentRef}</p>}
                       </td>
-                      <td className="p-3">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      <td className="p-3 whitespace-nowrap">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 whitespace-nowrap inline-flex items-center">
                           {b.paymentStatus}
                         </span>
                       </td>
-                      <td className="p-3">
+                      <td className="p-3 whitespace-nowrap">
                         <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${b.checkInStatus === "CHECKED_IN"
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap inline-flex items-center ${b.checkInStatus === "CHECKED_IN"
                               ? "bg-blue-100 text-blue-800 border border-blue-200"
                               : b.checkInStatus === "COMPLETED"
                                 ? "bg-slate-100 text-slate-700 border border-slate-200"
@@ -714,8 +714,8 @@ export default function CoworkingPage() {
                           {b.checkInStatus === "CHECKED_IN" ? "SEDANG AKTIF" : b.checkInStatus}
                         </span>
                       </td>
-                      <td className="p-3 text-right">
-                        <div className="flex items-center justify-end space-x-1.5">
+                      <td className="p-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap shrink-0">
                           <Button
                             size="sm"
                             variant="outline"
@@ -1259,15 +1259,15 @@ export default function CoworkingPage() {
                         }
                         onChange={(e) => setBookEndDate(e.target.value)}
                         className={`w-full p-2 border rounded-xl font-bold text-xs outline-none ${bookDailyPreset === "CUSTOM_RANGE"
-                            ? "bg-white border-amber-300 focus:ring-2 focus:ring-amber-500/20 text-slate-900"
-                            : "bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed"
+                            ? "bg-white dark:bg-slate-800 border-primary focus:ring-2 focus:ring-primary/20 text-slate-900 dark:text-slate-100"
+                            : "bg-slate-100 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
                           }`}
                         required
                       />
                     </div>
                   </div>
 
-                  <div className="p-2 bg-white rounded-xl border border-amber-200 text-[11px] text-amber-900 flex items-center justify-between font-bold">
+                  <div className="p-2 bg-primary/10 dark:bg-primary/15 rounded-xl border border-primary/20 dark:border-primary/30 text-[11px] text-slate-900 dark:text-slate-100 flex items-center justify-between font-bold">
                     <span>
                       Total:{" "}
                       {bookDailyPreset === "1_DAY"
@@ -1280,7 +1280,7 @@ export default function CoworkingPage() {
                               ? "14 Hari (2 Minggu)"
                               : `${calculateDaysCount(bookStartDate, bookEndDate)} Hari`}
                     </span>
-                    <span className="text-slate-500 font-normal">Akses 09:00 &ndash; 18:00 WITA setiap hari</span>
+                    <span className="text-slate-500 dark:text-slate-400 font-normal">Akses 09:00 &ndash; 18:00 WITA setiap hari</span>
                   </div>
                 </div>
               )}

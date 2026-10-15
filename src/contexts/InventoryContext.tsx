@@ -228,7 +228,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
 
     return {
       success: true,
-      message: `Simulasi Berhasil: ${quantity}x "${recipe.menuName}" otomatis memotong ${recipe.ingredients.length} bahan baku!`,
+      message: `Berhasil: ${quantity}x "${recipe.menuName}" otomatis memotong ${recipe.ingredients.length} bahan baku!`,
     };
   };
 

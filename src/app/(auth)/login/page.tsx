@@ -9,6 +9,7 @@ import { useAuth, DEMO_PERSONAS, PersonaKey } from "@/contexts/AuthContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import {
   Lock,
   Mail,
@@ -159,27 +160,30 @@ function LoginContent() {
 
       <div className="w-full max-w-md space-y-5 relative z-10">
 
-        {/* Top Back Navigation Bar */}
+        {/* Top Back Navigation Bar & Theme Toggle */}
         <div className="flex items-center justify-between px-1">
           <Link
             href={returnTo || "/"}
             className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-300 hover:text-white backdrop-blur-md transition-all duration-200 hover:scale-105 active:scale-95"
           >
-            <ArrowLeft className="w-3.5 h-3.5 text-brand-orange" />
+            <ArrowLeft className="w-3.5 h-3.5 text-primary" />
             <span>{returnTo ? "Kembali ke Portal / Fitur" : "Kembali ke Beranda"}</span>
           </Link>
 
-          {returnTo && (
-            <span className="text-[10px] bg-brand-orange/20 text-brand-orange font-bold px-2.5 py-1 rounded-full border border-brand-orange/30">
-              Konteks Terjaga
-            </span>
-          )}
+          <div className="flex items-center space-x-2">
+            {returnTo && (
+              <span className="text-[10px] bg-primary/20 text-primary font-bold px-2.5 py-1 rounded-full border border-primary/30">
+                Konteks Terjaga
+              </span>
+            )}
+            <ThemeToggle />
+          </div>
         </div>
 
         {/* Brand Header */}
         <div className="text-center space-y-2.5 pt-2">
           <Link href="/" className="inline-block group">
-            <div className="w-16 h-18 relative mx-auto transition-transform duration-300 group-hover:scale-110 drop-shadow-[0_8px_20px_rgba(249,115,22,0.35)]">
+            <div className="w-16 h-18 relative mx-auto transition-transform duration-300 group-hover:scale-110 drop-shadow-[0_8px_20px_rgba(59,122,87,0.35)]">
               <Image
                 src="/logo-dago.png"
                 alt="DagoEng Creative Hub Logo"
@@ -192,7 +196,7 @@ function LoginContent() {
           </Link>
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              DagoEng <span className="text-brand-orange">Platform</span>
+              DagoEng <span className="text-primary">Platform</span>
             </h1>
             <p className="text-xs text-slate-400 font-medium mt-1">
               Sistem Terpadu F&B, Co-working & Customer Loyalty
@@ -217,7 +221,7 @@ function LoginContent() {
             type="button"
             onClick={() => setActiveMode("CUSTOMER")}
             className={`py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center space-x-1.5 ${activeMode === "CUSTOMER"
-                ? "bg-gradient-to-r from-orange-500 to-brand-orange text-white shadow-lg shadow-orange-500/30 border border-orange-400/30 scale-[1.02]"
+                ? "bg-primary text-white shadow-lg shadow-primary/30 border border-primary/40 scale-[1.02]"
                 : "text-slate-400 hover:text-white"
               }`}
           >

@@ -590,21 +590,21 @@ export default function EmployeesPage() {
                   <tbody className="divide-y divide-slate-100">
                     {filteredShifts.map((shift) => (
                       <tr key={shift.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="px-4 py-3 font-bold text-slate-900">{shift.shiftName}</td>
-                        <td className="px-4 py-3">{shift.assignedCashierName}</td>
-                        <td className="px-4 py-3">
-                          <div className="text-slate-800">{shift.startTime}</div>
-                          {shift.endTime && <div className="text-[10px] text-slate-400">s/d {shift.endTime}</div>}
+                        <td className="px-4 py-3 font-bold text-slate-900 whitespace-nowrap">{shift.shiftName}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{shift.assignedCashierName}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="text-slate-800 dark:text-slate-200">{shift.startTime}</div>
+                          {shift.endTime && <div className="text-[10px] text-slate-500 dark:text-slate-300">s/d {shift.endTime}</div>}
                         </td>
-                        <td className="px-4 py-3 font-mono">Rp {shift.openingCash.toLocaleString("id-ID")}</td>
-                        <td className="px-4 py-3 font-mono">Rp {shift.expectedCash.toLocaleString("id-ID")}</td>
-                        <td className="px-4 py-3 font-mono font-semibold text-slate-900">
+                        <td className="px-4 py-3 font-mono whitespace-nowrap">Rp {shift.openingCash.toLocaleString("id-ID")}</td>
+                        <td className="px-4 py-3 font-mono whitespace-nowrap">Rp {shift.expectedCash.toLocaleString("id-ID")}</td>
+                        <td className="px-4 py-3 font-mono font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                           {shift.actualCash !== undefined ? `Rp ${shift.actualCash.toLocaleString("id-ID")}` : "-"}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 whitespace-nowrap">
                           {shift.status === "CLOSED" ? (
                             <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded font-mono text-[11px] font-bold ${
+                              className={`inline-flex items-center px-2 py-0.5 rounded font-mono text-[11px] font-bold whitespace-nowrap ${
                                 shift.cashVariance === 0
                                   ? "bg-emerald-100 text-emerald-800"
                                   : shift.cashVariance > 0
@@ -616,15 +616,15 @@ export default function EmployeesPage() {
                               Rp {shift.cashVariance.toLocaleString("id-ID")}
                             </span>
                           ) : (
-                            <span className="text-[11px] text-slate-400 italic">Sedang Berjalan</span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-300 italic whitespace-nowrap">Sedang Berjalan</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-4 py-3 text-center whitespace-nowrap">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${
                               shift.status === "ACTIVE"
                                 ? "bg-emerald-100 text-emerald-800"
-                                : "bg-slate-100 text-slate-700"
+                                : "bg-slate-100 text-slate-700 dark:text-slate-200"
                             }`}
                           >
                             {shift.status}

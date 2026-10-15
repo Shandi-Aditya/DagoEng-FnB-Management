@@ -257,7 +257,7 @@ export default function TablesPage() {
               : "bg-slate-100 text-slate-600 hover:bg-slate-200"
           }`}
         >
-          <CalendarCheck className="w-4 h-4 text-brand-orange" />
+          <CalendarCheck className="w-4 h-4 text-primary dark:text-primary-light" />
           <span>Buku Reservasi Terjadwal ({filteredReservations.filter((r) => r.status === "CONFIRMED").length})</span>
         </button>
       </div>
@@ -266,7 +266,7 @@ export default function TablesPage() {
       {activeTab === "FLOOR_PLAN" && (
         <div className="space-y-6 animate-in fade-in">
           {filteredAreas.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-2xl border border-slate-200 text-slate-400 text-xs">
+            <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-slate-400 dark:text-slate-500 text-xs">
               Belum ada area meja untuk outlet {activeOutlet?.name || "terpilih"}.
             </div>
           ) : (
@@ -296,7 +296,7 @@ export default function TablesPage() {
                             onClick={() => handleTableClick(area.id, t)}
                             className={`p-3.5 rounded-xl border transition-all cursor-pointer hover:shadow-md flex flex-col justify-between h-32 ${
                               isOccupied
-                                ? "bg-orange-50/70 border-brand-orange text-slate-900 ring-1 ring-brand-orange"
+                                ? "bg-primary/10 border-primary text-slate-900 dark:text-slate-100 ring-1 ring-primary/40"
                                 : isReserved
                                 ? "bg-amber-50/70 border-amber-400 text-slate-900"
                                 : isCleaning
@@ -309,7 +309,7 @@ export default function TablesPage() {
                               <span
                                 className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
                                   isOccupied
-                                    ? "bg-brand-orange text-white"
+                                    ? "bg-primary text-white"
                                     : isReserved
                                     ? "bg-amber-500 text-white"
                                     : isCleaning
@@ -327,9 +327,9 @@ export default function TablesPage() {
                             </div>
 
                             {isOccupied ? (
-                              <div className="pt-1.5 border-t border-brand-orange/20 text-[10px] space-y-0.5">
-                                <p className="font-bold text-slate-900 truncate">{t.customer || "Tamu Aktif"}</p>
-                                <p className="text-brand-orange font-bold font-mono">{t.total || "-"}</p>
+                              <div className="pt-1.5 border-t border-primary/20 text-[10px] space-y-0.5">
+                                <p className="font-bold text-slate-900 dark:text-slate-100 truncate">{t.customer || "Tamu Aktif"}</p>
+                                <p className="text-primary dark:text-primary-light font-bold font-mono">{t.total || "-"}</p>
                               </div>
                             ) : isReserved ? (
                               <div className="pt-1.5 border-t border-amber-300 text-[10px] space-y-0.5">
@@ -419,7 +419,7 @@ export default function TablesPage() {
                           </p>
                         </td>
                         <td className="p-3">
-                          <span className="font-extrabold text-brand-orange bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                          <span className="font-extrabold text-primary dark:text-primary-light bg-primary/10 dark:bg-primary/20 px-2 py-0.5 rounded border border-primary/20 dark:border-primary/40">
                             Meja {res.tableId}
                           </span>
                           <span className="text-[10px] text-slate-400 block mt-0.5">
@@ -438,9 +438,9 @@ export default function TablesPage() {
                         <td className="p-3 text-slate-600 max-w-[180px] truncate">
                           {res.notes || "-"}
                         </td>
-                        <td className="p-3">
+                        <td className="p-3 whitespace-nowrap">
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap inline-flex items-center ${
                               res.status === "CONFIRMED"
                                 ? "bg-amber-100 text-amber-800 border border-amber-200"
                                 : res.status === "SEATED"
@@ -455,8 +455,8 @@ export default function TablesPage() {
                               : "DIBATALKAN"}
                           </span>
                         </td>
-                        <td className="p-3 text-right">
-                          <div className="flex items-center justify-end space-x-1.5">
+                        <td className="p-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap shrink-0">
                             {res.status === "CONFIRMED" && (
                               <>
                                 <Button
@@ -483,7 +483,7 @@ export default function TablesPage() {
                                 onClick={() => router.push("/pos")}
                                 className="text-[10px] h-7 px-2 font-bold bg-slate-900 text-white space-x-1"
                               >
-                                <Utensils className="w-3 h-3 text-brand-orange" />
+                                <Utensils className="w-3 h-3 text-primary dark:text-primary-light" />
                                 <span>Buka POS</span>
                               </Button>
                             )}
@@ -501,20 +501,20 @@ export default function TablesPage() {
 
       {/* MODAL 1: DETAIL & AKSI MEJA */}
       {selectedTableDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200">
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800">
+            <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-850">
               <div className="flex items-center space-x-2">
-                <span className="font-extrabold text-base text-slate-900">
+                <span className="font-extrabold text-base text-slate-900 dark:text-slate-100">
                   Meja {selectedTableDetails.table.number || selectedTableDetails.table.id}
                 </span>
-                <span className="text-xs bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-medium">
+                <span className="text-xs bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded font-medium">
                   Kapasitas {selectedTableDetails.table.cap} Orang
                 </span>
               </div>
               <button
                 onClick={() => setSelectedTableDetails(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -523,17 +523,17 @@ export default function TablesPage() {
             <div className="p-5 space-y-4 text-xs">
               {/* Active Occupancy Details */}
               {selectedTableDetails.table.status === "OCCUPIED" && (
-                <div className="p-3 bg-orange-50 rounded-xl border border-brand-orange/30 space-y-1.5">
-                  <span className="text-[10px] font-bold text-brand-orange uppercase">
+                <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 space-y-1.5">
+                  <span className="text-[10px] font-bold text-primary uppercase">
                     Informasi Tagihan Aktif:
                   </span>
-                  <div className="flex justify-between font-bold text-sm text-slate-900">
+                  <div className="flex justify-between font-bold text-sm text-slate-900 dark:text-slate-100">
                     <span>{selectedTableDetails.table.customer || "Tamu Aktif"}</span>
-                    <span className="text-brand-orange font-mono">
+                    <span className="text-primary font-mono">
                       {selectedTableDetails.table.total || "-"}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Durasi: {selectedTableDetails.table.time || "Baru saja"} • {selectedTableDetails.table.itemsCount || 2} Menu
                   </p>
                 </div>
@@ -541,14 +541,14 @@ export default function TablesPage() {
 
               {/* Status Switcher Buttons */}
               <div className="space-y-2">
-                <label className="font-bold text-slate-700">Ubah Status Meja Langsung:</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Ubah Status Meja Langsung:</label>
                 <div className="grid grid-cols-2 gap-2">
                   <Button
                     type="button"
                     size="sm"
                     variant={selectedTableDetails.table.status === "AVAILABLE" ? "default" : "outline"}
                     onClick={() => handleUpdateTableStatus("AVAILABLE")}
-                    className={selectedTableDetails.table.status === "AVAILABLE" ? "bg-emerald-600 text-white" : ""}
+                    className={selectedTableDetails.table.status === "AVAILABLE" ? "bg-emerald-600 text-white" : "dark:border-slate-700 dark:text-slate-300"}
                   >
                     🟢 Kosongkan (Tersedia)
                   </Button>
@@ -557,25 +557,25 @@ export default function TablesPage() {
                     size="sm"
                     variant={selectedTableDetails.table.status === "OCCUPIED" ? "default" : "outline"}
                     onClick={() => handleUpdateTableStatus("OCCUPIED")}
-                    className={selectedTableDetails.table.status === "OCCUPIED" ? "bg-brand-orange text-white" : ""}
+                    className={selectedTableDetails.table.status === "OCCUPIED" ? "bg-primary text-white" : "dark:border-slate-700 dark:text-slate-300"}
                   >
-                    🟠 Terisi (Occupied)
+                    Terisi (Occupied)
                   </Button>
                   <Button
                     type="button"
                     size="sm"
                     variant={selectedTableDetails.table.status === "RESERVED" ? "default" : "outline"}
                     onClick={() => handleUpdateTableStatus("RESERVED")}
-                    className={selectedTableDetails.table.status === "RESERVED" ? "bg-amber-600 text-white" : ""}
+                    className={selectedTableDetails.table.status === "RESERVED" ? "bg-slate-700 text-white" : "dark:border-slate-700 dark:text-slate-300"}
                   >
-                    🟡 Reserved
+                    Reserved
                   </Button>
                   <Button
                     type="button"
                     size="sm"
                     variant={selectedTableDetails.table.status === "CLEANING" ? "default" : "outline"}
                     onClick={() => handleUpdateTableStatus("CLEANING")}
-                    className={selectedTableDetails.table.status === "CLEANING" ? "bg-slate-700 text-white" : ""}
+                    className={selectedTableDetails.table.status === "CLEANING" ? "bg-slate-600 text-white" : "dark:border-slate-700 dark:text-slate-300"}
                   >
                     Perlu Dibersihkan
                   </Button>
@@ -583,12 +583,13 @@ export default function TablesPage() {
               </div>
 
               {/* Action Button to Open POS */}
-              <div className="pt-3 border-t border-slate-100 flex justify-between gap-2">
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setSelectedTableDetails(null)}
+                  className="dark:border-slate-700 dark:text-slate-300"
                 >
                   Tutup
                 </Button>
@@ -596,9 +597,9 @@ export default function TablesPage() {
                   type="button"
                   size="sm"
                   onClick={() => router.push("/pos")}
-                  className="bg-slate-900 hover:bg-slate-800 text-white font-bold space-x-1.5"
+                  className="bg-primary hover:bg-primary/90 text-white font-bold space-x-1.5 shadow-sm"
                 >
-                  <Utensils className="w-3.5 h-3.5 text-brand-orange" />
+                  <Utensils className="w-3.5 h-3.5" />
                   <span>Buka POS Kasir Meja Ini</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
@@ -610,16 +611,16 @@ export default function TablesPage() {
 
       {/* MODAL 2: BUAT RESERVASI */}
       {isAddReservationModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-5 border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-lg p-5 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
-                <CalendarCheck className="w-5 h-5 text-brand-orange" />
-                <h3 className="font-bold text-sm text-slate-900">Buat Reservasi Meja Terjadwal</h3>
+                <CalendarCheck className="w-5 h-5 text-primary" />
+                <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Buat Reservasi Meja Terjadwal</h3>
               </div>
               <button
                 onClick={() => setIsAddReservationModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
+                className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -628,36 +629,36 @@ export default function TablesPage() {
             <form onSubmit={handleAddReservation} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Nama Lengkap Tamu</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Nama Lengkap Tamu</label>
                   <input
                     type="text"
                     required
                     placeholder="Contoh: Ibu Maya Santika"
                     value={resCustomerName}
                     onChange={(e) => setResCustomerName(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Nomor WhatsApp</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Nomor WhatsApp</label>
                   <input
                     type="text"
                     required
                     placeholder="Contoh: +62 812-3456-7890"
                     value={resPhone}
                     onChange={(e) => setResPhone(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl font-mono"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl font-mono"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Pilih Meja</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Pilih Meja</label>
                   <select
                     value={resTableId}
                     onChange={(e) => setResTableId(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl bg-white font-bold"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl font-bold"
                   >
                     {filteredAreas.flatMap((a) =>
                       a.tables.map((t) => (
@@ -669,7 +670,7 @@ export default function TablesPage() {
                   </select>
                 </div>
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Jumlah Tamu (Pax)</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Jumlah Tamu (Pax)</label>
                   <input
                     type="number"
                     min={1}
@@ -677,43 +678,43 @@ export default function TablesPage() {
                     required
                     value={resPax}
                     onChange={(e) => setResPax(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-xl font-mono font-bold"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl font-mono font-bold"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Uang Muka / DP (Rp)</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Uang Muka / DP (Rp)</label>
                   <input
                     type="number"
                     min={0}
                     step={10000}
                     value={resDP}
                     onChange={(e) => setResDP(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-xl font-mono font-bold text-emerald-700"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono font-bold text-primary rounded-xl"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                <label className="font-bold text-slate-800 block text-xs">Jadwal Kedatangan Tamu</label>
+              <div className="space-y-2 p-3 bg-slate-50 dark:bg-slate-850 rounded-xl border border-slate-200 dark:border-slate-700">
+                <label className="font-bold text-slate-800 dark:text-slate-200 block text-xs">Jadwal Kedatangan Tamu</label>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-600">Pilih Tanggal</label>
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Pilih Tanggal</label>
                     <input
                       type="date"
                       required
                       value={resDate}
                       onChange={(e) => setResDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border rounded-lg text-xs font-semibold bg-white"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-600">Pilih Jam (WITA)</label>
+                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Pilih Jam (WITA)</label>
                     <input
                       type="time"
                       required
                       value={resTime}
                       onChange={(e) => setResTime(e.target.value)}
-                      className="w-full px-2.5 py-1.5 border rounded-lg text-xs font-semibold bg-white"
+                      className="w-full px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                     />
                   </div>
                 </div>
@@ -724,7 +725,7 @@ export default function TablesPage() {
                   <button
                     type="button"
                     onClick={() => setResDate(new Date().toISOString().split("T")[0])}
-                    className="px-2 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-medium"
+                    className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium"
                   >
                     Hari Ini
                   </button>
@@ -735,18 +736,18 @@ export default function TablesPage() {
                       d.setDate(d.getDate() + 1);
                       setResDate(d.toISOString().split("T")[0]);
                     }}
-                    className="px-2 py-0.5 rounded bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 font-medium"
+                    className="px-2 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium"
                   >
                     Besok
                   </button>
-                  <span className="text-slate-300">|</span>
+                  <span className="text-slate-300 dark:text-slate-600">|</span>
                   {["12:00", "18:30", "19:00", "20:00"].map((t) => (
                     <button
                       key={t}
                       type="button"
                       onClick={() => setResTime(t)}
                       className={`px-1.5 py-0.5 rounded font-mono ${
-                        resTime === t ? "bg-brand-orange text-white font-bold" : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100"
+                        resTime === t ? "bg-primary text-white font-bold" : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
                       }`}
                     >
                       {t}
@@ -756,26 +757,27 @@ export default function TablesPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">Catatan Khusus / Permintaan Khusus</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Catatan Khusus / Permintaan Khusus</label>
                 <input
                   type="text"
                   placeholder="Contoh: Family dinner, siapkan baby high chair, meja sudut..."
                   value={resNotes}
                   onChange={(e) => setResNotes(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setIsAddReservationModalOpen(false)}
+                  className="dark:border-slate-700 dark:text-slate-300"
                 >
                   Batal
                 </Button>
-                <Button type="submit" size="sm" className="bg-brand-orange text-white font-bold">
+                <Button type="submit" size="sm" className="bg-primary hover:bg-primary/90 text-white font-bold shadow-sm">
                   Simpan Reservasi
                 </Button>
               </div>
@@ -786,13 +788,13 @@ export default function TablesPage() {
 
       {/* MODAL 3: TAMBAH MEJA */}
       {isAddTableModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-sm text-slate-900">Tambah Meja Baru</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Tambah Meja Baru</h3>
               <button
                 onClick={() => setIsAddTableModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
+                className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -800,11 +802,11 @@ export default function TablesPage() {
 
             <form onSubmit={handleAddTable} className="space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">Area Meja</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Area Meja</label>
                 <select
                   value={newTableAreaId}
                   onChange={(e) => setNewTableAreaId(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl bg-white"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100"
                 >
                   {filteredAreas.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -816,39 +818,40 @@ export default function TablesPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Nomor Meja</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Nomor Meja</label>
                   <input
                     type="text"
                     required
                     placeholder="Contoh: T-06"
                     value={newTableName}
                     onChange={(e) => setNewTableName(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-xl"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="font-bold text-slate-700">Kapasitas (Orang)</label>
+                  <label className="font-bold text-slate-700 dark:text-slate-300">Kapasitas (Orang)</label>
                   <input
                     type="number"
                     min={1}
                     max={20}
                     value={newTableCap}
                     onChange={(e) => setNewTableCap(Number(e.target.value))}
-                    className="w-full px-3 py-2 border rounded-xl"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setIsAddTableModalOpen(false)}
+                  className="dark:border-slate-700 dark:text-slate-300"
                 >
                   Batal
                 </Button>
-                <Button type="submit" size="sm" className="bg-brand-orange text-white font-bold">
+                <Button type="submit" size="sm" className="bg-primary hover:bg-primary/90 text-white font-bold shadow-sm">
                   Simpan Meja
                 </Button>
               </div>
@@ -859,13 +862,13 @@ export default function TablesPage() {
 
       {/* MODAL 4: TAMBAH AREA */}
       {isAddAreaModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="font-bold text-sm text-slate-900">Tambah Area Baru ({activeOutlet?.name || "Singaraja"})</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">Tambah Area Baru ({activeOutlet?.name || "Singaraja"})</h3>
               <button
                 onClick={() => setIsAddAreaModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
+                className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -873,27 +876,28 @@ export default function TablesPage() {
 
             <form onSubmit={handleAddArea} className="space-y-3 text-xs">
               <div className="space-y-1">
-                <label className="font-bold text-slate-700">Nama Area Baru</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300">Nama Area Baru</label>
                 <input
                   type="text"
                   required
                   placeholder="Contoh: Rooftop Sunset Lounge"
                   value={newAreaName}
                   onChange={(e) => setNewAreaName(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-xl"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl"
                 />
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={() => setIsAddAreaModalOpen(false)}
+                  className="dark:border-slate-700 dark:text-slate-300"
                 >
                   Batal
                 </Button>
-                <Button type="submit" size="sm" className="bg-brand-orange text-white font-bold">
+                <Button type="submit" size="sm" className="bg-primary hover:bg-primary/90 text-white font-bold shadow-sm">
                   Simpan Area
                 </Button>
               </div>

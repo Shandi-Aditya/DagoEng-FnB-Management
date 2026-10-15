@@ -75,6 +75,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import { POSReceiptData } from "@/features/pos/types";
 import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
@@ -1327,43 +1328,46 @@ function CustomerPortalContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex flex-col justify-between font-sans pb-24 sm:pb-8 selection:bg-brand-orange selection:text-white">
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 flex flex-col justify-between font-sans pb-24 sm:pb-8 selection:bg-primary selection:text-white transition-colors duration-200">
 
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 backdrop-blur-md text-white px-4 py-2.5 rounded-2xl shadow-xl border border-slate-700 text-xs font-semibold flex items-center space-x-2 animate-in fade-in slide-in-from-top-3 duration-300">
-          <Sparkles className="w-4 h-4 text-brand-orange" />
+          <Sparkles className="w-4 h-4 text-primary" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* 1. CLEAN & NEUTRAL HEADER (No DAGO/Mitra branding logos, focused on neutral navigation & branch) */}
-      <header className="bg-white/90 backdrop-blur-md border-b border-slate-200/90 sticky top-0 z-30 shadow-xs transition-all">
+      {/* 1. CLEAN & NEUTRAL HEADER (Focused on neutral navigation, theme toggle & branch) */}
+      <header className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/90 dark:border-slate-800 sticky top-0 z-30 shadow-xs transition-all">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
 
           <div className="flex items-center space-x-2.5">
-            <div className="flex items-center space-x-1.5 bg-slate-100/90 border border-slate-200/80 px-2.5 py-1.5 rounded-xl text-xs">
-              <MapPin className="w-3.5 h-3.5 text-slate-500" />
-              <span className="text-slate-400 text-[11px]">Cabang:</span>
-              <span className="font-bold text-slate-800 text-[11px]">
+            <div className="flex items-center space-x-1.5 bg-slate-100/90 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 px-2.5 py-1.5 rounded-xl text-xs">
+              <MapPin className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+              <span className="text-slate-400 dark:text-slate-400 text-[11px]">Cabang:</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200 text-[11px]">
                 {currentMember?.registeredOutletName || activeOutlet?.name || "Singaraja (Outlet Utama)"}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center space-x-2 sm:space-x-3">
+            {/* Global Theme Toggle */}
+            <ThemeToggle />
+
             {/* Quick Cart Pill on Header */}
             <button
               onClick={() => {
                 handleTabChange("MENU");
                 if (cart.length > 0) setIsCheckoutOpen(true);
               }}
-              className="relative p-2 rounded-xl bg-slate-100/80 hover:bg-slate-200/80 text-slate-700 transition-all hover:scale-105 active:scale-95"
+              className="relative p-2 rounded-xl bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-300 transition-all hover:scale-105 active:scale-95"
               title="Keranjang Belanja"
             >
               <ShoppingBag className="w-4 h-4" />
               {cartTotalItems > 0 && (
-                <span className="absolute -top-1 -right-1 bg-brand-orange text-white font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center animate-in zoom-in-50">
+                <span className="absolute -top-1 -right-1 bg-primary text-white font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center animate-in zoom-in-50">
                   {cartTotalItems}
                 </span>
               )}
@@ -1372,18 +1376,18 @@ function CustomerPortalContent() {
             {/* Guest vs Logged-In Customer Access */}
             {!isCustomerLoggedIn ? (
               <div className="flex items-center space-x-2">
-                <span className="hidden sm:inline-flex items-center space-x-1 text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
+                <span className="hidden sm:inline-flex items-center space-x-1 text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
                   <User className="w-3 h-3 text-slate-400" />
                   <span>Guest</span>
                 </span>
                 <Link href={`/login?returnTo=${encodeURIComponent(`/customer?tab=${activeTab}`)}&mode=customer`}>
-                  <Button size="sm" className="text-xs h-8 px-3.5 font-bold bg-brand-orange hover:bg-orange-600 text-white rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
+                  <Button size="sm" className="text-xs h-8 px-3.5 font-bold bg-primary hover:bg-primary/90 text-white rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
                     <LogIn className="w-3.5 h-3.5 mr-1.5" />
                     <span>Daftar / Masuk</span>
                   </Button>
                 </Link>
                 <Link href="/">
-                  <Button variant="outline" size="sm" className="text-xs h-8 px-2.5 font-bold text-slate-600 hover:text-slate-900 border-slate-300 rounded-xl" title="Kembali ke Beranda / Onboarding">
+                  <Button variant="outline" size="sm" className="text-xs h-8 px-2.5 font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl" title="Kembali ke Beranda / Onboarding">
                     <Home className="w-3.5 h-3.5 sm:mr-1 text-slate-500" />
                     <span className="hidden sm:inline">Ke Beranda</span>
                   </Button>
@@ -1397,7 +1401,7 @@ function CustomerPortalContent() {
                     showToast("Anda telah berhasil keluar dari sesi member.");
                     router.push("/");
                   }}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 text-xs font-bold transition-all hover:scale-105 active:scale-95"
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-slate-600 dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all hover:scale-105 active:scale-95"
                   title="Keluar Sesi & Kembali ke Beranda"
                 >
                   <LogOut className="w-3.5 h-3.5 text-rose-500" />
@@ -1409,7 +1413,7 @@ function CustomerPortalContent() {
         </div>
 
         {/* 2. Top Desktop Tab Navigation */}
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex space-x-1.5 border-t border-slate-100 overflow-x-auto scrollbar-none py-1.5">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex space-x-1.5 border-t border-slate-100 dark:border-slate-800 overflow-x-auto scrollbar-none py-1.5">
           {[
             { key: "HOME", label: "Home", icon: <Home className="w-3.5 h-3.5" /> },
             { key: "MENU", label: "Menu & Pesan", icon: <UtensilsCrossed className="w-3.5 h-3.5" /> },
@@ -4281,7 +4285,7 @@ function CustomerPortalContent() {
       </main>
 
       {/* 4. BOTTOM MOBILE NAVIGATION BAR */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/90 backdrop-blur-xl border-t border-slate-200/90 py-2 px-3 sm:hidden flex justify-around items-center shadow-lg">
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200/90 dark:border-slate-800 py-2 px-3 sm:hidden flex justify-around items-center shadow-lg transition-colors">
         {[
           { key: "HOME", label: "Home", icon: <Home className="w-4 h-4" /> },
           { key: "MENU", label: "Menu", icon: <UtensilsCrossed className="w-4 h-4" /> },
@@ -4299,14 +4303,14 @@ function CustomerPortalContent() {
             key={t.key}
             onClick={() => handleTabChange(t.key as CustomerTab)}
             className={`flex flex-col items-center py-1 px-2 text-[10px] font-bold transition-all relative ${activeTab === t.key
-              ? "text-brand-orange scale-105"
-              : "text-slate-500 hover:text-slate-800"
+              ? "text-primary dark:text-emerald-400 scale-105"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
           >
             {t.icon}
             <span className="mt-0.5">{t.label}</span>
             {t.badge && (
-              <span className="absolute top-0 right-0.5 bg-brand-orange text-white text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center">
+              <span className="absolute top-0 right-0.5 bg-primary text-white text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center">
                 {t.badge}
               </span>
             )}

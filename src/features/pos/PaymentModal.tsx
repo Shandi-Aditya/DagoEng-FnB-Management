@@ -200,12 +200,12 @@ export function PaymentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white">
+        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-900 text-white">
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-brand-orange uppercase tracking-wider">
+              <span className="text-xs font-bold text-primary dark:text-primary-light uppercase tracking-wider">
                 Pembayaran Kasir POS
               </span>
               <span className="text-[11px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono">
@@ -225,14 +225,14 @@ export function PaymentModal({
         </div>
 
         {/* Payment Tabs Navigation */}
-        <div className="grid grid-cols-4 border-b border-slate-200 bg-slate-50 text-xs font-bold">
+        <div className="grid grid-cols-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 text-xs font-bold">
           <button
             type="button"
             onClick={() => setActiveTab("QRIS")}
             className={`py-3 px-2 flex items-center justify-center space-x-1.5 border-b-2 transition-all ${
               activeTab === "QRIS"
-                ? "border-brand-orange bg-white text-brand-orange shadow-sm"
-                : "border-transparent text-slate-600 hover:text-slate-900"
+                ? "border-primary bg-white dark:bg-slate-900 text-primary dark:text-primary-light shadow-xs"
+                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
             }`}
           >
             <QrCode className="w-4 h-4" />
@@ -243,8 +243,8 @@ export function PaymentModal({
             onClick={() => setActiveTab("CASH")}
             className={`py-3 px-2 flex items-center justify-center space-x-1.5 border-b-2 transition-all ${
               activeTab === "CASH"
-                ? "border-brand-orange bg-white text-brand-orange shadow-sm"
-                : "border-transparent text-slate-600 hover:text-slate-900"
+                ? "border-primary bg-white dark:bg-slate-900 text-primary dark:text-primary-light shadow-xs"
+                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
             }`}
           >
             <Banknote className="w-4 h-4" />
@@ -255,8 +255,8 @@ export function PaymentModal({
             onClick={() => setActiveTab("EDC")}
             className={`py-3 px-2 flex items-center justify-center space-x-1.5 border-b-2 transition-all ${
               activeTab === "EDC"
-                ? "border-brand-orange bg-white text-brand-orange shadow-sm"
-                : "border-transparent text-slate-600 hover:text-slate-900"
+                ? "border-primary bg-white dark:bg-slate-900 text-primary dark:text-primary-light shadow-xs"
+                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
             }`}
           >
             <CreditCard className="w-4 h-4" />
@@ -267,8 +267,8 @@ export function PaymentModal({
             onClick={() => setActiveTab("SPLIT")}
             className={`py-3 px-2 flex items-center justify-center space-x-1.5 border-b-2 transition-all ${
               activeTab === "SPLIT"
-                ? "border-brand-orange bg-white text-brand-orange shadow-sm"
-                : "border-transparent text-slate-600 hover:text-slate-900"
+                ? "border-primary bg-white dark:bg-slate-900 text-primary dark:text-primary-light shadow-xs"
+                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
             }`}
           >
             <Users className="w-4 h-4" />
@@ -277,11 +277,11 @@ export function PaymentModal({
         </div>
 
         {/* Tab Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-4">
+        <div className="p-6 overflow-y-auto flex-1 space-y-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
           {/* TAB 1: QRIS DINAMIS */}
           {activeTab === "QRIS" && (
             <div className="flex flex-col items-center justify-center text-center space-y-4 py-2">
-              <div className="p-4 bg-white rounded-2xl border-2 border-dashed border-brand-orange shadow-md relative">
+              <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl border-2 border-dashed border-primary/40 shadow-md relative">
                 {/* Simulated dynamic QR code pattern */}
                 <div className="w-44 h-44 bg-slate-900 rounded-xl p-2 flex flex-col items-center justify-center text-white relative overflow-hidden">
                   <div className="grid grid-cols-6 gap-1 w-full h-full p-1 opacity-90">
@@ -295,18 +295,18 @@ export function PaymentModal({
                     ))}
                   </div>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="p-2 bg-white rounded-lg shadow-lg">
-                      <QrCode className="w-8 h-8 text-brand-orange" />
+                    <div className="p-2 bg-white dark:bg-slate-900 rounded-lg shadow-lg">
+                      <QrCode className="w-8 h-8 text-primary" />
                     </div>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <div className="flex items-center justify-center space-x-1.5 text-xs text-slate-600 font-semibold">
-                  <Clock className="w-3.5 h-3.5 text-amber-500" />
+                <div className="flex items-center justify-center space-x-1.5 text-xs text-slate-600 dark:text-slate-400 font-semibold">
+                  <Clock className="w-3.5 h-3.5 text-primary" />
                   <span>
-                    Masa berlaku QR: <strong className="font-mono text-slate-900">{qrisSecondsLeft}s</strong>
+                    Masa berlaku QR: <strong className="font-mono text-slate-900 dark:text-slate-100">{qrisSecondsLeft}s</strong>
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-400">
@@ -314,9 +314,9 @@ export function PaymentModal({
                 </p>
               </div>
 
-              <div className="w-full max-w-sm p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-left flex items-start space-x-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-emerald-800">
+              <div className="w-full max-w-sm p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800/60 text-left flex items-start space-x-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-emerald-800 dark:text-emerald-300">
                   Pembayaran terverifikasi otomatis secara real-time melalui QRIS Payment Gateway.
                 </p>
               </div>
@@ -329,7 +329,7 @@ export function PaymentModal({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Cash Input */}
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-800">
+                  <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     Jumlah Uang Tunai Diterima:
                   </label>
                   <div className="relative">
@@ -340,14 +340,14 @@ export function PaymentModal({
                       type="text"
                       value={cashInputRaw}
                       onChange={(e) => handleCustomCashInput(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2.5 text-base font-bold font-mono border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange"
+                      className="w-full pl-9 pr-3 py-2.5 text-base font-bold font-mono border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary"
                       placeholder="0"
                     />
                   </div>
 
                   {/* Shortcuts */}
                   <div className="space-y-1">
-                    <span className="text-[11px] text-slate-500 font-medium">Uang Pas & Rekomendasi:</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Uang Pas & Rekomendasi:</span>
                     <div className="grid grid-cols-2 gap-1.5">
                       {quickDenominations.map((denom, i) => (
                         <button
@@ -356,8 +356,8 @@ export function PaymentModal({
                           onClick={() => handleCashShortcut(denom)}
                           className={`p-2 rounded-lg border text-xs font-mono font-bold transition-all ${
                             cashGiven === denom
-                              ? "bg-brand-orange text-white border-brand-orange shadow-sm"
-                              : "bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200"
+                              ? "bg-primary text-white border-primary shadow-xs"
+                              : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700"
                           }`}
                         >
                           {denom === grandTotal ? "Uang Pas" : formatCurrencyIDR(denom)}
@@ -368,24 +368,24 @@ export function PaymentModal({
                 </div>
 
                 {/* Change Due Display */}
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col justify-between space-y-3">
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col justify-between space-y-3">
                   <div>
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                       Uang Kembalian (Change Due):
                     </span>
-                    <div className={`text-2xl font-black font-mono mt-1 ${isCashSufficient ? "text-brand-green" : "text-rose-500"}`}>
+                    <div className={`text-2xl font-black font-mono mt-1 ${isCashSufficient ? "text-primary dark:text-primary-light" : "text-rose-500"}`}>
                       {isCashSufficient ? formatCurrencyIDR(changeDue) : "Uang Kurang"}
                     </div>
                   </div>
 
-                  <div className="space-y-1 text-xs border-t border-slate-200 pt-2 text-slate-600">
+                  <div className="space-y-1 text-xs border-t border-slate-200 dark:border-slate-700 pt-2 text-slate-600 dark:text-slate-400">
                     <div className="flex justify-between">
                       <span>Total Tagihan:</span>
-                      <span className="font-mono font-semibold">{formatCurrencyIDR(grandTotal)}</span>
+                      <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">{formatCurrencyIDR(grandTotal)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Uang Diterima:</span>
-                      <span className="font-mono font-semibold">{formatCurrencyIDR(cashGiven)}</span>
+                      <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">{formatCurrencyIDR(cashGiven)}</span>
                     </div>
                   </div>
                 </div>
@@ -397,7 +397,7 @@ export function PaymentModal({
           {activeTab === "EDC" && (
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-800">Pilih Mesin EDC / Bank Kartu:</label>
+                <label className="text-xs font-bold text-slate-800 dark:text-slate-200">Pilih Mesin EDC / Bank Kartu:</label>
                 <div className="grid grid-cols-4 gap-2">
                   {["BCA", "Mandiri", "BRI", "BNI"].map((bank) => (
                     <button
@@ -406,8 +406,8 @@ export function PaymentModal({
                       onClick={() => setSelectedBank(bank)}
                       className={`p-2.5 rounded-xl border font-bold text-xs transition-all ${
                         selectedBank === bank
-                          ? "bg-brand-cyan text-white border-brand-cyan shadow-sm"
-                          : "bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200"
+                          ? "bg-primary text-white border-primary shadow-xs"
+                          : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700"
                       }`}
                     >
                       {bank}
@@ -417,7 +417,7 @@ export function PaymentModal({
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-800">
+                <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
                   Nomor Approval Code dari Struk EDC:
                 </label>
                 <input
@@ -425,7 +425,7 @@ export function PaymentModal({
                   value={approvalCode}
                   onChange={(e) => setApprovalCode(e.target.value)}
                   placeholder="Contoh: APP-782910"
-                  className="w-full px-3 py-2 text-xs font-mono font-bold border rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-cyan"
+                  className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary"
                 />
                 <p className="text-[11px] text-slate-400">
                   Gesek kartu pelanggan di mesin EDC {selectedBank}, lalu masukkan 6 digit kode otorisasi transaksi.
@@ -438,14 +438,14 @@ export function PaymentModal({
           {activeTab === "SPLIT" && (
             <div className="space-y-4">
               {/* Header: Equal Split Presets */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
                 <div>
-                  <h4 className="text-xs font-bold text-slate-900">Bagi Tagihan & Metode Pembayaran</h4>
-                  <p className="text-[11px] text-slate-500">Atur nominal dan metode bayar untuk masing-masing tamu</p>
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">Bagi Tagihan & Metode Pembayaran</h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Atur nominal dan metode bayar untuk masing-masing tamu</p>
                 </div>
                 <div className="flex items-center space-x-1.5">
                   <span className="text-[11px] text-slate-400 font-semibold">Bagi Rata:</span>
-                  <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
+                  <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/60 dark:border-slate-700">
                     {[2, 3, 4, 5].map((cnt) => (
                       <button
                         key={cnt}
@@ -453,8 +453,8 @@ export function PaymentModal({
                         onClick={() => handleSplitCountChange(cnt)}
                         className={`w-7 h-7 rounded-lg text-xs font-bold font-mono transition-all ${
                           splitGuestCount === cnt
-                            ? "bg-brand-orange text-white shadow-sm"
-                            : "text-slate-600 hover:bg-slate-200"
+                            ? "bg-primary text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
                         }`}
                       >
                         {cnt}
@@ -465,20 +465,20 @@ export function PaymentModal({
               </div>
 
               {/* Real-time Allocation Summary Card */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-3 gap-2 text-center text-xs">
                 <div>
                   <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Tagihan</span>
-                  <span className="font-mono font-black text-slate-900">{formatCurrencyIDR(grandTotal)}</span>
+                  <span className="font-mono font-black text-slate-900 dark:text-slate-100">{formatCurrencyIDR(grandTotal)}</span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 uppercase font-bold block">Total Dialokasikan</span>
-                  <span className={`font-mono font-black ${isSplitBalanced ? "text-emerald-600" : "text-amber-600"}`}>
+                  <span className={`font-mono font-black ${isSplitBalanced ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}>
                     {formatCurrencyIDR(splitTotalAssigned)}
                   </span>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 uppercase font-bold block">Sisa Alokasi</span>
-                  <span className={`font-mono font-black ${splitRemaining === 0 ? "text-emerald-600" : splitRemaining < 0 ? "text-rose-600" : "text-amber-600"}`}>
+                  <span className={`font-mono font-black ${splitRemaining === 0 ? "text-emerald-600 dark:text-emerald-400" : splitRemaining < 0 ? "text-rose-600 dark:text-rose-400" : "text-amber-600 dark:text-amber-400"}`}>
                     {formatCurrencyIDR(splitRemaining)}
                   </span>
                 </div>
@@ -486,8 +486,8 @@ export function PaymentModal({
 
               {/* Warning Alert if allocation does not match grand total */}
               {!isSplitBalanced && (
-                <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200 flex items-center space-x-2 text-xs text-amber-900">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-900/60 flex items-center space-x-2 text-xs text-amber-900 dark:text-amber-200">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                   <span>
                     {splitRemaining > 0
                       ? `Alokasi pembayaran masih kurang ${formatCurrencyIDR(splitRemaining)}.`
@@ -503,8 +503,8 @@ export function PaymentModal({
                     key={guest.id}
                     className={`p-3.5 rounded-xl border space-y-2.5 transition-all ${
                       guest.isPaid
-                        ? "bg-emerald-50/50 border-emerald-300 text-emerald-950"
-                        : "bg-white border-slate-200"
+                        ? "bg-emerald-50/50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-950 dark:text-emerald-200"
+                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -515,12 +515,12 @@ export function PaymentModal({
                           className={`w-5 h-5 rounded-md flex items-center justify-center border text-xs transition-colors ${
                             guest.isPaid
                               ? "bg-emerald-600 border-emerald-600 text-white"
-                              : "border-slate-300 hover:border-slate-400 bg-white"
+                              : "border-slate-300 dark:border-slate-600 hover:border-slate-400 bg-white dark:bg-slate-700"
                           }`}
                         >
                           {guest.isPaid && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                         </button>
-                        <span className="text-xs font-bold text-slate-900">{guest.guestLabel}</span>
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{guest.guestLabel}</span>
                       </div>
 
                       {/* Payment Method Selector */}
@@ -532,8 +532,8 @@ export function PaymentModal({
                             onClick={() => handleGuestMethodChange(guest.id, m)}
                             className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
                               guest.paymentMethod === m
-                                ? "bg-slate-900 text-white"
-                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                ? "bg-primary text-white"
+                                : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
                             }`}
                           >
                             {m}
@@ -543,15 +543,15 @@ export function PaymentModal({
                     </div>
 
                     {/* Assigned Amount Input */}
-                    <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100/80">
-                      <span className="text-[11px] text-slate-500 font-semibold">Nominal Pembayaran:</span>
+                    <div className="flex items-center justify-between gap-3 pt-1 border-t border-slate-100/80 dark:border-slate-700/80">
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">Nominal Pembayaran:</span>
                       <div className="relative w-40">
                         <span className="absolute left-2.5 top-1.5 text-[11px] font-bold text-slate-400">Rp</span>
                         <input
                           type="number"
                           value={guest.assignedAmount}
                           onChange={(e) => handleGuestAmountChange(guest.id, Number(e.target.value))}
-                          className="w-full pl-8 pr-2 py-1 text-xs font-mono font-bold bg-white border border-slate-200 rounded-lg text-right focus:outline-none focus:ring-1 focus:ring-brand-orange"
+                          className="w-full pl-8 pr-2 py-1 text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-right focus:outline-none focus:ring-1 focus:ring-primary"
                         />
                       </div>
                     </div>
@@ -563,12 +563,12 @@ export function PaymentModal({
         </div>
 
         {/* Footer: Confirm Payment Button */}
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-4">
+        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 flex items-center justify-between gap-4">
           <Button
             type="button"
             variant="outline"
             onClick={onClose}
-            className="text-xs font-semibold"
+            className="text-xs font-semibold dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Batal
           </Button>
@@ -583,8 +583,8 @@ export function PaymentModal({
             onClick={handleCompletePayment}
             className={`flex-1 text-xs font-bold h-11 space-x-2 shadow-md ${
               activeTab === "SPLIT" && !isSplitValid
-                ? "bg-slate-300 text-slate-500 cursor-not-allowed"
-                : "bg-brand-orange hover:bg-orange-600 text-white"
+                ? "bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
+                : "bg-primary hover:bg-primary/90 text-white"
             }`}
           >
             {isQrisProcessing ? (

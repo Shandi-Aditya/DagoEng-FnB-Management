@@ -37,9 +37,9 @@ export function DateRangePicker() {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 px-3 py-1.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 shadow-sm transition-colors"
+        className="flex items-center space-x-2 px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-xs transition-colors"
       >
-        <Calendar className="w-3.5 h-3.5 text-brand-orange" />
+        <Calendar className="w-3.5 h-3.5 text-primary" />
         <span>{formattedRangeLabel}</span>
         <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
       </button>
@@ -47,8 +47,8 @@ export function DateRangePicker() {
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 mt-1 w-80 bg-white rounded-xl shadow-dropdown border border-slate-200 p-3 z-50 text-slate-900 animate-in fade-in zoom-in-95 duration-100 space-y-3">
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 pb-1.5">
+          <div className="absolute right-0 mt-1 w-80 bg-white dark:bg-slate-900 rounded-xl shadow-lg border border-slate-200 dark:border-slate-800 p-3 z-50 text-slate-900 dark:text-slate-100 animate-in fade-in zoom-in-95 duration-100 space-y-3">
+            <div className="text-[11px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 pb-1.5">
               Pilih Rentang Tanggal Analisis
             </div>
 
@@ -65,8 +65,8 @@ export function DateRangePicker() {
                     }}
                     className={`px-2.5 py-1.5 rounded-md text-xs font-semibold text-left transition-colors flex items-center justify-between ${
                       isSelected
-                        ? "bg-brand-orange text-white"
-                        : "bg-slate-50 hover:bg-slate-100 text-slate-700"
+                        ? "bg-primary text-white"
+                        : "bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 text-slate-700 dark:text-slate-200"
                     }`}
                   >
                     <span>{sc.label}</span>
@@ -77,8 +77,8 @@ export function DateRangePicker() {
             </div>
 
             {/* Custom Range Input */}
-            <form onSubmit={handleApplyCustom} className="pt-2 border-t border-slate-100 space-y-2">
-              <div className="text-[11px] font-bold text-slate-600">Atur Tanggal Spesifik (Custom)</div>
+            <form onSubmit={handleApplyCustom} className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+              <div className="text-[11px] font-bold text-slate-600 dark:text-slate-300">Atur Tanggal Spesifik (Custom)</div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <label className="text-[10px] text-slate-400 font-medium">Mulai (Start Date)</label>
@@ -86,7 +86,7 @@ export function DateRangePicker() {
                     type="date"
                     value={customStart}
                     onChange={(e) => setCustomStart(e.target.value)}
-                    className="w-full mt-0.5 px-2 py-1 border border-slate-200 rounded text-xs text-slate-800"
+                    className="w-full mt-0.5 px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-primary"
                     required
                   />
                 </div>
@@ -96,7 +96,7 @@ export function DateRangePicker() {
                     type="date"
                     value={customEnd}
                     onChange={(e) => setCustomEnd(e.target.value)}
-                    className="w-full mt-0.5 px-2 py-1 border border-slate-200 rounded text-xs text-slate-800"
+                    className="w-full mt-0.5 px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-primary"
                     required
                   />
                 </div>

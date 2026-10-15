@@ -97,13 +97,13 @@ export default function ActivityLogPDFModal({
       `}</style>
 
       <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white print:static">
-        <div className="bg-white rounded-2xl max-w-5xl w-full border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 print:border-none print:shadow-none print:max-w-none flex flex-col max-h-[90vh]">
+        <div className="bg-white dark:bg-[#1E293B] rounded-2xl max-w-5xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 print:border-none print:shadow-none print:max-w-none flex flex-col max-h-[90vh]">
           {/* Non-Printable Action Bar */}
-          <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50 print:hidden shrink-0">
+          <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 print:hidden shrink-0">
             <div className="flex items-center space-x-2">
-              <ShieldCheck className="w-5 h-5 text-purple-600" />
-              <h3 className="font-bold text-slate-800 text-sm">Pratinjau PDF Audit Trail & Activity Log</h3>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800">
+              <ShieldCheck className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788]" />
+              <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">Pratinjau PDF Audit Trail & Activity Log</h3>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary dark:text-primary-light">
                 {logs.length} Entri Tercatat
               </span>
             </div>
@@ -111,14 +111,14 @@ export default function ActivityLogPDFModal({
               <Button
                 size="sm"
                 onClick={handlePrint}
-                className="text-xs bg-purple-600 hover:bg-purple-700 text-white space-x-1.5 shadow-xs font-semibold"
+                className="text-xs bg-[#3B7A57] hover:bg-[#2e6245] text-white space-x-1.5 shadow-xs font-semibold"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Cetak / Simpan PDF</span>
               </Button>
               <button
                 onClick={onClose}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -126,13 +126,13 @@ export default function ActivityLogPDFModal({
           </div>
 
           {/* Printable Document Body */}
-          <div className="overflow-y-auto p-6 flex-1 bg-slate-100 flex justify-center print:p-0 print:bg-white print:overflow-visible">
+          <div className="overflow-y-auto p-6 flex-1 bg-slate-100 dark:bg-slate-900/60 flex justify-center print:p-0 print:bg-white print:overflow-visible">
             <div
               id="activity-log-pdf-report"
-              className="w-full max-w-[800px] bg-white p-8 rounded-xl shadow-xs border border-slate-200 space-y-6 text-slate-800 font-sans print:shadow-none print:border-none print:p-0 print:max-w-none"
+              className="w-full max-w-[800px] bg-white dark:bg-[#1E293B] p-8 rounded-xl shadow-xs border border-slate-200 dark:border-slate-700 space-y-6 text-slate-800 dark:text-slate-100 font-sans print:shadow-none print:border-none print:p-0 print:max-w-none"
             >
               {/* Header Branding */}
-              <div className="flex items-start justify-between border-b-2 border-slate-900 pb-5">
+              <div className="flex items-start justify-between border-b-2 border-slate-900 dark:border-slate-700 pb-5">
                 <div>
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-12 relative flex-shrink-0">
@@ -145,15 +145,15 @@ export default function ActivityLogPDFModal({
                       />
                     </div>
                     <div>
-                      <h1 className="text-xl font-extrabold tracking-tight text-slate-900 leading-tight">
-                        DAGO <span className="text-brand-orange">CREATIVE HUB</span>
+                      <h1 className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
+                        DAGO <span className="text-[#3B7A57] dark:text-[#52B788]">CREATIVE HUB</span>
                       </h1>
-                      <p className="text-[11px] text-slate-500 font-semibold">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
                         Integrated F&B, Co-working & Commercial Management System
                       </p>
                     </div>
                   </div>
-                  <div className="mt-3 text-xs text-slate-600 space-y-0.5">
+                  <div className="mt-3 text-xs text-slate-600 dark:text-slate-400 space-y-0.5">
                     <p>
                       <strong>Gerai / Outlet:</strong> {outletName}
                     </p>
@@ -163,8 +163,8 @@ export default function ActivityLogPDFModal({
                   </div>
                 </div>
 
-                <div className="text-right text-xs text-slate-600 space-y-1">
-                  <div className="inline-block px-3 py-1 bg-purple-100 text-purple-900 rounded-lg font-mono font-bold text-xs border border-purple-200">
+                <div className="text-right text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                  <div className="inline-block px-3 py-1 bg-primary/10 text-primary dark:text-primary-light rounded-lg font-mono font-bold text-xs border border-primary/20">
                     LAPORAN RESMI AUDIT TRAIL
                   </div>
                   <p className="text-[11px] text-slate-500">

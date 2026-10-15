@@ -286,20 +286,20 @@ export default function ReportsPage() {
       )}
 
       {/* Top Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-brand-orange shadow-2xs">
+            <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary dark:text-primary-light shadow-2xs">
               <BarChart3 className="w-5 h-5" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
               Laporan Manajemen & Ekspor Terstruktur
             </h2>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             Laporan operasional resmi Dago Creative Hub • Scope:{" "}
-            <span className="font-semibold text-slate-800">{activeOutlet?.name || "Singaraja"}</span> • Periode:{" "}
-            <span className="font-semibold text-brand-orange">{formattedRangeLabel}</span>
+            <span className="font-semibold text-slate-800 dark:text-slate-200">{activeOutlet?.name || "Singaraja"}</span> • Periode:{" "}
+            <span className="font-semibold text-primary dark:text-primary-light">{formattedRangeLabel}</span>
           </p>
         </div>
 
@@ -311,10 +311,10 @@ export default function ReportsPage() {
             size="sm"
             onClick={handleExportExcel}
             variant="outline"
-            className="text-xs space-x-1.5 border-slate-200/90 text-slate-700 hover:bg-slate-50 font-bold rounded-xl h-9 px-3 shadow-2xs flex items-center"
+            className="text-xs space-x-1.5 border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold rounded-xl h-9 px-3 shadow-2xs flex items-center"
             title="Download Spreadsheet Excel (.xls)"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>Excel (.xls)</span>
             <ProFeatureBadge label="PRO" variant="pro" size="xs" />
           </Button>
@@ -323,7 +323,7 @@ export default function ReportsPage() {
             size="sm"
             onClick={handleExportCSV}
             variant="outline"
-            className="text-xs space-x-1.5 border-slate-200/90 hover:bg-slate-50 text-slate-700 font-bold rounded-xl h-9 px-3.5 shadow-2xs"
+            className="text-xs space-x-1.5 border-slate-200/90 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-xl h-9 px-3.5 shadow-2xs"
             title="Download Data CSV"
           >
             <Download className="w-3.5 h-3.5 text-slate-500" />
@@ -333,7 +333,7 @@ export default function ReportsPage() {
           <Button
             size="sm"
             onClick={() => setIsPDFModalOpen(true)}
-            className="text-xs space-x-1.5 bg-brand-orange hover:bg-orange-600 text-white font-bold rounded-xl h-9 px-4 shadow-xs"
+            className="text-xs space-x-1.5 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl h-9 px-4 shadow-xs"
             title="Buka Dokumen PDF & Cetak Struk / Berkas Resmi"
           >
             <Printer className="w-3.5 h-3.5" />
@@ -360,27 +360,27 @@ export default function ReportsPage() {
               onClick={() => setSelectedReportType(cat.id as ReportType)}
               className={`p-3.5 rounded-2xl border text-left transition-all duration-200 cursor-pointer ${
                 isSelected
-                  ? "bg-orange-50/90 border-brand-orange/40 shadow-xs text-orange-950 ring-1 ring-brand-orange/20 font-bold"
-                  : "bg-white border-slate-200/90 hover:border-slate-300 hover:bg-slate-50/60 text-slate-700 shadow-2xs"
+                  ? "bg-primary/10 border-primary/40 shadow-xs text-primary dark:text-primary-light ring-1 ring-primary/20 font-bold"
+                  : "bg-white dark:bg-slate-800/80 border-slate-200/90 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-200 shadow-2xs"
               }`}
             >
               <div className="flex items-center justify-between">
                 <div
                   className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
-                    isSelected ? "bg-brand-orange/20 text-brand-orange" : "bg-slate-100 text-slate-500"
+                    isSelected ? "bg-primary/20 text-primary dark:text-primary-light" : "bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400"
                   }`}
                 >
                   <Icon className="w-4 h-4" />
                 </div>
                 <span
                   className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md ${
-                    isSelected ? "bg-brand-orange/20 text-brand-orange" : "bg-slate-100 text-slate-500"
+                    isSelected ? "bg-primary/20 text-primary dark:text-primary-light" : "bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400"
                   }`}
                 >
                   {cat.count}
                 </span>
               </div>
-              <p className="font-bold text-xs mt-2.5 text-slate-900 tracking-tight">{cat.label}</p>
+              <p className="font-bold text-xs mt-2.5 text-slate-900 dark:text-slate-100 tracking-tight">{cat.label}</p>
             </button>
           );
         })}
@@ -413,16 +413,16 @@ export default function ReportsPage() {
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-600 min-w-[720px]">
-              <thead className="bg-slate-50/80 text-slate-500 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-200">
+              <thead className="bg-slate-50/80 text-slate-700 dark:text-slate-200 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
                 <tr>
                   {currentReportData.tableHeaders.map((th, i) => (
-                    <th key={i} className="px-4 py-3.5">
+                    <th key={i} className="px-4 py-3.5 whitespace-nowrap">
                       {th}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {currentReportData.tableRows.length === 0 ? (
                   <tr>
                     <td colSpan={currentReportData.tableHeaders.length} className="px-4 py-12 text-center">
@@ -443,10 +443,10 @@ export default function ReportsPage() {
                       {row.map((cell, cIdx) => (
                         <td
                           key={cIdx}
-                          className={`px-4 py-3.5 ${
+                          className={`px-4 py-3.5 whitespace-nowrap ${
                             typeof cell === "number" || (typeof cell === "string" && (cell.startsWith("Rp") || cell.endsWith("%")))
-                              ? "font-mono font-semibold text-slate-900"
-                              : ""
+                              ? "font-mono font-semibold text-slate-900 dark:text-slate-100"
+                              : "text-slate-700 dark:text-slate-200"
                           }`}
                         >
                           {cell}

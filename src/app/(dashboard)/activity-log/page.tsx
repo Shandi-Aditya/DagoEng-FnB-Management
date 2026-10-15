@@ -468,21 +468,21 @@ export default function ActivityLogPage() {
           </p>
         </Card>
 
-        <Card className="p-4 bg-white border border-slate-200 shadow-xs">
+        <Card className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Peringatan / Selisih</p>
-            <AlertTriangle className="w-4 h-4 text-amber-600" />
+            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Peringatan / Selisih</p>
+            <AlertTriangle className="w-4 h-4 text-primary" />
           </div>
-          <p className="text-2xl font-black text-amber-600 mt-2">{warningCount}</p>
-          <p className="text-[11px] text-amber-700/80 font-medium mt-0.5">Void, selisih stok & kas</p>
+          <p className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-2">{warningCount}</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">Void, selisih stok & kas</p>
         </Card>
 
-        <Card className="p-4 bg-white border border-slate-200 shadow-xs">
+        <Card className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">High / Critical</p>
-            <ShieldCheck className="w-4 h-4 text-purple-600" />
+            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">High / Critical</p>
+            <ShieldCheck className="w-4 h-4 text-primary" />
           </div>
-          <p className="text-2xl font-black text-purple-600 mt-2">{highSeverityCount}</p>
+          <p className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-2">{highSeverityCount}</p>
           <p className="text-[11px] text-purple-700/80 font-medium mt-0.5">Aksi butuh otorisasi tinggi</p>
         </Card>
       </div>
@@ -661,56 +661,56 @@ export default function ActivityLogPage() {
                             WITA
                           </div>
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="font-bold text-slate-900">{log.actorName}</div>
-                          <div className="text-[10px] text-purple-600 font-bold">{log.actorRole}</div>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="font-bold text-slate-900 dark:text-slate-100">{log.actorName}</div>
+                          <div className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">{log.actorRole}</div>
                         </td>
-                        <td className="px-4 py-3">
-                          <span className="inline-block px-1.5 py-0.5 bg-slate-100 text-slate-700 rounded text-[10px] font-mono font-bold mb-0.5">
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="inline-block px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded text-[10px] font-mono font-bold mb-0.5">
                             {log.module}
                           </span>
-                          <div className="font-bold text-slate-800 text-[11px]">{log.action}</div>
+                          <div className="font-bold text-slate-800 dark:text-slate-200 text-[11px]">{log.action}</div>
                           {log.recordId && (
-                            <span className="text-[9px] text-slate-400 font-mono">
+                            <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">
                               #{log.recordId}
                             </span>
                           )}
                         </td>
                         <td className="px-4 py-3 max-w-sm">
-                          <div className="text-slate-800 line-clamp-1 font-medium">{log.description}</div>
+                          <div className="text-slate-800 dark:text-slate-200 line-clamp-1 font-medium">{log.description}</div>
                           {log.previousValue && log.newValue && (
-                            <div className="text-[10px] text-slate-600 flex items-center space-x-1 mt-1 font-mono bg-slate-50 p-1 rounded border border-slate-100">
-                              <span className="text-red-600 line-through truncate max-w-[120px]">
+                            <div className="text-[10px] text-slate-600 dark:text-slate-300 flex items-center space-x-1 mt-1 font-mono bg-slate-50 dark:bg-slate-800 p-1 rounded border border-slate-100 dark:border-slate-700">
+                              <span className="text-red-600 dark:text-red-400 line-through truncate max-w-[120px]">
                                 {log.previousValue}
                               </span>
                               <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span className="text-emerald-700 font-bold truncate max-w-[150px]">
+                              <span className="text-emerald-700 dark:text-emerald-400 font-bold truncate max-w-[150px]">
                                 {log.newValue}
                               </span>
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-slate-500 italic max-w-xs truncate text-[11px]">
+                        <td className="px-4 py-3 text-slate-600 dark:text-slate-300 italic max-w-xs truncate text-[11px] whitespace-nowrap">
                           {log.reason || "-"}
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-4 py-3 text-center whitespace-nowrap">
                           <span
-                            className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                            className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-mono font-bold whitespace-nowrap ${
                               log.severity === "CRITICAL"
                                 ? "bg-red-100 text-red-800 border border-red-200"
                                 : log.severity === "HIGH"
                                 ? "bg-amber-100 text-amber-800 border border-amber-200"
                                 : log.severity === "MEDIUM"
                                 ? "bg-blue-100 text-blue-800 border border-blue-200"
-                                : "bg-slate-100 text-slate-600"
+                                : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
                             }`}
                           >
                             {log.severity || "INFO"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-4 py-3 text-center whitespace-nowrap">
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${
                               log.status === "SUCCESS"
                                 ? "bg-emerald-100 text-emerald-800"
                                 : log.status === "WARNING"

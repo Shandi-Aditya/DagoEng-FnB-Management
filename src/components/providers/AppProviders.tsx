@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { OutletProvider } from "@/contexts/OutletContext";
 import { SettingsProvider } from "@/contexts/SettingsContext";
@@ -18,7 +19,8 @@ import { EmployeeShiftProvider } from "@/contexts/EmployeeShiftContext";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
-    <AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
       <OutletProvider>
         <ActivityLogProvider>
           <SettingsProvider>
@@ -47,5 +49,6 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
         </ActivityLogProvider>
       </OutletProvider>
     </AuthProvider>
+    </ThemeProvider>
   );
 }

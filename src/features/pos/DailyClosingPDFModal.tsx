@@ -155,17 +155,17 @@ _DagoEng Creative Hub - Financial Automated System_`);
       `}</style>
 
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200 flex flex-col max-h-[92vh]">
+        <div className="bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh]">
           {/* Top Control Bar (Hidden when printing) */}
-          <div className="px-6 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-900 text-white print:hidden">
+          <div className="px-6 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-900 text-white print:hidden">
             <div className="flex items-center space-x-2.5">
-              <FileText className="w-5 h-5 text-brand-orange" />
+              <FileText className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788]" />
               <div>
                 <h3 className="font-bold text-sm text-white">
                   Dokumen Resmi Laporan Closing Harian
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  No. Dokumen: <span className="font-mono text-brand-orange">{reportData.reportNumber}</span>
+                  No. Dokumen: <span className="font-mono text-[#3B7A57] dark:text-[#52B788]">{reportData.reportNumber}</span>
                 </p>
               </div>
             </div>
@@ -174,7 +174,7 @@ _DagoEng Creative Hub - Financial Automated System_`);
               <Button
                 size="sm"
                 onClick={handlePrintPDF}
-                className="text-xs bg-brand-orange hover:bg-orange-600 text-white font-bold space-x-1.5 shadow-xs"
+                className="text-xs bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold space-x-1.5 shadow-xs"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Cetak / Save as PDF</span>
@@ -234,7 +234,7 @@ _DagoEng Creative Hub - Financial Automated System_`);
                     </div>
                     <div>
                       <h1 className="font-extrabold text-base tracking-tight text-slate-900 leading-none">
-                        DAGOENG <span className="text-brand-orange">CREATIVE HUB</span>
+                        DAGOENG <span className="text-[#3B7A57] dark:text-[#52B788]">CREATIVE HUB</span>
                       </h1>
                       <p className="text-[9px] text-slate-400 font-medium">
                         Multi-Business F&B Management & Platform Ecosystem
@@ -252,7 +252,7 @@ _DagoEng Creative Hub - Financial Automated System_`);
                     REKAPITULASI RESMI
                   </span>
                   <h2 className="font-bold text-xs text-slate-900 pt-0.5">LAPORAN CLOSING HARIAN</h2>
-                  <p className="font-mono text-[11px] font-bold text-brand-orange">{reportData.reportNumber}</p>
+                  <p className="font-mono text-[11px] font-bold text-[#3B7A57] dark:text-[#52B788]">{reportData.reportNumber}</p>
                   <p className="text-[10px] text-slate-500">{reportData.closingDateTime}</p>
                 </div>
               </div>
@@ -310,7 +310,7 @@ _DagoEng Creative Hub - Financial Automated System_`);
                     </tr>
                     <tr className="bg-slate-50 font-bold text-slate-900 border-t border-slate-300">
                       <td className="py-1.5">TOTAL OMSET BERSIH (NET REVENUE)</td>
-                      <td className="py-1.5 text-right font-mono text-xs text-brand-orange">
+                      <td className="py-1.5 text-right font-mono text-xs text-[#3B7A57] dark:text-[#52B788]">
                         {formatCurrencyIDR(reportData.totalNetSales)}
                       </td>
                     </tr>

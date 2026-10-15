@@ -80,9 +80,9 @@ export default function DashboardPage() {
       share: fnbShare,
       tenants: "Kopi Senja, Dapur Mama, Manis Bakery, Warung Bu Narti",
       status: "AKTIF",
-      icon: <Coffee className="w-4 h-4 text-brand-orange" />,
-      color: "border-brand-orange",
-      progressColor: "bg-brand-orange",
+      icon: <Coffee className="w-4 h-4 text-primary" />,
+      color: "border-primary",
+      progressColor: "bg-primary",
       progressWidth: fnbRevenue > 0 ? "w-full" : "w-0",
     },
     {
@@ -92,9 +92,9 @@ export default function DashboardPage() {
       share: cwkShare,
       tenants: "1 Hub (30 Desk, 4 Meeting Room)",
       status: activeOrgModules.includes("CO_WORKING") ? "AKTIF" : "NON-AKTIF",
-      icon: <Laptop className="w-4 h-4 text-blue-600" />,
-      color: "border-blue-500",
-      progressColor: "bg-blue-500",
+      icon: <Laptop className="w-4 h-4 text-sky-600 dark:text-sky-400" />,
+      color: "border-sky-500",
+      progressColor: "bg-sky-500",
       progressWidth: cwkRevenue > 0 ? "w-full" : "w-0",
     },
   ];
@@ -102,14 +102,14 @@ export default function DashboardPage() {
   if (!isMounted) {
     return (
       <div className="space-y-6 max-w-7xl mx-auto animate-pulse">
-        <div className="h-16 bg-slate-100 rounded-xl w-1/3" />
+        <div className="h-16 bg-slate-100 dark:bg-slate-800 rounded-xl w-1/3" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="h-28 bg-slate-100 rounded-xl" />
-          <div className="h-28 bg-slate-100 rounded-xl" />
-          <div className="h-28 bg-slate-100 rounded-xl" />
-          <div className="h-28 bg-slate-100 rounded-xl" />
+          <div className="h-28 bg-slate-100 dark:bg-slate-800 rounded-xl" />
+          <div className="h-28 bg-slate-100 dark:bg-slate-800 rounded-xl" />
+          <div className="h-28 bg-slate-100 dark:bg-slate-800 rounded-xl" />
+          <div className="h-28 bg-slate-100 dark:bg-slate-800 rounded-xl" />
         </div>
-        <div className="h-64 bg-slate-100 rounded-xl" />
+        <div className="h-64 bg-slate-100 dark:bg-slate-800 rounded-xl" />
       </div>
     );
   }
@@ -117,21 +117,21 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* 1. Header Eksekutif & Filter Periode Tanggal */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
               Selamat Datang, {user?.name.split(" ")[0]}
             </h1>
-            <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+            <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
               {isDagoOwner ? "Owner Dago Hub" : `Tenant: ${user?.tenant?.name || "Kopi Senja"}`}
             </span>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
             {isDagoOwner
               ? "Ringkasan eksekutif konsolidasi seluruh domain bisnis Dago Creative Hub"
               : `Ringkasan operasional bisnis ${user?.tenant?.name || "Kopi Senja"}`} •{" "}
-            <span className="font-semibold text-slate-700">
+            <span className="font-semibold text-slate-700 dark:text-slate-300">
               {isAllOutlets ? "Semua Outlet" : `Outlet ${activeOutlet?.name}`}
             </span>
           </p>
@@ -148,38 +148,38 @@ export default function DashboardPage() {
           title={isDagoOwner ? "Total Pendapatan Konsolidasi" : "Total Pendapatan"}
           value={formatCurrencyIDR(totalRevenue)}
           trendText={`Periode ${formattedRangeLabel}`}
-          accentColor="orange"
-          icon={<DollarSign className="w-5 h-5 text-brand-orange" />}
+          accentColor="sage"
+          icon={<DollarSign className="w-5 h-5 text-primary" />}
         />
         <KPICard
           title="Total Transaksi"
           value={`${totalOrdersCount.toLocaleString("id-ID")} Pesanan`}
           trendText={isDagoOwner ? "Semua unit bisnis" : "Transaksi pesanan tenant"}
           accentColor="cyan"
-          icon={<ShoppingBag className="w-5 h-5 text-brand-cyan" />}
+          icon={<ShoppingBag className="w-5 h-5 text-sky-600 dark:text-sky-400" />}
         />
         <KPICard
           title="Rata-rata Nilai Pesanan"
           value={formatCurrencyIDR(averageOrderValue)}
           trendText="Rata-rata per transaksi"
           accentColor="green"
-          icon={<TrendingUp className="w-5 h-5 text-brand-green" />}
+          icon={<TrendingUp className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
         />
         {isDagoOwner ? (
           <KPICard
             title="Unit Bisnis Aktif"
             value={`${activeOrgModules.filter((m) => m !== "CORE").length + 1} Unit`}
             trendText="F&B Culinary & Co-Working"
-            accentColor="yellow"
-            icon={<Building className="w-5 h-5 text-amber-500" />}
+            accentColor="sage"
+            icon={<Building className="w-5 h-5 text-primary" />}
           />
         ) : (
           <KPICard
             title="Pesanan Selesai"
             value={`${completedOrdersCount} Pesanan`}
             trendText={`${Math.round((completedOrdersCount / (totalOrdersCount || 1)) * 100)}% tingkat selesai`}
-            accentColor="yellow"
-            icon={<CheckCircle2 className="w-5 h-5 text-amber-500" />}
+            accentColor="sage"
+            icon={<CheckCircle2 className="w-5 h-5 text-primary" />}
           />
         )}
       </div>
@@ -192,18 +192,18 @@ export default function DashboardPage() {
 
         <div className="lg:col-span-1">
           {isDagoOwner ? (
-            <Card className="h-full shadow-sm flex flex-col justify-between">
-              <CardHeader className="pb-3 border-b border-slate-100">
+            <Card className="h-full shadow-sm flex flex-col justify-between border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-bold flex items-center space-x-2 text-slate-900">
-                    <Layers className="w-4 h-4 text-brand-cyan" />
+                  <CardTitle className="text-sm font-bold flex items-center space-x-2 text-slate-900 dark:text-slate-100">
+                    <Layers className="w-4 h-4 text-primary" />
                     <span>Kontribusi Unit Bisnis</span>
                   </CardTitle>
-                  <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
                     Konsolidasi
                   </span>
                 </div>
-                <CardDescription className="text-xs">
+                <CardDescription className="text-xs text-slate-500 dark:text-slate-400">
                   Porsi pendapatan antar domain operasional
                 </CardDescription>
               </CardHeader>
@@ -212,23 +212,23 @@ export default function DashboardPage() {
                 {businessBreakdown.map((b) => (
                   <div
                     key={b.module}
-                    className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50 space-y-2.5"
+                    className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-2.5"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
-                        <div className="p-1.5 rounded-lg bg-white shadow-xs border border-slate-100">
+                        <div className="p-1.5 rounded-lg bg-white dark:bg-slate-800 shadow-xs border border-slate-100 dark:border-slate-700">
                           {b.icon}
                         </div>
                         <div>
-                          <p className="font-bold text-xs text-slate-900">{b.name}</p>
-                          <p className="text-[10px] text-slate-400">{b.tenants}</p>
+                          <p className="font-bold text-xs text-slate-900 dark:text-slate-100">{b.name}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500">{b.tenants}</p>
                         </div>
                       </div>
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                           b.status === "AKTIF"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                            : "bg-slate-100 text-slate-500 border border-slate-200"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60"
+                            : "bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"
                         }`}
                       >
                         {b.status}
@@ -237,14 +237,14 @@ export default function DashboardPage() {
 
                     <div>
                       <div className="flex items-baseline justify-between text-xs">
-                        <span className="font-bold text-slate-900">
+                        <span className="font-bold text-slate-900 dark:text-slate-100">
                           {formatCurrencyIDR(b.revenue)}
                         </span>
-                        <span className="font-semibold text-slate-500">
-                          Porsi: <strong className="text-slate-900">{b.share}</strong>
+                        <span className="font-semibold text-slate-500 dark:text-slate-400">
+                          Porsi: <strong className="text-slate-900 dark:text-slate-100">{b.share}</strong>
                         </span>
                       </div>
-                      <div className="w-full bg-slate-200 h-1.5 rounded-full mt-1.5 overflow-hidden">
+                      <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full mt-1.5 overflow-hidden">
                         <div className={`h-full ${b.progressColor} ${b.progressWidth} rounded-full`} />
                       </div>
                     </div>
