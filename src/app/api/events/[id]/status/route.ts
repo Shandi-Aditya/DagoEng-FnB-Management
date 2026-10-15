@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { updateEventStatus, getAdminEventById } from "@/lib/events";
 import { assertEventAdmin } from "@/lib/server-auth";
 import { EventStatus } from "@/types/event";
+export const dynamic = "force-dynamic";
 
 const VALID_STATUSES: EventStatus[] = [
   "PENDING",

@@ -339,22 +339,33 @@ async function main() {
 
   // 7. CREATE MENU CATEGORIES & PRODUCTS (Realistic High/Low Margin & Best/Slow Sellers)
   const catCoffee = await prisma.category.create({
-    data: { organizationId: orgKopiSenja.id, name: "Signature Coffee", sortOrder: 1 },
+    data: { name: "Signature Coffee", sortOrder: 1 },
   });
   const catTea = await prisma.category.create({
-    data: { organizationId: orgKopiSenja.id, name: "Artisan Tea & Refreshers", sortOrder: 2 },
+    data: { name: "Artisan Tea & Refreshers", sortOrder: 2 },
   });
   const catMains = await prisma.category.create({
-    data: { organizationId: orgKopiSenja.id, name: "Main Course", sortOrder: 3 },
+    data: { name: "Main Course", sortOrder: 3 },
   });
   const catPastry = await prisma.category.create({
-    data: { organizationId: orgKopiSenja.id, name: "Pastry & Snacks", sortOrder: 4 },
+    data: { name: "Pastry & Snacks", sortOrder: 4 },
+  });
+
+  const tenantKopiSenja = await prisma.tenant.upsert({
+    where: { code: "tenant-ks" },
+    update: {},
+    create: {
+      name: "Kopi Senja",
+      code: "tenant-ks",
+      commission: 15.0,
+      status: "ACTIVE",
+    },
   });
 
   // Product 1: Best Seller & High Velocity (Kopi Senja Aren)
   const prodSenjaAren = await prisma.product.create({
     data: {
-      organizationId: orgKopiSenja.id,
+      tenantId: tenantKopiSenja.id,
       categoryId: catCoffee.id,
       name: "Kopi Senja Aren",
       description: "Signature espresso with premium organic palm sugar and fresh milk.",
@@ -373,7 +384,7 @@ async function main() {
   // Product 2: High Margin (Artisan Peach White Tea)
   const prodPeachTea = await prisma.product.create({
     data: {
-      organizationId: orgKopiSenja.id,
+      tenantId: tenantKopiSenja.id,
       categoryId: catTea.id,
       name: "Artisan Peach White Tea",
       description: "Fragrant white tea infused with white peach extract and mint leaf.",
@@ -391,7 +402,7 @@ async function main() {
   // Product 3: Low Margin & High Cost (Signature Wagyu Beef Bowl)
   const prodBeefBowl = await prisma.product.create({
     data: {
-      organizationId: orgKopiSenja.id,
+      tenantId: tenantKopiSenja.id,
       categoryId: catMains.id,
       name: "Signature Wagyu Beef Bowl",
       description: "Pan-seared Australian Wagyu beef slices over warm Japanese rice and onsen egg.",
@@ -403,7 +414,7 @@ async function main() {
   // Product 4: Slow Moving (Herbal Lemongrass Infusion)
   const prodHerbal = await prisma.product.create({
     data: {
-      organizationId: orgKopiSenja.id,
+      tenantId: tenantKopiSenja.id,
       categoryId: catTea.id,
       name: "Herbal Lemongrass Infusion",
       description: "Traditional brew with fresh lemongrass, ginger, and wild forest honey.",
@@ -415,7 +426,7 @@ async function main() {
   // Product 5: Pastry Snack (Butter Croissant)
   await prisma.product.create({
     data: {
-      organizationId: orgKopiSenja.id,
+      tenantId: tenantKopiSenja.id,
       categoryId: catPastry.id,
       name: "Flaky French Butter Croissant",
       description: "Freshly baked artisan butter croissant with crisp layers.",
@@ -427,7 +438,6 @@ async function main() {
   // Modifiers
   const modSugar = await prisma.modifierGroup.create({
     data: {
-      organizationId: orgKopiSenja.id,
       name: "Sugar Level",
       minSelect: 1,
       maxSelect: 1,
@@ -444,7 +454,6 @@ async function main() {
 
   const modDairy = await prisma.modifierGroup.create({
     data: {
-      organizationId: orgKopiSenja.id,
       name: "Milk Substitute & Add-on",
       minSelect: 0,
       maxSelect: 2,

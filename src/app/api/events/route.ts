@@ -6,6 +6,7 @@ import {
   validateEventSubmission,
 } from "@/lib/events";
 import { EventSubmissionPayload } from "@/types/event";
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/events

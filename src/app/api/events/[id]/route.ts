@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPublicEventById, updateEventDetails, getAdminEventById } from "@/lib/events";
 import { assertEventAdmin } from "@/lib/server-auth";
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/events/[id]
