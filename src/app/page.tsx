@@ -192,13 +192,13 @@ export default function PublicLandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0F17] text-slate-100 font-sans flex flex-col justify-between selection:bg-brand-orange selection:text-white scroll-smooth overflow-x-hidden">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F17] text-slate-800 dark:text-slate-100 font-sans flex flex-col justify-between selection:bg-[#3B7A57] selection:text-white scroll-smooth overflow-x-hidden transition-colors duration-300">
 
       {/* 1. CLEAN & SPACIOUS GLASSMORPHISM NAVBAR */}
       <header
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out ${isScrolled
-          ? "bg-slate-950/85 backdrop-blur-2xl shadow-lg shadow-black/30 py-3"
-          : "bg-transparent py-4 sm:py-5"
+          ? "bg-white/90 dark:bg-slate-950/90 backdrop-blur-2xl shadow-md border-b border-slate-200/80 dark:border-white/10 py-3"
+          : "bg-white/60 dark:bg-slate-950/40 backdrop-blur-md py-4 sm:py-5 border-b border-slate-200/40 dark:border-transparent"
           }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -206,7 +206,7 @@ export default function PublicLandingPage() {
           {/* Brand Logo & Name */}
           <Link href="/" className="flex items-center space-x-3 group relative">
             <div className="relative flex-shrink-0">
-              <div className="absolute -inset-1 rounded-full bg-brand-orange/30 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+              <div className="absolute -inset-1 rounded-full bg-[#52B788]/20 blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
               <div className="w-9 h-11 relative transition-transform duration-300 ease-out group-hover:scale-105 group-hover:-rotate-2">
                 <Image
                   src="/logo-dago.png"
@@ -219,17 +219,17 @@ export default function PublicLandingPage() {
               </div>
             </div>
             <div>
-              <span className="font-black text-lg tracking-tight text-white block leading-none drop-shadow-sm transition-colors duration-200 group-hover:text-slate-100">
-                DagoEng <span className="text-brand-orange transition-all duration-300 group-hover:text-orange-400">Creative Hub</span>
+              <span className="font-black text-lg tracking-tight text-slate-900 dark:text-white block leading-none drop-shadow-sm transition-colors duration-200 group-hover:text-[#3B7A57] dark:group-hover:text-slate-100">
+                DagoEng <span className="text-[#3B7A57] dark:text-[#52B788] transition-all duration-300 group-hover:text-[#2E6044] dark:group-hover:text-[#74c69d]">Creative Hub</span>
               </span>
-              <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase transition-colors duration-200 group-hover:text-slate-300">
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-wider uppercase transition-colors duration-200 group-hover:text-slate-700 dark:group-hover:text-slate-300">
                 F&B Management & Coworking
               </span>
             </div>
           </Link>
 
           {/* Clean Desktop Nav Links - Ordered matching page DOM flow */}
-          <nav className="hidden lg:flex items-center space-x-1 p-1.5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 text-xs font-semibold text-slate-300">
+          <nav className="hidden lg:flex items-center space-x-1 p-1.5 rounded-full bg-slate-100/90 dark:bg-white/5 backdrop-blur-md border border-slate-200/80 dark:border-white/10 text-xs font-semibold text-slate-600 dark:text-slate-300">
             {[
               { id: "services", label: "Layanan" },
               { id: "events", label: "Event" },
@@ -243,8 +243,8 @@ export default function PublicLandingPage() {
                   key={item.id}
                   onClick={() => scrollToSection(item.id)}
                   className={`px-4 py-2 rounded-full transition-all duration-200 ease-out select-none ${isActive
-                    ? "bg-primary text-white font-bold shadow-md shadow-primary/25"
-                    : "text-slate-300 hover:text-white hover:bg-white/10 active:bg-white/15"
+                    ? "bg-[#3B7A57] text-white font-bold shadow-md shadow-[#3B7A57]/20"
+                    : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/70 dark:hover:bg-white/10 active:bg-slate-200 dark:active:bg-white/15"
                     }`}
                 >
                   {item.label}
@@ -260,7 +260,7 @@ export default function PublicLandingPage() {
             <Link href="/customer">
               <Button
                 size="sm"
-                className="text-xs h-10 px-5 font-black bg-primary text-white hover:bg-primary/90 shadow-lg shadow-primary/25 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 border border-primary/40 group"
+                className="text-xs h-10 px-5 font-black bg-[#3B7A57] text-white hover:bg-[#2E6044] shadow-md shadow-[#3B7A57]/20 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 border border-[#52B788]/40 group"
               >
                 <UtensilsCrossed className="w-3.5 h-3.5 mr-1.5 transition-transform duration-300 group-hover:rotate-12" />
                 <span>Customer Portal</span>
@@ -272,9 +272,9 @@ export default function PublicLandingPage() {
               onClick={() => setIsLoginModalOpen(true)}
               variant="outline"
               size="sm"
-              className="text-xs h-10 px-4 font-bold bg-white/5 backdrop-blur-md border-white/20 text-slate-200 hover:bg-white/15 hover:text-white hover:border-white/40 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 group"
+              className="text-xs h-10 px-4 font-bold bg-white dark:bg-white/5 backdrop-blur-md border border-slate-200 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/15 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-white/40 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 group shadow-xs"
             >
-              <LogIn className="w-3.5 h-3.5 mr-1.5 text-primary transition-transform duration-300 group-hover:translate-x-0.5" />
+              <LogIn className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788] transition-transform duration-300 group-hover:translate-x-0.5" />
               <span>{user ? `Akun: ${user.name.split(" ")[0]}` : "Masuk Sistem"}</span>
             </Button>
           </div>
@@ -283,13 +283,13 @@ export default function PublicLandingPage() {
           <div className="flex sm:hidden items-center space-x-2">
             <ThemeToggle />
             <Link href="/customer">
-              <Button size="sm" className="text-[11px] h-8 px-3 font-bold bg-primary text-white rounded-lg shadow-sm hover:scale-105 active:scale-95 transition-all">
+              <Button size="sm" className="text-[11px] h-8 px-3 font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-lg shadow-sm hover:scale-105 active:scale-95 transition-all">
                 Portal
               </Button>
             </Link>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 active:scale-90 transition-all duration-200"
+              className="p-2 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-white/20 active:scale-90 transition-all duration-200 border border-slate-200 dark:border-transparent"
               aria-label="Toggle Menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -300,8 +300,8 @@ export default function PublicLandingPage() {
 
         {/* Mobile Dropdown Menu with Slide Animation */}
         {mobileMenuOpen && (
-          <div className="sm:hidden px-4 pt-3 pb-6 bg-slate-950/95 backdrop-blur-2xl border-b border-white/10 space-y-3 animate-in fade-in slide-in-from-top-3 duration-300">
-            <div className="flex flex-col space-y-1.5 text-sm font-semibold text-slate-300">
+          <div className="sm:hidden px-4 pt-3 pb-6 bg-white/95 dark:bg-slate-950/95 backdrop-blur-2xl border-b border-slate-200 dark:border-white/10 space-y-3 animate-in fade-in slide-in-from-top-3 duration-300 shadow-xl">
+            <div className="flex flex-col space-y-1.5 text-sm font-semibold text-slate-700 dark:text-slate-300">
               {[
                 { id: "services", label: "Layanan (F&B & Coworking)" },
                 { id: "events", label: "Event Komunitas" },
@@ -318,8 +318,8 @@ export default function PublicLandingPage() {
                       scrollToSection(item.id);
                     }}
                     className={`p-2.5 rounded-xl text-left transition-all duration-200 ${isActive
-                      ? "bg-primary text-white font-bold shadow-sm shadow-primary/20"
-                      : "hover:bg-white/5 hover:text-white"
+                      ? "bg-[#3B7A57] text-white font-bold shadow-sm shadow-[#3B7A57]/20"
+                      : "hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
                       }`}
                   >
                     {item.label}
@@ -328,9 +328,9 @@ export default function PublicLandingPage() {
               })}
             </div>
 
-            <div className="pt-3 border-t border-white/10 flex flex-col gap-2">
+            <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex flex-col gap-2">
               <Link href="/customer" onClick={() => setMobileMenuOpen(false)}>
-                <Button className="w-full bg-primary text-white font-bold text-xs h-10 rounded-xl hover:scale-[1.02] active:scale-95 transition-all">
+                <Button className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-10 rounded-xl hover:scale-[1.02] active:scale-95 transition-all shadow-md shadow-[#3B7A57]/20">
                   Buka Customer Portal
                 </Button>
               </Link>
@@ -340,7 +340,7 @@ export default function PublicLandingPage() {
                   setIsLoginModalOpen(true);
                 }}
                 variant="outline"
-                className="w-full bg-white/5 text-slate-200 border-white/20 font-bold text-xs h-10 rounded-xl hover:scale-[1.02] active:scale-95 transition-all"
+                className="w-full bg-slate-50 dark:bg-white/5 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-white/20 font-bold text-xs h-10 rounded-xl hover:scale-[1.02] active:scale-95 transition-all"
               >
                 Masuk / Login Multi-Role
               </Button>
@@ -368,17 +368,17 @@ export default function PublicLandingPage() {
           </div>
         ))}
 
-        {/* Ambient Glow Aura */}
-        <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-brand-orange/20 rounded-full blur-3xl pointer-events-none" />
+        {/* Ambient Glow Aura in Sage Green & Subtle Blue */}
+        <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-[#52B788]/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
 
         {/* Hero Content Container */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 relative z-20 w-full">
           <div className="max-w-3xl space-y-6">
 
-            {/* Glowing Badge */}
-            <div className="inline-flex items-center space-x-2 bg-brand-orange/20 backdrop-blur-md border border-brand-orange/50 text-orange-400 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg shadow-orange-500/10 animate-in fade-in duration-300">
-              <Sparkles className="w-3.5 h-3.5 text-brand-orange animate-spin" style={{ animationDuration: "6s" }} />
+            {/* Glowing Badge in Sage Green */}
+            <div className="inline-flex items-center space-x-2 bg-[#52B788]/15 backdrop-blur-md border border-[#52B788]/40 text-[#52B788] px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider shadow-md shadow-[#52B788]/15 animate-in fade-in duration-300">
+              <Sparkles className="w-3.5 h-3.5 text-[#52B788] animate-spin" style={{ animationDuration: "6s" }} />
               <span>{HERO_SLIDES[currentSlide].badge}</span>
             </div>
 
@@ -397,7 +397,7 @@ export default function PublicLandingPage() {
               <Link href="/customer?tab=MENU">
                 <Button
                   size="lg"
-                  className="h-12 px-7 font-black bg-brand-orange text-white hover:bg-orange-600 rounded-2xl text-xs shadow-xl shadow-orange-500/25 transition-all hover:scale-105 active:scale-95 border border-orange-400/40 flex items-center space-x-2"
+                  className="h-12 px-7 font-black bg-[#3B7A57] text-white hover:bg-[#2E6044] rounded-2xl text-xs shadow-xl shadow-[#3B7A57]/20 transition-all hover:scale-105 active:scale-95 border border-[#52B788]/30 flex items-center space-x-2"
                 >
                   <UtensilsCrossed className="w-4 h-4" />
                   <span>Explore F&B</span>
@@ -409,9 +409,9 @@ export default function PublicLandingPage() {
                 <Button
                   size="lg"
                   variant="outline"
-                  className="h-12 px-7 font-bold bg-white/10 backdrop-blur-md border-white/20 text-white hover:bg-white/20 rounded-2xl text-xs transition-all hover:scale-105 active:scale-95 flex items-center space-x-2"
+                  className="h-12 px-7 font-bold bg-white/10 backdrop-blur-md border-white/20 text-white hover:bg-white/20 rounded-2xl text-xs transition-all hover:scale-105 active:scale-95 flex items-center space-x-2 shadow-sm"
                 >
-                  <Laptop className="w-4 h-4 text-brand-orange" />
+                  <Laptop className="w-4 h-4 text-[#52B788]" />
                   <span>Explore Co-Working</span>
                 </Button>
               </Link>
@@ -424,7 +424,7 @@ export default function PublicLandingPage() {
                   key={idx}
                   onClick={() => setCurrentSlide(idx)}
                   className={`h-2 rounded-full transition-all duration-300 ${idx === currentSlide
-                    ? "w-10 bg-brand-orange shadow-md shadow-orange-500/50"
+                    ? "w-10 bg-[#52B788] shadow-md shadow-[#52B788]/30"
                     : "w-2.5 bg-white/30 hover:bg-white/60"
                     }`}
                   aria-label={`Slide ${idx + 1}`}
@@ -441,27 +441,27 @@ export default function PublicLandingPage() {
 
       {/* 3. QUICK SERVICE FINDER BAR (DIRECT) */}
       <section className="relative z-30 -mt-10 sm:-mt-12 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-        <div className="bg-slate-900/95 backdrop-blur-xl rounded-3xl p-4 sm:p-5 shadow-2xl border border-white/15 flex flex-col md:flex-row items-center justify-between gap-4 text-white">
+        <div className="bg-white dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl p-4 sm:p-5 shadow-xl border border-slate-200 dark:border-white/15 flex flex-col md:flex-row items-center justify-between gap-4 text-slate-800 dark:text-white transition-colors">
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full md:w-auto flex-1">
             {/* Select Location */}
-            <div className="flex items-center space-x-3 p-3 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-orange/50 transition-colors">
-              <MapPin className="w-5 h-5 text-brand-orange flex-shrink-0" />
+            <div className="flex items-center space-x-3 p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-[#52B788]/60 transition-colors">
+              <MapPin className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
               <div className="space-y-0.5 flex-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Pilih Cabang Dago
                 </span>
                 <select
                   value={selectedOutlet}
                   onChange={(e) => setSelectedOutlet(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-white outline-none w-full cursor-pointer"
+                  className="bg-transparent text-xs font-bold text-slate-800 dark:text-white outline-none w-full cursor-pointer"
                 >
                   {outlets.map((o) => (
                     <option
                       key={o.id}
                       value={o.id}
                       disabled={o.isComingSoon}
-                      className={o.isComingSoon ? "bg-slate-900 text-slate-400 italic" : "bg-slate-900 text-white font-bold"}
+                      className={o.isComingSoon ? "bg-white dark:bg-slate-900 text-slate-400 italic" : "bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"}
                     >
                       {o.name} {o.isComingSoon ? "— ⏳ (Segera Hadir)" : `(${o.address})`}
                     </option>
@@ -471,20 +471,20 @@ export default function PublicLandingPage() {
             </div>
 
             {/* Select Service Type */}
-            <div className="flex items-center space-x-3 p-3 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-orange/50 transition-colors">
-              <Building2 className="w-5 h-5 text-blue-400 flex-shrink-0" />
+            <div className="flex items-center space-x-3 p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-[#52B788]/60 transition-colors">
+              <Building2 className="w-5 h-5 text-blue-500 dark:text-blue-400 flex-shrink-0" />
               <div className="space-y-0.5 flex-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                   Layanan Yang Dituju
                 </span>
                 <select
                   value={selectedService}
                   onChange={(e) => setSelectedService(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-white outline-none w-full cursor-pointer"
+                  className="bg-transparent text-xs font-bold text-slate-800 dark:text-white outline-none w-full cursor-pointer"
                 >
-                  <option value="MENU" className="bg-slate-900 text-white">Layanan F&B (Menu & Kopi)</option>
-                  <option value="COWORKING" className="bg-slate-900 text-white">Layanan Co-Working (Workspace & Meeting)</option>
-                  <option value="LOYALTY" className="bg-slate-900 text-white">Program Member Loyalty</option>
+                  <option value="MENU" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Layanan F&B (Menu & Kopi)</option>
+                  <option value="COWORKING" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Layanan Co-Working (Workspace & Meeting)</option>
+                  <option value="LOYALTY" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Program Member Loyalty</option>
                 </select>
               </div>
             </div>
@@ -493,7 +493,7 @@ export default function PublicLandingPage() {
           {/* Action Search Button */}
           <Button
             onClick={handleOpenService}
-            className="w-full md:w-auto h-12 px-7 font-black bg-brand-orange text-white hover:bg-orange-600 rounded-2xl text-xs transition-all hover:scale-105 active:scale-95 shadow-lg shadow-orange-500/25"
+            className="w-full md:w-auto h-12 px-7 font-black bg-[#3B7A57] text-white hover:bg-[#2E6044] rounded-2xl text-xs transition-all hover:scale-105 active:scale-95 shadow-lg shadow-[#3B7A57]/20 border border-[#52B788]/30"
           >
             <Search className="w-4 h-4 mr-2" />
             <span>Buka Layanan di Customer Portal</span>
@@ -502,17 +502,17 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 4. SECTION: LAYANAN UTAMA DAGO (INFORM & DIRECT: F&B & COWORKING) */}
-      <section id="services" className="py-24 bg-[#0B0F17] relative scroll-mt-20">
+      <section id="services" className="py-24 bg-slate-100/70 dark:bg-[#0B0F17] transition-colors duration-300 relative scroll-mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
 
           <div className="text-center max-w-2xl mx-auto space-y-2">
-            <Badge variant="outline" className="text-brand-orange border-brand-orange/40 bg-brand-orange/10 font-black uppercase text-[10px] tracking-wider">
+            <Badge variant="outline" className="text-[#3B7A57] dark:text-[#52B788] border-[#3B7A57]/30 dark:border-[#52B788]/40 bg-[#3B7A57]/10 dark:bg-[#52B788]/10 font-black uppercase text-[10px] tracking-wider">
               Dua Layanan Utama DAGO
             </Badge>
-            <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+            <h2 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
               Satu Ekosistem, Dua Pengalaman Layanan
             </h2>
-            <p className="text-xs sm:text-sm text-slate-400">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
               Jelajahi sajian kuliner artisan F&B pilihan atau pesan ruang kerja Co-Working representatif sesuai kebutuhan Anda.
             </p>
           </div>
@@ -521,42 +521,42 @@ export default function PublicLandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 
             {/* Service 1: F&B & Culinary */}
-            <div className="p-8 rounded-3xl bg-slate-900/80 border border-white/10 space-y-6 flex flex-col justify-between hover:border-brand-orange hover:bg-gradient-to-b hover:from-orange-950/30 hover:via-slate-900 hover:to-slate-900 transition-all duration-300 shadow-xl group">
+            <div className="p-8 rounded-3xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 space-y-6 flex flex-col justify-between hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/50 dark:hover:from-emerald-950/20 hover:to-white dark:hover:to-slate-900 transition-all duration-300 shadow-md dark:shadow-xl group">
               <div className="space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-brand-orange/20 text-brand-orange border border-brand-orange/30 flex items-center justify-center font-bold">
+                <div className="w-12 h-12 rounded-2xl bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 flex items-center justify-center font-bold">
                   <UtensilsCrossed className="w-6 h-6" />
                 </div>
                 <div>
-                  <Badge className="bg-brand-orange/20 text-orange-400 border border-brand-orange/30 text-[10px] font-bold uppercase mb-2">
+                  <Badge className="bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 text-[10px] font-bold uppercase mb-2">
                     Layanan F&B
                   </Badge>
-                  <h3 className="text-2xl font-black text-white group-hover:text-brand-orange transition-colors">
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
                     Sajian Kuliner Artisan & Kopi
                   </h3>
-                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mt-2">
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-2">
                     Koleksi menu lezat dari aneka mitra kuliner DAGO — mulai dari specialty coffee Kopi Senja, masakan lezat Dapur Mama, Manis Bakery, hingga Warung Bu Narti. Pesan mandiri via QR Meja dengan pembayaran instan.
                   </p>
                 </div>
 
-                <div className="pt-2 space-y-2 text-xs text-slate-300">
+                <div className="pt-2 space-y-2 text-xs text-slate-600 dark:text-slate-300">
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0" />
                     <span>Multi-Mitra Kuliner Terintegrasi</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0" />
                     <span>Pemesanan Mandiri Cepat Tanpa Antre</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0" />
                     <span>Nota Transaksi F&B Resmi & Riwayat Order</span>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-white/10">
+              <div className="pt-6 border-t border-slate-100 dark:border-white/10">
                 <Link href="/customer?tab=MENU">
-                  <Button className="w-full h-12 bg-brand-orange hover:bg-orange-600 text-white font-black text-xs rounded-2xl shadow-lg shadow-orange-500/25 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2">
+                  <Button className="w-full h-12 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-black text-xs rounded-2xl shadow-lg shadow-[#3B7A57]/20 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2 border border-[#52B788]/30">
                     <span>Explore F&B</span>
                     <ArrowRight className="w-4 h-4" />
                   </Button>
@@ -565,42 +565,42 @@ export default function PublicLandingPage() {
             </div>
 
             {/* Service 2: Co-Working & Workspace */}
-            <div className="p-8 rounded-3xl bg-slate-900/80 border border-white/10 space-y-6 flex flex-col justify-between hover:border-blue-500 hover:bg-gradient-to-b hover:from-blue-950/30 hover:via-slate-900 hover:to-slate-900 transition-all duration-300 shadow-xl group">
+            <div className="p-8 rounded-3xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 space-y-6 flex flex-col justify-between hover:border-blue-500 hover:bg-gradient-to-b hover:from-blue-50/50 dark:hover:from-blue-950/20 hover:to-white dark:hover:to-slate-900 transition-all duration-300 shadow-md dark:shadow-xl group">
               <div className="space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center justify-center font-bold">
+                <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-500/20 dark:border-blue-500/30 flex items-center justify-center font-bold">
                   <Laptop className="w-6 h-6" />
                 </div>
                 <div>
-                  <Badge className="bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold uppercase mb-2">
+                  <Badge className="bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300 border border-blue-500/20 dark:border-blue-500/30 text-[10px] font-bold uppercase mb-2">
                     Layanan Co-Working
                   </Badge>
-                  <h3 className="text-2xl font-black text-white group-hover:text-blue-400 transition-colors">
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                     Ruang Kerja & Meeting Room
                   </h3>
-                  <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mt-2">
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-2">
                     Pilihan Hot Desk fleksibel, Dedicated Nomad Desk, dan VIP Meeting Suite ber-AC dengan koneksi fiber optic dedicated 100 Mbps serta fasilitas free flow kopi/teh artisan.
                   </p>
                 </div>
 
-                <div className="pt-2 space-y-2 text-xs text-slate-300">
+                <div className="pt-2 space-y-2 text-xs text-slate-600 dark:text-slate-300">
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
                     <span>WiFi Dedicated 100 Mbps Berkecepatan Tinggi</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
                     <span>Reservasi Fleksibel Jam atau Bulanan</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
                     <span>Nota Transaksi Co-Working & Booking Terpisah</span>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-white/10">
+              <div className="pt-6 border-t border-slate-100 dark:border-white/10">
                 <Link href="/customer?tab=COWORKING">
-                  <Button className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-2xl shadow-lg shadow-blue-500/25 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2">
+                  <Button className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-2xl shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2">
                     <span>Explore Co-Working</span>
                     <ArrowRight className="w-4 h-4" />
                   </Button>
@@ -614,20 +614,20 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 4B. SECTION: EVENT KOMUNITAS (INFORMASI & PENGAJUAN PUBLIK) */}
-      <section id="events" className="py-24 bg-[#090D15] relative scroll-mt-20 border-t border-white/5">
+      <section id="events" className="py-24 bg-white dark:bg-[#090D15] transition-colors duration-300 relative scroll-mt-20 border-t border-slate-200 dark:border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
 
           {/* Section Header */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-white/10">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-slate-200 dark:border-white/10">
             <div className="space-y-3 max-w-2xl">
-              <div className="inline-flex items-center space-x-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider">
-                <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+              <div className="inline-flex items-center space-x-2 bg-[#3B7A57]/10 dark:bg-emerald-500/15 border border-[#3B7A57]/20 dark:border-emerald-500/30 text-[#3B7A57] dark:text-emerald-400 px-3.5 py-1 rounded-full text-xs font-black uppercase tracking-wider">
+                <Calendar className="w-3.5 h-3.5 text-[#3B7A57] dark:text-emerald-400" />
                 <span>Agenda & Komunitas Kreatif</span>
               </div>
-              <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">
+              <h2 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
                 Event Komunitas & Ruang Kolaborasi
               </h2>
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                 Temukan lokakarya, perjumpaan komunitas, dan sharing session menarik yang diselenggarakan oleh komunitas lokal di Dago Creative Hub.
               </p>
             </div>
@@ -635,7 +635,7 @@ export default function PublicLandingPage() {
             {/* CTA Buttons */}
             <div className="flex flex-wrap items-center gap-3">
               <Link href="/events/submit">
-                <Button className="h-10 px-4 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-900/20 transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5 border border-emerald-600/40">
+                <Button className="h-10 px-4 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl shadow-lg shadow-[#3B7A57]/20 transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5 border border-[#52B788]/30">
                   <PlusCircle className="w-3.5 h-3.5" />
                   <span>Pasang Event Komunitas</span>
                 </Button>
@@ -643,7 +643,7 @@ export default function PublicLandingPage() {
               <Link href="/events">
                 <Button
                   variant="outline"
-                  className="h-10 px-4 bg-white/5 text-slate-200 border-white/20 hover:bg-white/15 hover:text-white text-xs font-bold rounded-xl transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5"
+                  className="h-10 px-4 bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-white/20 hover:bg-slate-200 dark:hover:bg-white/15 hover:text-slate-900 dark:hover:text-white text-xs font-bold rounded-xl transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5"
                 >
                   <span>Lihat Semua Event</span>
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -656,18 +656,18 @@ export default function PublicLandingPage() {
           {isLoadingEvents ? (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[1, 2, 3].map((i) => (
-                <div key={i} className="h-96 rounded-3xl bg-slate-900/60 border border-white/10 animate-pulse" />
+                <div key={i} className="h-96 rounded-3xl bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 animate-pulse" />
               ))}
             </div>
           ) : communityEvents.length === 0 ? (
-            <div className="p-12 text-center rounded-3xl bg-slate-900/40 border border-white/10 max-w-xl mx-auto space-y-4">
-              <Calendar className="w-12 h-12 text-slate-500 mx-auto" />
-              <h3 className="text-lg font-bold text-white">Belum Ada Agenda Komunitas Mendatang</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
+            <div className="p-12 text-center rounded-3xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-white/10 max-w-xl mx-auto space-y-4">
+              <Calendar className="w-12 h-12 text-slate-400 dark:text-slate-500 mx-auto" />
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Belum Ada Agenda Komunitas Mendatang</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
                 Punya rencana mengadakan lokakarya, meetup, atau sesi sharing? Pasang pengajuan event komunitasmu di sini secara gratis.
               </p>
               <Link href="/events/submit">
-                <Button className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-5 py-2.5 rounded-xl">
+                <Button className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md shadow-[#3B7A57]/20">
                   Pasang Event Sekarang
                 </Button>
               </Link>
@@ -677,7 +677,7 @@ export default function PublicLandingPage() {
               {communityEvents.map((evt) => (
                 <div
                   key={evt.id}
-                  className="group rounded-3xl bg-slate-900/80 border border-white/10 hover:border-emerald-500/50 hover:bg-gradient-to-b hover:from-emerald-950/20 hover:via-slate-900 hover:to-slate-900 transition-all duration-300 shadow-xl overflow-hidden flex flex-col justify-between"
+                  className="group rounded-3xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-slate-50 dark:hover:to-slate-900 transition-all duration-300 shadow-md dark:shadow-xl overflow-hidden flex flex-col justify-between"
                 >
                   <div>
                     {/* Poster Header */}
@@ -702,8 +702,8 @@ export default function PublicLandingPage() {
                         <span
                           className={`text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm backdrop-blur-md ${
                             evt.isPaid
-                              ? "bg-amber-500/90 text-white"
-                              : "bg-emerald-600/90 text-white"
+                              ? "bg-slate-900/90 text-emerald-400 border border-emerald-500/30"
+                              : "bg-[#3B7A57]/90 text-white"
                           }`}
                         >
                           {evt.isPaid ? formatCurrencyIDR(evt.price) : "GRATIS"}
@@ -718,17 +718,17 @@ export default function PublicLandingPage() {
 
                     {/* Card Content */}
                     <div className="p-6 space-y-3">
-                      <h3 className="font-bold text-base text-white line-clamp-2 leading-snug group-hover:text-emerald-400 transition-colors">
+                      <h3 className="font-bold text-base text-slate-900 dark:text-white line-clamp-2 leading-snug group-hover:text-[#3B7A57] dark:group-hover:text-emerald-400 transition-colors">
                         {evt.title}
                       </h3>
 
-                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                      <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
                         {evt.description}
                       </p>
 
-                      <div className="pt-2 space-y-1.5 text-xs text-slate-300 border-t border-white/10">
+                      <div className="pt-2 space-y-1.5 text-xs text-slate-600 dark:text-slate-300 border-t border-slate-200 dark:border-white/10">
                         <div className="flex items-center space-x-2">
-                          <Calendar className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                          <Calendar className="w-3.5 h-3.5 text-[#3B7A57] dark:text-emerald-400 flex-shrink-0" />
                           <span className="truncate">
                             {new Date(evt.startDate).toLocaleDateString("id-ID", {
                               weekday: "short",
@@ -740,8 +740,8 @@ export default function PublicLandingPage() {
                             })}
                           </span>
                         </div>
-                        <div className="flex items-center space-x-2 text-slate-400 text-[11px]">
-                          <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-500" />
+                        <div className="flex items-center space-x-2 text-slate-500 dark:text-slate-400 text-[11px]">
+                          <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-slate-400 dark:text-slate-500" />
                           <span className="truncate">{evt.location}</span>
                         </div>
                       </div>
@@ -753,7 +753,7 @@ export default function PublicLandingPage() {
                     <Link href={`/events/${evt.id}`}>
                       <Button
                         variant="outline"
-                        className="w-full text-xs font-bold border-white/15 text-slate-200 hover:bg-[#3B7A57] hover:text-white hover:border-[#3B7A57] rounded-xl justify-between transition-all group/btn"
+                        className="w-full text-xs font-bold border-slate-300 dark:border-white/15 text-slate-700 dark:text-slate-200 hover:bg-[#3B7A57] hover:text-white hover:border-[#3B7A57] rounded-xl justify-between transition-all group/btn"
                       >
                         <span>Lihat Detail Event</span>
                         <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />
@@ -769,13 +769,13 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 5. SECTION: TENTANG DAGO (INFORM: EKOSISTEM TERPADU) */}
-      <section id="about" className="py-24 bg-[#0E131F] relative scroll-mt-20">
+      <section id="about" className="py-24 bg-slate-100/70 dark:bg-[#0E131F] transition-colors duration-300 relative scroll-mt-20 border-t border-slate-200 dark:border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
 
             {/* Left Visual */}
             <div className="lg:col-span-6 relative space-y-4">
-              <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-white/10 aspect-[4/3] group">
+              <div className="relative rounded-3xl overflow-hidden shadow-2xl border border-slate-200 dark:border-white/10 aspect-[4/3] group">
                 <Image
                   src="https://images.unsplash.com/photo-1527192491265-7e15c55b1ed2?q=80&w=1200&auto=format&fit=crop"
                   alt="Dago Creative Hub Workspace"
@@ -786,7 +786,7 @@ export default function PublicLandingPage() {
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent" />
 
                 <div className="absolute bottom-6 left-6 right-6 text-white space-y-1.5">
-                  <Badge className="bg-brand-orange text-white text-[10px] font-bold uppercase tracking-wider">
+                  <Badge className="bg-[#3B7A57] text-white text-[10px] font-bold uppercase tracking-wider">
                     Integrated Ecosystem
                   </Badge>
                   <h3 className="font-black text-xl text-white">Dago Creative Hub Bali</h3>
@@ -798,23 +798,23 @@ export default function PublicLandingPage() {
 
               {/* Stats Highlights Bar */}
               <div className="grid grid-cols-3 gap-3">
-                <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center">
-                  <span className="text-xl sm:text-2xl font-black text-brand-orange block">
+                <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-center shadow-xs">
+                  <span className="text-xl sm:text-2xl font-black text-[#3B7A57] dark:text-[#52B788] block">
                     <AnimatedCounter value={3} />
                   </span>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Outlet Bali</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Outlet Bali</span>
                 </div>
-                <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center">
-                  <span className="text-xl sm:text-2xl font-black text-emerald-400 block">
+                <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-center shadow-xs">
+                  <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 block">
                     100<span className="text-xs font-normal">Mbps</span>
                   </span>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Fiber Optic</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Fiber Optic</span>
                 </div>
-                <div className="p-4 rounded-2xl bg-white/5 border border-white/10 text-center">
-                  <span className="text-xl sm:text-2xl font-black text-blue-400 block">
+                <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-center shadow-xs">
+                  <span className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400 block">
                     100%
                   </span>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase">Cloud Sync</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Cloud Sync</span>
                 </div>
               </div>
             </div>
@@ -822,13 +822,13 @@ export default function PublicLandingPage() {
             {/* Right Content */}
             <div className="lg:col-span-6 space-y-6">
               <div className="space-y-2">
-                <Badge variant="outline" className="text-brand-orange border-brand-orange/40 bg-brand-orange/10 font-black uppercase text-[10px] tracking-wider">
+                <Badge variant="outline" className="text-[#3B7A57] dark:text-[#52B788] border-[#3B7A57]/30 dark:border-[#52B788]/40 bg-[#3B7A57]/10 dark:bg-[#52B788]/10 font-black uppercase text-[10px] tracking-wider">
                   Tentang Dago Creative Hub
                 </Badge>
-                <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight">
+                <h2 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
                   Ekosistem Terintegrasi untuk Produktivitas & Kuliner
                 </h2>
-                <p className="text-xs sm:text-sm text-slate-400 leading-relaxed pt-1">
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed pt-1">
                   Dago Creative Hub menghadirkan platform terpadu yang menghubungkan tamu, kasir POS terpadu, stasiun dapur KDS, dan loyalty points dalam satu ekosistem yang mulus.
                 </p>
               </div>
@@ -850,14 +850,14 @@ export default function PublicLandingPage() {
                 ].map((item, idx) => (
                   <div
                     key={idx}
-                    className="flex items-start space-x-3.5 p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-brand-orange/40 hover:bg-white/10 transition-all duration-200"
+                    className="flex items-start space-x-3.5 p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-[#52B788]/50 hover:bg-slate-50 dark:hover:bg-white/10 transition-all duration-200 shadow-xs"
                   >
-                    <div className="w-7 h-7 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <div className="w-7 h-7 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <Check className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-xs text-white">{item.title}</h4>
-                      <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">{item.desc}</p>
+                      <h4 className="font-bold text-xs text-slate-900 dark:text-white">{item.title}</h4>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed mt-0.5">{item.desc}</p>
                     </div>
                   </div>
                 ))}
@@ -869,17 +869,17 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 6. SECTION: CABANG OUTLET (OVERVIEW DENGAN VIEW BRANCHES) */}
-      <section id="outlets" className="py-24 bg-[#0B0F17] relative scroll-mt-20">
+      <section id="outlets" className="py-24 bg-white dark:bg-[#0B0F17] transition-colors duration-300 relative scroll-mt-20 border-t border-slate-200 dark:border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
 
           <div className="text-center max-w-2xl mx-auto space-y-2">
-            <Badge variant="outline" className="text-brand-orange border-brand-orange/40 bg-brand-orange/10 font-black uppercase text-[10px] tracking-wider">
+            <Badge variant="outline" className="text-[#3B7A57] dark:text-[#52B788] border-[#3B7A57]/30 dark:border-[#52B788]/40 bg-[#3B7A57]/10 dark:bg-[#52B788]/10 font-black uppercase text-[10px] tracking-wider">
               Jaringan Cabang Bali
             </Badge>
-            <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+            <h2 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
               Kunjungi Cabang Dago Terdekat
             </h2>
-            <p className="text-xs sm:text-sm text-slate-400">
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
               Temukan suasana produktif dan sajian kuliner favorit di seluruh lokasi strategis Dago Creative Hub.
             </p>
           </div>
@@ -891,9 +891,9 @@ export default function PublicLandingPage() {
               return (
                 <div
                   key={outlet.id}
-                  className={`p-6 rounded-3xl bg-slate-900/60 backdrop-blur-md border space-y-4 flex flex-col justify-between transition-all duration-300 group shadow-xl ${isComingSoon
-                    ? "border-amber-500/20 hover:border-amber-500/40 opacity-90"
-                    : "border-white/10 hover:border-brand-orange/50 hover:bg-slate-900"
+                  className={`p-6 rounded-3xl bg-slate-50 dark:bg-slate-900/60 backdrop-blur-md border space-y-4 flex flex-col justify-between transition-all duration-300 group shadow-md dark:shadow-xl ${isComingSoon
+                    ? "border-slate-300 dark:border-slate-700/50 opacity-90"
+                    : "border-slate-200 dark:border-white/10 hover:border-[#52B788]/60 hover:bg-white dark:hover:bg-slate-900"
                     }`}
                 >
                   <div className="space-y-3">
@@ -901,18 +901,18 @@ export default function PublicLandingPage() {
                       <div className="flex items-center space-x-2.5">
                         <div
                           className={`w-9 h-9 rounded-2xl flex items-center justify-center font-bold ${isComingSoon
-                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                            : "bg-orange-500/20 text-brand-orange border border-orange-500/30"
+                            ? "bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
+                            : "bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30"
                             }`}
                         >
                           <Store className="w-4 h-4" />
                         </div>
                         <div>
-                          <h3 className="font-bold text-base text-white group-hover:text-brand-orange transition-colors">
+                          <h3 className="font-bold text-base text-slate-900 dark:text-white group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
                             {outlet.name}
                           </h3>
                           {outlet.id === "outlet-sgr" && (
-                            <span className="text-[10px] text-emerald-400 font-bold block">
+                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block">
                               Outlet Pusat Singaraja
                             </span>
                           )}
@@ -920,21 +920,21 @@ export default function PublicLandingPage() {
                       </div>
                       <Badge
                         className={`text-[10px] font-bold ${isComingSoon
-                          ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
-                          : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                          ? "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700"
+                          : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
                           }`}
                       >
                         {outlet.badgeLabel || (isComingSoon ? "⏳ Segera Hadir" : "● Buka")}
                       </Badge>
                     </div>
 
-                    <div className="space-y-2 text-xs text-slate-400 pt-1">
+                    <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400 pt-1">
                       <div className="flex items-start space-x-2">
-                        <MapPin className="w-3.5 h-3.5 text-brand-orange mt-0.5 flex-shrink-0" />
+                        <MapPin className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] mt-0.5 flex-shrink-0" />
                         <span>{outlet.address}</span>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Clock className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                        <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
                         <span>
                           {isComingSoon
                             ? "Tahap Persiapan Cabang"
@@ -944,16 +944,16 @@ export default function PublicLandingPage() {
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs">
+                  <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between text-xs">
                     <span className="font-mono text-[11px] text-slate-500 font-bold">{outlet.code}</span>
                     {isComingSoon ? (
-                      <span className="text-xs font-semibold text-amber-400/80 italic">
+                      <span className="text-xs font-semibold text-slate-500 italic">
                         Ekspansi Mendatang
                       </span>
                     ) : (
                       <Link
                         href={`/customer?outlet=${outlet.id}`}
-                        className="font-bold text-brand-orange hover:text-orange-400 flex items-center group-hover:underline"
+                        className="font-bold text-[#3B7A57] dark:text-[#52B788] hover:text-[#2E6044] dark:hover:text-[#74c69d] flex items-center group-hover:underline"
                       >
                         <span>Buka Cabang</span>
                         <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
@@ -969,23 +969,23 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 7. SECTION: RINGKASAN LOYALTY REWARDS */}
-      <section id="loyalty" className="py-16 bg-[#0E131F] relative overflow-hidden">
+      <section id="loyalty" className="py-16 bg-slate-100/70 dark:bg-[#0E131F] transition-colors duration-300 relative overflow-hidden border-t border-slate-200 dark:border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="p-8 sm:p-10 rounded-3xl bg-gradient-to-r from-orange-950/60 via-slate-900 to-slate-900 border border-brand-orange/40 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl">
+          <div className="p-8 sm:p-10 rounded-3xl bg-gradient-to-r from-emerald-50 via-white to-emerald-50/40 dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900 border border-[#52B788]/30 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl transition-colors">
             <div className="space-y-1.5 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start space-x-2">
-                <Crown className="w-4 h-4 text-amber-400" />
-                <span className="text-[10px] font-black uppercase tracking-wider text-amber-300">
+                <Crown className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#3B7A57] dark:text-[#52B788]">
                   DAGO Member Loyalty Program
                 </span>
               </div>
-              <h3 className="font-black text-xl sm:text-2xl text-white">Kumpulkan Poin Setiap Transaksi</h3>
-              <p className="text-xs text-slate-300 max-w-xl">
+              <h3 className="font-black text-xl sm:text-2xl text-slate-900 dark:text-white">Kumpulkan Poin Setiap Transaksi</h3>
+              <p className="text-xs text-slate-600 dark:text-slate-300 max-w-xl">
                 Nikmati diskon hingga 30%, free jam coworking, dan voucher reward spesial untuk setiap transaksi F&B dan Co-Working di DAGO.
               </p>
             </div>
             <Link href="/customer?tab=LOYALTY">
-              <Button size="lg" className="h-12 px-7 font-black bg-brand-orange text-white hover:bg-orange-600 rounded-2xl text-xs shadow-lg shadow-orange-500/25 whitespace-nowrap">
+              <Button size="lg" className="h-12 px-7 font-black bg-[#3B7A57] text-white hover:bg-[#2E6044] rounded-2xl text-xs shadow-lg shadow-[#3B7A57]/20 whitespace-nowrap transition-all hover:scale-105 active:scale-95 border border-[#52B788]/30">
                 <span>Eksplor Program Member</span>
                 <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
@@ -995,7 +995,7 @@ export default function PublicLandingPage() {
       </section>
 
       {/* 8. SECTION: KONTAK & FOOTER */}
-      <section id="contact" className="py-20 bg-[#0B0F17] border-t border-white/10 text-slate-300 relative scroll-mt-20">
+      <section id="contact" className="py-20 bg-slate-950 text-slate-300 border-t border-slate-800 relative scroll-mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-12 border-b border-white/10">
 
@@ -1016,15 +1016,15 @@ export default function PublicLandingPage() {
             <div className="space-y-2.5 text-xs">
               <h4 className="font-bold text-white uppercase tracking-wider text-xs">Hubungi Kami</h4>
               <div className="flex items-center space-x-2 text-slate-400">
-                <MapPin className="w-4 h-4 text-brand-orange flex-shrink-0" />
+                <MapPin className="w-4 h-4 text-[#52B788] flex-shrink-0" />
                 <span>	Jl. Teleng No.1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 8111</span>
               </div>
               <div className="flex items-center space-x-2 text-slate-400">
-                <Phone className="w-4 h-4 text-brand-orange flex-shrink-0" />
+                <Phone className="w-4 h-4 text-[#52B788] flex-shrink-0" />
                 <span>+62 811-2233-4455</span>
               </div>
               <div className="flex items-center space-x-2 text-slate-400">
-                <Mail className="w-4 h-4 text-brand-orange flex-shrink-0" />
+                <Mail className="w-4 h-4 text-[#52B788] flex-shrink-0" />
                 <span>info@dagoeng.com</span>
               </div>
             </div>
@@ -1038,18 +1038,18 @@ export default function PublicLandingPage() {
                   href="https://instagram.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-brand-orange hover:bg-white/10 text-slate-200 transition-colors"
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-[#52B788] hover:bg-white/10 text-slate-200 transition-colors"
                 >
-                  <Instagram className="w-3.5 h-3.5 text-pink-500" />
+                  <Instagram className="w-3.5 h-3.5 text-pink-400" />
                   <span>@dagocreativehub</span>
                 </a>
                 <a
                   href="https://wa.me/6281122334455"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-brand-orange hover:bg-white/10 text-slate-200 transition-colors"
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-[#52B788] hover:bg-white/10 text-slate-200 transition-colors"
                 >
-                  <MessageCircle className="w-3.5 h-3.5 text-emerald-500" />
+                  <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
                   <span>WhatsApp CS</span>
                 </a>
               </div>
@@ -1059,10 +1059,10 @@ export default function PublicLandingPage() {
             <div className="space-y-2 text-xs">
               <h4 className="font-bold text-white uppercase tracking-wider text-xs">Navigasi Langsung</h4>
               <div className="flex flex-col space-y-1.5 text-slate-400">
-                <Link href="/customer?tab=MENU" className="hover:text-brand-orange transition-colors">Layanan Kuliner (F&B)</Link>
-                <Link href="/customer?tab=COWORKING" className="hover:text-brand-orange transition-colors">Layanan Co-Working Space</Link>
-                <Link href="/customer?tab=LOYALTY" className="hover:text-brand-orange transition-colors">Program Member Loyalty</Link>
-                <button onClick={() => setIsLoginModalOpen(true)} className="text-left hover:text-brand-orange transition-colors">
+                <Link href="/customer?tab=MENU" className="hover:text-[#52B788] transition-colors">Layanan Kuliner (F&B)</Link>
+                <Link href="/customer?tab=COWORKING" className="hover:text-[#52B788] transition-colors">Layanan Co-Working Space</Link>
+                <Link href="/customer?tab=LOYALTY" className="hover:text-[#52B788] transition-colors">Program Member Loyalty</Link>
+                <button onClick={() => setIsLoginModalOpen(true)} className="text-left hover:text-[#52B788] transition-colors">
                   Akses Staf & Manajemen
                 </button>
               </div>
@@ -1089,22 +1089,22 @@ export default function PublicLandingPage() {
             onClick={() => setIsLoginModalOpen(false)}
           />
 
-          <div className="relative w-full max-w-md bg-slate-900 border border-white/15 rounded-3xl p-6 sm:p-7 shadow-2xl z-10 text-white space-y-5 animate-in zoom-in-95 duration-200">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/15 rounded-3xl p-6 sm:p-7 shadow-2xl z-10 text-slate-900 dark:text-white space-y-5 animate-in zoom-in-95 duration-200 transition-colors">
 
             {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
               <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-xl bg-brand-orange/20 text-brand-orange flex items-center justify-center font-bold">
+                <div className="w-8 h-8 rounded-xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center font-bold">
                   <LogIn className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-black text-base text-white">Masuk ke Sistem DagoEng</h3>
-                  <p className="text-[11px] text-slate-400">Pilih akses cepat role untuk demo atau form login</p>
+                  <h3 className="font-black text-base text-slate-900 dark:text-white">Masuk ke Sistem DagoEng</h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Pilih akses cepat role untuk demo atau form login</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsLoginModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1112,66 +1112,66 @@ export default function PublicLandingPage() {
 
             {/* Quick 1-Click Role Access Grid */}
             <div className="space-y-2">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
                 Akses Langsung 1-Klik Role:
               </span>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <button
                   onClick={() => handleQuickModalLogin("DAGO_OWNER")}
-                  className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">Owner Dago Hub</span>
-                  <span className="text-[10px] text-slate-400 group-hover:text-white/80">Executive Org</span>
+                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Owner Dago Hub</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Executive Org</span>
                 </button>
 
                 <button
                   onClick={() => handleQuickModalLogin("TENANT_OWNER_KS")}
-                  className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">Owner Kopi Senja</span>
-                  <span className="text-[10px] text-slate-400 group-hover:text-white/80">Tenant F&B</span>
+                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Owner Kopi Senja</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Tenant F&B</span>
                 </button>
 
                 <button
                   onClick={() => handleQuickModalLogin("CASHIER_SGR")}
-                  className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">Kasir POS</span>
-                  <span className="text-[10px] text-slate-400 group-hover:text-white/80">Singaraja POS</span>
+                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Kasir POS</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Singaraja POS</span>
                 </button>
 
                 <button
                   onClick={() => handleQuickModalLogin("KITCHEN_SGR")}
-                  className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">Chef Dapur (KDS)</span>
-                  <span className="text-[10px] text-slate-400 group-hover:text-white/80">Antrean Dapur</span>
+                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Chef Dapur (KDS)</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Antrean Dapur</span>
                 </button>
 
                 <button
                   onClick={() => handleQuickModalLogin("WAITER_SGR")}
-                  className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">Pramusaji / Waiter</span>
-                  <span className="text-[10px] text-slate-400 group-hover:text-white/80">Denah Meja</span>
+                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Pramusaji / Waiter</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Denah Meja</span>
                 </button>
 
                 <button
                   onClick={() => handleQuickModalLogin("CUSTOMER_DEMO")}
-                  className="p-2.5 rounded-xl bg-white/5 hover:bg-brand-orange hover:text-white border border-white/10 text-left transition-all group"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
                 >
-                  <span className="block font-bold text-white group-hover:text-white">Pelanggan QR</span>
-                  <span className="text-[10px] text-slate-400 group-hover:text-white/80">Customer Portal</span>
+                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Pelanggan QR</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Customer Portal</span>
                 </button>
               </div>
             </div>
 
             {/* Link to Full Login Form */}
-            <div className="pt-2 border-t border-white/10 flex items-center justify-between text-xs">
+            <div className="pt-2 border-t border-slate-200 dark:border-white/10 flex items-center justify-between text-xs">
               <Link
                 href="/login"
                 onClick={() => setIsLoginModalOpen(false)}
-                className="text-brand-orange font-bold hover:underline flex items-center space-x-1"
+                className="text-[#3B7A57] dark:text-[#52B788] font-bold hover:underline flex items-center space-x-1"
               >
                 <span>Buka Form Login Email Lengkap</span>
                 <ArrowRight className="w-3.5 h-3.5" />

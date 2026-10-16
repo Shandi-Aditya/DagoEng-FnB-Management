@@ -26,16 +26,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>("light");
   const [isMounted, setIsMounted] = useState(false);
 
-  // Apply theme to <html> element
+  // Apply theme to <html> and <body> elements
   const applyTheme = useCallback((targetTheme: ResolvedTheme) => {
     if (typeof document === "undefined") return;
     const root = document.documentElement;
+    const body = document.body;
     if (targetTheme === "dark") {
       root.classList.add("dark");
       root.style.colorScheme = "dark";
+      if (body) body.classList.add("dark");
     } else {
       root.classList.remove("dark");
       root.style.colorScheme = "light";
+      if (body) body.classList.remove("dark");
     }
   }, []);
 
