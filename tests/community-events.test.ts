@@ -154,12 +154,10 @@ describe("Community Events Module — Unit & Integration Tests", () => {
 
     it("should strip private organizer email and phone from public sanitized event", () => {
       const sanitized = toPublicEvent(createdPendingEvent);
-      // @ts-expect-error Organizer email must not exist on public type
-      expect(sanitized.organizerEmail).toBeUndefined();
-      // @ts-expect-error Organizer phone must not exist on public type
-      expect(sanitized.organizerPhone).toBeUndefined();
-      // @ts-expect-error Rejection reason must not exist on public type
-      expect(sanitized.rejectionReason).toBeUndefined();
+      const raw = sanitized as unknown as Record<string, unknown>;
+      expect(raw.organizerEmail).toBeUndefined();
+      expect(raw.organizerPhone).toBeUndefined();
+      expect(raw.rejectionReason).toBeUndefined();
       expect(sanitized.title).toBe(createdPendingEvent.title);
       expect(sanitized.organizerName).toBe(createdPendingEvent.organizerName);
     });
