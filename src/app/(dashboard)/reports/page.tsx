@@ -82,11 +82,12 @@ export default function ReportsPage() {
 
   // Generate Report Configuration Data for PDF/CSV
   const getReportData = (type: ReportType) => {
+    const scopeName = activeOutlet?.name || "Semua Outlet (Konsolidasi)";
     switch (type) {
       case "SALES":
         return {
           title: "Laporan Penjualan & Revenue POS",
-          subtitle: `Rincian seluruh transaksi kasir & pesanan terselesaikan di ${activeOutlet?.name}`,
+          subtitle: `Rincian seluruh transaksi kasir & pesanan terselesaikan di ${scopeName}`,
           summaryCards: [
             { label: "Total Omset (Revenue)", value: `Rp ${totalRevenue.toLocaleString("id-ID")}` },
             { label: "Jumlah Transaksi", value: `${totalOrdersCount} Order` },
@@ -121,7 +122,7 @@ export default function ReportsPage() {
       case "CLOSING":
         return {
           title: "Laporan Rekonsiliasi Kasir & Shift Closing",
-          subtitle: `Pencocokan modal awal, penjualan kas, dan fisik drawer di ${activeOutlet?.name}`,
+          subtitle: `Pencocokan modal awal, penjualan kas, dan fisik drawer di ${scopeName}`,
           summaryCards: [
             { label: "Total Shift Selesai", value: `${filteredShifts.filter((s) => s.status === "CLOSED").length} Shift` },
             { label: "Akumulasi Kas Drawer", value: `Rp ${filteredShifts.reduce((s, sh) => s + (sh.actualCash || 0), 0).toLocaleString("id-ID")}` },
@@ -147,7 +148,7 @@ export default function ReportsPage() {
       case "PRODUCTS":
         return {
           title: "Laporan Penjualan Produk & COGS / Gross Margin",
-          subtitle: `Kinerja profitabilitas menu F&B dan margin kotor di ${activeOutlet?.name}`,
+          subtitle: `Kinerja profitabilitas menu F&B dan margin kotor di ${scopeName}`,
           summaryCards: [
             { label: "Total SKU Terdaftar", value: `${filteredProducts.length} Produk` },
             { label: "Rata-rata Gross Margin", value: "74.8%" },
@@ -173,7 +174,7 @@ export default function ReportsPage() {
       case "INVENTORY":
         return {
           title: "Laporan Mutasi Inventory & Stok Bahan Baku",
-          subtitle: `Posisi stok aktual, konsumsi resep (BOM), dan nilai gudang di ${activeOutlet?.name}`,
+          subtitle: `Posisi stok aktual, konsumsi resep (BOM), dan nilai gudang di ${scopeName}`,
           summaryCards: [
             { label: "Total Bahan Baku", value: `${filteredMaterials.length} Item` },
             { label: "Item Kritis / Habis", value: `${filteredMaterials.filter((m) => m.stockNumber <= m.min).length} Item` },
@@ -194,7 +195,7 @@ export default function ReportsPage() {
       case "FINANCE_AUDIT":
         return {
           title: "Laporan Audit Trail Finansial & Void/Refund",
-          subtitle: `Rekam jejak seluruh mutasi dana, penyesuaian kas, dan transaksi di ${activeOutlet?.name}`,
+          subtitle: `Rekam jejak seluruh mutasi dana, penyesuaian kas, dan transaksi di ${scopeName}`,
           summaryCards: [
             { label: "Total Aktivitas Keuangan", value: `${filteredFinanceLogs.length} Entri` },
             { label: "Status Audit", value: "100% Terverifikasi" },
@@ -218,7 +219,7 @@ export default function ReportsPage() {
         const totalDagoShare = settlementData.reduce((sum, s) => sum + (s.dagoShareAmount || 0), 0);
         return {
           title: "Laporan Settlement & Bagi Hasil Mitra",
-          subtitle: `Rincian alokasi pendapatan, rekening tujuan pencairan, dan bagi hasil untuk Dago Hub dan Mitra di ${activeOutlet?.name}`,
+          subtitle: `Rincian alokasi pendapatan, rekening tujuan pencairan, dan bagi hasil untuk Dago Hub dan Mitra di ${scopeName}`,
           summaryCards: [
             { label: "Total Net Settlement", value: `Rp ${totalNetSettlement.toLocaleString("id-ID")}` },
             { label: "Total Bagian Mitra", value: `Rp ${totalTenantShare.toLocaleString("id-ID")}` },
@@ -358,29 +359,29 @@ export default function ReportsPage() {
             <button
               key={cat.id}
               onClick={() => setSelectedReportType(cat.id as ReportType)}
-              className={`p-3.5 rounded-2xl border text-left transition-all duration-200 cursor-pointer ${
+              className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer min-w-0 overflow-hidden ${
                 isSelected
                   ? "bg-primary/10 border-primary/40 shadow-xs text-primary dark:text-primary-light ring-1 ring-primary/20 font-bold"
                   : "bg-white dark:bg-slate-800/80 border-slate-200/90 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-200 shadow-2xs"
               }`}
             >
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-1">
                 <div
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors ${
+                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center transition-colors flex-shrink-0 ${
                     isSelected ? "bg-primary/20 text-primary dark:text-primary-light" : "bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400"
                   }`}
                 >
                   <Icon className="w-4 h-4" />
                 </div>
                 <span
-                  className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md ${
+                  className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${
                     isSelected ? "bg-primary/20 text-primary dark:text-primary-light" : "bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400"
                   }`}
                 >
                   {cat.count}
                 </span>
               </div>
-              <p className="font-bold text-xs mt-2.5 text-slate-900 dark:text-slate-100 tracking-tight">{cat.label}</p>
+              <p className="font-bold text-xs mt-2.5 text-slate-900 dark:text-slate-100 tracking-tight truncate">{cat.label}</p>
             </button>
           );
         })}
@@ -389,31 +390,31 @@ export default function ReportsPage() {
       {/* KPI Cards Preview */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {currentReportData.summaryCards.map((card: any, idx: number) => (
-          <Card key={idx} className="p-4.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs hover:shadow-xs transition-shadow space-y-1">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{card.label}</p>
-            <p className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight mt-1">{card.value}</p>
-            {card.sub && <p className="text-[11px] text-slate-400 font-medium">{card.sub}</p>}
+          <Card key={idx} className="p-4 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200/90 dark:border-slate-800 shadow-2xs hover:shadow-xs transition-shadow space-y-1">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider truncate">{card.label}</p>
+            <p className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight mt-1 truncate">{card.value}</p>
+            {card.sub && <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium truncate">{card.sub}</p>}
           </Card>
         ))}
       </div>
 
       {/* Report Table Preview Card */}
-      <Card className="shadow-2xs border border-slate-200/90 rounded-2xl overflow-hidden bg-white">
-        <CardHeader className="p-4 sm:p-5 border-b border-slate-100 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <Card className="shadow-2xs border border-slate-200/90 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-900/90">
+        <CardHeader className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <CardTitle className="text-sm font-bold text-slate-900">
+            <CardTitle className="text-sm font-bold text-slate-900 dark:text-slate-100">
               {currentReportData.title}
             </CardTitle>
-            <p className="text-xs text-slate-500 mt-0.5">{currentReportData.subtitle}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{currentReportData.subtitle}</p>
           </div>
-          <span className="text-xs font-bold px-3 py-1 bg-slate-100 text-slate-700 rounded-full border border-slate-200/80 self-start sm:self-center">
+          <span className="text-xs font-bold px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full border border-slate-200/80 dark:border-slate-700 self-start sm:self-center flex-shrink-0">
             {currentReportData.tableRows.length} Baris Data
           </span>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600 min-w-[720px]">
-              <thead className="bg-slate-50/80 text-slate-700 dark:text-slate-200 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+            <table className="w-full text-left text-xs text-slate-600 dark:text-slate-300 min-w-[720px]">
+              <thead className="bg-slate-50/80 dark:bg-slate-800/60 text-slate-700 dark:text-slate-200 uppercase font-bold text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
                 <tr>
                   {currentReportData.tableHeaders.map((th, i) => (
                     <th key={i} className="px-4 py-3.5 whitespace-nowrap">
@@ -427,10 +428,10 @@ export default function ReportsPage() {
                   <tr>
                     <td colSpan={currentReportData.tableHeaders.length} className="px-4 py-12 text-center">
                       <div className="max-w-sm mx-auto space-y-2">
-                        <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                        <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
                           <FileText className="w-5 h-5" />
                         </div>
-                        <p className="font-bold text-slate-700 text-xs">Belum ada baris data untuk modul laporan ini</p>
+                        <p className="font-bold text-slate-700 dark:text-slate-200 text-xs">Belum ada baris data untuk modul laporan ini</p>
                         <p className="text-[11px] text-slate-400">
                           Tidak ada transaksi atau entri yang tercatat untuk outlet {activeOutlet?.name || "Singaraja"} pada rentang {formattedRangeLabel}.
                         </p>
@@ -439,15 +440,16 @@ export default function ReportsPage() {
                   </tr>
                 ) : (
                   currentReportData.tableRows.slice(0, 10).map((row, rIdx) => (
-                    <tr key={rIdx} className="hover:bg-slate-50/70 transition-colors">
+                    <tr key={rIdx} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors">
                       {row.map((cell, cIdx) => (
                         <td
                           key={cIdx}
-                          className={`px-4 py-3.5 whitespace-nowrap ${
+                          className={`px-4 py-3.5 whitespace-nowrap max-w-[200px] truncate ${
                             typeof cell === "number" || (typeof cell === "string" && (cell.startsWith("Rp") || cell.endsWith("%")))
                               ? "font-mono font-semibold text-slate-900 dark:text-slate-100"
                               : "text-slate-700 dark:text-slate-200"
                           }`}
+                          title={String(cell)}
                         >
                           {cell}
                         </td>
@@ -460,33 +462,33 @@ export default function ReportsPage() {
           </div>
 
           {currentReportData.tableRows.length > 10 && (
-            <div className="p-3 bg-slate-50/80 border-t border-slate-100 text-center text-xs text-slate-500">
+            <div className="p-3 bg-slate-50/80 dark:bg-slate-800/60 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500 dark:text-slate-400">
               Menampilkan 10 baris pratinjau pertama dari total <strong>{currentReportData.tableRows.length}</strong> baris data.
               Gunakan tombol <strong>Cetak PDF Resmi</strong> atau <strong>Excel (.xls)</strong> di atas untuk melihat seluruh data.
             </div>
           )}
+
+          {/* Reconciliation / Settlement Extra Breakdown - Integrated Inside the Report Card */}
+          {currentReportData.reconciliationInfo && currentReportData.reconciliationInfo.length > 0 && (
+            <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
+              <div className="flex items-center space-x-2 pb-2 border-b border-slate-200/80 dark:border-slate-700/80">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+                  Ringkasan Rekonsiliasi & Audit Terkait
+                </h4>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {currentReportData.reconciliationInfo.map((rec: any, rIdx: number) => (
+                  <div key={rIdx} className="p-3 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs flex items-center justify-between gap-2 text-xs">
+                    <span className="text-slate-600 dark:text-slate-400 font-medium text-[11px] truncate">{rec.label}</span>
+                    <span className="font-bold font-mono text-slate-900 dark:text-slate-100 flex-shrink-0 ml-2">{rec.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
-
-      {/* Reconciliation / Settlement Extra Breakdown Card */}
-      {currentReportData.reconciliationInfo && currentReportData.reconciliationInfo.length > 0 && (
-        <div className="p-4.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs space-y-3">
-          <div className="flex items-center space-x-2 pb-2 border-b border-slate-100">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">
-              Ringkasan Rekonsiliasi & Audit Terkait
-            </h4>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {currentReportData.reconciliationInfo.map((rec: any, rIdx: number) => (
-              <div key={rIdx} className="p-3 rounded-xl bg-slate-50/70 border border-slate-200/60 flex items-center justify-between text-xs">
-                <span className="text-slate-500 font-medium text-[11px]">{rec.label}</span>
-                <span className="font-bold font-mono text-slate-900">{rec.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* PDF Modal */}
       {isPDFModalOpen && (

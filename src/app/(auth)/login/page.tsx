@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
@@ -7,23 +6,17 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth, DEMO_PERSONAS, PersonaKey } from "@/contexts/AuthContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import {
   Lock,
   Mail,
   ArrowRight,
-  ShieldAlert,
   Phone,
   User,
   ArrowLeft,
   Sparkles,
   Building2,
-  UtensilsCrossed,
-  Laptop,
-  CheckCircle2,
-  ShieldCheck,
   Zap,
 } from "lucide-react";
 
@@ -148,15 +141,14 @@ function LoginContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden selection:bg-brand-orange selection:text-white">
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden selection:bg-[#3B7A57] selection:text-white transition-colors duration-300">
 
-      {/* Dynamic Ambient Background Glows matching Onboarding */}
-      <div className="absolute top-1/4 -right-20 w-96 h-96 bg-brand-orange/15 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-10 -left-20 w-96 h-96 bg-blue-600/15 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute top-10 left-1/3 w-80 h-80 bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
+      {/* Dynamic Ambient Background Glows matching Sage Green Design System */}
+      <div className="absolute top-1/4 -right-20 w-96 h-96 bg-[#52B788]/15 dark:bg-[#52B788]/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-10 -left-20 w-96 h-96 bg-[#3B7A57]/15 dark:bg-[#3B7A57]/10 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Decorative Grid Pattern */}
-      <div className="absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
+      {/* Decorative Subtle Grid Pattern */}
+      <div className="absolute inset-0 bg-[radial-gradient(#0000000a_1px,transparent_1px)] dark:bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
 
       <div className="w-full max-w-md space-y-5 relative z-10">
 
@@ -164,26 +156,26 @@ function LoginContent() {
         <div className="flex items-center justify-between px-1">
           <Link
             href={returnTo || "/"}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-slate-300 hover:text-white backdrop-blur-md transition-all duration-200 hover:scale-105 active:scale-95"
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white backdrop-blur-md shadow-xs transition-all duration-200 hover:scale-105 active:scale-95"
           >
-            <ArrowLeft className="w-3.5 h-3.5 text-primary" />
+            <ArrowLeft className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
             <span>{returnTo ? "Kembali ke Portal / Fitur" : "Kembali ke Beranda"}</span>
           </Link>
 
           <div className="flex items-center space-x-2">
             {returnTo && (
-              <span className="text-[10px] bg-primary/20 text-primary font-bold px-2.5 py-1 rounded-full border border-primary/30">
+              <span className="text-[10px] bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] font-bold px-2.5 py-1 rounded-full border border-[#3B7A57]/20 dark:border-[#52B788]/30">
                 Konteks Terjaga
               </span>
             )}
-            <ThemeToggle />
+            <ThemeToggle variant="pill" />
           </div>
         </div>
 
         {/* Brand Header */}
         <div className="text-center space-y-2.5 pt-2">
           <Link href="/" className="inline-block group">
-            <div className="w-16 h-18 relative mx-auto transition-transform duration-300 group-hover:scale-110 drop-shadow-[0_8px_20px_rgba(59,122,87,0.35)]">
+            <div className="w-16 h-18 relative mx-auto transition-transform duration-300 group-hover:scale-110 drop-shadow-[0_8px_20px_rgba(59,122,87,0.25)]">
               <Image
                 src="/logo-dago.png"
                 alt="DagoEng Creative Hub Logo"
@@ -195,34 +187,34 @@ function LoginContent() {
             </div>
           </Link>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              DagoEng <span className="text-primary">Platform</span>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+              DagoEng <span className="text-[#3B7A57] dark:text-[#52B788]">Platform</span>
             </h1>
-            <p className="text-xs text-slate-400 font-medium mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
               Sistem Terpadu F&B, Co-working & Customer Loyalty
             </p>
           </div>
         </div>
 
         {/* Primary Role Mode Switcher (Staf & Manajemen vs Pelanggan / Member) */}
-        <div className="grid grid-cols-2 p-1.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl text-xs font-bold shadow-inner">
+        <div className="grid grid-cols-2 p-1.5 bg-slate-200/70 dark:bg-white/5 backdrop-blur-md border border-slate-300/80 dark:border-white/10 rounded-2xl text-xs font-bold shadow-inner transition-colors">
           <button
             type="button"
             onClick={() => setActiveMode("STAFF")}
             className={`py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center space-x-1.5 ${activeMode === "STAFF"
-                ? "bg-slate-800 text-white shadow-md border border-white/15 scale-[1.02]"
-                : "text-slate-400 hover:text-white"
+                ? "bg-white dark:bg-[#131B2B] text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/15 scale-[1.02]"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
           >
-            <Building2 className="w-3.5 h-3.5 text-blue-400" />
+            <Building2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
             <span>Staf & Manajemen</span>
           </button>
           <button
             type="button"
             onClick={() => setActiveMode("CUSTOMER")}
             className={`py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center space-x-1.5 ${activeMode === "CUSTOMER"
-                ? "bg-primary text-white shadow-lg shadow-primary/30 border border-primary/40 scale-[1.02]"
-                : "text-slate-400 hover:text-white"
+                ? "bg-[#3B7A57] text-white shadow-md shadow-[#3B7A57]/25 border border-[#52B788]/30 scale-[1.02]"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
@@ -231,10 +223,10 @@ function LoginContent() {
         </div>
 
         {/* Main Glassmorphic Login Card */}
-        <div className="bg-slate-900/80 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl shadow-black/80 overflow-hidden">
+        <div className="bg-white dark:bg-[#131B2B] backdrop-blur-2xl border border-slate-200 dark:border-white/10 rounded-3xl shadow-xl dark:shadow-2xl overflow-hidden transition-colors">
 
-          <div className="px-6 pt-6 pb-4 border-b border-white/5 space-y-1">
-            <h2 className="text-base font-bold text-white flex items-center space-x-2">
+          <div className="px-6 pt-6 pb-4 border-b border-slate-100 dark:border-white/5 space-y-1">
+            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
               <span>
                 {activeMode === "STAFF"
                   ? "Masuk ke Sesi Akun Staf"
@@ -243,7 +235,7 @@ function LoginContent() {
                     : "Masuk Akun Pelanggan"}
               </span>
             </h2>
-            <p className="text-xs text-slate-400 leading-relaxed">
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
               {activeMode === "STAFF"
                 ? "Gunakan kredensial terdaftar untuk membuka dashboard POS, KDS, atau manajerial."
                 : customerSubMode === "REGISTER"
@@ -256,14 +248,14 @@ function LoginContent() {
             {activeMode === "STAFF" ? (
               <form onSubmit={handleStaffLogin} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">Email Address</label>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Email Address</label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                     <input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 transition-all"
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
                       placeholder="nama@bisnis.com"
                       required
                     />
@@ -271,14 +263,14 @@ function LoginContent() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-300">Password</label>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Password</label>
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                     <input
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 transition-all"
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
                       placeholder="••••••••"
                       required
                     />
@@ -288,7 +280,7 @@ function LoginContent() {
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-11 text-xs font-black bg-brand-orange hover:bg-orange-600 text-white rounded-xl shadow-lg shadow-orange-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="w-full h-11 text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-md shadow-[#3B7A57]/20 border border-[#52B788]/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <span>{isLoading ? "Memverifikasi..." : "Masuk ke Sistem Staf"}</span>
                   <ArrowRight className="w-4 h-4 ml-1.5" />
@@ -297,13 +289,13 @@ function LoginContent() {
             ) : (
               <div className="space-y-4">
                 {/* Customer Sub-mode Toggle (Masuk vs Daftar) */}
-                <div className="grid grid-cols-2 p-1 bg-white/5 rounded-xl border border-white/10 text-xs font-bold">
+                <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-bold">
                   <button
                     type="button"
                     onClick={() => setCustomerSubMode("LOGIN")}
                     className={`py-2 rounded-lg transition-all ${customerSubMode === "LOGIN"
-                        ? "bg-white/15 text-white shadow-sm border border-white/20"
-                        : "text-slate-400 hover:text-slate-200"
+                        ? "bg-white dark:bg-white/15 text-slate-900 dark:text-white shadow-xs border border-slate-200 dark:border-white/20"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                       }`}
                   >
                     Masuk Akun
@@ -312,8 +304,8 @@ function LoginContent() {
                     type="button"
                     onClick={() => setCustomerSubMode("REGISTER")}
                     className={`py-2 rounded-lg transition-all flex items-center justify-center space-x-1 ${customerSubMode === "REGISTER"
-                        ? "bg-brand-orange text-white shadow-md shadow-orange-500/30 font-black"
-                        : "text-slate-400 hover:text-slate-200"
+                        ? "bg-[#3B7A57] text-white shadow-sm shadow-[#3B7A57]/20 font-bold"
+                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                       }`}
                   >
                     <Sparkles className="w-3 h-3 text-amber-300" />
@@ -323,14 +315,14 @@ function LoginContent() {
 
                 <form onSubmit={handleCustomerSubmit} className="space-y-3.5">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-300">Nama Lengkap</label>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Nama Lengkap</label>
                     <div className="relative">
                       <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                       <input
                         type="text"
                         value={custName}
                         onChange={(e) => setCustName(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 transition-all"
+                        className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
                         placeholder="Contoh: Ketut Dian"
                         required
                       />
@@ -338,14 +330,14 @@ function LoginContent() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-300">Nomor WhatsApp / HP</label>
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Nomor WhatsApp / HP</label>
                     <div className="relative">
                       <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                       <input
                         type="tel"
                         value={custPhone}
                         onChange={(e) => setCustPhone(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 transition-all"
+                        className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
                         placeholder="+62 819-xxxx-xxxx"
                         required
                       />
@@ -354,14 +346,14 @@ function LoginContent() {
 
                   {customerSubMode === "REGISTER" && (
                     <div className="space-y-1.5 animate-in fade-in duration-200">
-                      <label className="text-xs font-bold text-slate-300">Email (Opsional untuk E-Receipt)</label>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Email (Opsional untuk E-Receipt)</label>
                       <div className="relative">
                         <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                         <input
                           type="email"
                           value={custEmail}
                           onChange={(e) => setCustEmail(e.target.value)}
-                          className="w-full pl-10 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-brand-orange focus:ring-2 focus:ring-brand-orange/20 transition-all"
+                          className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
                           placeholder="email@anda.com"
                         />
                       </div>
@@ -371,7 +363,7 @@ function LoginContent() {
                   <Button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full h-11 text-xs font-black space-x-1.5 mt-2 bg-brand-orange hover:bg-orange-600 text-white rounded-xl shadow-lg shadow-orange-500/25 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                    className="w-full h-11 text-xs font-bold space-x-1.5 mt-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-md shadow-[#3B7A57]/20 border border-[#52B788]/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
                   >
                     <span>
                       {isLoading
@@ -387,74 +379,74 @@ function LoginContent() {
             )}
 
             {/* Quick 1-Click Role Login for QA / Testing Evaluator */}
-            <div className="pt-4 border-t border-white/10 space-y-2.5">
-              <div className="flex items-center space-x-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <div className="pt-4 border-t border-slate-200 dark:border-white/10 space-y-2.5">
+              <div className="flex items-center space-x-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <Zap className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
                 <span>Akses Cepat 1-Klik Testing Demo:</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("DAGO_OWNER")}
-                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-brand-orange/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
                 >
                   🏢 Dago Hub Owner
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("TENANT_OWNER_KS")}
-                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
                 >
                   ☕ Mitra: Kopi Senja
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("TENANT_OWNER_KITCHEN")}
-                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
                 >
                   🍽️ Mitra: Dapur Mama
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("TENANT_OWNER_BAKERY")}
-                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
                 >
                   🥐 Mitra: Manis Bakery
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("TENANT_OWNER_TEA")}
-                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
                 >
                   🍃 Mitra: Warung Bu Narti
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("CASHIER_SGR")}
-                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
                 >
                   💵 Kasir POS (Singaraja)
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("KITCHEN_SGR")}
-                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-amber-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
                 >
                   👨‍🍳 Chef Dapur (KDS)
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("WAITER_SGR")}
-                  className="p-2 text-left bg-white/5 hover:bg-white/10 border border-white/10 hover:border-blue-500/40 rounded-xl font-medium text-[11px] text-slate-300 hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
                 >
                   🤵 Waiter (Floor Meja)
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("CUSTOMER_DEMO")}
-                  className="p-2 text-left bg-brand-orange/15 hover:bg-brand-orange/25 border border-brand-orange/30 rounded-xl font-bold text-[11px] text-brand-orange hover:text-white transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="col-span-2 p-2.5 text-center bg-[#3B7A57]/10 dark:bg-[#52B788]/15 hover:bg-[#3B7A57] hover:text-white border border-[#3B7A57]/30 dark:border-[#52B788]/30 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
                 >
-                  📱 Pelanggan (Customer)
+                  📱 Pelanggan QR (Customer Portal)
                 </button>
               </div>
             </div>
@@ -462,7 +454,7 @@ function LoginContent() {
           </div>
         </div>
 
-        <p className="text-center text-[11px] text-slate-500 font-medium">
+        <p className="text-center text-[11px] text-slate-400 dark:text-slate-500 font-medium">
           © {new Date().getFullYear()} DagoEng Creative Hub. All rights reserved.
         </p>
       </div>
@@ -474,9 +466,9 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#0B0F17] flex items-center justify-center p-6 text-xs text-slate-400 font-bold">
+        <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B0F17] flex items-center justify-center p-6 text-xs text-slate-500 font-bold">
           <div className="flex flex-col items-center space-y-3">
-            <div className="w-8 h-8 border-3 border-brand-orange border-t-transparent rounded-full animate-spin" />
+            <div className="w-8 h-8 border-3 border-[#3B7A57] border-t-transparent rounded-full animate-spin" />
             <span>Memuat Halaman Login...</span>
           </div>
         </div>

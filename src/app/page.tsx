@@ -5,29 +5,20 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, PersonaKey } from "@/contexts/AuthContext";
-import { useOutlet } from "@/contexts/OutletContext";
 import { formatCurrencyIDR } from "@/lib/utils";
-import { AnimatedCounter } from "@/components/ui/animated-counter";
 import {
   UtensilsCrossed,
   Laptop,
-  Store,
   ArrowRight,
   Sparkles,
   CheckCircle2,
   Clock,
   MapPin,
-  Wifi,
   ChevronRight,
   LogIn,
   Phone,
-  Search,
-  Users,
-  Coffee,
   Check,
-  Building2,
   Crown,
-  Star,
   Menu,
   X,
   Mail,
@@ -35,11 +26,11 @@ import {
   MessageCircle,
   Calendar,
   PlusCircle,
-  ExternalLink,
+  ShieldCheck,
+  Flame,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { PublicCommunityEvent } from "@/types/event";
 
@@ -51,33 +42,26 @@ const HERO_SLIDES = [
     subtitle: "Nikmati aneka seduhan kopi lokal pilihan dan hidangan kuliner premium multi-mitra dengan pemesanan mandiri cepat via QR Meja.",
     badge: "Layanan F&B DAGO",
     bgImage: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=1920&auto=format&fit=crop",
-    ctaFnb: "Explore F&B",
-    ctaCowork: "Explore Co-Working",
   },
   {
     id: 2,
     title: "Ruang Kerja Kolaboratif & Meeting Suite",
-    subtitle: "Hot desk fleksibel, dedicated nomad desk, dan meeting room privat kedap suara dengan koneksi fiber optic dedicated 100 Mbps.",
+    subtitle: "Hot desk fleksibel, dedicated nomad desk, dan meeting room privat kedap suara dengan koneksi fiber optic dedicated berkecepatan tinggi.",
     badge: "Layanan Co-Working DAGO",
     bgImage: "https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=1920&auto=format&fit=crop",
-    ctaFnb: "Explore F&B",
-    ctaCowork: "Explore Co-Working",
   },
   {
     id: 3,
     title: "Satu Ekosistem Terpadu Produktivitas & Rasa",
-    subtitle: "DAGO Creative Hub memadukan kenyamanan bekerja, pilihan kuliner artisan, dan program membership loyalty dalam satu platform.",
+    subtitle: "DAGO Creative Hub memadukan kenyamanan bekerja, pilihan kuliner artisan, dan program membership loyalty dalam satu platform modern.",
     badge: "DAGO Creative Hub Bali",
     bgImage: "https://images.unsplash.com/photo-1527192491265-7e15c55b1ed2?q=80&w=1920&auto=format&fit=crop",
-    ctaFnb: "Explore F&B",
-    ctaCowork: "Explore Co-Working",
   },
 ];
 
 export default function PublicLandingPage() {
   const router = useRouter();
   const { user, login } = useAuth();
-  const { outlets } = useOutlet();
 
   // Scroll State for Navbar Glassmorphism & Active Spy
   const [isScrolled, setIsScrolled] = useState(false);
@@ -87,12 +71,8 @@ export default function PublicLandingPage() {
   const isManualScrollingRef = React.useRef(false);
   const scrollTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  // Hero Carousel State (Snappy 3-second transition)
+  // Hero Carousel State (Snappy 3.5-second transition)
   const [currentSlide, setCurrentSlide] = useState(0);
-
-  // Quick Service Finder State
-  const [selectedOutlet, setSelectedOutlet] = useState("outlet-sgr");
-  const [selectedService, setSelectedService] = useState("MENU");
 
   // Community Events State for Landing Page
   const [communityEvents, setCommunityEvents] = useState<PublicCommunityEvent[]>([]);
@@ -124,7 +104,7 @@ export default function PublicLandingPage() {
 
       if (isManualScrollingRef.current) return;
 
-      const sectionIds = ["services", "events", "about", "outlets", "contact"];
+      const sectionIds = ["services", "events", "about", "loyalty", "contact"];
       let current = "";
       for (const id of sectionIds) {
         const el = document.getElementById(id);
@@ -152,7 +132,7 @@ export default function PublicLandingPage() {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
-    }, 3500);
+    }, 4000);
     return () => clearInterval(timer);
   }, []);
 
@@ -166,10 +146,6 @@ export default function PublicLandingPage() {
     else router.push("/dashboard");
   };
 
-  const handleOpenService = () => {
-    router.push(`/customer?tab=${selectedService}&outlet=${selectedOutlet}`);
-  };
-
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
     if (el) {
@@ -177,7 +153,7 @@ export default function PublicLandingPage() {
       isManualScrollingRef.current = true;
       setActiveSection(id);
 
-      const navbarOffset = 72;
+      const navbarOffset = 76;
       const elementPosition = el.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.pageYOffset - navbarOffset;
       window.scrollTo({
@@ -192,13 +168,13 @@ export default function PublicLandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F17] text-slate-800 dark:text-slate-100 font-sans flex flex-col justify-between selection:bg-[#3B7A57] selection:text-white scroll-smooth overflow-x-hidden transition-colors duration-300">
+    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 font-sans flex flex-col justify-between selection:bg-[#3B7A57] selection:text-white scroll-smooth overflow-x-hidden transition-colors duration-300">
 
       {/* 1. CLEAN & SPACIOUS GLASSMORPHISM NAVBAR */}
       <header
         className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out ${isScrolled
-          ? "bg-white/90 dark:bg-slate-950/90 backdrop-blur-2xl shadow-md border-b border-slate-200/80 dark:border-white/10 py-3"
-          : "bg-white/60 dark:bg-slate-950/40 backdrop-blur-md py-4 sm:py-5 border-b border-slate-200/40 dark:border-transparent"
+          ? "bg-white/90 dark:bg-[#0B0F17]/90 backdrop-blur-xl shadow-md border-b border-slate-200/80 dark:border-white/10 py-3"
+          : "bg-white/70 dark:bg-[#0B0F17]/60 backdrop-blur-md py-4 sm:py-5 border-b border-slate-200/40 dark:border-transparent"
           }`}
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -219,7 +195,7 @@ export default function PublicLandingPage() {
               </div>
             </div>
             <div>
-              <span className="font-black text-lg tracking-tight text-slate-900 dark:text-white block leading-none drop-shadow-sm transition-colors duration-200 group-hover:text-[#3B7A57] dark:group-hover:text-slate-100">
+              <span className="font-black text-lg tracking-tight text-slate-900 dark:text-white block leading-none drop-shadow-xs transition-colors duration-200 group-hover:text-[#3B7A57] dark:group-hover:text-slate-100">
                 DagoEng <span className="text-[#3B7A57] dark:text-[#52B788] transition-all duration-300 group-hover:text-[#2E6044] dark:group-hover:text-[#74c69d]">Creative Hub</span>
               </span>
               <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 tracking-wider uppercase transition-colors duration-200 group-hover:text-slate-700 dark:group-hover:text-slate-300">
@@ -232,9 +208,9 @@ export default function PublicLandingPage() {
           <nav className="hidden lg:flex items-center space-x-1 p-1.5 rounded-full bg-slate-100/90 dark:bg-white/5 backdrop-blur-md border border-slate-200/80 dark:border-white/10 text-xs font-semibold text-slate-600 dark:text-slate-300">
             {[
               { id: "services", label: "Layanan" },
-              { id: "events", label: "Event" },
+              { id: "events", label: "Event Komunitas" },
               { id: "about", label: "Tentang" },
-              { id: "outlets", label: "Cabang" },
+              { id: "loyalty", label: "Loyalty" },
               { id: "contact", label: "Kontak" },
             ].map((item) => {
               const isActive = activeSection === item.id;
@@ -260,7 +236,7 @@ export default function PublicLandingPage() {
             <Link href="/customer">
               <Button
                 size="sm"
-                className="text-xs h-10 px-5 font-black bg-[#3B7A57] text-white hover:bg-[#2E6044] shadow-md shadow-[#3B7A57]/20 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 border border-[#52B788]/40 group"
+                className="text-xs h-10 px-5 font-bold bg-[#3B7A57] text-white hover:bg-[#2E6044] shadow-md shadow-[#3B7A57]/20 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 border border-[#52B788]/40 group"
               >
                 <UtensilsCrossed className="w-3.5 h-3.5 mr-1.5 transition-transform duration-300 group-hover:rotate-12" />
                 <span>Customer Portal</span>
@@ -300,14 +276,14 @@ export default function PublicLandingPage() {
 
         {/* Mobile Dropdown Menu with Slide Animation */}
         {mobileMenuOpen && (
-          <div className="sm:hidden px-4 pt-3 pb-6 bg-white/95 dark:bg-slate-950/95 backdrop-blur-2xl border-b border-slate-200 dark:border-white/10 space-y-3 animate-in fade-in slide-in-from-top-3 duration-300 shadow-xl">
+          <div className="sm:hidden px-4 pt-3 pb-6 bg-white/95 dark:bg-[#0B0F17]/95 backdrop-blur-2xl border-b border-slate-200 dark:border-white/10 space-y-3 animate-in fade-in slide-in-from-top-3 duration-300 shadow-xl">
             <div className="flex flex-col space-y-1.5 text-sm font-semibold text-slate-700 dark:text-slate-300">
               {[
                 { id: "services", label: "Layanan (F&B & Coworking)" },
                 { id: "events", label: "Event Komunitas" },
                 { id: "about", label: "Tentang Dago" },
-                { id: "outlets", label: "Cabang Outlet" },
-                { id: "contact", label: "Kontak & Medsos" },
+                { id: "loyalty", label: "Program Loyalty" },
+                { id: "contact", label: "Kontak & Alamat" },
               ].map((item) => {
                 const isActive = activeSection === item.id;
                 return (
@@ -349,8 +325,8 @@ export default function PublicLandingPage() {
         )}
       </header>
 
-      {/* 2. HERO SLIDESHOW (INTRODUCE & DIRECT) */}
-      <section className="relative min-h-[600px] sm:min-h-[660px] lg:min-h-[720px] flex items-center justify-center overflow-hidden bg-slate-950 text-white pt-24 sm:pt-28">
+      {/* 2. HERO SLIDESHOW */}
+      <section className="relative min-h-[580px] sm:min-h-[640px] lg:min-h-[700px] flex items-center justify-center overflow-hidden bg-slate-950 text-white pt-24 sm:pt-28 pb-16 sm:pb-20">
         {HERO_SLIDES.map((slide, idx) => (
           <div
             key={slide.id}
@@ -360,7 +336,7 @@ export default function PublicLandingPage() {
               }`}
           >
             <div
-              className="absolute inset-0 bg-cover bg-center transition-transform duration-[3500ms] ease-linear"
+              className="absolute inset-0 bg-cover bg-center transition-transform duration-[4000ms] ease-linear"
               style={{ backgroundImage: `url(${slide.bgImage})` }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F17] via-slate-950/75 to-slate-950/60" />
@@ -368,9 +344,9 @@ export default function PublicLandingPage() {
           </div>
         ))}
 
-        {/* Ambient Glow Aura in Sage Green & Subtle Blue */}
+        {/* Ambient Glow Aura in Sage Green */}
         <div className="absolute top-1/3 left-1/4 w-96 h-96 bg-[#52B788]/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#3B7A57]/15 rounded-full blur-3xl pointer-events-none" />
 
         {/* Hero Content Container */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 relative z-20 w-full">
@@ -383,12 +359,12 @@ export default function PublicLandingPage() {
             </div>
 
             {/* Slide Title */}
-            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.12] drop-shadow-md">
+            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.14] drop-shadow-md">
               {HERO_SLIDES[currentSlide].title}
             </h1>
 
             {/* Slide Subtitle */}
-            <p className="text-sm sm:text-base text-slate-200 leading-relaxed max-w-2xl font-normal drop-shadow-sm">
+            <p className="text-sm sm:text-base text-slate-200 leading-relaxed max-w-2xl font-normal drop-shadow-xs">
               {HERO_SLIDES[currentSlide].subtitle}
             </p>
 
@@ -397,7 +373,7 @@ export default function PublicLandingPage() {
               <Link href="/customer?tab=MENU">
                 <Button
                   size="lg"
-                  className="h-12 px-7 font-black bg-[#3B7A57] text-white hover:bg-[#2E6044] rounded-2xl text-xs shadow-xl shadow-[#3B7A57]/20 transition-all hover:scale-105 active:scale-95 border border-[#52B788]/30 flex items-center space-x-2"
+                  className="h-12 px-7 font-bold bg-[#3B7A57] text-white hover:bg-[#2E6044] rounded-2xl text-xs shadow-xl shadow-[#3B7A57]/25 transition-all hover:scale-105 active:scale-95 border border-[#52B788]/30 flex items-center space-x-2"
                 >
                   <UtensilsCrossed className="w-4 h-4" />
                   <span>Explore F&B</span>
@@ -439,125 +415,110 @@ export default function PublicLandingPage() {
         </div>
       </section>
 
-      {/* 3. QUICK SERVICE FINDER BAR (DIRECT) */}
-      <section className="relative z-30 -mt-10 sm:-mt-12 max-w-6xl mx-auto px-4 sm:px-6 w-full">
-        <div className="bg-white dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl p-4 sm:p-5 shadow-xl border border-slate-200 dark:border-white/15 flex flex-col md:flex-row items-center justify-between gap-4 text-slate-800 dark:text-white transition-colors">
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full md:w-auto flex-1">
-            {/* Select Location */}
-            <div className="flex items-center space-x-3 p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-[#52B788]/60 transition-colors">
-              <MapPin className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
-              <div className="space-y-0.5 flex-1">
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                  Pilih Cabang Dago
-                </span>
-                <select
-                  value={selectedOutlet}
-                  onChange={(e) => setSelectedOutlet(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-800 dark:text-white outline-none w-full cursor-pointer"
-                >
-                  {outlets.map((o) => (
-                    <option
-                      key={o.id}
-                      value={o.id}
-                      disabled={o.isComingSoon}
-                      className={o.isComingSoon ? "bg-white dark:bg-slate-900 text-slate-400 italic" : "bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-bold"}
-                    >
-                      {o.name} {o.isComingSoon ? "— ⏳ (Segera Hadir)" : `(${o.address})`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Select Service Type */}
-            <div className="flex items-center space-x-3 p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 hover:border-[#52B788]/60 transition-colors">
-              <Building2 className="w-5 h-5 text-blue-500 dark:text-blue-400 flex-shrink-0" />
-              <div className="space-y-0.5 flex-1">
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                  Layanan Yang Dituju
-                </span>
-                <select
-                  value={selectedService}
-                  onChange={(e) => setSelectedService(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-800 dark:text-white outline-none w-full cursor-pointer"
-                >
-                  <option value="MENU" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Layanan F&B (Menu & Kopi)</option>
-                  <option value="COWORKING" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Layanan Co-Working (Workspace & Meeting)</option>
-                  <option value="LOYALTY" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Program Member Loyalty</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* Action Search Button */}
-          <Button
-            onClick={handleOpenService}
-            className="w-full md:w-auto h-12 px-7 font-black bg-[#3B7A57] text-white hover:bg-[#2E6044] rounded-2xl text-xs transition-all hover:scale-105 active:scale-95 shadow-lg shadow-[#3B7A57]/20 border border-[#52B788]/30"
-          >
-            <Search className="w-4 h-4 mr-2" />
-            <span>Buka Layanan di Customer Portal</span>
-          </Button>
-        </div>
-      </section>
-
-      {/* 4. SECTION: LAYANAN UTAMA DAGO (INFORM & DIRECT: F&B & COWORKING) */}
+      {/* 3. SECTION: EXPLORE OUR SERVICES (F&B & COWORKING) */}
       <section id="services" className="py-24 bg-slate-100/70 dark:bg-[#0B0F17] transition-colors duration-300 relative scroll-mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
 
+          {/* Section Header */}
           <div className="text-center max-w-2xl mx-auto space-y-2">
             <Badge variant="outline" className="text-[#3B7A57] dark:text-[#52B788] border-[#3B7A57]/30 dark:border-[#52B788]/40 bg-[#3B7A57]/10 dark:bg-[#52B788]/10 font-black uppercase text-[10px] tracking-wider">
-              Dua Layanan Utama DAGO
+              Explore Our Services
             </Badge>
             <h2 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
-              Satu Ekosistem, Dua Pengalaman Layanan
+              Satu Ekosistem, Dua Layanan Utama
             </h2>
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-              Jelajahi sajian kuliner artisan F&B pilihan atau pesan ruang kerja Co-Working representatif sesuai kebutuhan Anda.
+              DAGO Creative Hub menggabungkan kenyamanan ruang kerja modern dengan pilihan kuliner artisan terbaik dalam satu platform yang saling terintegrasi.
             </p>
           </div>
 
           {/* 2 Core Service Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
 
             {/* Service 1: F&B & Culinary */}
-            <div className="p-8 rounded-3xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 space-y-6 flex flex-col justify-between hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/50 dark:hover:from-emerald-950/20 hover:to-white dark:hover:to-slate-900 transition-all duration-300 shadow-md dark:shadow-xl group">
-              <div className="space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 flex items-center justify-center font-bold">
-                  <UtensilsCrossed className="w-6 h-6" />
-                </div>
-                <div>
-                  <Badge className="bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 text-[10px] font-bold uppercase mb-2">
-                    Layanan F&B
+            <div className="p-8 rounded-3xl bg-white dark:bg-[#131B2B] border border-slate-200 dark:border-white/10 space-y-6 flex flex-col justify-between hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-white dark:hover:to-[#131B2B] transition-all duration-300 shadow-md dark:shadow-xl group">
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className="w-12 h-12 rounded-2xl bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 flex items-center justify-center font-bold">
+                    <UtensilsCrossed className="w-6 h-6" />
+                  </div>
+                  <Badge className="bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 text-[10px] font-bold uppercase">
+                    Kuliner & Kopi Spesialti
                   </Badge>
+                </div>
+
+                <div>
                   <h3 className="text-2xl font-black text-slate-900 dark:text-white group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
-                    Sajian Kuliner Artisan & Kopi
+                    Sajian Kuliner Artisan Multi-Mitra
                   </h3>
                   <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-2">
-                    Koleksi menu lezat dari aneka mitra kuliner DAGO — mulai dari specialty coffee Kopi Senja, masakan lezat Dapur Mama, Manis Bakery, hingga Warung Bu Narti. Pesan mandiri via QR Meja dengan pembayaran instan.
+                    Nikmati aneka hidangan lezat dan kopi berkualitas dari para mitra terpercaya DAGO — mulai dari seduhan Kopi Senja, hidangan nusantara Dapur Mama, hingga pastry manis Manis Bakery. Pesan mandiri via QR Meja dengan pembayaran instan.
                   </p>
                 </div>
 
+                {/* Tenant Badges */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    ☕ Kopi Senja
+                  </span>
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    🍲 Dapur Mama
+                  </span>
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    🥐 Manis Bakery
+                  </span>
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    🍛 Warung Bu Narti
+                  </span>
+                </div>
+
+                {/* Key Features */}
                 <div className="pt-2 space-y-2 text-xs text-slate-600 dark:text-slate-300">
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0" />
-                    <span>Multi-Mitra Kuliner Terintegrasi</span>
+                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <span>Pemesanan mandiri via scan QR Meja tanpa antrean kasir</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0" />
-                    <span>Pemesanan Mandiri Cepat Tanpa Antre</span>
+                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <span>Pesanan otomatis terhubung ke Kitchen Display System (KDS) mitra</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 dark:text-emerald-400 flex-shrink-0" />
-                    <span>Nota Transaksi F&B Resmi & Riwayat Order</span>
+                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <span>Struk digital transparan & penambahan loyalty points otomatis</span>
+                  </div>
+                </div>
+
+                {/* Popular Menu Preview */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    <span className="flex items-center space-x-1">
+                      <Flame className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Menu Favorit Pengunjung:</span>
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-400 font-normal">Harga Transparan</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-[11px]">
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate">Kopi Senja Aren</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">{formatCurrencyIDR(24000)}</span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate">Nasi Beef Bowl</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">{formatCurrencyIDR(45000)}</span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate">Butter Croissant</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">{formatCurrencyIDR(20000)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
 
               <div className="pt-6 border-t border-slate-100 dark:border-white/10">
                 <Link href="/customer?tab=MENU">
-                  <Button className="w-full h-12 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-black text-xs rounded-2xl shadow-lg shadow-[#3B7A57]/20 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2 border border-[#52B788]/30">
-                    <span>Explore F&B</span>
+                  <Button className="w-full h-12 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-2xl shadow-lg shadow-[#3B7A57]/20 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2 border border-[#52B788]/30">
+                    <UtensilsCrossed className="w-4 h-4" />
+                    <span>Explore F&B & Pesan Mandiri</span>
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
@@ -565,43 +526,89 @@ export default function PublicLandingPage() {
             </div>
 
             {/* Service 2: Co-Working & Workspace */}
-            <div className="p-8 rounded-3xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 space-y-6 flex flex-col justify-between hover:border-blue-500 hover:bg-gradient-to-b hover:from-blue-50/50 dark:hover:from-blue-950/20 hover:to-white dark:hover:to-slate-900 transition-all duration-300 shadow-md dark:shadow-xl group">
-              <div className="space-y-4">
-                <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-500/20 dark:border-blue-500/30 flex items-center justify-center font-bold">
-                  <Laptop className="w-6 h-6" />
-                </div>
-                <div>
-                  <Badge className="bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300 border border-blue-500/20 dark:border-blue-500/30 text-[10px] font-bold uppercase mb-2">
-                    Layanan Co-Working
+            <div className="p-8 rounded-3xl bg-white dark:bg-[#131B2B] border border-slate-200 dark:border-white/10 space-y-6 flex flex-col justify-between hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-white dark:hover:to-[#131B2B] transition-all duration-300 shadow-md dark:shadow-xl group">
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className="w-12 h-12 rounded-2xl bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 flex items-center justify-center font-bold">
+                    <Laptop className="w-6 h-6" />
+                  </div>
+                  <Badge className="bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 text-[10px] font-bold uppercase">
+                    Ruang Kerja & Produktivitas
                   </Badge>
-                  <h3 className="text-2xl font-black text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                    Ruang Kerja & Meeting Room
+                </div>
+
+                <div>
+                  <h3 className="text-2xl font-black text-slate-900 dark:text-white group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                    Ruang Kerja Kolaboratif & Meeting Room
                   </h3>
                   <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-2">
-                    Pilihan Hot Desk fleksibel, Dedicated Nomad Desk, dan VIP Meeting Suite ber-AC dengan koneksi fiber optic dedicated 100 Mbps serta fasilitas free flow kopi/teh artisan.
+                    Fasilitas kerja representatif yang dirancang untuk freelancer, remote worker, profesional, dan tim yang membutuhkan ruang tenang, kolaboratif, serta didukung fasilitas audio visual lengkap.
                   </p>
                 </div>
 
+                {/* Workspace Badges */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    💻 Hot Desk Flex
+                  </span>
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    🖥️ Dedicated Desk
+                  </span>
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    🎙️ Focus Audio Pod
+                  </span>
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    👥 Meeting Suite (10 Pax)
+                  </span>
+                </div>
+
+                {/* Key Features */}
                 <div className="pt-2 space-y-2 text-xs text-slate-600 dark:text-slate-300">
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
-                    <span>WiFi Dedicated 100 Mbps Berkecepatan Tinggi</span>
+                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <span>Koneksi internet dedicated fiber optic berkecepatan tinggi & stabil</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
-                    <span>Reservasi Fleksibel Jam atau Bulanan</span>
+                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <span>Reservasi fleksibel: pilihan sewa per jam, harian, atau bulanan</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-blue-500 dark:text-blue-400 flex-shrink-0" />
-                    <span>Nota Transaksi Co-Working & Booking Terpisah</span>
+                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <span>Fasilitas lengkap: Smart TV 4K, audio conference, & free-flow water</span>
+                  </div>
+                </div>
+
+                {/* Popular Workspace Preview */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    <span className="flex items-center space-x-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                      <span>Pilihan Ruang Tersedia:</span>
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-400 font-normal">Pemesanan Langsung</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-[11px]">
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate">Hot Desk Flex</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">Rp 15.000<span className="text-[10px] font-normal">/jam</span></span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate">Focus Audio Pod</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">Rp 35.000<span className="text-[10px] font-normal">/jam</span></span>
+                    </div>
+                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate">Meeting Room Alpha</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">Rp 150.000<span className="text-[10px] font-normal">/jam</span></span>
+                    </div>
                   </div>
                 </div>
               </div>
 
               <div className="pt-6 border-t border-slate-100 dark:border-white/10">
                 <Link href="/customer?tab=COWORKING">
-                  <Button className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-2xl shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2">
-                    <span>Explore Co-Working</span>
+                  <Button className="w-full h-12 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-2xl shadow-lg shadow-[#3B7A57]/20 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2 border border-[#52B788]/30">
+                    <Laptop className="w-4 h-4" />
+                    <span>Explore Co-Working & Reservasi Ruang</span>
                     <ArrowRight className="w-4 h-4" />
                   </Button>
                 </Link>
@@ -628,7 +635,7 @@ export default function PublicLandingPage() {
                 Event Komunitas & Ruang Kolaborasi
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                Temukan lokakarya, perjumpaan komunitas, dan sharing session menarik yang diselenggarakan oleh komunitas lokal di Dago Creative Hub.
+                Temukan lokakarya, perjumpaan komunitas, dan sharing session menarik yang diselenggarakan oleh komunitas lokal di DAGO Creative Hub.
               </p>
             </div>
 
@@ -677,7 +684,7 @@ export default function PublicLandingPage() {
               {communityEvents.map((evt) => (
                 <div
                   key={evt.id}
-                  className="group rounded-3xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-white/10 hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-slate-50 dark:hover:to-slate-900 transition-all duration-300 shadow-md dark:shadow-xl overflow-hidden flex flex-col justify-between"
+                  className="group rounded-3xl bg-slate-50 dark:bg-[#131B2B] border border-slate-200 dark:border-white/10 hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-slate-50 dark:hover:to-[#131B2B] transition-all duration-300 shadow-md dark:shadow-xl overflow-hidden flex flex-col justify-between"
                 >
                   <div>
                     {/* Poster Header */}
@@ -700,7 +707,7 @@ export default function PublicLandingPage() {
                       {/* Pricing Tag */}
                       <div className="absolute top-3 right-3">
                         <span
-                          className={`text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm backdrop-blur-md ${
+                          className={`text-[10px] font-black px-2.5 py-1 rounded-full shadow-xs backdrop-blur-md ${
                             evt.isPaid
                               ? "bg-slate-900/90 text-emerald-400 border border-emerald-500/30"
                               : "bg-[#3B7A57]/90 text-white"
@@ -768,7 +775,7 @@ export default function PublicLandingPage() {
         </div>
       </section>
 
-      {/* 5. SECTION: TENTANG DAGO (INFORM: EKOSISTEM TERPADU) */}
+      {/* 5. SECTION: TENTANG DAGO (EKOSISTEM TERPADU OPERASIONAL) */}
       <section id="about" className="py-24 bg-slate-100/70 dark:bg-[#0E131F] transition-colors duration-300 relative scroll-mt-20 border-t border-slate-200 dark:border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
@@ -789,32 +796,32 @@ export default function PublicLandingPage() {
                   <Badge className="bg-[#3B7A57] text-white text-[10px] font-bold uppercase tracking-wider">
                     Integrated Ecosystem
                   </Badge>
-                  <h3 className="font-black text-xl text-white">Dago Creative Hub Bali</h3>
+                  <h3 className="font-black text-xl text-white">DAGO Creative Hub Bali</h3>
                   <p className="text-xs text-slate-300 leading-relaxed">
-                    Sinergi operasional F&B modern, ruang kerja bersama berkecepatan tinggi, dan program keanggotaan CRM terpadu.
+                    Sinergi operasional F&B modern, ruang kerja bersama, dan program keanggotaan loyalty dalam satu sistem.
                   </p>
                 </div>
               </div>
 
-              {/* Stats Highlights Bar */}
+              {/* Authentic Feature Pillars Bar (Replacing fabricated stats) */}
               <div className="grid grid-cols-3 gap-3">
                 <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-center shadow-xs">
-                  <span className="text-xl sm:text-2xl font-black text-[#3B7A57] dark:text-[#52B788] block">
-                    <AnimatedCounter value={3} />
+                  <span className="text-sm sm:text-base font-black text-[#3B7A57] dark:text-[#52B788] block">
+                    Multi-Mitra
                   </span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Outlet Bali</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Kuliner Terpadu</span>
                 </div>
                 <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-center shadow-xs">
-                  <span className="text-xl sm:text-2xl font-black text-emerald-600 dark:text-emerald-400 block">
-                    100<span className="text-xs font-normal">Mbps</span>
+                  <span className="text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 block">
+                    QR Meja
                   </span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Fiber Optic</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Self-Order KDS</span>
                 </div>
                 <div className="p-4 rounded-2xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 text-center shadow-xs">
-                  <span className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400 block">
-                    100%
+                  <span className="text-sm sm:text-base font-black text-[#3B7A57] dark:text-[#52B788] block">
+                    Workspace
                   </span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Cloud Sync</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Meeting & Pod</span>
                 </div>
               </div>
             </div>
@@ -823,13 +830,13 @@ export default function PublicLandingPage() {
             <div className="lg:col-span-6 space-y-6">
               <div className="space-y-2">
                 <Badge variant="outline" className="text-[#3B7A57] dark:text-[#52B788] border-[#3B7A57]/30 dark:border-[#52B788]/40 bg-[#3B7A57]/10 dark:bg-[#52B788]/10 font-black uppercase text-[10px] tracking-wider">
-                  Tentang Dago Creative Hub
+                  Tentang DAGO Creative Hub
                 </Badge>
                 <h2 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
                   Ekosistem Terintegrasi untuk Produktivitas & Kuliner
                 </h2>
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 leading-relaxed pt-1">
-                  Dago Creative Hub menghadirkan platform terpadu yang menghubungkan tamu, kasir POS terpadu, stasiun dapur KDS, dan loyalty points dalam satu ekosistem yang mulus.
+                  DAGO Creative Hub menghadirkan platform terpadu yang menghubungkan pengunjung, kasir POS terintegrasi, stasiun dapur KDS, reservasi workspace, dan program loyalty dalam satu alur yang nyaman.
                 </p>
               </div>
 
@@ -837,15 +844,15 @@ export default function PublicLandingPage() {
                 {[
                   {
                     title: "Pemesanan Mandiri & Smart Kitchen Display",
-                    desc: "Tamu memesan langsung via QR Meja, pesanan otomatis masuk ke stasiun dapur (KDS) mitra terkait.",
+                    desc: "Tamu memesan langsung via scan QR Meja, pesanan otomatis didistribusikan ke stasiun dapur (KDS) mitra terkait.",
                   },
                   {
                     title: "Ruang Kerja & Meeting Room Fleksibel",
-                    desc: "Pilihan Hot Desk harian hingga VIP Meeting Room dengan fasilitas audio visual lengkap.",
+                    desc: "Pilihan Hot Desk harian hingga VIP Meeting Room dengan koneksi internet dedicated dan fasilitas representatif.",
                   },
                   {
-                    title: "Loyalty Points Otomatis",
-                    desc: "Setiap transaksi F&B dan Co-Working menambah poin pelanggan secara otomatis.",
+                    title: "Loyalty Points & Program Member",
+                    desc: "Setiap transaksi F&B dan Co-Working menambah poin pelanggan secara otomatis untuk ditukar dengan reward.",
                   },
                 ].map((item, idx) => (
                   <div
@@ -868,108 +875,8 @@ export default function PublicLandingPage() {
         </div>
       </section>
 
-      {/* 6. SECTION: CABANG OUTLET (OVERVIEW DENGAN VIEW BRANCHES) */}
-      <section id="outlets" className="py-24 bg-white dark:bg-[#0B0F17] transition-colors duration-300 relative scroll-mt-20 border-t border-slate-200 dark:border-white/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-
-          <div className="text-center max-w-2xl mx-auto space-y-2">
-            <Badge variant="outline" className="text-[#3B7A57] dark:text-[#52B788] border-[#3B7A57]/30 dark:border-[#52B788]/40 bg-[#3B7A57]/10 dark:bg-[#52B788]/10 font-black uppercase text-[10px] tracking-wider">
-              Jaringan Cabang Bali
-            </Badge>
-            <h2 className="text-2xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight">
-              Kunjungi Cabang Dago Terdekat
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-              Temukan suasana produktif dan sajian kuliner favorit di seluruh lokasi strategis Dago Creative Hub.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {outlets.map((outlet) => {
-              const isComingSoon = outlet.isComingSoon;
-
-              return (
-                <div
-                  key={outlet.id}
-                  className={`p-6 rounded-3xl bg-slate-50 dark:bg-slate-900/60 backdrop-blur-md border space-y-4 flex flex-col justify-between transition-all duration-300 group shadow-md dark:shadow-xl ${isComingSoon
-                    ? "border-slate-300 dark:border-slate-700/50 opacity-90"
-                    : "border-slate-200 dark:border-white/10 hover:border-[#52B788]/60 hover:bg-white dark:hover:bg-slate-900"
-                    }`}
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2.5">
-                        <div
-                          className={`w-9 h-9 rounded-2xl flex items-center justify-center font-bold ${isComingSoon
-                            ? "bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700"
-                            : "bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30"
-                            }`}
-                        >
-                          <Store className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-base text-slate-900 dark:text-white group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
-                            {outlet.name}
-                          </h3>
-                          {outlet.id === "outlet-sgr" && (
-                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block">
-                              Outlet Pusat Singaraja
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <Badge
-                        className={`text-[10px] font-bold ${isComingSoon
-                          ? "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-700"
-                          : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
-                          }`}
-                      >
-                        {outlet.badgeLabel || (isComingSoon ? "⏳ Segera Hadir" : "● Buka")}
-                      </Badge>
-                    </div>
-
-                    <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400 pt-1">
-                      <div className="flex items-start space-x-2">
-                        <MapPin className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] mt-0.5 flex-shrink-0" />
-                        <span>{outlet.address}</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 flex-shrink-0" />
-                        <span>
-                          {isComingSoon
-                            ? "Tahap Persiapan Cabang"
-                            : "08:00 - 22:00 WITA (Setiap Hari)"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between text-xs">
-                    <span className="font-mono text-[11px] text-slate-500 font-bold">{outlet.code}</span>
-                    {isComingSoon ? (
-                      <span className="text-xs font-semibold text-slate-500 italic">
-                        Ekspansi Mendatang
-                      </span>
-                    ) : (
-                      <Link
-                        href={`/customer?outlet=${outlet.id}`}
-                        className="font-bold text-[#3B7A57] dark:text-[#52B788] hover:text-[#2E6044] dark:hover:text-[#74c69d] flex items-center group-hover:underline"
-                      >
-                        <span>Buka Cabang</span>
-                        <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-        </div>
-      </section>
-
-      {/* 7. SECTION: RINGKASAN LOYALTY REWARDS */}
-      <section id="loyalty" className="py-16 bg-slate-100/70 dark:bg-[#0E131F] transition-colors duration-300 relative overflow-hidden border-t border-slate-200 dark:border-white/5">
+      {/* 6. SECTION: RINGKASAN LOYALTY REWARDS */}
+      <section id="loyalty" className="py-16 bg-slate-100/70 dark:bg-[#0B0F17] transition-colors duration-300 relative overflow-hidden border-t border-slate-200 dark:border-white/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="p-8 sm:p-10 rounded-3xl bg-gradient-to-r from-emerald-50 via-white to-emerald-50/40 dark:from-emerald-950/40 dark:via-slate-900 dark:to-slate-900 border border-[#52B788]/30 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl transition-colors">
             <div className="space-y-1.5 text-center md:text-left">
@@ -981,11 +888,11 @@ export default function PublicLandingPage() {
               </div>
               <h3 className="font-black text-xl sm:text-2xl text-slate-900 dark:text-white">Kumpulkan Poin Setiap Transaksi</h3>
               <p className="text-xs text-slate-600 dark:text-slate-300 max-w-xl">
-                Nikmati diskon hingga 30%, free jam coworking, dan voucher reward spesial untuk setiap transaksi F&B dan Co-Working di DAGO.
+                Nikmati diskon eksklusif, free jam coworking, dan voucher reward spesial untuk setiap transaksi F&B dan Co-Working di DAGO Creative Hub.
               </p>
             </div>
             <Link href="/customer?tab=LOYALTY">
-              <Button size="lg" className="h-12 px-7 font-black bg-[#3B7A57] text-white hover:bg-[#2E6044] rounded-2xl text-xs shadow-lg shadow-[#3B7A57]/20 whitespace-nowrap transition-all hover:scale-105 active:scale-95 border border-[#52B788]/30">
+              <Button size="lg" className="h-12 px-7 font-bold bg-[#3B7A57] text-white hover:bg-[#2E6044] rounded-2xl text-xs shadow-lg shadow-[#3B7A57]/20 whitespace-nowrap transition-all hover:scale-105 active:scale-95 border border-[#52B788]/30">
                 <span>Eksplor Program Member</span>
                 <ChevronRight className="w-4 h-4 ml-1" />
               </Button>
@@ -994,8 +901,8 @@ export default function PublicLandingPage() {
         </div>
       </section>
 
-      {/* 8. SECTION: KONTAK & FOOTER */}
-      <section id="contact" className="py-20 bg-slate-950 text-slate-300 border-t border-slate-800 relative scroll-mt-20">
+      {/* 7. SECTION: KONTAK & FOOTER */}
+      <footer id="contact" className="py-20 bg-slate-950 text-slate-300 border-t border-slate-800 relative scroll-mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-12 border-b border-white/10">
 
@@ -1008,16 +915,20 @@ export default function PublicLandingPage() {
                 <span className="font-black text-base text-white">DagoEng Creative Hub</span>
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Ekosistem terpadu F&B kuliner artisan, Co-working space, dan Customer Loyalty modern di Bali.
+                Ekosistem terpadu F&B kuliner artisan, Co-working space representatif, dan program customer loyalty modern di Bali.
               </p>
             </div>
 
-            {/* Col 2: Kontak & Alamat */}
+            {/* Col 2: Kontak & Alamat Resmi */}
             <div className="space-y-2.5 text-xs">
-              <h4 className="font-bold text-white uppercase tracking-wider text-xs">Hubungi Kami</h4>
+              <h4 className="font-bold text-white uppercase tracking-wider text-xs">Lokasi & Kontak</h4>
+              <div className="flex items-start space-x-2 text-slate-400">
+                <MapPin className="w-4 h-4 text-[#52B788] flex-shrink-0 mt-0.5" />
+                <span>Jl. Ngurah Rai No. 45, Singaraja, Kabupaten Buleleng, Bali 81116</span>
+              </div>
               <div className="flex items-center space-x-2 text-slate-400">
-                <MapPin className="w-4 h-4 text-[#52B788] flex-shrink-0" />
-                <span>	Jl. Teleng No.1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 8111</span>
+                <Clock className="w-4 h-4 text-[#52B788] flex-shrink-0" />
+                <span>08:00 - 22:00 WITA (Buka Setiap Hari)</span>
               </div>
               <div className="flex items-center space-x-2 text-slate-400">
                 <Phone className="w-4 h-4 text-[#52B788] flex-shrink-0" />
@@ -1062,7 +973,8 @@ export default function PublicLandingPage() {
                 <Link href="/customer?tab=MENU" className="hover:text-[#52B788] transition-colors">Layanan Kuliner (F&B)</Link>
                 <Link href="/customer?tab=COWORKING" className="hover:text-[#52B788] transition-colors">Layanan Co-Working Space</Link>
                 <Link href="/customer?tab=LOYALTY" className="hover:text-[#52B788] transition-colors">Program Member Loyalty</Link>
-                <button onClick={() => setIsLoginModalOpen(true)} className="text-left hover:text-[#52B788] transition-colors">
+                <Link href="/events" className="hover:text-[#52B788] transition-colors">Event Komunitas</Link>
+                <button onClick={() => setIsLoginModalOpen(true)} className="text-left hover:text-[#52B788] transition-colors cursor-pointer">
                   Akses Staf & Manajemen
                 </button>
               </div>
@@ -1079,9 +991,9 @@ export default function PublicLandingPage() {
             </div>
           </div>
         </div>
-      </section>
+      </footer>
 
-      {/* 9. INTERACTIVE LOGIN MODAL POPUP */}
+      {/* 8. INTERACTIVE LOGIN MODAL POPUP */}
       {isLoginModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -1089,7 +1001,7 @@ export default function PublicLandingPage() {
             onClick={() => setIsLoginModalOpen(false)}
           />
 
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/15 rounded-3xl p-6 sm:p-7 shadow-2xl z-10 text-slate-900 dark:text-white space-y-5 animate-in zoom-in-95 duration-200 transition-colors">
+          <div className="relative w-full max-w-md bg-white dark:bg-[#131B2B] border border-slate-200 dark:border-white/15 rounded-3xl p-6 sm:p-7 shadow-2xl z-10 text-slate-900 dark:text-white space-y-5 animate-in zoom-in-95 duration-200 transition-colors">
 
             {/* Modal Header */}
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
@@ -1104,7 +1016,7 @@ export default function PublicLandingPage() {
               </div>
               <button
                 onClick={() => setIsLoginModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1118,7 +1030,7 @@ export default function PublicLandingPage() {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <button
                   onClick={() => handleQuickModalLogin("DAGO_OWNER")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
                 >
                   <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Owner Dago Hub</span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Executive Org</span>
@@ -1126,7 +1038,7 @@ export default function PublicLandingPage() {
 
                 <button
                   onClick={() => handleQuickModalLogin("TENANT_OWNER_KS")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
                 >
                   <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Owner Kopi Senja</span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Tenant F&B</span>
@@ -1134,7 +1046,7 @@ export default function PublicLandingPage() {
 
                 <button
                   onClick={() => handleQuickModalLogin("CASHIER_SGR")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
                 >
                   <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Kasir POS</span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Singaraja POS</span>
@@ -1142,7 +1054,7 @@ export default function PublicLandingPage() {
 
                 <button
                   onClick={() => handleQuickModalLogin("KITCHEN_SGR")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
                 >
                   <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Chef Dapur (KDS)</span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Antrean Dapur</span>
@@ -1150,7 +1062,7 @@ export default function PublicLandingPage() {
 
                 <button
                   onClick={() => handleQuickModalLogin("WAITER_SGR")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
                 >
                   <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Pramusaji / Waiter</span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Denah Meja</span>
@@ -1158,7 +1070,7 @@ export default function PublicLandingPage() {
 
                 <button
                   onClick={() => handleQuickModalLogin("CUSTOMER_DEMO")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs"
+                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
                 >
                   <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Pelanggan QR</span>
                   <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Customer Portal</span>

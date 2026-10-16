@@ -159,15 +159,16 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                   <span className={isActive ? "text-slate-900 dark:text-slate-100" : ""}>{item.name}</span>
                 </div>
                 {item.module !== "CORE" && (
-                  <div className="flex items-center space-x-1.5">
-                    {item.module === "CO_WORKING" && (
+                  <div className="flex items-center space-x-1.5 flex-shrink-0 ml-1.5">
+                    {item.module === "CO_WORKING" ? (
                       <ProFeatureBadge label="PRO" variant="pro" size="xs" />
+                    ) : (
+                      <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+                        isActive ? "bg-primary/20 dark:bg-primary/30 text-primary dark:text-emerald-300 font-semibold" : "text-slate-400 dark:text-slate-400 font-normal"
+                      }`}>
+                        {item.module}
+                      </span>
                     )}
-                    <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
-                      isActive ? "bg-primary/20 dark:bg-primary/30 text-primary dark:text-emerald-300 font-semibold" : "text-slate-400 dark:text-slate-400 font-normal"
-                    }`}>
-                      {item.module}
-                    </span>
                   </div>
                 )}
               </Link>
