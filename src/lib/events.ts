@@ -22,6 +22,11 @@ const INITIAL_COMMUNITY_EVENTS: CommunityEvent[] = [
     organizerEmail: "baristaguild@dagocreative.id",
     organizerPhone: "+62 812-9876-5432",
     status: "APPROVED",
+    guidelines: [
+      "Bawa apron dan milk pitcher favorit Anda (opsional, pitcher cadangan disediakan).",
+      "Koneksi Wi-Fi publik dan sertifikat partisipasi workshop disediakan gratis.",
+      "Sesi cupping dan kalibrasi sensoris dimulai tepat waktu pukul 14:00 WIB.",
+    ],
     createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
   },
@@ -41,6 +46,11 @@ const INITIAL_COMMUNITY_EVENTS: CommunityEvent[] = [
     organizerEmail: "halo@bandungdev.org",
     organizerPhone: "+62 813-1122-3344",
     status: "APPROVED",
+    guidelines: [
+      "Bawa laptop / device pengujian prototype game buatanmu.",
+      "Tersedia meja display, monitor HDMI, dan colokan listrik di Main Tech Lab.",
+      "Terbuka untuk umum, tester pemain, dan developer game segala level.",
+    ],
     createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
   },
@@ -60,6 +70,11 @@ const INITIAL_COMMUNITY_EVENTS: CommunityEvent[] = [
     organizerEmail: "info@aksarapriangan.id",
     organizerPhone: "+62 817-2233-4455",
     status: "APPROVED",
+    guidelines: [
+      "Seluruh alat cetak risograph, master stensil, dan kertas seni disediakan studio.",
+      "Peserta membawa pulang 10 lembar cetakan poster aksara Sunda 2-warna.",
+      "Disarankan menggunakan pakaian yang siap terkena percikan tinta cetak kedelai.",
+    ],
     createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
   },
@@ -79,6 +94,11 @@ const INITIAL_COMMUNITY_EVENTS: CommunityEvent[] = [
     organizerEmail: "kontak@dagohijau.id",
     organizerPhone: "+62 819-8877-6655",
     status: "APPROVED",
+    guidelines: [
+      "Harap membawa tumbler air minum pribadi dan sarung tangan kain.",
+      "Gunakan pakaian olahraga santai dan sepatu jalan yang nyaman.",
+      "Kumpul di Courtyard Garden Dago Creative Hub 15 menit sebelum kegiatan.",
+    ],
     createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
   },
@@ -140,6 +160,25 @@ function saveEventsToDisk(events: CommunityEvent[]): void {
   } catch (err) {
     console.error("Failed to write events to disk", err);
   }
+}
+
+/**
+ * Parses guidelines input (array of strings or newline-separated string).
+ */
+export function parseGuidelinesInput(input?: string[] | string | null): string[] | null {
+  if (!input) return null;
+  if (Array.isArray(input)) {
+    const sanitized = input.map(sanitizeHtmlText).filter((s) => s.length > 0);
+    return sanitized.length > 0 ? sanitized : null;
+  }
+  if (typeof input === "string") {
+    const sanitized = input
+      .split("\n")
+      .map((line) => sanitizeHtmlText(line.trim()))
+      .filter((s) => s.length > 0);
+    return sanitized.length > 0 ? sanitized : null;
+  }
+  return null;
 }
 
 /**
@@ -241,6 +280,7 @@ export function toPublicEvent(event: CommunityEvent): PublicCommunityEvent {
     externalRegistrationUrl: event.externalRegistrationUrl || null,
     organizerName: event.organizerName,
     status: "APPROVED",
+    guidelines: event.guidelines || null,
     createdAt: event.createdAt,
   };
 }
@@ -460,6 +500,7 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
     organizerName: sanitizeHtmlText(payload.organizerName),
     organizerEmail: payload.organizerEmail.trim().toLowerCase(),
     organizerPhone: payload.organizerPhone.trim(),
+    guidelines: parseGuidelinesInput(payload.guidelines),
     status: "PENDING", // Always PENDING on submission
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -548,6 +589,7 @@ export async function updateEventDetails(
     }
   }
   if (updates.organizerName !== undefined) sanitizedUpdates.organizerName = sanitizeHtmlText(updates.organizerName);
+  if (updates.guidelines !== undefined) sanitizedUpdates.guidelines = parseGuidelinesInput(updates.guidelines);
 
   const updated: CommunityEvent = {
     ...existing,

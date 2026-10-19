@@ -38,6 +38,9 @@ export interface CommunityEvent {
   rejectionReason?: string | null;
   revisionNotes?: string | null;
   
+  // Guidelines & attendee instructions
+  guidelines?: string[] | null;
+
   // Metadata
   createdAt: string;
   updatedAt: string;
@@ -61,6 +64,7 @@ export interface PublicCommunityEvent {
   externalRegistrationUrl?: string | null;
   organizerName: string;
   status: "APPROVED";
+  guidelines?: string[] | null;
   createdAt: string;
 }
 
@@ -78,5 +82,6 @@ export interface EventSubmissionPayload {
   price?: number;
   posterUrl: string;
   externalRegistrationUrl?: string;
+  guidelines?: string[] | string | null;
   honeypot?: string; // Anti-spam trap
 }

@@ -84,8 +84,21 @@ export default function PublicLandingPage() {
         const res = await fetch("/api/events");
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
-          // Display top 3 upcoming approved events
-          setCommunityEvents(json.data.slice(0, 3));
+          const nowMs = Date.now();
+          const upcomingEvents = (json.data as PublicCommunityEvent[])
+            .filter((event) => {
+              if (event.status !== "APPROVED") return false;
+              const endMs = new Date(event.endDate).getTime();
+              return !isNaN(endMs) && endMs >= nowMs;
+            })
+            .sort((a, b) => {
+              const startA = new Date(a.startDate).getTime();
+              const startB = new Date(b.startDate).getTime();
+              return startA - startB;
+            })
+            .slice(0, 3);
+
+          setCommunityEvents(upcomingEvents);
         }
       } catch (err) {
         console.error("Failed to load landing events", err);
@@ -377,7 +390,6 @@ export default function PublicLandingPage() {
                 >
                   <UtensilsCrossed className="w-4 h-4" />
                   <span>Explore F&B</span>
-                  <ArrowRight className="w-4 h-4 ml-1" />
                 </Button>
               </Link>
 
@@ -707,11 +719,10 @@ export default function PublicLandingPage() {
                       {/* Pricing Tag */}
                       <div className="absolute top-3 right-3">
                         <span
-                          className={`text-[10px] font-black px-2.5 py-1 rounded-full shadow-xs backdrop-blur-md ${
-                            evt.isPaid
+                          className={`text-[10px] font-black px-2.5 py-1 rounded-full shadow-xs backdrop-blur-md ${evt.isPaid
                               ? "bg-slate-900/90 text-emerald-400 border border-emerald-500/30"
                               : "bg-[#3B7A57]/90 text-white"
-                          }`}
+                            }`}
                         >
                           {evt.isPaid ? formatCurrencyIDR(evt.price) : "GRATIS"}
                         </span>

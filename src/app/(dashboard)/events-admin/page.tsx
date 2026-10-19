@@ -77,6 +77,7 @@ export default function AdminEventsPage() {
 
   // Edit form state
   const [editFormData, setEditFormData] = useState<Partial<CommunityEvent>>({});
+  const [editGuidelinesText, setEditGuidelinesText] = useState("");
 
   useEffect(() => {
     if (isAuthorized) {
@@ -164,6 +165,14 @@ export default function AdminEventsPage() {
       setIsProcessingAction(true);
       setActionErrorMessage(null);
 
+      const payload = {
+        ...editFormData,
+        guidelines: editGuidelinesText
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean),
+      };
+
       const res = await fetch(`/api/events/${selectedEvent.id}`, {
         method: "PUT",
         headers: {
@@ -172,7 +181,7 @@ export default function AdminEventsPage() {
           "x-user-id": user?.id || "admin-user",
           "x-user-scope": user?.scopeLevel || "ORGANIZATION",
         },
-        body: JSON.stringify(editFormData),
+        body: JSON.stringify(payload),
       });
 
       const json = await res.json();
@@ -205,7 +214,11 @@ export default function AdminEventsPage() {
       price: event.price,
       posterUrl: event.posterUrl,
       externalRegistrationUrl: event.externalRegistrationUrl || "",
+      guidelines: event.guidelines || [],
     });
+    setEditGuidelinesText(
+      Array.isArray(event.guidelines) ? event.guidelines.join("\n") : ""
+    );
     setIsEditModalOpen(true);
   };
 
@@ -686,6 +699,20 @@ export default function AdminEventsPage() {
               {selectedEvent.description}
             </div>
 
+            {/* Guidelines if exists */}
+            {selectedEvent.guidelines && selectedEvent.guidelines.length > 0 && (
+              <div className="p-3 rounded-xl bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800">
+                <span className="font-bold text-xs text-slate-700 dark:text-slate-200 block mb-1">
+                  Panduan & Ketentuan Khusus Acara:
+                </span>
+                <ul className="list-disc pl-4 space-y-1 text-xs text-slate-600 dark:text-slate-300">
+                  {selectedEvent.guidelines.map((g, i) => (
+                    <li key={i}>{g}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Rejection / Revision Notes if exists */}
             {selectedEvent.revisionNotes && (
               <div className="p-3 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300 text-xs">
@@ -941,6 +968,19 @@ export default function AdminEventsPage() {
                   }
                   placeholder="https://..."
                   className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="font-semibold block mb-1">
+                  Panduan & Ketentuan Khusus Acara (1 baris per poin)
+                </label>
+                <textarea
+                  rows={3}
+                  value={editGuidelinesText}
+                  onChange={(e) => setEditGuidelinesText(e.target.value)}
+                  placeholder="Contoh:&#10;Bawa laptop dan charger masing-masing&#10;Dilarang membawa makanan dari luar"
+                  className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-xs"
                 />
               </div>
             </div>

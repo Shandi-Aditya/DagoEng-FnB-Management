@@ -90,6 +90,7 @@ export async function PUT(
       posterUrl: body.posterUrl,
       externalRegistrationUrl: body.externalRegistrationUrl,
       organizerName: body.organizerName,
+      guidelines: body.guidelines,
     };
 
     const updated = await updateEventDetails(id, allowedUpdates);

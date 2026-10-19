@@ -30,6 +30,7 @@ import { MasterProduct } from "@/types/product";
 import { OrderRecord } from "@/types/order";
 import { LoyaltyTier } from "@/types/loyalty";
 import { CoworkingSpaceItem, CoworkingMembershipPlan } from "@/types/coworking";
+import { PublicCommunityEvent } from "@/types/event";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { isTenantActive, getTenantStatus, getAllFnbTenants, getTenantName } from "@/lib/tenant";
 import {
@@ -258,6 +259,63 @@ function CustomerPortalContent() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [menuCatFilter, setMenuCatFilter] = useState<string>("ALL");
   const [spaceTypeFilter, setSpaceTypeFilter] = useState<string>("ALL");
+
+  // Community Events State for Portal HOME Tab
+  const [communityEvents, setCommunityEvents] = useState<PublicCommunityEvent[]>([]);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(true);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+
+  const fetchPortalEvents = async () => {
+    try {
+      setIsLoadingEvents(true);
+      setEventsError(null);
+      const res = await fetch("/api/events");
+      const json = await res.json();
+      if (res.ok && json.success && Array.isArray(json.data)) {
+        const now = Date.now();
+        const activeUpcomingEvents = (json.data as PublicCommunityEvent[])
+          .filter((evt) => {
+            if (!evt.endDate || !evt.startDate) return false;
+            const endMs = new Date(evt.endDate).getTime();
+            const startMs = new Date(evt.startDate).getTime();
+            // Discard invalid dates safely
+            if (isNaN(endMs) || isNaN(startMs)) return false;
+            // Only include upcoming or currently ongoing events
+            return endMs >= now;
+          })
+          .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime())
+          .slice(0, 3);
+
+        setCommunityEvents(activeUpcomingEvents);
+      } else {
+        setEventsError(json.error || "Gagal memuat agenda event komunitas.");
+      }
+    } catch (err: any) {
+      console.error("Failed to load customer portal events:", err);
+      setEventsError(err.message || "Kesalahan jaringan saat memuat event.");
+    } finally {
+      setIsLoadingEvents(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPortalEvents();
+  }, []);
+
+  const formatPortalEventDate = (isoStr: string) => {
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleDateString("id-ID", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return isoStr;
+    }
+  };
 
   // Transition state
   const [isTabLoading, setIsTabLoading] = useState<boolean>(false);
@@ -1528,6 +1586,19 @@ function CustomerPortalContent() {
                         <Laptop className="w-3.5 h-3.5 mr-1.5 text-brand-orange" />
                         <span>Booking Ruang Kerja</span>
                       </Button>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const el = document.getElementById("portal-community-events");
+                          if (el) el.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        size="sm"
+                        variant="outline"
+                        className="font-bold bg-[#3B7A57]/20 border-[#52B788]/40 text-emerald-300 hover:bg-[#3B7A57]/30 text-xs h-10 px-4 rounded-xl hover:-translate-y-0.5 transition-all"
+                      >
+                        <Calendar className="w-3.5 h-3.5 mr-1.5 text-[#52B788]" />
+                        <span>Event Komunitas</span>
+                      </Button>
                     </div>
                   </div>
                 ) : (
@@ -1618,6 +1689,19 @@ function CustomerPortalContent() {
                       >
                         <Award className="w-3.5 h-3.5 mr-1.5 text-amber-400" />
                         <span>Tukar Voucher ({LOYALTY_VOUCHERS.length})</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const el = document.getElementById("portal-community-events");
+                          if (el) el.scrollIntoView({ behavior: "smooth" });
+                        }}
+                        size="sm"
+                        variant="outline"
+                        className="font-bold bg-[#3B7A57]/20 border-[#52B788]/40 text-emerald-300 hover:bg-[#3B7A57]/30 text-xs h-10 px-4 rounded-xl hover:-translate-y-0.5 transition-all"
+                      >
+                        <Calendar className="w-3.5 h-3.5 mr-1.5 text-[#52B788]" />
+                        <span>Event Komunitas</span>
                       </Button>
                     </div>
                   </div>
@@ -1799,6 +1883,166 @@ function CustomerPortalContent() {
                     </div>
                   </div>
                 )}
+
+                {/* Agenda & Event Komunitas Dago Hub */}
+                <div id="portal-community-events" className="space-y-3.5 scroll-mt-24">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-black text-base text-slate-900 dark:text-white flex items-center space-x-2">
+                        <Calendar className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                        <span>Agenda & Event Komunitas Dago Hub</span>
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Lokakarya kreatif, meetup komunitas, dan agenda menarik di Dago Creative Hub
+                      </p>
+                    </div>
+                    <Link href="/events">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-xs font-bold text-[#3B7A57] dark:text-[#52B788] hover:bg-[#3B7A57]/10 dark:hover:bg-[#52B788]/10 h-8 px-2.5 rounded-xl flex items-center cursor-pointer"
+                      >
+                        <span>Semua Event</span>
+                        <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                      </Button>
+                    </Link>
+                  </div>
+
+                  {/* Loading State */}
+                  {isLoadingEvents ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {[1, 2, 3].map((idx) => (
+                        <Card
+                          key={idx}
+                          className="p-4 rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-xs animate-pulse space-y-3"
+                        >
+                          <div className="h-32 bg-slate-200 dark:bg-slate-800 rounded-2xl w-full" />
+                          <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-md w-3/4" />
+                          <div className="h-3 bg-slate-100 dark:bg-slate-800/60 rounded-md w-1/2" />
+                        </Card>
+                      ))}
+                    </div>
+                  ) : eventsError ? (
+                    /* Error State */
+                    <Card className="p-5 rounded-3xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 text-center space-y-2">
+                      <div className="flex items-center justify-center space-x-2 text-rose-700 dark:text-rose-400 text-xs font-bold">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>{eventsError}</span>
+                      </div>
+                      <Button
+                        onClick={fetchPortalEvents}
+                        size="sm"
+                        variant="outline"
+                        className="text-xs font-bold bg-white dark:bg-slate-900 border-rose-300 text-rose-700 dark:text-rose-400 hover:bg-rose-100/50 h-8 rounded-xl cursor-pointer"
+                      >
+                        Coba Muat Ulang
+                      </Button>
+                    </Card>
+                  ) : communityEvents.length === 0 ? (
+                    /* Empty State */
+                    <Card className="p-8 text-center bg-white dark:bg-slate-900/60 rounded-3xl border border-slate-200/90 dark:border-slate-800 text-slate-500 dark:text-slate-400 space-y-2">
+                      <Calendar className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-1" />
+                      <p className="font-bold text-xs text-slate-700 dark:text-slate-300">
+                        Belum ada event komunitas mendatang yang terjadwal.
+                      </p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                        Punya rencana lokakarya atau meetup? Ajukan event komunitas Anda secara gratis.
+                      </p>
+                      <div className="pt-2">
+                        <Link href="/events/submit">
+                          <Button
+                            size="sm"
+                            className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl h-8 px-4 cursor-pointer"
+                          >
+                            Pasang Event Sekarang
+                          </Button>
+                        </Link>
+                      </div>
+                    </Card>
+                  ) : (
+                    /* Events Grid (Max 3 APPROVED items) */
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {communityEvents.slice(0, 3).map((evt) => (
+                        <Card
+                          key={evt.id}
+                          className="group rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:border-[#52B788]/60 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
+                        >
+                          <div>
+                            {/* Thumbnail & Badges */}
+                            <div className="relative h-36 w-full bg-slate-950 overflow-hidden">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={evt.posterUrl}
+                                alt={evt.title}
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
+
+                              {/* Category Badge */}
+                              <div className="absolute top-2.5 left-2.5">
+                                <Badge className="bg-slate-950/80 backdrop-blur-md text-emerald-300 border border-emerald-500/30 text-[9px] font-bold">
+                                  {evt.category}
+                                </Badge>
+                              </div>
+
+                              {/* Price Badge */}
+                              <div className="absolute top-2.5 right-2.5">
+                                <span
+                                  className={`text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs backdrop-blur-md ${
+                                    evt.isPaid
+                                      ? "bg-slate-900/90 text-emerald-400 border border-emerald-500/30"
+                                      : "bg-[#3B7A57]/90 text-white"
+                                  }`}
+                                >
+                                  {evt.isPaid ? formatCurrencyIDR(evt.price) : "GRATIS"}
+                                </span>
+                              </div>
+
+                              {/* Organizer Name */}
+                              <div className="absolute bottom-2 left-2.5 text-[10px] text-slate-300 font-medium">
+                                Oleh: <span className="font-bold text-white">{evt.organizerName}</span>
+                              </div>
+                            </div>
+
+                            {/* Event Details */}
+                            <div className="p-4 space-y-2">
+                              <h4 className="font-bold text-xs text-slate-900 dark:text-white line-clamp-1 group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                                {evt.title}
+                              </h4>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                                {evt.description}
+                              </p>
+
+                              <div className="pt-2 space-y-1 text-[10px] text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800">
+                                <div className="flex items-center space-x-1.5">
+                                  <Clock className="w-3 h-3 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                                  <span className="truncate">{formatPortalEventDate(evt.startDate)} WIB</span>
+                                </div>
+                                <div className="flex items-center space-x-1.5">
+                                  <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span className="truncate">{evt.location}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action Link to Detail Page */}
+                          <div className="p-4 pt-0">
+                            <Link href={`/events/${evt.id}`}>
+                              <Button
+                                size="sm"
+                                className="w-full h-8 text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] dark:bg-[#3B7A57] dark:hover:bg-[#488e68] text-white rounded-xl shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-1 cursor-pointer"
+                              >
+                                <span>Lihat Detail Event</span>
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </Button>
+                            </Link>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* Explore Mitra Kuliner (F&B Partners Grid) */}
                 <div className="space-y-3.5">

@@ -229,18 +229,29 @@ export default function EventDetailPage() {
                 Panduan Menghadiri Acara
               </h2>
               <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-2.5">
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
-                  <span>Harap hadir 15 menit sebelum acara dimulai untuk registrasi ulang di venue.</span>
-                </li>
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
-                  <span>Koneksi Wi-Fi publik berkecepatan tinggi tersedia gratis untuk seluruh peserta acara.</span>
-                </li>
-                <li className="flex items-start space-x-2">
-                  <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
-                  <span>Tersedia aneka menu artisan coffee dan pastry dari tenant kuliner DAGO Creative Hub.</span>
-                </li>
+                {event.guidelines && event.guidelines.length > 0 ? (
+                  event.guidelines.map((guide, idx) => (
+                    <li key={idx} className="flex items-start space-x-2">
+                      <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
+                      <span>{guide}</span>
+                    </li>
+                  ))
+                ) : (
+                  <>
+                    <li className="flex items-start space-x-2">
+                      <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
+                      <span>Harap hadir 15 menit sebelum acara dimulai untuk registrasi ulang di venue.</span>
+                    </li>
+                    <li className="flex items-start space-x-2">
+                      <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
+                      <span>Koneksi Wi-Fi publik berkecepatan tinggi tersedia gratis untuk seluruh peserta acara.</span>
+                    </li>
+                    <li className="flex items-start space-x-2">
+                      <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
+                      <span>Tersedia aneka menu artisan coffee dan pastry dari tenant kuliner DAGO Creative Hub.</span>
+                    </li>
+                  </>
+                )}
               </ul>
             </Card>
           </div>
