@@ -163,16 +163,15 @@ export default function EventsListingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-emerald-100/70 dark:bg-emerald-900/40 border border-emerald-300/50 dark:border-emerald-700/50 text-[#3B7A57] dark:text-[#52B788] text-xs font-bold mb-4">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Ekosistem Kreatif, Kolaborasi & Kopi Spesialti</span>
+            <span>Marketplace Event & Komunitas Kreatif Singaraja</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl font-black text-slate-900 dark:text-white tracking-tight mb-4">
-            Event Komunitas di Dago Creative Hub
+            Agenda & Event Komunitas Singaraja
           </h1>
 
           <p className="max-w-2xl mx-auto text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed mb-8">
-            Temukan berbagai workshop artisan, talkshow industri kreatif, meetup pengembang game,
-            dan perjumpaan komunitas di ruang terbuka kolaboratif kami.
+            Temukan berbagai lokakarya kreatif, talkshow, meetup komunitas, dan agenda kolaborasi menarik dari berbagai penyelenggara di kawasan Singaraja dan sekitarnya.
           </p>
 
           {/* Search Bar */}

@@ -647,7 +647,7 @@ export default function PublicLandingPage() {
                 Event Komunitas & Ruang Kolaborasi
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                Temukan lokakarya, perjumpaan komunitas, dan sharing session menarik yang diselenggarakan oleh komunitas lokal di DAGO Creative Hub.
+                Temukan lokakarya, perjumpaan komunitas, dan sharing session menarik yang diselenggarakan oleh berbagai komunitas lokal di kawasan Singaraja dan sekitarnya.
               </p>
             </div>
 

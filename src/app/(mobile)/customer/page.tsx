@@ -1884,16 +1884,16 @@ function CustomerPortalContent() {
                   </div>
                 )}
 
-                {/* Agenda & Event Komunitas Dago Hub */}
+                {/* Agenda & Event Komunitas Singaraja */}
                 <div id="portal-community-events" className="space-y-3.5 scroll-mt-24">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-black text-base text-slate-900 dark:text-white flex items-center space-x-2">
                         <Calendar className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
-                        <span>Agenda & Event Komunitas Dago Hub</span>
+                        <span>Agenda & Event Komunitas Singaraja</span>
                       </h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Lokakarya kreatif, meetup komunitas, dan agenda menarik di Dago Creative Hub
+                        Lokakarya kreatif, meetup komunitas, dan agenda menarik di Singaraja & sekitarnya
                       </p>
                     </div>
                     <Link href="/events">

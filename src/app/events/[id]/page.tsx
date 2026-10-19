@@ -248,7 +248,7 @@ export default function EventDetailPage() {
                     </li>
                     <li className="flex items-start space-x-2">
                       <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
-                      <span>Tersedia aneka menu artisan coffee dan pastry dari tenant kuliner DAGO Creative Hub.</span>
+                      <span>Tersedia aneka menu makanan, kopi, dan minuman pendamping di sekitar lokasi acara.</span>
                     </li>
                   </>
                 )}
@@ -339,7 +339,7 @@ export default function EventDetailPage() {
                 Punya Komunitas atau Acara Sendiri?
               </span>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                Manfaatkan venue, fasilitas audiovisual, dan publikasi di platform Dago Creative Hub.
+                Publikasikan agenda acaramu dan jangkau audiens komunitas di kawasan Singaraja dan sekitarnya.
               </p>
               <Link href="/events/submit" className="block">
                 <Button

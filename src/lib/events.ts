@@ -481,7 +481,7 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
 
   if (isDuplicate) {
     throw new Error(
-      "Pengajuan event dengan judul serupa dari email ini baru saja dikirimkan dan sedang dalam antrean review. Mohon menunggu proses kurasi tim Dago Creative Hub."
+      "Pengajuan event dengan judul serupa dari email ini baru saja dikirimkan dan sedang dalam antrean review. Mohon menunggu proses kurasi tim kurator platform."
     );
   }
 

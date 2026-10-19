@@ -51,7 +51,7 @@ export default function SubmitEventPage() {
     description: "",
     startDate: "",
     endDate: "",
-    location: "Dago Creative Hub, Bandung",
+    location: "Singaraja, Bali",
     isPaid: false,
     price: 0,
     posterUrl: "",
@@ -253,8 +253,8 @@ export default function SubmitEventPage() {
             </h1>
 
             <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 max-w-lg mx-auto leading-relaxed mb-6">
-              Terima kasih telah mengajukan event di Dago Creative Hub. Tim kurator kami akan
-              memeriksa kelayakan dan ketersediaan ruang dalam waktu 1x24 jam kerja.
+              Terima kasih telah mengajukan event di platform komunitas kami. Tim kurator kami akan
+              memeriksa kelayakan agenda dalam waktu 1x24 jam kerja.
             </p>
 
             <div className="p-4 rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-left text-xs space-y-2 mb-8 max-w-md mx-auto shadow-sm">
@@ -296,7 +296,7 @@ export default function SubmitEventPage() {
                     description: "",
                     startDate: "",
                     endDate: "",
-                    location: "Dago Creative Hub, Bandung",
+                    location: "Singaraja, Bali",
                     isPaid: false,
                     price: 0,
                     posterUrl: "",
@@ -318,14 +318,14 @@ export default function SubmitEventPage() {
             <div className="mb-8">
               <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-800 dark:text-emerald-400 text-xs font-semibold mb-3">
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>Terbuka untuk Komunitas Kreatif Bandung & Sekitarnya</span>
+                <span>Terbuka untuk Komunitas Kreatif Singaraja & Sekitarnya</span>
               </div>
               <h1 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mb-2">
                 Pasang Event Komunitas
               </h1>
               <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                Publikasikan lokakarya, meetup kreatif, atau temu komunitasmu di ekosistem Dago Creative Hub.
-                Pengajuan tidak memerlukan pembuatan akun dan akan ditinjau oleh Admin sebelum tayang di publik.
+                Publikasikan lokakarya, meetup kreatif, atau temu komunitasmu di platform marketplace event Singaraja.
+                Pengajuan tidak memerlukan pembuatan akun dan akan ditinjau oleh Admin kurator sebelum tayang di publik.
               </p>
             </div>
 
@@ -393,7 +393,7 @@ export default function SubmitEventPage() {
                         required
                         value={formData.organizerName}
                         onChange={handleInputChange}
-                        placeholder="Contoh: Dago Coffee Enthusiasts / Studio Priangan"
+                        placeholder="Contoh: Komunitas Kopi Singaraja / Buleleng Creative Collective"
                         className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
                       />
                     </div>
@@ -500,7 +500,7 @@ export default function SubmitEventPage() {
                           required
                           value={formData.location}
                           onChange={handleInputChange}
-                          placeholder="Contoh: Amphitheater Lt. 2 / Co-Working Lounge"
+                          placeholder="Contoh: Gedung Kesenian Singaraja / Kafe / Dago Hub Lt. 2"
                           className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
                         />
                       </div>
@@ -719,7 +719,7 @@ export default function SubmitEventPage() {
                 <Info className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
                 <div className="leading-relaxed">
                   <span className="font-bold block">Kebijakan Moderasi Komunitas:</span>
-                  Semua pengajuan akan berstatus <span className="font-semibold underline">PENDING</span> dan tidak akan langsung muncul pada Landing Page publik sebelum diperiksa oleh admin Dago Creative Hub.
+                  Semua pengajuan akan berstatus <span className="font-semibold underline">PENDING</span> dan tidak akan langsung muncul pada Landing Page publik sebelum diperiksa oleh tim kurator platform.
                 </div>
               </div>
 
