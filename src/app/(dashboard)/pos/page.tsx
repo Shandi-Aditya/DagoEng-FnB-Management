@@ -66,6 +66,7 @@ import {
   User,
   ShieldCheck,
   Building,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -154,6 +155,8 @@ export default function POSPage() {
   const [isPosOpenShiftModalOpen, setIsPosOpenShiftModalOpen] = useState<boolean>(false);
   const [posOpenShiftName, setPosOpenShiftName] = useState<string>("Shift Pagi (08:00 - 16:00)");
   const [posOpeningCashInput, setPosOpeningCashInput] = useState<number>(500000);
+  const [isSubmittingShift, setIsSubmittingShift] = useState<boolean>(false);
+  const [previewSpacePhoto, setPreviewSpacePhoto] = useState<CoworkingSpaceItem | null>(null);
 
   // Mount state for SSR Hydration safety
   const [isMounted, setIsMounted] = useState(false);
@@ -946,6 +949,29 @@ export default function POSPage() {
     setPosToast(`Booking ${createdBooking.bookingCode} berhasil diproses!`);
   };
 
+  // Reset co-working form for a fresh booking
+  const handleResetCoworkingForm = () => {
+    setCwMemberId("");
+    setCwGuestName("");
+    setCwGuestPhone("");
+    setCwGuestEmail("");
+    setCwNotes("");
+    setCwVoucherCode("");
+    setCwAppliedPromo(null);
+    setCwVoucherValidationMsg(null);
+    setCwCustomerType("MEMBER");
+    setCwUsageType("PERSONAL");
+    setCwCompanyName("");
+    setCwDuration(2);
+    setCwStartTime("09:00");
+    setCwDate(new Date().toISOString().split("T")[0]);
+    setCwPaymentMethod("QRIS");
+    setIsCoworkReceiptModalOpen(false);
+    setLastCoworkReceiptData(null);
+    setPosToast("Form booking baru siap. Pilih ruang dan isi detail tamu.");
+    setTimeout(() => setPosToast(""), 3500);
+  };
+
   return (
     <div className="space-y-4">
       {/* POS Toast Notification */}
@@ -975,18 +1001,18 @@ export default function POSPage() {
         <div className="flex flex-wrap items-center gap-2">
           {/* Shift Status Indicator / Quick Action for Cashier */}
           {activeShift ? (
-            <div className="flex items-center space-x-2 bg-emerald-50 border border-emerald-300 px-3 py-1 rounded-xl text-xs shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <div className="flex items-center space-x-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 px-3 py-1.5 rounded-xl text-xs shadow-2xs">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
               <div className="flex flex-col">
-                <span className="font-bold text-emerald-900 leading-tight">{activeShift.shiftName}</span>
-                <span className="text-[10px] text-emerald-700 font-mono">Modal: {formatCurrencyIDR(activeShift.openingCash)}</span>
+                <span className="font-bold text-emerald-900 dark:text-emerald-200 leading-tight text-xs">{activeShift.shiftName}</span>
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono">Modal: {formatCurrencyIDR(activeShift.openingCash)}</span>
               </div>
               <Button
                 size="sm"
                 variant="outline"
                 type="button"
                 onClick={() => setIsClosingShiftModalOpen(true)}
-                className="h-6 text-[10px] font-bold px-2 border-emerald-400 text-emerald-800 hover:bg-emerald-100 rounded-lg ml-1 shadow-2xs"
+                className="min-h-[34px] text-xs font-bold px-2.5 border-emerald-400 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-lg ml-1.5 shadow-2xs touch-manipulation"
                 title="Tutup Shift & Rekonsiliasi Kasir"
               >
                 Tutup Shift
@@ -997,10 +1023,10 @@ export default function POSPage() {
               size="sm"
               type="button"
               onClick={() => setIsPosOpenShiftModalOpen(true)}
-              className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-1.5"
+              className="min-h-[40px] px-3.5 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-xs flex items-center space-x-2 transition-all active:scale-98 touch-manipulation"
               title="Buka Shift Kasir Baru di POS"
             >
-              <Clock className="w-3.5 h-3.5" />
+              <Clock className="w-4 h-4 shrink-0" />
               <span>+ Buka Shift Kasir</span>
             </Button>
           )}
@@ -1590,8 +1616,9 @@ export default function POSPage() {
       {posMode === "COWORKING" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 animate-in fade-in duration-200">
           {/* Left Column: Workspace Catalog (Col 7 / 12) */}
-          <div className="lg:col-span-7 xl:col-span-8 space-y-4">
-            <div className="space-y-3.5 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+          <div className="lg:col-span-7 xl:col-span-8 space-y-3.5">
+            {/* Search & Filter Header */}
+            <div className="space-y-3 bg-white dark:bg-[#1E293B] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
@@ -1599,7 +1626,7 @@ export default function POSPage() {
                   value={cwSearchQuery}
                   onChange={(e) => setCwSearchQuery(e.target.value)}
                   placeholder="Cari ruang kerja, area, fasilitas..."
-                  className="w-full pl-10 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 shadow-2xs"
+                  className="w-full pl-10 pr-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]/20 focus:border-[#3B7A57] shadow-2xs"
                 />
               </div>
 
@@ -1616,10 +1643,11 @@ export default function POSPage() {
                     key={f.key}
                     type="button"
                     onClick={() => setCwSpaceTypeFilter(f.key)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-colors ${cwSpaceTypeFilter === f.key
-                      ? "bg-slate-900 text-white shadow-xs"
-                      : "bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100"
-                      }`}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                      cwSpaceTypeFilter === f.key
+                        ? "bg-[#3B7A57] text-white shadow-xs"
+                        : "bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                    }`}
                   >
                     {f.label}
                   </button>
@@ -1627,8 +1655,8 @@ export default function POSPage() {
               </div>
             </div>
 
-            {/* Workspaces Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {/* Workspaces Compact Grid (Photos collapsed for maximum operational clarity) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {filteredCwSpaces.map((space) => {
                 const isSelected = selectedSpace?.id === space.id;
                 const startH = parseHour(cwStartTime);
@@ -1638,81 +1666,91 @@ export default function POSPage() {
                   <div
                     key={space.id}
                     onClick={() => setCwSelectedSpaceId(space.id)}
-                    className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 ${isSelected
-                      ? "bg-blue-50/40 border-blue-600 ring-2 ring-blue-600/20 shadow-md"
-                      : "bg-white border-slate-200 hover:border-slate-400 hover:shadow-sm"
-                      }`}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer flex flex-col justify-between space-y-2.5 ${
+                      isSelected
+                        ? "bg-emerald-50/50 dark:bg-emerald-950/30 border-[#3B7A57] dark:border-[#52B788] ring-2 ring-[#3B7A57]/20 shadow-sm"
+                        : "bg-white dark:bg-[#1E293B] border-slate-200 dark:border-slate-800 hover:border-[#3B7A57]/60 hover:shadow-xs"
+                    }`}
                   >
-                    <div className="space-y-2.5">
-                      {space.imageUrl ? (
-                        <div className="relative w-full h-28 rounded-xl overflow-hidden bg-slate-100 border border-slate-100">
-                          <img
-                            src={space.imageUrl}
-                            alt={space.name}
-                            className="w-full h-full object-cover"
-                          />
+                    {/* Header Row: Type Tag, Name, Availability Badge */}
+                    <div className="space-y-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-[#3B7A57] dark:text-[#52B788] block">
+                            {space.type.replace("_", " ")}
+                          </span>
+                          <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate">
+                            {space.name}
+                          </h4>
                         </div>
-                      ) : (
-                        <div className="w-full h-16 rounded-xl bg-slate-100 border border-slate-100 flex items-center justify-center text-slate-400">
-                          <Laptop className="w-6 h-6 opacity-30" />
-                        </div>
-                      )}
 
-                      <div className="space-y-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">
-                              {space.type.replace("_", " ")}
-                            </span>
-                            <h4 className="font-bold text-sm text-slate-900 line-clamp-1">{space.name}</h4>
-                            <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                              <MapPin className="w-3 h-3 text-slate-400" />
-                              <span>{space.area}</span>
-                            </p>
-                          </div>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border shrink-0 ${
+                            avail.isAvailable
+                              ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                              : "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                          }`}
+                        >
+                          {avail.isAvailable ? "Tersedia" : "Terisi"}
+                        </span>
+                      </div>
 
-                          <span
-                            className={`text-[9px] font-bold px-2 py-0.5 rounded-md border ${avail.isAvailable
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-rose-50 text-rose-700 border-rose-200"
-                              }`}
-                          >
-                            {avail.isAvailable ? "Tersedia" : "Terisi"}
+                      {/* Location & Capacity Row */}
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
+                        <div className="flex items-center space-x-2">
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>{space.area}</span>
+                          </span>
+                          <span>•</span>
+                          <span className="flex items-center gap-1">
+                            <Users className="w-3 h-3 text-slate-400 shrink-0" />
+                            <span>{space.capacity} Tamu</span>
                           </span>
                         </div>
 
-                        {space.description && (
-                          <p className="text-[11px] text-slate-500 line-clamp-1 leading-relaxed">
-                            {space.description}
-                          </p>
+                        {/* Optional Quick Photo Preview Trigger */}
+                        {space.imageUrl && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewSpacePhoto(space);
+                            }}
+                            className="text-[10px] font-semibold text-[#3B7A57] dark:text-[#52B788] hover:underline flex items-center gap-1 p-0.5"
+                            title="Lihat foto ruang"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>Foto</span>
+                          </button>
                         )}
-
-                        {/* Amenities */}
-                        <div className="flex flex-wrap gap-1 pt-1">
-                          {space.amenities.slice(0, 3).map((a, idx) => (
-                            <span key={idx} className="text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                              • {a}
-                            </span>
-                          ))}
-                        </div>
                       </div>
                     </div>
 
-                    <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                      <div className="flex items-center space-x-1 text-slate-600">
-                        <Users className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="font-medium text-[11px]">{space.capacity} Tamu</span>
-                      </div>
-
-                      <div className="flex items-center space-x-2">
-                        <div className="text-right">
-                          <span className="font-mono font-black text-xs text-blue-600">
-                            {formatCurrencyIDR(space.hourlyRate)}
+                    {/* Bottom Row: Rate & Selection Indicator */}
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-mono font-bold text-sm text-[#3B7A57] dark:text-[#52B788]">
+                          {formatCurrencyIDR(space.hourlyRate)}
+                        </span>
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500"> /jam</span>
+                        {space.dailyRate && (
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-1.5 hidden sm:inline">
+                            (Harian: {formatCurrencyIDR(space.dailyRate)})
                           </span>
-                          <span className="text-[20x] text-slate-400"> /jam</span>
-                        </div>
-
+                        )}
                       </div>
+
+                      {isSelected ? (
+                        <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788] flex items-center gap-1 bg-emerald-100/70 dark:bg-emerald-900/40 px-2 py-0.5 rounded-md">
+                          <Check className="w-3 h-3" />
+                          <span>Dipilih</span>
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                          Klik untuk pilih
+                        </span>
+                      )}
                     </div>
                   </div>
                 );
@@ -1722,39 +1760,48 @@ export default function POSPage() {
 
           {/* Right Column: Reservation & Checkout Panel (Col 5 / 12) */}
           <div className="lg:col-span-5 xl:col-span-4 flex flex-col space-y-3">
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-4">
-              {/* Workspace Summary Header */}
+            <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 space-y-3.5 text-slate-900 dark:text-slate-100">
+              {/* Workspace Summary Header (Compact, no redundant photo) */}
               {selectedSpace && (
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                  {selectedSpace.imageUrl && (
-                    <div className="relative w-full h-24 rounded-lg overflow-hidden border border-slate-200 bg-slate-100">
-                      <img
-                        src={selectedSpace.imageUrl}
-                        alt={selectedSpace.name}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <span className="text-[9px] uppercase font-bold text-slate-400">{selectedSpace.type.replace("_", " ")}</span>
-                      <h4 className="font-black text-xs text-slate-900">{selectedSpace.name}</h4>
-                      <p className="text-[10px] text-slate-500">{selectedSpace.area}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="font-black text-xs text-blue-600 font-mono">
-                        {formatCurrencyIDR(selectedSpace.hourlyRate)}
-                      </span>
-                      <span className="text-[10px] text-slate-400 block">/jam</span>
-                    </div>
+                <div className="p-3 bg-emerald-50/40 dark:bg-emerald-950/30 rounded-xl border border-emerald-200/60 dark:border-emerald-800/50 flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-[9px] uppercase font-bold text-[#3B7A57] dark:text-[#52B788]">
+                      {selectedSpace.type.replace("_", " ")}
+                    </span>
+                    <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100">
+                      {selectedSpace.name}
+                    </h4>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                      <MapPin className="w-3 h-3" />
+                      <span>{selectedSpace.area}</span>
+                      <span>•</span>
+                      <Users className="w-3 h-3" />
+                      <span>{selectedSpace.capacity} Tamu</span>
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold text-xs text-[#3B7A57] dark:text-[#52B788] font-mono">
+                      {formatCurrencyIDR(selectedSpace.hourlyRate)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 block">/jam</span>
+                    {selectedSpace.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewSpacePhoto(selectedSpace)}
+                        className="text-[9px] font-semibold text-[#3B7A57] dark:text-[#52B788] hover:underline flex items-center gap-0.5 justify-end mt-0.5"
+                      >
+                        <Eye className="w-2.5 h-2.5" />
+                        <span>Lihat Foto</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
 
               {/* Date Input */}
               <div className="space-y-1 text-xs">
-                <label className="font-bold text-slate-700 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
                   <span>Tanggal Booking</span>
                 </label>
                 <input
@@ -1762,18 +1809,18 @@ export default function POSPage() {
                   value={cwDate}
                   min={new Date().toISOString().split("T")[0]}
                   onChange={(e) => setCwDate(e.target.value)}
-                  className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none"
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-[#3B7A57]"
                 />
               </div>
 
               {/* Pilihan Paket Durasi Sewa (Min. 2 Jam) */}
               <div className="space-y-2 pt-1 text-xs">
                 <div className="flex items-center justify-between">
-                  <label className="font-bold text-slate-700 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Pilihan Paket Durasi Sewa</span>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                    <span>Paket Durasi Sewa</span>
                   </label>
-                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 rounded border border-amber-200 dark:border-amber-800">
                     Min. 2 Jam
                   </span>
                 </div>
@@ -1812,25 +1859,26 @@ export default function POSPage() {
                         key={pkg.hours}
                         type="button"
                         onClick={() => setCwDuration(pkg.hours)}
-                        className={`p-2.5 rounded-xl border text-left transition-all ${isPkgActive
-                          ? "bg-slate-900 text-white border-slate-900 shadow-sm ring-2 ring-slate-900/20"
-                          : "bg-slate-50 hover:bg-slate-100/80 border-slate-200 text-slate-800"
-                          }`}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          isPkgActive
+                            ? "bg-[#3B7A57] text-white border-[#3B7A57] shadow-xs ring-2 ring-[#3B7A57]/20"
+                            : "bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                        }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-[11px]">
-                            {pkg.title}
-                          </span>
+                          <span className="font-bold text-[11px]">{pkg.title}</span>
                           <span
-                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${isPkgActive ? "bg-white/20 text-white" : "bg-slate-200/80 text-slate-600"
-                              }`}
+                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                              isPkgActive ? "bg-white/20 text-white" : "bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                            }`}
                           >
                             {pkg.tag}
                           </span>
                         </div>
                         <div
-                          className={`text-xs font-mono font-black mt-1 ${isPkgActive ? "text-amber-300" : "text-blue-700"
-                            }`}
+                          className={`text-xs font-mono font-bold mt-1 ${
+                            isPkgActive ? "text-amber-200" : "text-[#3B7A57] dark:text-[#52B788]"
+                          }`}
                         >
                           {formatCurrencyIDR(pkg.price)}
                         </div>
@@ -1839,13 +1887,13 @@ export default function POSPage() {
                   })}
                 </div>
 
-                {/* Custom / Ubah Durasi Lainnya */}
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-slate-500 font-medium">Ubah / Durasi Kustom:</span>
+                {/* Custom Durasi Dropdown */}
+                <div className="pt-1.5 flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Ubah Durasi Kustom:</span>
                   <select
                     value={cwDuration}
                     onChange={(e) => setCwDuration(Number(e.target.value))}
-                    className="p-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-900 outline-none"
+                    className="p-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-[#3B7A57]"
                   >
                     <option value={2}>2 Jam (Minimal Booking)</option>
                     <option value={3}>3 Jam</option>
@@ -1860,41 +1908,41 @@ export default function POSPage() {
                 </div>
               </div>
 
-              {/* Time Slots Selector with Availability Matrix & Automatic End Time */}
+              {/* Time Slots Selector */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <label className="font-bold text-slate-700 flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-blue-600" />
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
                     <span>Jam Sewa (Operasional 09:00 - 18:00)</span>
                   </label>
                   <button
                     type="button"
                     onClick={() => setCwStartTime("09:00")}
-                    className="text-[10px] text-blue-600 font-bold hover:underline"
+                    className="text-[10px] text-[#3B7A57] dark:text-[#52B788] font-bold hover:underline"
                   >
                     Set Jam Buka (09:00)
                   </button>
                 </div>
 
-                <div className="p-2.5 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs space-y-1">
+                <div className="p-2.5 bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/50 rounded-xl text-xs space-y-1">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-600">Jam Mulai (Start):</span>
+                    <span className="text-slate-600 dark:text-slate-300">Jam Mulai (Start):</span>
                     <input
                       type="time"
                       value={cwStartTime}
                       min="09:00"
                       max="18:00"
                       onChange={(e) => setCwStartTime(e.target.value)}
-                      className="px-2 py-0.5 bg-white border border-blue-300 rounded font-mono font-bold text-xs text-slate-900 outline-none"
+                      className="px-2 py-0.5 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded font-mono font-bold text-xs text-slate-900 dark:text-slate-100 outline-none"
                     />
                   </div>
-                  <div className="flex justify-between items-center text-blue-900 font-bold pt-1 border-t border-blue-100">
+                  <div className="flex justify-between items-center text-emerald-900 dark:text-emerald-300 font-bold pt-1 border-t border-emerald-100 dark:border-emerald-900/50">
                     <span>Estimasi Selesai (End):</span>
                     <span className="font-mono text-sm">{calculateEndTime(cwStartTime, cwDuration)} WITA</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-1 max-h-28 overflow-y-auto p-1 bg-slate-50 rounded-xl border border-slate-200/80">
+                <div className="grid grid-cols-4 gap-1 max-h-24 overflow-y-auto p-1 bg-slate-50 dark:bg-slate-900/70 rounded-xl border border-slate-200/80 dark:border-slate-800">
                   {COWORKING_TIME_SLOTS.map((slot) => {
                     const startH = parseHour(slot);
                     const avail = selectedSpace
@@ -1908,15 +1956,16 @@ export default function POSPage() {
                         type="button"
                         disabled={!avail.isAvailable}
                         onClick={() => setCwStartTime(slot)}
-                        className={`py-1.5 px-1 rounded-lg text-center transition-all flex flex-col items-center justify-center ${!avail.isAvailable
-                          ? "bg-rose-50 border border-rose-200 text-rose-400 cursor-not-allowed opacity-60 line-through"
-                          : isSelected
-                            ? "bg-slate-900 text-white shadow-xs font-black ring-1 ring-slate-900 scale-105"
-                            : "bg-white border border-slate-200 text-slate-700 hover:bg-blue-50"
-                          }`}
+                        className={`py-1.5 px-1 rounded-lg text-center transition-all flex flex-col items-center justify-center ${
+                          !avail.isAvailable
+                            ? "bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-400 cursor-not-allowed opacity-60 line-through"
+                            : isSelected
+                            ? "bg-[#3B7A57] text-white shadow-xs font-bold ring-1 ring-[#3B7A57]"
+                            : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-700"
+                        }`}
                       >
                         <span className="text-[11px] font-mono">{slot}</span>
-                        <span className={`text-[8px] font-bold ${!avail.isAvailable ? "text-rose-600" : isSelected ? "text-blue-200" : "text-emerald-600"}`}>
+                        <span className={`text-[8px] font-bold ${!avail.isAvailable ? "text-rose-600 dark:text-rose-400" : isSelected ? "text-emerald-100" : "text-emerald-600 dark:text-emerald-400"}`}>
                           {avail.isAvailable ? "Tersedia" : "Terisi"}
                         </span>
                       </button>
@@ -1925,25 +1974,25 @@ export default function POSPage() {
                 </div>
               </div>
 
-              {/* Tipe Penggunaan (Personal vs Group / Company) */}
-              <div className="space-y-1.5 pt-2 border-t border-slate-100 text-xs">
+              {/* Tipe Penggunaan */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
                 <div className="flex items-center justify-between">
-                  <label className="font-bold text-slate-700 flex items-center gap-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                     <Building className="w-3.5 h-3.5 text-slate-500" />
                     <span>Tipe Penggunaan</span>
                   </label>
-                  <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                  <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[10px] font-bold">
                     <button
                       type="button"
                       onClick={() => setCwUsageType("PERSONAL")}
-                      className={`px-2 py-0.5 rounded ${cwUsageType === "PERSONAL" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500"}`}
+                      className={`px-2 py-0.5 rounded ${cwUsageType === "PERSONAL" ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs" : "text-slate-500 dark:text-slate-400"}`}
                     >
                       Personal
                     </button>
                     <button
                       type="button"
                       onClick={() => setCwUsageType("GROUP")}
-                      className={`px-2 py-0.5 rounded ${cwUsageType === "GROUP" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500"}`}
+                      className={`px-2 py-0.5 rounded ${cwUsageType === "GROUP" ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs" : "text-slate-500 dark:text-slate-400"}`}
                     >
                       Group / Company
                     </button>
@@ -1956,30 +2005,30 @@ export default function POSPage() {
                     placeholder="Nama Instansi / Perusahaan / Group *"
                     value={cwCompanyName}
                     onChange={(e) => setCwCompanyName(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none"
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 )}
               </div>
 
               {/* Customer / Guest Selection */}
-              <div className="space-y-2 pt-2 border-t border-slate-100">
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <div className="flex items-center justify-between text-xs">
-                  <label className="font-bold text-slate-700 flex items-center gap-1">
+                  <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                     <User className="w-3.5 h-3.5 text-slate-500" />
                     <span>Identitas Pelanggan / Tamu</span>
                   </label>
-                  <div className="flex items-center space-x-1 bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                  <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[10px] font-bold">
                     <button
                       type="button"
                       onClick={() => setCwCustomerType("MEMBER")}
-                      className={`px-2 py-0.5 rounded ${cwCustomerType === "MEMBER" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500"}`}
+                      className={`px-2 py-0.5 rounded ${cwCustomerType === "MEMBER" ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs" : "text-slate-500 dark:text-slate-400"}`}
                     >
                       Member
                     </button>
                     <button
                       type="button"
                       onClick={() => setCwCustomerType("WALK_IN")}
-                      className={`px-2 py-0.5 rounded ${cwCustomerType === "WALK_IN" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-500"}`}
+                      className={`px-2 py-0.5 rounded ${cwCustomerType === "WALK_IN" ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs" : "text-slate-500 dark:text-slate-400"}`}
                     >
                       Walk-in
                     </button>
@@ -1990,7 +2039,7 @@ export default function POSPage() {
                   <select
                     value={cwMemberId}
                     onChange={(e) => setCwMemberId(e.target.value)}
-                    className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 outline-none"
+                    className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 outline-none focus:ring-2 focus:ring-[#3B7A57]"
                   >
                     <option value="">-- Pilih Member Terdaftar ({membersList.length}) --</option>
                     {membersList.map((m) => (
@@ -2006,7 +2055,7 @@ export default function POSPage() {
                       placeholder="Nama Lengkap Tamu *"
                       value={cwGuestName}
                       onChange={(e) => setCwGuestName(e.target.value)}
-                      className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none"
+                      className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-[#3B7A57]"
                     />
                     <div className="grid grid-cols-2 gap-1.5">
                       <input
@@ -2014,25 +2063,40 @@ export default function POSPage() {
                         placeholder="No. WhatsApp / HP"
                         value={cwGuestPhone}
                         onChange={(e) => setCwGuestPhone(e.target.value)}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none"
+                        className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 outline-none"
                       />
                       <input
                         type="email"
                         placeholder="Email Tamu"
                         value={cwGuestEmail}
                         onChange={(e) => setCwGuestEmail(e.target.value)}
-                        className="w-full p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 outline-none"
+                        className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 outline-none"
                       />
                     </div>
                   </div>
                 )}
               </div>
 
+              {/* Notes / Catatan Booking */}
+              <div className="space-y-1 pt-1 text-xs">
+                <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <span>📝</span>
+                  <span>Catatan Booking (Opsional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Contoh: Butuh kursi tambahan, minta di lantai 2, dll."
+                  value={cwNotes}
+                  onChange={(e) => setCwNotes(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-[#3B7A57] resize-none leading-relaxed placeholder:text-slate-400"
+                />
+              </div>
+
               {/* Voucher / Promo Co-Working */}
-              <div className="space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+              <div className="space-y-2 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
                 <div className="flex items-center justify-between text-xs">
-                  <label className="font-bold text-slate-800 flex items-center gap-1">
-                    <Tag className="w-3.5 h-3.5 text-blue-600" />
+                  <label className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
                     <span>Voucher Promo Co-Working</span>
                   </label>
                   {cwAppliedPromo && (
@@ -2056,12 +2120,12 @@ export default function POSPage() {
                     placeholder="Kode: COWORK50 / DAGO20"
                     value={cwVoucherCode}
                     onChange={(e) => setCwVoucherCode(e.target.value.toUpperCase())}
-                    className="flex-1 px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold uppercase text-slate-900 outline-none"
+                    className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-mono font-bold uppercase text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-[#3B7A57]"
                   />
                   <Button
                     type="button"
                     onClick={() => handleApplyCoworkVoucher()}
-                    className="h-8 px-3 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs"
+                    className="h-8 px-3 text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-xs"
                   >
                     Terapkan
                   </Button>
@@ -2069,10 +2133,11 @@ export default function POSPage() {
 
                 {cwVoucherValidationMsg && (
                   <div
-                    className={`p-2 rounded-lg text-[11px] font-medium flex items-center space-x-1.5 ${cwVoucherValidationMsg.type === "SUCCESS"
-                      ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-                      : "bg-rose-50 border border-rose-200 text-rose-800"
-                      }`}
+                    className={`p-2 rounded-lg text-[11px] font-medium flex items-center space-x-1.5 ${
+                      cwVoucherValidationMsg.type === "SUCCESS"
+                        ? "bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
+                        : "bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300"
+                    }`}
                   >
                     {cwVoucherValidationMsg.type === "SUCCESS" ? (
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
@@ -2085,32 +2150,32 @@ export default function POSPage() {
               </div>
 
               {/* Price Breakdown */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1.5 text-xs">
-                <div className="flex justify-between text-slate-600">
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-600 dark:text-slate-400">
                   <span>Sewa ({cwDuration} Jam)</span>
-                  <span>{formatCurrencyIDR(cwPricing.originalSubtotal)}</span>
+                  <span className="font-mono">{formatCurrencyIDR(cwPricing.originalSubtotal)}</span>
                 </div>
                 {cwPricing.discountAmount > 0 && (
-                  <div className="flex justify-between text-emerald-600 font-bold">
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
                     <span>Diskon Promo {cwAppliedPromo ? `(${cwAppliedPromo.code || cwAppliedPromo.name})` : ""}</span>
-                    <span>-{formatCurrencyIDR(cwPricing.discountAmount)}</span>
+                    <span className="font-mono">-{formatCurrencyIDR(cwPricing.discountAmount)}</span>
                   </div>
                 )}
                 {isTaxEnabled && (
-                  <div className="flex justify-between text-slate-600">
+                  <div className="flex justify-between text-slate-600 dark:text-slate-400">
                     <span>Pajak PB1 ({taxRatePercent}%)</span>
-                    <span>{formatCurrencyIDR(cwPricing.tax)}</span>
+                    <span className="font-mono">{formatCurrencyIDR(cwPricing.tax)}</span>
                   </div>
                 )}
-                <div className="flex justify-between font-black text-slate-900 pt-1.5 border-t border-slate-200 text-sm">
+                <div className="flex justify-between font-black text-slate-900 dark:text-slate-100 pt-1.5 border-t border-slate-200 dark:border-slate-800 text-sm">
                   <span>Total Tagihan</span>
-                  <span className="text-blue-600 font-black">{formatCurrencyIDR(cwPricing.total)}</span>
+                  <span className="text-[#3B7A57] dark:text-[#52B788] font-black font-mono">{formatCurrencyIDR(cwPricing.total)}</span>
                 </div>
               </div>
 
               {/* Payment Method Selector */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-700">Metode Pembayaran Kasir</label>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Metode Pembayaran Kasir</label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {[
                     { id: "QRIS", label: "QRIS", desc: "e-Wallet" },
@@ -2121,13 +2186,14 @@ export default function POSPage() {
                       key={pm.id}
                       type="button"
                       onClick={() => setCwPaymentMethod(pm.id as POSPaymentMethod)}
-                      className={`p-2 rounded-xl border text-center transition-all ${cwPaymentMethod === pm.id
-                        ? "bg-slate-900 text-white border-slate-900 shadow-xs"
-                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
-                        }`}
+                      className={`p-2 rounded-xl border text-center transition-all ${
+                        cwPaymentMethod === pm.id
+                          ? "bg-[#3B7A57] text-white border-[#3B7A57] shadow-xs"
+                          : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                      }`}
                     >
-                      <span className="text-xs font-black block">{pm.label}</span>
-                      <span className={`text-[9px] block ${cwPaymentMethod === pm.id ? "text-slate-300" : "text-slate-400"}`}>
+                      <span className="text-xs font-bold block">{pm.label}</span>
+                      <span className={`text-[9px] block ${cwPaymentMethod === pm.id ? "text-emerald-100" : "text-slate-400 dark:text-slate-500"}`}>
                         {pm.desc}
                       </span>
                     </button>
@@ -2135,16 +2201,112 @@ export default function POSPage() {
                 </div>
               </div>
 
-              {/* Action Button */}
-              <Button
-                type="button"
-                onClick={handleCompleteCoworkingPayment}
-                className="w-full h-11 bg-slate-900 hover:bg-slate-800 text-white font-black text-xs rounded-xl shadow-md space-x-2"
-              >
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <span>Bayar & Cetak Nota Co-Working ({formatCurrencyIDR(cwPricing.total)})</span>
-                <ArrowRight className="w-4 h-4" />
-              </Button>
+              {/* Action Buttons */}
+              <div className="space-y-2">
+                <Button
+                  type="button"
+                  onClick={handleCompleteCoworkingPayment}
+                  className="w-full min-h-[48px] h-12 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-sm rounded-xl shadow-md space-x-2 transition-all active:scale-98 touch-manipulation"
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-300" />
+                  <span>Bayar & Cetak Nota ({formatCurrencyIDR(cwPricing.total)})</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+                <button
+                  type="button"
+                  onClick={handleResetCoworkingForm}
+                  className="w-full py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
+                >
+                  ↺ Reset Form / Booking Baru
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workspace Photo Preview Modal (Triggered optionally when cashier or customer clicks "Foto") */}
+      {previewSpacePhoto && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1E293B] rounded-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {previewSpacePhoto.imageUrl && (
+              <div className="relative w-full h-56 bg-slate-100 dark:bg-slate-800">
+                <img
+                  src={previewSpacePhoto.imageUrl}
+                  alt={previewSpacePhoto.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )}
+            <div className="p-5 space-y-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[#3B7A57] dark:text-[#52B788]">
+                    {previewSpacePhoto.type.replace("_", " ")}
+                  </span>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                    {previewSpacePhoto.name}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>{previewSpacePhoto.area}</span>
+                    <span>•</span>
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Kapasitas {previewSpacePhoto.capacity} Tamu</span>
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="font-mono font-bold text-sm text-[#3B7A57] dark:text-[#52B788]">
+                    {formatCurrencyIDR(previewSpacePhoto.hourlyRate)}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block">/ jam</span>
+                </div>
+              </div>
+
+              {previewSpacePhoto.description && (
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  {previewSpacePhoto.description}
+                </p>
+              )}
+
+              {previewSpacePhoto.amenities?.length > 0 && (
+                <div>
+                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Fasilitas:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {previewSpacePhoto.amenities.map((a, i) => (
+                      <span
+                        key={i}
+                        className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                      >
+                        ✓ {a}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setPreviewSpacePhoto(null)}
+                  className="rounded-xl min-h-[40px] px-4 font-bold"
+                >
+                  Tutup
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setCwSelectedSpaceId(previewSpacePhoto.id);
+                    setPreviewSpacePhoto(null);
+                  }}
+                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-xl min-h-[40px] px-4"
+                >
+                  Pilih Ruang Ini
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -2271,10 +2433,7 @@ export default function POSPage() {
         <CoworkingReceiptModal
           isOpen={isCoworkReceiptModalOpen}
           booking={lastCoworkReceiptData}
-          onClose={() => {
-            setIsCoworkReceiptModalOpen(false);
-            setLastCoworkReceiptData(null);
-          }}
+          onClose={handleResetCoworkingForm}
         />
       )}
 
@@ -2307,37 +2466,70 @@ export default function POSPage() {
 
       {/* 7. Quick Open Shift Modal for POS Cashier */}
       {isPosOpenShiftModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full border border-slate-200 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1E293B] rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-slate-900 dark:text-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center space-x-2">
-                <Clock className="w-5 h-5 text-emerald-600" />
-                <h3 className="text-base font-bold text-slate-900">Buka Shift Kasir Baru (POS)</h3>
+                <Clock className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788]" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Buka Shift Kasir Baru (POS)</h3>
               </div>
               <button
-                onClick={() => setIsPosOpenShiftModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+                type="button"
+                onClick={() => !isSubmittingShift && setIsPosOpenShiftModalOpen(false)}
+                disabled={isSubmittingShift}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form
-              onSubmit={(e) => {
+              onSubmit={async (e) => {
                 e.preventDefault();
-                openShift(posOpenShiftName, Number(posOpeningCashInput), user?.name || "Kasir Bertugas");
+                if (isSubmittingShift) return;
+                setIsSubmittingShift(true);
+
+                const targetOutlet = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
+                const targetCashier = user?.name || "Kasir Bertugas";
+
+                try {
+                  const res = await fetch("/api/shifts", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      action: "OPEN",
+                      shiftName: posOpenShiftName,
+                      startingCash: Number(posOpeningCashInput) || 0,
+                      cashierName: targetCashier,
+                      outletId: targetOutlet,
+                    }),
+                  });
+                  const data = await res.json().catch(() => null);
+                  if (res.status === 409) {
+                    setPosToast(data?.error || "Sesi kasir aktif sudah berjalan.");
+                    setTimeout(() => setPosToast(""), 4000);
+                  }
+                } catch (err) {
+                  console.warn("[Shift Open Sync Warn]:", err);
+                }
+
+                openShift(posOpenShiftName, Number(posOpeningCashInput) || 0, targetCashier);
+                setIsSubmittingShift(false);
                 setIsPosOpenShiftModalOpen(false);
-                setPosToast(`Shift "${posOpenShiftName}" berhasil dibuka dengan Modal Kas ${formatCurrencyIDR(Number(posOpeningCashInput))}. Selamat bertugas!`);
+                setPosToast(`Shift "${posOpenShiftName}" berhasil dibuka dengan Modal Kas ${formatCurrencyIDR(Number(posOpeningCashInput) || 0)}. Selamat bertugas!`);
                 setTimeout(() => setPosToast(""), 4000);
               }}
-              className="space-y-3 text-xs"
+              className="space-y-4 text-xs"
             >
               <div>
-                <label className="block text-slate-700 font-bold mb-1">Nama Sesi Shift</label>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1.5">
+                  Nama Sesi Shift
+                </label>
                 <select
                   value={posOpenShiftName}
                   onChange={(e) => setPosOpenShiftName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white text-xs font-semibold"
+                  disabled={isSubmittingShift}
+                  className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
                 >
                   <option value="Shift Pagi (08:00 - 16:00)">Shift Pagi (08:00 - 16:00)</option>
                   <option value="Shift Sore (14:00 - 22:00)">Shift Sore (14:00 - 22:00)</option>
@@ -2346,36 +2538,79 @@ export default function POSPage() {
               </div>
 
               <div>
-                <label className="block text-slate-700 font-bold mb-1">Modal Kas Awal di Laci / Cash Drawer (Rp) *</label>
-                <input
-                  type="number"
-                  required
-                  min={0}
-                  step={10000}
-                  value={posOpeningCashInput}
-                  onChange={(e) => setPosOpeningCashInput(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono text-sm font-bold text-slate-800"
-                  placeholder="Contoh: 500000"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">Uang pecahan fisik di laci kasir untuk modal uang kembalian.</p>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1.5">
+                  Modal Kas Awal di Laci / Cash Drawer (Rp) *
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-2.5 text-xs text-slate-400 font-mono">Rp</span>
+                  <input
+                    type="number"
+                    required
+                    min={0}
+                    step={10000}
+                    value={posOpeningCashInput}
+                    onChange={(e) => setPosOpeningCashInput(Number(e.target.value))}
+                    disabled={isSubmittingShift}
+                    className="w-full pl-10 pr-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl font-mono text-sm font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    placeholder="Contoh: 500000"
+                  />
+                </div>
+
+                {/* Quick Denomination Presets for Tablet */}
+                <div className="pt-2">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block mb-1">
+                    Preset Cepat Tablet:
+                  </span>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[0, 100000, 200000, 500000].map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setPosOpeningCashInput(amt)}
+                        disabled={isSubmittingShift}
+                        className={`py-1.5 px-2 rounded-lg text-[11px] font-mono font-bold transition-all border ${
+                          posOpeningCashInput === amt
+                            ? "bg-[#3B7A57] text-white border-[#3B7A57] shadow-xs"
+                            : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        {amt === 0 ? "Rp 0" : `${amt / 1000}k`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5">
+                  Uang pecahan fisik di laci kasir untuk modal uang kembalian transaksi tunai.
+                </p>
               </div>
 
-              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-200">
+              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <Button
                   type="button"
                   variant="outline"
-                  size="sm"
                   onClick={() => setIsPosOpenShiftModalOpen(false)}
-                  className="rounded-xl"
+                  disabled={isSubmittingShift}
+                  className="rounded-xl min-h-[44px] px-4 font-bold border-slate-300 dark:border-slate-700"
                 >
                   Batal
                 </Button>
                 <Button
                   type="submit"
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs"
+                  disabled={isSubmittingShift}
+                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-xl min-h-[44px] px-5 shadow-xs flex items-center space-x-2"
                 >
-                  Buka Shift & Mulai Transaksi
+                  {isSubmittingShift ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Membuka Sesi...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Clock className="w-4 h-4" />
+                      <span>Buka Shift & Mulai Transaksi</span>
+                    </>
+                  )}
                 </Button>
               </div>
             </form>

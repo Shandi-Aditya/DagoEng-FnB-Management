@@ -34,10 +34,23 @@ export async function POST(req: NextRequest) {
     const { action, startingCash, actualCash, notes, shiftId, cashierName, outletId } = body;
 
     if (action === "OPEN") {
+      const targetOutlet = outletId || "outlet-sgr";
+      const existingOpen = mockShifts.find((s) => s.status === "OPEN" && s.outletId === targetOutlet);
+      if (existingOpen) {
+        return NextResponse.json(
+          {
+            error: `Sesi kasir aktif (${existingOpen.cashierName}) sudah berjalan untuk outlet ini. Tutup sesi sebelumnya terlebih dahulu.`,
+            shift: existingOpen,
+            isAlreadyOpen: true,
+          },
+          { status: 409 }
+        );
+      }
+
       const newShift: ShiftData = {
         id: `shift-${Date.now()}`,
         cashierName: cashierName || "Front Office Cashier",
-        outletId: outletId || "outlet-sgr",
+        outletId: targetOutlet,
         startingCash: Number(startingCash) || 0,
         status: "OPEN",
         openedAt: new Date().toISOString(),

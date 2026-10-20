@@ -279,9 +279,19 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
   };
 
   const openShift = (shiftName: string, openingCash: number, cashierName?: string): ShiftRecord => {
-    const nowFormatted = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) + " WITA";
     const targetOutletId = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
     const targetOutletName = activeOutlet?.name || "Singaraja";
+
+    // Guard against multiple concurrent active shifts for the same outlet
+    const existingActive = shifts.find(
+      (s) => (s.status === "ACTIVE" || s.status === "OPEN") && s.outletId === targetOutletId
+    );
+    if (existingActive) {
+      console.warn(`[EmployeeShift] Shift aktif sudah berjalan untuk outlet ${targetOutletName}:`, existingActive.id);
+      return existingActive;
+    }
+
+    const nowFormatted = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) + " WITA";
 
     const newShift: ShiftRecord = {
       id: `shf-${Date.now()}`,
