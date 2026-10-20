@@ -131,29 +131,3 @@ dagoeng-fnb-management/
 ```
 
 ---
-
-## 🚀 Quick Start
-
-### 1. Install Dependencies
-```bash
-npm install
-```
-
-### 2. Configure Environment Variables
-Copy `.env.example` ke `.env`:
-```bash
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/dagoeng_fnb_dev?schema=public"
-ENABLE_ROLE_SIMULATOR="true"
-```
-
-### 3. Run Type-Check & Automated Tests
-```bash
-npm run type-check
-npm test
-```
-
-### 4. Jalankan Development Server
-```bash
-npm run dev
-```
-Akses aplikasi melalui browser di `http://localhost:3000`.
