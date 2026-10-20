@@ -21,10 +21,20 @@ import {
   ExternalLink,
   Menu,
   Globe,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
-export function Header({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void } = {}) {
+export function Header({
+  onOpenMobileMenu,
+  isSidebarCollapsed,
+  onToggleSidebar,
+}: {
+  onOpenMobileMenu?: () => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
+} = {}) {
   const router = useRouter();
   const { user } = useAuth();
   const { activeOutletId, outlets, isAllOutlets, setOutlet } = useOutlet();
@@ -52,8 +62,9 @@ export function Header({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void } =
 
   return (
     <header className="h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border-b border-slate-200/90 dark:border-slate-800 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30 gap-2 transition-colors duration-200">
-      {/* Left: Hamburger & Organization Title & Scope Context */}
-      <div className="flex items-center space-x-2 sm:space-x-4 min-w-0">
+      {/* Left: Hamburger & Desktop Sidebar Toggle & Organization Title */}
+      <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+        {/* Mobile & Tablet Drawer Trigger (<1024px) */}
         <button
           onClick={onOpenMobileMenu}
           className="lg:hidden p-2 -ml-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors shrink-0"
@@ -62,6 +73,19 @@ export function Header({ onOpenMobileMenu }: { onOpenMobileMenu?: () => void } =
         >
           <Menu className="w-5 h-5" />
         </button>
+
+        {/* Desktop & Tablet Landscape Sidebar Toggle (only shown when sidebar is closed/hidden) */}
+        {isSidebarCollapsed && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="hidden lg:flex p-2 -ml-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors shrink-0 items-center justify-center min-h-[40px] min-w-[40px] touch-manipulation"
+            title="Buka Menu Navigasi"
+            aria-label="Buka Menu Navigasi"
+          >
+            <PanelLeftOpen className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788]" />
+          </button>
+        )}
 
         <div className="flex items-center space-x-2 truncate">
           <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-1.5 truncate">

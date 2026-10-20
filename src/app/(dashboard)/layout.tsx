@@ -16,6 +16,27 @@ export default function DashboardLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Restore client preference for sidebar collapse state
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("dago_sidebar_collapsed");
+      if (saved !== null) {
+        setIsSidebarCollapsed(saved === "true");
+      }
+    } catch (_) {}
+  }, []);
+
+  const handleToggleSidebar = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("dago_sidebar_collapsed", String(next));
+      } catch (_) {}
+      return next;
+    });
+  };
 
   // Operational screens that benefit from maximum horizontal space
   const isFullWidthPage = pathname === "/pos" || pathname === "/kitchen" || pathname === "/tables";
@@ -41,9 +62,18 @@ export default function DashboardLayout({
     <div className="min-h-screen flex flex-col bg-[#F8FAFC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E2E8F0] transition-colors duration-200">
       <div className="flex-1 flex overflow-hidden">
         {/* Desktop Sidebar (visible on large screens >= 1024px) */}
-        <div className="hidden lg:flex flex-shrink-0 transition-all duration-300">
-          <Sidebar />
-        </div>
+        <aside
+          className={`hidden lg:flex flex-shrink-0 transition-all duration-300 ease-in-out ${
+            isSidebarCollapsed
+              ? "w-0 -ml-64 opacity-0 pointer-events-none overflow-hidden"
+              : "w-64 opacity-100"
+          }`}
+        >
+          <Sidebar
+            isCollapsed={false}
+            onToggleCollapse={handleToggleSidebar}
+          />
+        </aside>
 
         {/* Mobile & Tablet Slide-over Drawer (< 1024px) */}
         {isMobileMenuOpen && (
@@ -56,20 +86,27 @@ export default function DashboardLayout({
               <div className="absolute top-3 right-3 z-20">
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100"
+                  className="p-2 min-h-[44px] min-w-[44px] rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center justify-center touch-manipulation"
                   aria-label="Tutup Menu"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <Sidebar onNavigate={() => setIsMobileMenuOpen(false)} />
+              <Sidebar
+                isCollapsed={false}
+                onNavigate={() => setIsMobileMenuOpen(false)}
+              />
             </div>
           </div>
         )}
 
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-          <Header onOpenMobileMenu={() => setIsMobileMenuOpen(true)} />
+          <Header
+            onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+            isSidebarCollapsed={isSidebarCollapsed}
+            onToggleSidebar={handleToggleSidebar}
+          />
           <main
             className={`flex-1 w-full animate-in fade-in duration-200 ${
               isFullWidthPage

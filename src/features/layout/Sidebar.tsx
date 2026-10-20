@@ -56,36 +56,54 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Calendar: <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />,
 };
 
-export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
+export function Sidebar({
+  onNavigate,
+  isCollapsed: controlledCollapsed,
+  onToggleCollapse,
+}: {
+  onNavigate?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
+} = {}) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, activeOrgModules, logout } = useAuth();
   const { t, settings } = useSettings();
   const { activeOutlet } = useOutlet();
   const [isCashDrawerModalOpen, setIsCashDrawerModalOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [localCollapsed, setLocalCollapsed] = useState(false);
   const { filteredOrders } = useOrders();
   const { activeShift } = useEmployeeShift();
   const navItems = getAuthorizedNavItems(user, activeOrgModules);
 
-  // Restore client preference for sidebar minimize
+  // Determine active collapsed state (controlled vs local)
+  const isDrawer = Boolean(onNavigate);
+  const isCollapsed = isDrawer ? false : (controlledCollapsed !== undefined ? controlledCollapsed : localCollapsed);
+
+  // Restore client preference for sidebar minimize if not controlled
   React.useEffect(() => {
-    try {
-      const saved = localStorage.getItem("dago_sidebar_collapsed");
-      if (saved !== null) {
-        setIsCollapsed(saved === "true");
-      }
-    } catch (_) {}
-  }, []);
+    if (controlledCollapsed === undefined && !isDrawer) {
+      try {
+        const saved = localStorage.getItem("dago_sidebar_collapsed");
+        if (saved !== null) {
+          setLocalCollapsed(saved === "true");
+        }
+      } catch (_) {}
+    }
+  }, [controlledCollapsed, isDrawer]);
 
   const toggleCollapsed = () => {
-    setIsCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("dago_sidebar_collapsed", String(next));
-      } catch (_) {}
-      return next;
-    });
+    if (onToggleCollapse) {
+      onToggleCollapse();
+    } else {
+      setLocalCollapsed((prev) => {
+        const next = !prev;
+        try {
+          localStorage.setItem("dago_sidebar_collapsed", String(next));
+        } catch (_) {}
+        return next;
+      });
+    }
   };
 
   const isCashier = user?.role?.slug === "CASHIER";
@@ -131,10 +149,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   };
 
   return (
-    <aside
-      className={`${
-        isCollapsed ? "w-20" : "w-64"
-      } bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between h-full select-none transition-all duration-300 ease-in-out`}
+    <div
+      className="w-64 flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between h-full select-none"
     >
       {/* Brand Header & Minimize Toggle */}
       <div>
@@ -166,15 +182,17 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={toggleCollapsed}
-                className="p-2 min-h-[44px] min-w-[44px] rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center shrink-0 touch-manipulation"
-                title="Perkecil Sidebar"
-                aria-label="Perkecil Sidebar"
-              >
-                <PanelLeftClose className="w-5 h-5" />
-              </button>
+              {!isDrawer && (
+                <button
+                  type="button"
+                  onClick={toggleCollapsed}
+                  className="p-2 min-h-[44px] min-w-[44px] rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center shrink-0 touch-manipulation"
+                  title="Perkecil / Tutup Sidebar"
+                  aria-label="Perkecil / Tutup Sidebar"
+                >
+                  <PanelLeftClose className="w-5 h-5" />
+                </button>
+              )}
             </>
           ) : (
             <>
@@ -349,6 +367,6 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
           taxRatePercent={settings.taxRatePercent}
         />
       )}
-    </aside>
+    </div>
   );
 }

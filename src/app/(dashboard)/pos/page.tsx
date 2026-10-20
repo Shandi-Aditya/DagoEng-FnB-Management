@@ -990,96 +990,57 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* Clean Single-Row POS Operational Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pb-2.5 border-b border-slate-200 dark:border-slate-800">
-        <div className="flex flex-wrap items-center gap-3">
+      {/* Sleek Minimalist POS Mode Switcher (Ultra-focused, zero header clutter) */}
+      <div className="flex items-center justify-between gap-3 pb-1">
+        <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800/90 p-1 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setPosMode("FNB")}
+            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 touch-manipulation ${
+              posMode === "FNB"
+                ? "bg-[#3B7A57] text-white shadow-xs"
+                : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <Utensils className="w-3.5 h-3.5" />
+            <span>Kuliner F&B</span>
+            {cartItems.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.2 bg-white text-[#3B7A57] rounded-full text-[10px] font-black">
+                {cartItems.reduce((s, i) => s + i.quantity, 0)}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPosMode("COWORKING")}
+            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 touch-manipulation ${
+              posMode === "COWORKING"
+                ? "bg-[#3B7A57] text-white shadow-xs"
+                : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+            }`}
+          >
+            <Laptop className="w-3.5 h-3.5" />
+            <span>Co-Working & Ruang Kerja</span>
+          </button>
+        </div>
+
+        {/* Status Shift Otomatis (Subtil & Informatif) */}
+        {activeShift && (
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/20 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center shrink-0">
-              <Calculator className="w-4 h-4" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 leading-tight">
-                  POS Kasir
-                </h1>
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-                  {user?.name || "Kasir"} • {activeOutlet?.name || "Singaraja"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* POS Mode Switcher: F&B vs Co-Working */}
-          <div className="flex items-center bg-slate-100 dark:bg-slate-800/90 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1 rounded-xl">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Shift Otomatis: <strong className="text-slate-700 dark:text-slate-200">{activeShift.shiftName}</strong></span>
+            </span>
             <button
               type="button"
-              onClick={() => setPosMode("FNB")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 touch-manipulation ${
-                posMode === "FNB"
-                  ? "bg-[#3B7A57] text-white shadow-xs"
-                  : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-              }`}
+              onClick={() => setIsClosingShiftModalOpen(true)}
+              className="text-[11px] font-bold text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 px-2.5 py-1 rounded-lg transition-all"
+              title="Tutup Shift & Rekonsiliasi Kasir"
             >
-              <Utensils className="w-3.5 h-3.5" />
-              <span>F&B</span>
-              {cartItems.length > 0 && (
-                <span className="ml-0.5 px-1.5 py-0.2 bg-white text-[#3B7A57] rounded-full text-[10px] font-black">
-                  {cartItems.reduce((s, i) => s + i.quantity, 0)}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => setPosMode("COWORKING")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 touch-manipulation ${
-                posMode === "COWORKING"
-                  ? "bg-[#3B7A57] text-white shadow-xs"
-                  : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-              }`}
-            >
-              <Laptop className="w-3.5 h-3.5" />
-              <span>Co-Working</span>
+              Tutup Shift
             </button>
           </div>
-        </div>
-
-        {/* Right side: Single Shift Status Controller */}
-        <div className="flex items-center gap-2">
-          {activeShift ? (
-            <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 px-2.5 py-1 rounded-xl text-xs shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-              <div className="flex flex-col text-[11px] leading-tight">
-                <span className="font-bold text-emerald-900 dark:text-emerald-200">
-                  {activeShift.shiftName}
-                </span>
-                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono">
-                  Modal: {formatCurrencyIDR(activeShift.openingCash)}
-                </span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                type="button"
-                onClick={() => setIsClosingShiftModalOpen(true)}
-                className="min-h-[36px] text-xs font-bold px-2.5 border-emerald-400 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 rounded-lg ml-1 shadow-2xs touch-manipulation"
-                title="Tutup Shift & Rekonsiliasi Kasir"
-              >
-                Tutup Shift
-              </Button>
-            </div>
-          ) : (
-            <Button
-              size="sm"
-              type="button"
-              onClick={() => setIsPosOpenShiftModalOpen(true)}
-              className="min-h-[40px] px-3.5 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-xs flex items-center gap-1.5 transition-all active:scale-98 touch-manipulation"
-              title="Buka Shift Kasir Baru di POS"
-            >
-              <Clock className="w-4 h-4 shrink-0" />
-              <span>+ Buka Shift Kasir</span>
-            </Button>
-          )}
-        </div>
+        )}
       </div>
 
       {/* ==================================================== */}

@@ -194,6 +194,67 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
 
   const activeShift = filteredShifts.find((s) => s.status === "ACTIVE" || s.status === "OPEN") || null;
 
+  // Auto-detect & buka shift kasir aktif saat kasir/user login ke sistem
+  useEffect(() => {
+    if (!isInitialized || !user) return;
+    const targetOutletId = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
+    const targetOutletName = activeOutlet?.name || "Singaraja";
+
+    // Cek apakah sudah ada shift yang berstatus ACTIVE / OPEN untuk outlet ini
+    const existingActive = shifts.find(
+      (s) => (s.status === "ACTIVE" || s.status === "OPEN") && (s.outletId === targetOutletId || s.outletId === "ALL")
+    );
+
+    // Jika shift baru saja ditutup secara manual pada sesi saat ini, jangan auto-open langsung
+    const wasManuallyClosed =
+      typeof window !== "undefined" &&
+      sessionStorage.getItem(`dagoeng_shift_closed_${user.id}_${targetOutletId}`) === "true";
+    if (wasManuallyClosed) return;
+
+    if (!existingActive) {
+      const curHour = new Date().getHours();
+      let autoShiftName = "Shift Pagi (08:00 - 16:00)";
+      if (curHour >= 15 && curHour < 23) {
+        autoShiftName = "Shift Sore (15:00 - 23:00)";
+      } else if (curHour >= 23 || curHour < 8) {
+        autoShiftName = "Shift Malam (23:00 - 08:00)";
+      }
+
+      const nowFormatted = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) + " WITA";
+      const autoNewShift: ShiftRecord = {
+        id: `shf-auto-${Date.now()}`,
+        shiftName: autoShiftName,
+        outletId: targetOutletId,
+        outletName: targetOutletName,
+        assignedCashierId: user.id || "emp-002",
+        assignedCashierName: user.name || "Kasir Bertugas",
+        startTime: nowFormatted,
+        status: "ACTIVE",
+        openingCash: 500000,
+        cashSales: 0,
+        nonCashSales: 0,
+        refundAmount: 0,
+        expectedCash: 500000,
+        actualCash: 500000,
+        cashVariance: 0,
+      };
+
+      setShifts((prev) => [autoNewShift, ...prev]);
+
+      logActivity({
+        module: "EMPLOYEES_SHIFT",
+        action: "OPEN_SHIFT",
+        recordId: autoNewShift.id,
+        newValue: `Shift Otomatis: ${autoShiftName} (Kasir: ${autoNewShift.assignedCashierName})`,
+        description: `Sistem otomatis mengaktifkan shift kasir saat ${autoNewShift.assignedCashierName} login`,
+        reason: "Otomatisasi shift kasir aktif",
+        status: "SUCCESS",
+        outletId: targetOutletId,
+        outletName: targetOutletName,
+      });
+    }
+  }, [isInitialized, user, activeOutletId, activeOutlet?.name, shifts, logActivity]);
+
   const createEmployee = (empData: Omit<EmployeeProfile, "id" | "employeeNumber">): EmployeeProfile => {
     const code = empData.outletName.slice(0, 3).toUpperCase();
     const newEmp: EmployeeProfile = {
@@ -311,6 +372,10 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       cashVariance: 0,
     };
 
+    if (typeof window !== "undefined" && user) {
+      sessionStorage.removeItem(`dagoeng_shift_closed_${user.id}_${targetOutletId}`);
+    }
+
     setShifts((prev) => [newShift, ...prev]);
 
     logActivity({
@@ -387,6 +452,10 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
           : s
       )
     );
+
+    if (typeof window !== "undefined" && user) {
+      sessionStorage.setItem(`dagoeng_shift_closed_${user.id}_${shift.outletId}`, "true");
+    }
 
     addNotification({
       type: "SHIFT_CLOSED",
