@@ -41,7 +41,7 @@ export default function DashboardLayout({
     <div className="min-h-screen flex flex-col bg-[#F8FAFC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E2E8F0] transition-colors duration-200">
       <div className="flex-1 flex overflow-hidden">
         {/* Desktop Sidebar (visible on large screens >= 1024px) */}
-        <div className="hidden lg:flex flex-shrink-0">
+        <div className="hidden lg:flex flex-shrink-0 transition-all duration-300">
           <Sidebar />
         </div>
 

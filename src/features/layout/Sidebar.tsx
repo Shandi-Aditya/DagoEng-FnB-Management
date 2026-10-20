@@ -31,6 +31,10 @@ import {
   Building2,
   ShieldCheck,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -59,9 +63,30 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { t, settings } = useSettings();
   const { activeOutlet } = useOutlet();
   const [isCashDrawerModalOpen, setIsCashDrawerModalOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const { filteredOrders } = useOrders();
   const { activeShift } = useEmployeeShift();
   const navItems = getAuthorizedNavItems(user, activeOrgModules);
+
+  // Restore client preference for sidebar minimize
+  React.useEffect(() => {
+    try {
+      const saved = localStorage.getItem("dago_sidebar_collapsed");
+      if (saved !== null) {
+        setIsCollapsed(saved === "true");
+      }
+    } catch (_) {}
+  }, []);
+
+  const toggleCollapsed = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("dago_sidebar_collapsed", String(next));
+      } catch (_) {}
+      return next;
+    });
+  };
 
   const isCashier = user?.role?.slug === "CASHIER";
 
@@ -106,41 +131,122 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   };
 
   return (
-    <aside className="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between h-full select-none transition-colors duration-200">
-      {/* Brand Header */}
+    <aside
+      className={`${
+        isCollapsed ? "w-20" : "w-64"
+      } bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between h-full select-none transition-all duration-300 ease-in-out`}
+    >
+      {/* Brand Header & Minimize Toggle */}
       <div>
-        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center space-x-3">
-          <div className="w-8 h-10 relative flex-shrink-0">
-            <Image
-              src="/logo-dago.png"
-              alt="Dago Creative Hub"
-              width={32}
-              height={40}
-              priority
-              className="object-contain"
-            />
-          </div>
-          <div>
-            <h1 className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
-              DAGO <span className="text-primary dark:text-emerald-400">Creative Hub</span>
-            </h1>
-            <p className="text-[10px] text-slate-400 dark:text-slate-400 font-medium tracking-wide">
-              {user?.tenant ? getTenantName(user.tenant.id) : "Platform & Management"}
-            </p>
-          </div>
+        <div
+          className={`p-4 border-b border-slate-100 dark:border-slate-800 flex items-center ${
+            isCollapsed ? "flex-col space-y-2 justify-center" : "justify-between"
+          }`}
+        >
+          {!isCollapsed ? (
+            <>
+              <div className="flex items-center space-x-3 overflow-hidden min-w-0">
+                <div className="w-8 h-10 relative flex-shrink-0">
+                  <Image
+                    src="/logo-dago.png"
+                    alt="Dago Creative Hub"
+                    width={32}
+                    height={40}
+                    priority
+                    className="object-contain"
+                  />
+                </div>
+                <div className="truncate">
+                  <h1 className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100 leading-tight truncate">
+                    DAGO <span className="text-primary dark:text-emerald-400">Creative Hub</span>
+                  </h1>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-400 font-medium tracking-wide truncate">
+                    {user?.tenant ? getTenantName(user.tenant.id) : "Platform & Management"}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                className="p-2 min-h-[44px] min-w-[44px] rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center shrink-0 touch-manipulation"
+                title="Perkecil Sidebar"
+                aria-label="Perkecil Sidebar"
+              >
+                <PanelLeftClose className="w-5 h-5" />
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="w-8 h-8 relative flex-shrink-0">
+                <Image
+                  src="/logo-dago.png"
+                  alt="Dago Creative Hub"
+                  width={32}
+                  height={32}
+                  priority
+                  className="object-contain"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                className="p-2 min-h-[44px] min-w-[44px] rounded-xl text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center touch-manipulation"
+                title="Perluas Sidebar"
+                aria-label="Perluas Sidebar"
+              >
+                <PanelLeftOpen className="w-5 h-5" />
+              </button>
+            </>
+          )}
         </div>
 
         {/* Dynamic Multi-Business Navigation */}
-        <nav className="p-3 space-y-1">
-          <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between">
-            <span>Menu ({user?.role.name})</span>
-            <span className="text-[9px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono text-slate-600 dark:text-slate-400">
-              {user?.scopeLevel}
-            </span>
-          </div>
+        <nav className={`p-2 space-y-1 ${isCollapsed ? "flex flex-col items-center" : ""}`}>
+          {!isCollapsed && (
+            <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Menu ({user?.role.name})</span>
+              <span className="text-[9px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono text-slate-600 dark:text-slate-400">
+                {user?.scopeLevel}
+              </span>
+            </div>
+          )}
 
           {navItems.map((item) => {
             const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+
+            if (isCollapsed) {
+              return (
+                <div key={item.href} className="relative group w-full flex justify-center">
+                  <Link
+                    href={item.href}
+                    onClick={onNavigate}
+                    className={`w-12 h-12 flex items-center justify-center rounded-xl transition-all ${
+                      isActive
+                        ? "bg-primary/10 dark:bg-primary/20 text-primary dark:text-emerald-300 font-bold border border-primary/20 dark:border-primary/30 shadow-2xs"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100"
+                    }`}
+                    title={item.name}
+                    aria-label={item.name}
+                  >
+                    <span className={isActive ? "text-primary dark:text-emerald-400" : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"}>
+                      {ICON_MAP[item.icon]}
+                    </span>
+                  </Link>
+
+                  {/* Floating accessible hover tooltip */}
+                  <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xl whitespace-nowrap hidden group-hover:flex items-center space-x-1.5 z-50 pointer-events-none">
+                    <span>{item.name}</span>
+                    {item.module !== "CORE" && (
+                      <span className="text-[9px] bg-primary/30 text-emerald-300 px-1.5 py-0.2 rounded font-mono">
+                        {item.module}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <Link
                 key={item.href}
@@ -178,28 +284,51 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
       </div>
 
       {/* User Footer & Logout */}
-      <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-        <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between mb-2">
-          <div className="flex items-center space-x-2 overflow-hidden">
-            <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center font-bold text-xs text-slate-700 dark:text-slate-200 flex-shrink-0">
+      <div className={`p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 ${isCollapsed ? "flex flex-col items-center space-y-2" : ""}`}>
+        {!isCollapsed ? (
+          <>
+            <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2 overflow-hidden">
+                <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center font-bold text-xs text-slate-700 dark:text-slate-200 flex-shrink-0">
+                  {user?.name.charAt(0) || "U"}
+                </div>
+                <div className="truncate">
+                  <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{user?.name}</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-400 truncate">
+                    {user?.tenant ? (getTenantName(user.tenant.id) || user.tenant.name) : user?.organization?.name || "Dago Hub"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogoutClick}
+              className="w-full flex items-center justify-center space-x-2 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-colors min-h-[44px] touch-manipulation"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>{isCashier ? "Tutup Sesi / Keluar" : "Keluar Sesi"}</span>
+            </button>
+          </>
+        ) : (
+          <div className="flex flex-col items-center space-y-2">
+            <div
+              className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center font-bold text-xs text-slate-700 dark:text-slate-200"
+              title={user?.name}
+            >
               {user?.name.charAt(0) || "U"}
             </div>
-            <div className="truncate">
-              <p className="text-xs font-semibold text-slate-800 dark:text-slate-100 truncate">{user?.name}</p>
-              <p className="text-[10px] text-slate-400 dark:text-slate-400 truncate">
-                {user?.tenant ? (getTenantName(user.tenant.id) || user.tenant.name) : user?.organization?.name || "Dago Hub"}
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={handleLogoutClick}
+              className="w-10 h-10 flex items-center justify-center text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-xl transition-colors min-h-[44px] min-w-[44px] touch-manipulation"
+              title={isCashier ? "Tutup Sesi / Keluar" : "Keluar Sesi"}
+              aria-label="Keluar Sesi"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
-        </div>
-
-        <button
-          onClick={handleLogoutClick}
-          className="w-full flex items-center justify-center space-x-2 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md transition-colors"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>{isCashier ? "Tutup Sesi / Keluar" : "Keluar Sesi"}</span>
-        </button>
+        )}
       </div>
 
       {/* Shift Closing & Reconciliation Modal for Cashier */}
