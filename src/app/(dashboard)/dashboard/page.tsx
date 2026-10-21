@@ -13,6 +13,7 @@ import { DateRangePicker } from "@/features/dashboard/DateRangePicker";
 import { DailyProgressSummary } from "@/features/dashboard/DailyProgressSummary";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { formatCurrencyIDR } from "@/lib/utils";
+import Link from "next/link";
 import {
   DollarSign,
   ShoppingBag,
@@ -23,6 +24,10 @@ import {
   Laptop,
   Layers,
   CheckCircle2,
+  Calendar,
+  Ticket,
+  Zap,
+  ArrowRight,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -32,13 +37,36 @@ export default function DashboardPage() {
   const { filteredOrders } = useOrders();
 
   const [isMounted, setIsMounted] = React.useState(false);
+  const [eventStats, setEventStats] = React.useState<{
+    totalRevenue: number;
+    paidBookingsCount: number;
+    platformRevenue: number;
+  }>({ totalRevenue: 0, paidBookingsCount: 0, platformRevenue: 0 });
+
   React.useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  const isDagoOwner = user?.scopeLevel === "ORGANIZATION";
+  const isDagoOwner = user?.scopeLevel === "ORGANIZATION" || user?.scopeLevel === "PLATFORM";
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
   const userTenantId = user?.tenant?.id;
+
+  React.useEffect(() => {
+    if (isDagoOwner) {
+      fetch("/api/events/bookings?includeStats=true")
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.success && json.stats) {
+            setEventStats({
+              totalRevenue: json.stats.totalTicketRevenue || 0,
+              paidBookingsCount: json.stats.totalTicketsSold || 0,
+              platformRevenue: json.stats.platformCommissionRevenue || 0,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isDagoOwner]);
 
   // Tenant-aware order filtering
   const scopedOrders = React.useMemo(() => {
@@ -68,9 +96,11 @@ export default function DashboardPage() {
   // Multi-Business Breakdown for Dago Organization Owner
   const fnbRevenue = totalRevenue;
   const cwkRevenue = 0;
-  const consolidatedTotal = fnbRevenue + cwkRevenue;
+  const eventRevenue = isDagoOwner ? eventStats.totalRevenue : 0;
+  const consolidatedTotal = fnbRevenue + cwkRevenue + eventRevenue;
   const fnbShare = consolidatedTotal > 0 ? `${Math.round((fnbRevenue / consolidatedTotal) * 100)}%` : "0%";
   const cwkShare = consolidatedTotal > 0 ? `${Math.round((cwkRevenue / consolidatedTotal) * 100)}%` : "0%";
+  const eventShare = consolidatedTotal > 0 ? `${Math.round((eventRevenue / consolidatedTotal) * 100)}%` : "0%";
 
   const businessBreakdown = [
     {
@@ -96,6 +126,18 @@ export default function DashboardPage() {
       color: "border-sky-500",
       progressColor: "bg-sky-500",
       progressWidth: cwkRevenue > 0 ? "w-full" : "w-0",
+    },
+    {
+      module: "COMMUNITY_EVENTS",
+      name: "Event Komunitas & Kreatif",
+      revenue: eventRevenue,
+      share: eventShare,
+      tenants: `${eventStats.paidBookingsCount} Tiket Terjual (Platform Fee 20%)`,
+      status: "AKTIF",
+      icon: <Calendar className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />,
+      color: "border-[#3B7A57]",
+      progressColor: "bg-[#3B7A57]",
+      progressWidth: eventRevenue > 0 ? "w-full" : "w-0",
     },
   ];
 
@@ -146,15 +188,15 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           title={isDagoOwner ? "Total Pendapatan Konsolidasi" : "Total Pendapatan"}
-          value={formatCurrencyIDR(totalRevenue)}
+          value={formatCurrencyIDR(isDagoOwner ? consolidatedTotal : totalRevenue)}
           trendText={`Periode ${formattedRangeLabel}`}
           accentColor="sage"
           icon={<DollarSign className="w-5 h-5 text-primary" />}
         />
         <KPICard
           title="Total Transaksi"
-          value={`${totalOrdersCount.toLocaleString("id-ID")} Pesanan`}
-          trendText={isDagoOwner ? "Semua unit bisnis" : "Transaksi pesanan tenant"}
+          value={`${(totalOrdersCount + (isDagoOwner ? eventStats.paidBookingsCount : 0)).toLocaleString("id-ID")} Transaksi`}
+          trendText={isDagoOwner ? "F&B + Tiket Event Komunitas" : "Transaksi pesanan tenant"}
           accentColor="cyan"
           icon={<ShoppingBag className="w-5 h-5 text-sky-600 dark:text-sky-400" />}
         />
@@ -182,6 +224,81 @@ export default function DashboardPage() {
             icon={<CheckCircle2 className="w-5 h-5 text-primary" />}
           />
         )}
+      </div>
+
+      {/* 2b. Akses Cepat Operasional (Quick Access Shortcuts) */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Zap className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+            <h2 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+              Akses Cepat
+            </h2>
+          </div>
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+            Pintasan demo &amp; modul operasional
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Link
+            href="/events-admin"
+            className="group block p-4 sm:p-4.5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-[#3B7A57] dark:hover:border-[#52B788] hover:shadow-md transition-all duration-200"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-10 h-10 rounded-xl bg-[#3B7A57]/10 dark:bg-[#52B788]/15 border border-[#3B7A57]/20 dark:border-[#52B788]/30 flex items-center justify-center text-[#3B7A57] dark:text-[#52B788] group-hover:scale-105 transition-transform shrink-0">
+                  <Calendar className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                      Event Komunitas
+                    </h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 border border-emerald-200/50 dark:border-emerald-800/50">
+                      Admin Moderasi
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                    Kelola event, peserta, dan tiket komunitas
+                  </p>
+                </div>
+              </div>
+              <div className="w-7 h-7 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] group-hover:translate-x-0.5 transition-all shrink-0">
+                <ArrowRight className="w-4 h-4" />
+              </div>
+            </div>
+          </Link>
+
+          <Link
+            href="/events/portal"
+            className="group block p-4 sm:p-4.5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-[#3B7A57] dark:hover:border-[#52B788] hover:shadow-md transition-all duration-200"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/50 flex items-center justify-center text-[#3B7A57] dark:text-[#52B788] group-hover:scale-105 transition-transform shrink-0">
+                  <Ticket className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                      Portal Komunitas
+                    </h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400 border border-sky-200/50 dark:border-sky-800/50">
+                      Penyelenggara
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                    Portal mandiri penyelenggara, tiket &amp; check-in peserta
+                  </p>
+                </div>
+              </div>
+              <div className="w-7 h-7 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-400 group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] group-hover:translate-x-0.5 transition-all shrink-0">
+                <ArrowRight className="w-4 h-4" />
+              </div>
+            </div>
+          </Link>
+        </div>
       </div>
 
       {/* 3. Visual Utama & Analisis Performa (Tren Penjualan & Komparasi/Kontribusi) */}

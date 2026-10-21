@@ -46,7 +46,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const auth = assertEventAdmin(req);
+    const auth = await assertEventAdmin(req);
     if (!auth.authorized) {
       return NextResponse.json(
         { success: false, error: auth.error },

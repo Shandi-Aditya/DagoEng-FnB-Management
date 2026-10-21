@@ -28,11 +28,13 @@ import {
   Building2,
   Info,
   Calendar,
+  Ticket,
 } from "lucide-react";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import StructuredReportPDFModal, { ReportType } from "@/features/reports/StructuredReportPDFModal";
 import { DateRangePicker } from "@/features/dashboard/DateRangePicker";
 import { ProFeatureBadge } from "@/components/premium";
+import { EventTicketOrder } from "@/types/event";
 
 export default function ReportsPage() {
   const { formattedRangeLabel } = useDateFilter();
@@ -48,6 +50,22 @@ export default function ReportsPage() {
   const [selectedReportType, setSelectedReportType] = useState<ReportType>("SALES");
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [exportSuccessMessage, setExportSuccessMessage] = useState("");
+  const [eventBookings, setEventBookings] = useState<EventTicketOrder[]>([]);
+
+  const canAccessEvents = user?.scopeLevel === "ORGANIZATION" || user?.scopeLevel === "PLATFORM";
+
+  React.useEffect(() => {
+    if (canAccessEvents) {
+      fetch("/api/events/bookings")
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.success && json.data) {
+            setEventBookings(json.data);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [canAccessEvents]);
 
   // Filtered dataset according to active outlet
   const filteredOrders = orders.filter((o) => activeOutletId === "ALL" || o.outletId === activeOutletId || !o.outletId);
@@ -248,6 +266,55 @@ export default function ReportsPage() {
             ];
           }),
         };
+
+      case "EVENTS": {
+        const paidEvents = eventBookings.filter((b) => b.paymentStatus === "PAID");
+        const totalEventGross = paidEvents.reduce((s, b) => s + b.totalPrice, 0);
+        const totalEventPlatformFee = paidEvents.reduce((s, b) => s + b.platformFeeAmount, 0);
+        const totalEventOrganizerPayout = paidEvents.reduce((s, b) => s + b.organizerRevenueAmount, 0);
+        const totalTicketsCount = paidEvents.reduce((s, b) => s + b.ticketCount, 0);
+
+        return {
+          title: "Laporan Pendapatan & Tiket Event Komunitas",
+          subtitle: `Rekapitulasi penjualan tiket dan skema bagi hasil 20% Dago Creative Hub di ${scopeName}`,
+          summaryCards: [
+            { label: "Total Omset Tiket", value: `Rp ${totalEventGross.toLocaleString("id-ID")}` },
+            { label: "Total Tiket Terjual", value: `${totalTicketsCount} Tiket` },
+            { label: "Fee Platform Dago (20%)", value: `Rp ${totalEventPlatformFee.toLocaleString("id-ID")}` },
+            { label: "Payout Komunitas (80%)", value: `Rp ${totalEventOrganizerPayout.toLocaleString("id-ID")}` },
+          ],
+          tableHeaders: [
+            "Kode Tiket",
+            "Nama Event",
+            "Nama Peserta",
+            "No WhatsApp",
+            "Qty Tiket",
+            "Metode Bayar",
+            "Status Bayar",
+            "Check-In",
+            "Total Omset (Rp)",
+            "Fee Dago 20% (Rp)",
+            "Payout Komunitas 80% (Rp)",
+          ],
+          tableRows: eventBookings.map((b) => [
+            b.ticketCode,
+            b.eventTitle,
+            b.guestName,
+            b.guestPhone,
+            b.ticketCount,
+            b.paymentMethod,
+            b.paymentStatus,
+            b.checkInStatus === "CHECKED_IN" ? "HADIR" : "BELUM HADIR",
+            `Rp ${b.totalPrice.toLocaleString("id-ID")}`,
+            `Rp ${b.platformFeeAmount.toLocaleString("id-ID")}`,
+            `Rp ${b.organizerRevenueAmount.toLocaleString("id-ID")}`,
+          ]),
+          reconciliationInfo: [
+            { label: "Model Bagi Hasil", value: "20% Dago Creative Hub / 80% Komunitas" },
+            { label: "Gateway Tiket", value: "Sistem Terintegrasi DAGO (Simulasi QRIS / Tunai)" },
+          ],
+        };
+      }
     }
   };
 
@@ -344,10 +411,13 @@ export default function ReportsPage() {
       </div>
 
       {/* Report Categories Selector */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className={`grid grid-cols-2 sm:grid-cols-4 ${canAccessEvents ? "lg:grid-cols-7" : "lg:grid-cols-6"} gap-3`}>
         {[
           { id: "SALES", label: "Penjualan POS", icon: DollarSign, count: `${filteredOrders.length} Trx` },
           { id: "SETTLEMENT", label: "Settlement Mitra", icon: Building2, count: `${calculateSettlement(filteredOrders).length} Tenant` },
+          ...(canAccessEvents
+            ? [{ id: "EVENTS", label: "Event & Tiket", icon: Ticket, count: `${eventBookings.filter((b) => b.paymentStatus === "PAID").length} Peserta` }]
+            : []),
           { id: "CLOSING", label: "Closing Kasir", icon: Clock, count: `${filteredShifts.length} Shift` },
           { id: "PRODUCTS", label: "Sales & Margin", icon: TrendingUp, count: `${filteredProducts.length} Menu` },
           { id: "INVENTORY", label: "Mutasi Gudang", icon: Boxes, count: `${filteredMaterials.length} Bahan` },

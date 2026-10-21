@@ -16,7 +16,10 @@ export type PersonaKey =
   | "KITCHEN_SGR"
   | "WAITER_SGR"
   | "CUSTOMER_DEMO"
-  | "SUPER_ADMIN";
+  | "SUPER_ADMIN"
+  | "COMMUNITY_BARISTA"
+  | "COMMUNITY_BANDUNGDEV"
+  | "COMMUNITY_AKSARAPRIANGAN";
 
 interface AuthContextType {
   user: AuthenticatedUser | null;
@@ -226,9 +229,63 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["*"],
   },
+
+  // 10. Community Organizer: Dago Barista Guild
+  COMMUNITY_BARISTA: {
+    id: "user-comm-barista",
+    email: "baristaguild@dagocreative.id",
+    name: "Barista Community Bandung",
+    phone: "+62 812-9876-5432",
+    role: { id: "role-community", slug: "CUSTOMER", name: "Community Organizer" },
+    scopeLevel: "TENANT",
+    allowedModules: ["CO_WORKING"],
+    organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
+    tenant: null,
+    outlet: null,
+    permissions: ["events:manage_own"],
+  },
+
+  // 11. Community Organizer: Bandung Game Creators / Dev
+  COMMUNITY_BANDUNGDEV: {
+    id: "user-comm-bandungdev",
+    email: "halo@bandungdev.org",
+    name: "Bandung Game Creators Collective",
+    phone: "+62 813-8899-0011",
+    role: { id: "role-community", slug: "CUSTOMER", name: "Community Organizer" },
+    scopeLevel: "TENANT",
+    allowedModules: ["CO_WORKING"],
+    organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
+    tenant: null,
+    outlet: null,
+    permissions: ["events:manage_own"],
+  },
+
+  // 12. Community Organizer: Aksara Priangan
+  COMMUNITY_AKSARAPRIANGAN: {
+    id: "user-comm-aksara",
+    email: "info@aksarapriangan.id",
+    name: "Aksara Priangan Studio",
+    phone: "+62 815-4433-2211",
+    role: { id: "role-community", slug: "CUSTOMER", name: "Community Organizer" },
+    scopeLevel: "TENANT",
+    allowedModules: ["CO_WORKING"],
+    organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
+    tenant: null,
+    outlet: null,
+    permissions: ["events:manage_own"],
+  },
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+function syncPersonaCookie(personaKey: string | null) {
+  if (typeof document === "undefined") return;
+  if (!personaKey) {
+    document.cookie = "dagoeng_active_persona=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
+  } else {
+    document.cookie = `dagoeng_active_persona=${personaKey}; path=/; max-age=604800; SameSite=Lax`;
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Default perspective: Dago Organization Owner
@@ -241,6 +298,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const isLoggedOut = localStorage.getItem("dagoeng_is_logged_out") === "true";
     if (isLoggedOut) {
       setUser(null);
+      syncPersonaCookie(null);
       return;
     }
     const savedCustom = localStorage.getItem("dagoeng_custom_customer");
@@ -249,6 +307,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const parsed = JSON.parse(savedCustom);
         if (parsed && parsed.role?.slug === "CUSTOMER") {
           setUser(parsed);
+          syncPersonaCookie("CUSTOMER_DEMO");
           return;
         }
       } catch (e) {
@@ -257,6 +316,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     const savedKey = localStorage.getItem("dagoeng_active_persona") as PersonaKey | null;
     let initialUser = (savedKey && DEMO_PERSONAS[savedKey]) ? DEMO_PERSONAS[savedKey] : DEMO_PERSONAS.DAGO_OWNER;
+    const activeKey = (savedKey && DEMO_PERSONAS[savedKey]) ? savedKey : "DAGO_OWNER";
+    syncPersonaCookie(activeKey);
+
     if (initialUser?.tenant?.id) {
       const freshName = getTenantName(initialUser.tenant.id);
       if (freshName && freshName !== initialUser.tenant.name) {
@@ -306,6 +368,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("dagoeng_is_logged_out");
     localStorage.removeItem("dagoeng_custom_customer");
     localStorage.setItem("dagoeng_active_persona", personaKey);
+    syncPersonaCookie(personaKey);
     setIsLoading(false);
     return true;
   };
@@ -329,6 +392,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("dagoeng_is_logged_out");
     localStorage.setItem("dagoeng_custom_customer", JSON.stringify(customCustomer));
     localStorage.setItem("dagoeng_active_persona", "CUSTOMER_DEMO");
+    syncPersonaCookie("CUSTOMER_DEMO");
     setIsLoading(false);
     return customCustomer;
   };
@@ -338,6 +402,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("dagoeng_active_persona");
     localStorage.removeItem("dagoeng_custom_customer");
     localStorage.setItem("dagoeng_is_logged_out", "true");
+    syncPersonaCookie(null);
   };
 
   const switchPersona = async (personaKey: PersonaKey) => {
@@ -347,6 +412,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("dagoeng_is_logged_out");
       localStorage.removeItem("dagoeng_custom_customer");
       localStorage.setItem("dagoeng_active_persona", personaKey);
+      syncPersonaCookie(personaKey);
     }
   };
 

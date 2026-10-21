@@ -142,8 +142,18 @@ export default function EventsListingPage() {
             </Link>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-3">
             <ThemeToggle variant="pill" />
+
+            <Link href="/events/portal">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-9 px-3 font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl"
+              >
+                <span>Portal Penyelenggara</span>
+              </Button>
+            </Link>
 
             <Link href="/events/submit">
               <Button
@@ -151,7 +161,7 @@ export default function EventsListingPage() {
                 className="text-xs h-9 px-4 font-bold bg-[#3B7A57] hover:bg-[#2E6044] dark:bg-[#3B7A57] dark:hover:bg-[#488e68] text-white rounded-xl shadow-sm transition-all hover:scale-105 active:scale-95"
               >
                 <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
-                <span>Pasang Event Komunitas</span>
+                <span>Pasang Event</span>
               </Button>
             </Link>
           </div>

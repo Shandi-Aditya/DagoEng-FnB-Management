@@ -125,7 +125,7 @@ describe("Community Events Module — Unit & Integration Tests", () => {
         organizerName: "Komunitas Indie Dev",
         organizerEmail: "indie@bandung.dev",
         organizerPhone: "081987654321",
-        title: "Dago Indie Jam Playtest 2026",
+        title: `Dago Indie Jam Playtest ${Date.now()}`,
         category: "TECH",
         description: "Sesi playtest game indie buatan anak muda Bandung.",
         startDate: new Date(Date.now() + 100000000).toISOString(),
@@ -228,54 +228,74 @@ describe("Community Events Module — Unit & Integration Tests", () => {
     });
   });
 
-  describe("5. Server-side Role & Scope Assertion", () => {
-    it("should allow SUPER_ADMIN (PLATFORM) and Hub OWNER/MANAGER (ORGANIZATION) to access admin moderation", () => {
+  describe("5. Server-side Role & Scope Assertion & Anti-Spoofing", () => {
+    it("should allow SUPER_ADMIN (PLATFORM) and Hub OWNER/MANAGER (ORGANIZATION) via verified server cookies", async () => {
       const reqSuperAdmin = new NextRequest("http://localhost:3000/api/events/admin", {
-        headers: { "x-user-role": "SUPER_ADMIN", "x-user-id": "admin-1", "x-user-scope": "PLATFORM" },
+        headers: { Cookie: "dagoeng_active_persona=SUPER_ADMIN" },
       });
-      const auth1 = assertEventAdmin(reqSuperAdmin);
+      const auth1 = await assertEventAdmin(reqSuperAdmin);
       expect(auth1.authorized).toBe(true);
+      expect(auth1.role).toBe("SUPER_ADMIN");
+      expect(auth1.scopeLevel).toBe("PLATFORM");
 
       const reqHubOwner = new NextRequest("http://localhost:3000/api/events/admin", {
-        headers: { "x-user-role": "OWNER", "x-user-id": "hub-owner-1", "x-user-scope": "ORGANIZATION" },
+        headers: { Cookie: "dagoeng_active_persona=HUB_OWNER" },
       });
-      const auth2 = assertEventAdmin(reqHubOwner);
+      const auth2 = await assertEventAdmin(reqHubOwner);
       expect(auth2.authorized).toBe(true);
+      expect(auth2.role).toBe("OWNER");
+      expect(auth2.scopeLevel).toBe("ORGANIZATION");
 
       const reqManager = new NextRequest("http://localhost:3000/api/events/admin", {
-        headers: { "x-user-role": "MANAGER", "x-user-id": "manager-1", "x-user-scope": "ORGANIZATION" },
+        headers: { Cookie: "dagoeng_active_persona=HUB_MANAGER" },
       });
-      const auth3 = assertEventAdmin(reqManager);
+      const auth3 = await assertEventAdmin(reqManager);
       expect(auth3.authorized).toBe(true);
+      expect(auth3.role).toBe("MANAGER");
+      expect(auth3.scopeLevel).toBe("ORGANIZATION");
     });
 
-    it("should strictly BLOCK Tenant Owners with TENANT scope from moderating hub-wide events", () => {
+    it("should strictly REJECT client header spoofing attempts (x-user-role without valid server cookie)", async () => {
+      // Attacker attempts to spoof admin access by sending raw headers
+      const spoofedReq = new NextRequest("http://localhost:3000/api/events/admin", {
+        headers: {
+          "x-user-role": "SUPER_ADMIN",
+          "x-user-id": "attacker-id",
+          "x-user-scope": "PLATFORM",
+        },
+      });
+      const authSpoofed = await assertEventAdmin(spoofedReq);
+      expect(authSpoofed.authorized).toBe(false);
+      expect(authSpoofed.error).toContain("UNAUTHORIZED");
+    });
+
+    it("should strictly BLOCK Tenant Owners with TENANT scope from moderating hub-wide events", async () => {
       // Tenant stall owner (e.g. Kopi Senja Owner) has role OWNER, but scope TENANT
       const reqTenantOwner = new NextRequest("http://localhost:3000/api/events/admin", {
-        headers: { "x-user-role": "OWNER", "x-user-id": "tenant-owner-ks", "x-user-scope": "TENANT" },
+        headers: { Cookie: "dagoeng_active_persona=TENANT_OWNER" },
       });
-      const authTenant = assertEventAdmin(reqTenantOwner);
+      const authTenant = await assertEventAdmin(reqTenantOwner);
       expect(authTenant.authorized).toBe(false);
       expect(authTenant.error).toContain("FORBIDDEN");
       expect(authTenant.error).toContain("TENANT");
     });
 
-    it("should block unauthenticated requests and unauthorized staff roles (CASHIER, KITCHEN_STAFF, CUSTOMER)", () => {
+    it("should block unauthenticated requests and unauthorized staff roles (CASHIER, KITCHEN_STAFF, CUSTOMER)", async () => {
       const reqNoAuth = new NextRequest("http://localhost:3000/api/events/admin");
-      const authNoAuth = assertEventAdmin(reqNoAuth);
+      const authNoAuth = await assertEventAdmin(reqNoAuth);
       expect(authNoAuth.authorized).toBe(false);
 
       const reqCashier = new NextRequest("http://localhost:3000/api/events/admin", {
-        headers: { "x-user-role": "CASHIER", "x-user-id": "cashier-1" },
+        headers: { Cookie: "dagoeng_active_persona=CASHIER" },
       });
-      const authCashier = assertEventAdmin(reqCashier);
+      const authCashier = await assertEventAdmin(reqCashier);
       expect(authCashier.authorized).toBe(false);
       expect(authCashier.error).toContain("FORBIDDEN");
 
       const reqCustomer = new NextRequest("http://localhost:3000/api/events/admin", {
-        headers: { "x-user-role": "CUSTOMER", "x-user-id": "cust-1" },
+        headers: { Cookie: "dagoeng_active_persona=CUSTOMER" },
       });
-      const authCust = assertEventAdmin(reqCustomer);
+      const authCust = await assertEventAdmin(reqCustomer);
       expect(authCust.authorized).toBe(false);
     });
   });

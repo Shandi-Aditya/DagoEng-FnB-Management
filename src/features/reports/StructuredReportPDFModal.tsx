@@ -5,7 +5,7 @@ import Image from "next/image";
 import { X, Printer, Download, Building2, Calendar, User, FileText, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export type ReportType = "SALES" | "CLOSING" | "PRODUCTS" | "INVENTORY" | "FINANCE_AUDIT" | "SETTLEMENT";
+export type ReportType = "SALES" | "CLOSING" | "PRODUCTS" | "INVENTORY" | "FINANCE_AUDIT" | "SETTLEMENT" | "EVENTS";
 
 export interface ReportPDFModalProps {
   isOpen: boolean;
