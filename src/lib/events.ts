@@ -12,10 +12,105 @@ import {
   AttendeeCheckInStatus,
   TicketPaymentStatus,
   TicketPaymentMethod,
+  EventRevenueSharingPolicy,
+  DEFAULT_EVENT_POLICY,
+  OrganizerPortalSummary,
+  OrganizerPortalData,
 } from "@/types/event";
+
+export {
+  type EventRevenueSharingPolicy,
+  DEFAULT_EVENT_POLICY,
+  type OrganizerPortalSummary,
+  type OrganizerPortalData,
+};
 
 const DATA_FILE = path.join(process.cwd(), "data", "events.json");
 const BOOKINGS_DATA_FILE = path.join(process.cwd(), "data", "event_bookings.json");
+const EVENT_SETTINGS_FILE = path.join(process.cwd(), "data", "event_settings.json");
+
+
+
+let cachedPolicy: EventRevenueSharingPolicy | null = null;
+
+export function getEventRevenuePolicy(): EventRevenueSharingPolicy {
+  try {
+    if (!fs.existsSync(EVENT_SETTINGS_FILE)) {
+      const dir = path.dirname(EVENT_SETTINGS_FILE);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(EVENT_SETTINGS_FILE, JSON.stringify(DEFAULT_EVENT_POLICY, null, 2), "utf-8");
+      cachedPolicy = { ...DEFAULT_EVENT_POLICY };
+      return cachedPolicy;
+    }
+    const raw = fs.readFileSync(EVENT_SETTINGS_FILE, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.defaultPlatformFeePercent === "number") {
+      const policy: EventRevenueSharingPolicy = {
+        ...DEFAULT_EVENT_POLICY,
+        ...parsed,
+        defaultOrganizerSharePercent: 100 - parsed.defaultPlatformFeePercent,
+      };
+      cachedPolicy = policy;
+      return policy;
+    }
+    const fallback: EventRevenueSharingPolicy = { ...DEFAULT_EVENT_POLICY };
+    cachedPolicy = fallback;
+    return fallback;
+  } catch (err) {
+    console.error("Failed to read event revenue policy from disk", err);
+    if (!cachedPolicy) cachedPolicy = { ...DEFAULT_EVENT_POLICY };
+    return cachedPolicy || DEFAULT_EVENT_POLICY;
+  }
+}
+
+export function updateEventRevenuePolicy(
+  updates: {
+    defaultPlatformFeePercent: number;
+    policyNotes?: string;
+    effectiveDate?: string;
+  },
+  actorName = "Admin Dago"
+): EventRevenueSharingPolicy {
+  const fee = Number(updates.defaultPlatformFeePercent);
+  if (isNaN(fee) || fee < 0 || fee > 100) {
+    throw new Error("Persentase komisi platform harus berupa angka valid antara 0% hingga 100%.");
+  }
+
+  const current = getEventRevenuePolicy();
+  const prevFee = current.defaultPlatformFeePercent;
+  const now = new Date().toISOString();
+
+  const newHistoryEntry = {
+    id: `hist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    changedAt: now,
+    changedBy: actorName,
+    previousPlatformFeePercent: prevFee,
+    newPlatformFeePercent: fee,
+    reason: updates.policyNotes || `Penyesuaian komisi platform menjadi ${fee}% oleh ${actorName}`,
+  };
+
+  const updated: EventRevenueSharingPolicy = {
+    ...current,
+    defaultPlatformFeePercent: fee,
+    defaultOrganizerSharePercent: 100 - fee,
+    effectiveDate: updates.effectiveDate || now,
+    policyNotes: updates.policyNotes || current.policyNotes,
+    updatedAt: now,
+    updatedBy: actorName,
+    history: [newHistoryEntry, ...(current.history || [])],
+  };
+
+  try {
+    cachedPolicy = updated;
+    const dir = path.dirname(EVENT_SETTINGS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(EVENT_SETTINGS_FILE, JSON.stringify(updated, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Failed to write event revenue policy to disk", err);
+  }
+
+  return updated;
+}
 
 // Default verified community events for Dago Creative Hub
 const INITIAL_COMMUNITY_EVENTS: CommunityEvent[] = [
@@ -518,6 +613,22 @@ export function validateEventSubmission(payload: EventSubmissionPayload): { vali
     }
   }
 
+  // 7b. Kapasitas & Kuota (Opsional, namun jika diisi harus bilangan bulat positif)
+  if (
+    payload.maxCapacity !== undefined &&
+    payload.maxCapacity !== null &&
+    (payload.maxCapacity as unknown) !== ""
+  ) {
+    if (
+      typeof payload.maxCapacity !== "number" ||
+      isNaN(payload.maxCapacity) ||
+      !Number.isInteger(payload.maxCapacity) ||
+      payload.maxCapacity <= 0
+    ) {
+      errors.push("Kapasitas maksimal venue/tiket harus berupa bilangan bulat positif lebih dari 0.");
+    }
+  }
+
   // 8. Poster URL
   if (!payload.posterUrl || payload.posterUrl.trim().length === 0) {
     errors.push("URL poster event wajib diisi.");
@@ -601,7 +712,12 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
     startDate: new Date(payload.startDate).toISOString(),
     endDate: new Date(payload.endDate).toISOString(),
     location: sanitizeHtmlText(payload.location),
-    maxCapacity: payload.maxCapacity && payload.maxCapacity > 0 ? Number(payload.maxCapacity) : undefined,
+    maxCapacity:
+      typeof payload.maxCapacity === "number" &&
+      Number.isInteger(payload.maxCapacity) &&
+      payload.maxCapacity > 0
+        ? payload.maxCapacity
+        : undefined,
     isPaid: Boolean(payload.isPaid),
     price: payload.isPaid ? Number(payload.price || 0) : 0,
     posterUrl: payload.posterUrl.trim(),
@@ -699,6 +815,17 @@ export async function updateEventDetails(
   }
   if (updates.organizerName !== undefined) sanitizedUpdates.organizerName = sanitizeHtmlText(updates.organizerName);
   if (updates.guidelines !== undefined) sanitizedUpdates.guidelines = parseGuidelinesInput(updates.guidelines);
+  if (updates.customPlatformFeePercent !== undefined) {
+    if (updates.customPlatformFeePercent === null) {
+      sanitizedUpdates.customPlatformFeePercent = null;
+    } else {
+      const num = Number(updates.customPlatformFeePercent);
+      if (isNaN(num) || num < 0 || num > 100) {
+        throw new Error("Persentase komisi override harus berupa angka antara 0% hingga 100%.");
+      }
+      sanitizedUpdates.customPlatformFeePercent = num;
+    }
+  }
 
   const updated: CommunityEvent = {
     ...existing,
@@ -710,6 +837,39 @@ export async function updateEventDetails(
   all[index] = updated;
   saveEventsToDisk(all);
 
+  return updated;
+}
+
+/**
+ * Admin utility to set or reset commission fee override for a specific event.
+ */
+export async function setEventCommissionOverride(
+  eventId: string,
+  customFeePercent: number | null
+): Promise<CommunityEvent> {
+  const all = loadEventsFromDisk();
+  const index = all.findIndex((e) => e.id === eventId);
+  if (index === -1) {
+    throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
+  }
+
+  let finalPercent: number | null = null;
+  if (customFeePercent !== null) {
+    const num = Number(customFeePercent);
+    if (isNaN(num) || num < 0 || num > 100) {
+      throw new Error("Persentase komisi override harus berupa angka antara 0% hingga 100%.");
+    }
+    finalPercent = num;
+  }
+
+  const updated: CommunityEvent = {
+    ...all[index],
+    customPlatformFeePercent: finalPercent,
+    updatedAt: new Date().toISOString(),
+  };
+
+  all[index] = updated;
+  saveEventsToDisk(all);
   return updated;
 }
 
@@ -1013,8 +1173,12 @@ export async function createEventBooking(
     const unitPrice = event.isPaid ? Number(event.price || 0) : 0;
     const totalPrice = unitPrice * ticketCount;
 
-    // Revenue sharing formula: 20% Platform Fee, 80% Organizer Revenue
-    const platformFeePercent = 20;
+    // Revenue sharing formula: dynamic platform fee policy with event override support
+    const policy = getEventRevenuePolicy();
+    const platformFeePercent =
+      event.customPlatformFeePercent !== undefined && event.customPlatformFeePercent !== null
+        ? Number(event.customPlatformFeePercent)
+        : policy.defaultPlatformFeePercent;
     const platformFeeAmount = Math.round((totalPrice * platformFeePercent) / 100);
     const organizerRevenueAmount = totalPrice - platformFeeAmount;
 
@@ -1074,6 +1238,17 @@ export async function updateBookingCheckIn(
   }
 
   const existing = allBookings[index];
+
+  // T-2: Tolak check-in jika tiket berstatus CANCELLED
+  if (existing.paymentStatus === "CANCELLED" && status === "CHECKED_IN") {
+    throw new Error("Tiket dengan status CANCELLED tidak dapat digunakan untuk check-in.");
+  }
+
+  // T-1: Tolak check-in berulang jika tiket sudah berstatus CHECKED_IN
+  if (existing.checkInStatus === "CHECKED_IN" && status === "CHECKED_IN") {
+    throw new Error("Tiket sudah digunakan untuk check-in sebelumnya (tidak dapat check-in berulang).");
+  }
+
   const updated: EventTicketOrder = {
     ...existing,
     checkInStatus: status,
@@ -1101,6 +1276,15 @@ export async function updateBookingPaymentStatus(
   }
 
   const existing = allBookings[index];
+
+  // Two-Step Reversal Guard (Opsi A):
+  // Tolak pembatalan pembayaran jika tiket masih tercatat hadir (CHECKED_IN)
+  if (status === "CANCELLED" && existing.checkInStatus === "CHECKED_IN") {
+    throw new Error(
+      "Tiket sudah digunakan untuk check-in. Batalkan status kehadiran terlebih dahulu sebelum membatalkan pembayaran."
+    );
+  }
+
   const updated: EventTicketOrder = {
     ...existing,
     paymentStatus: status,
@@ -1143,25 +1327,7 @@ export async function getEventOperationalStats(): Promise<EventOperationalStats>
   };
 }
 
-export interface OrganizerPortalSummary {
-  organizerEmail: string;
-  organizerName: string;
-  totalEvents: number;
-  approvedEvents: number;
-  pendingEvents: number;
-  revisionEvents: number;
-  totalAttendees: number;
-  totalTicketsSold: number;
-  grossRevenue: number;
-  platformFeeAmount: number;
-  organizerPayoutAmount: number; // 80% payout
-}
 
-export interface OrganizerPortalData {
-  summary: OrganizerPortalSummary;
-  events: CommunityEvent[];
-  bookings: EventTicketOrder[];
-}
 
 /**
  * Retrieves Community Organizer Portal data strictly isolated by organizerEmail.

@@ -138,6 +138,7 @@ export default function AdminEventsPage() {
   };
 
   const handleCheckInToggle = async (booking: EventTicketOrder) => {
+    if (booking.paymentStatus === "CANCELLED") return;
     try {
       setIsUpdatingCheckIn(booking.id);
       const nextStatus = booking.checkInStatus === "CHECKED_IN" ? "REGISTERED" : "CHECKED_IN";
@@ -1532,22 +1533,33 @@ export default function AdminEventsPage() {
                             )}
                             <Button
                               size="sm"
-                              disabled={isUpdatingCheckIn === b.id}
+                              disabled={isUpdatingCheckIn === b.id || b.paymentStatus === "CANCELLED"}
                               onClick={() => handleCheckInToggle(b)}
-                              className={`h-7 px-2 text-[11px] font-semibold rounded-lg cursor-pointer ${
-                                b.checkInStatus === "CHECKED_IN"
-                                  ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
-                                  : "bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs"
+                              className={`h-7 px-2 text-[11px] font-semibold rounded-lg ${
+                                b.paymentStatus === "CANCELLED"
+                                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-800"
+                                  : b.checkInStatus === "CHECKED_IN"
+                                  ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                                  : "bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs cursor-pointer"
                               }`}
+                              title={b.paymentStatus === "CANCELLED" ? "Tiket yang dibatalkan tidak dapat check-in" : undefined}
                             >
                               {isUpdatingCheckIn === b.id ? (
                                 <RefreshCw className="w-3 h-3 animate-spin mr-1" />
+                              ) : b.paymentStatus === "CANCELLED" ? (
+                                <X className="w-3 h-3 mr-1" />
                               ) : b.checkInStatus === "CHECKED_IN" ? (
                                 <RotateCcw className="w-3 h-3 mr-1" />
                               ) : (
                                 <UserCheck className="w-3 h-3 mr-1" />
                               )}
-                              <span>{b.checkInStatus === "CHECKED_IN" ? "Batal" : "Hadir"}</span>
+                              <span>
+                                {b.paymentStatus === "CANCELLED"
+                                  ? "Batal"
+                                  : b.checkInStatus === "CHECKED_IN"
+                                  ? "Batal"
+                                  : "Hadir"}
+                              </span>
                             </Button>
                           </td>
                         </tr>

@@ -145,16 +145,6 @@ export default function EventsListingPage() {
           <div className="flex items-center space-x-2 sm:space-x-3">
             <ThemeToggle variant="pill" />
 
-            <Link href="/events/portal">
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs h-9 px-3 font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl"
-              >
-                <span>Portal Penyelenggara</span>
-              </Button>
-            </Link>
-
             <Link href="/events/submit">
               <Button
                 size="sm"

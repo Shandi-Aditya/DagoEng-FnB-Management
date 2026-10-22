@@ -1,0 +1,22 @@
+[
+  {
+    "id": "inv-mvjc4h4x-y52l",
+    "organizerId": "org-comm-mvjc3wwk-iq5y",
+    "email": "sansaditya222105@gmail.com",
+    "tokenHash": "0f0971bb97f6956c9461d1b5ec058b34ea7a01ac77f9d134d54ec297a1c41bf8",
+    "expiresAt": "2026-10-24T09:24:44.097Z",
+    "createdAt": "2026-10-22T09:24:44.097Z",
+    "usedAt": null,
+    "createdBy": "Hendra Wijaya (Owner Dago Hub)"
+  },
+  {
+    "id": "inv-mvjc4d1k-pyoo",
+    "organizerId": "org-comm-mvjc3wwk-iq5y",
+    "email": "sansaditya222105@gmail.com",
+    "tokenHash": "6ed98e27186a6c936970c7d32d3ed97c9836749672e233b73cfedde36f7764b7",
+    "expiresAt": "2026-10-24T09:24:38.791Z",
+    "createdAt": "2026-10-22T09:24:38.791Z",
+    "usedAt": null,
+    "createdBy": "Hendra Wijaya (Owner Dago Hub)"
+  }
+]

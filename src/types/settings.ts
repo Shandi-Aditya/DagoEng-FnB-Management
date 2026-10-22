@@ -19,6 +19,42 @@ export interface LoyaltyTierConfig {
   platinumMin: number;
 }
 
+export interface EventMarketplaceRevenuePolicy {
+  defaultPlatformFeePercent: number; // e.g. 20 (20% DAGO Hub)
+  defaultOrganizerSharePercent: number; // e.g. 80 (80% Organizer)
+  minPlatformFeePercent: number; // 0
+  maxPlatformFeePercent: number; // 100
+  effectiveDate: string; // ISO date
+  policyNotes?: string;
+  history?: Array<{
+    id: string;
+    changedAt: string;
+    changedBy: string;
+    previousPlatformFeePercent: number;
+    newPlatformFeePercent: number;
+    reason: string;
+  }>;
+}
+
+export const DEFAULT_EVENT_REVENUE_POLICY: EventMarketplaceRevenuePolicy = {
+  defaultPlatformFeePercent: 20,
+  defaultOrganizerSharePercent: 80,
+  minPlatformFeePercent: 0,
+  maxPlatformFeePercent: 100,
+  effectiveDate: "2026-01-01T00:00:00.000Z",
+  policyNotes: "Kebijakan komisi standar platform DAGO Creative Hub (20% Platform / 80% Penyelenggara Komunitas).",
+  history: [
+    {
+      id: "hist-init-2026",
+      changedAt: "2026-01-01T00:00:00.000Z",
+      changedBy: "Platform Super Admin",
+      previousPlatformFeePercent: 20,
+      newPlatformFeePercent: 20,
+      reason: "Inisialisasi kebijakan bagi hasil awal Dago Creative Hub.",
+    },
+  ],
+};
+
 export interface PlatformSettings {
   language: LanguageCode;
   timezone: string;
@@ -36,6 +72,7 @@ export interface PlatformSettings {
   coworkingHolidays: CoworkingHolidayConfig;
   operationalHours: ServiceOperationalHours;
   tenantOperations: Record<string, TenantOperationConfig>;
+  eventRevenueSharing: EventMarketplaceRevenuePolicy;
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -50,6 +87,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   coworkingHolidays: DEFAULT_COWORKING_HOLIDAY_CONFIG,
   operationalHours: DEFAULT_OPERATIONAL_HOURS,
   tenantOperations: DEFAULT_TENANT_OPERATIONS,
+  eventRevenueSharing: DEFAULT_EVENT_REVENUE_POLICY,
   loyaltyTiers: {
     bronzeMin: 0,
     bronzeMax: 499,

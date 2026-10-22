@@ -60,7 +60,20 @@ import {
   Server,
   Info,
   Sliders,
+  Users,
+  UserCheck,
+  Eye,
+  TrendingUp,
+  Calculator,
+  Percent,
+  History,
+  FileCheck,
+  Key,
+  Copy,
+  ExternalLink,
 } from "lucide-react";
+import { CommunityOrganizerProfile, INITIAL_ORGANIZERS } from "@/types/organizer";
+import { CommunityEvent, EventRevenueSharingPolicy, DEFAULT_EVENT_POLICY } from "@/types/event";
 import {
   INDONESIAN_NATIONAL_HOLIDAYS_2026,
   HolidayOverride,
@@ -72,6 +85,7 @@ import {
   getTenantStatus,
   setTenantStatus,
   DEFAULT_FNB_TENANTS,
+  DEFAULT_TENANT_PROFILES,
   getTenantProfile,
   getTenantName,
   getAllFnbTenants,
@@ -209,6 +223,63 @@ export default function SettingsPage() {
   const [revenueSplits, setRevenueSplits] = useState<Record<string, TenantRevenueSplitConfig>>({});
   const [revenueSplitErrors, setRevenueSplitErrors] = useState<Record<string, string>>({});
   const [splitSaveFeedback, setSplitSaveFeedback] = useState<string>("");
+
+  // Unified Platform Administration: Mitra F&B & Penyelenggara Event
+  const [partnerSubTab, setPartnerSubTab] = useState<"MANAJEMEN_MITRA" | "BAGI_HASIL_FNB" | "BAGI_HASIL_EVENTS">("MANAJEMEN_MITRA");
+  const [partnerTypeFilter, setPartnerTypeFilter] = useState<"ALL" | "FNB" | "EVENT">("ALL");
+  const [partnerStatusFilter, setPartnerStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
+  const [partnerSearchQuery, setPartnerSearchQuery] = useState<string>("");
+  const [organizers, setOrganizers] = useState<CommunityOrganizerProfile[]>(INITIAL_ORGANIZERS);
+  const [isAddOrganizerModalOpen, setIsAddOrganizerModalOpen] = useState(false);
+  const [selectedPartnerDetail, setSelectedPartnerDetail] = useState<{
+    id: string;
+    name: string;
+    type: "FNB" | "EVENT";
+    categoryOrBadge: string;
+    contactPerson: string;
+    phone: string;
+    email: string;
+    status: "ACTIVE" | "INACTIVE";
+    serviceModule: string;
+    scopeLevel: string;
+    roleName: string;
+    permissions: string[];
+    bankInfo?: { bankName: string; accountNumber: string; accountHolder: string };
+    notes?: string;
+  } | null>(null);
+
+  // Form Tambah Penyelenggara
+  const [newOrgName, setNewOrgName] = useState("");
+  const [newOrgCategory, setNewOrgCategory] = useState("Komunitas Kreatif");
+  const [newOrgPIC, setNewOrgPIC] = useState("");
+  const [newOrgPhone, setNewOrgPhone] = useState("");
+  const [newOrgEmail, setNewOrgEmail] = useState("");
+  const [newOrgNotes, setNewOrgNotes] = useState("");
+  const [newOrgStatus, setNewOrgStatus] = useState<"ACTIVE" | "INACTIVE">("ACTIVE");
+  const [addOrgError, setAddOrgError] = useState("");
+  const [isSubmittingOrg, setIsSubmittingOrg] = useState(false);
+
+  // Organizer Activation Modal State
+  const [activationModalData, setActivationModalData] = useState<{
+    organizerName: string;
+    organizerEmail: string;
+    activationUrl: string;
+    expiresAt: string;
+  } | null>(null);
+  const [isGeneratingInvite, setIsGeneratingInvite] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Event Marketplace Revenue Sharing Policy State
+  const [eventPlatformFee, setEventPlatformFee] = useState<number>(20);
+  const [eventPolicyEffectiveDate, setEventPolicyEffectiveDate] = useState<string>("2026-01-01T00:00:00.000Z");
+  const [eventPolicyNotes, setEventPolicyNotes] = useState<string>("Kebijakan komisi standar platform DAGO Creative Hub (20% Platform / 80% Penyelenggara Komunitas).");
+  const [eventPolicyHistory, setEventPolicyHistory] = useState<any[]>(DEFAULT_EVENT_POLICY.history || []);
+  const [eventPolicyFeedback, setEventPolicyFeedback] = useState<string>("");
+  const [isSavingEventPolicy, setIsSavingEventPolicy] = useState(false);
+  const [eventSimTicketPrice, setEventSimTicketPrice] = useState<number>(50000);
+  const [eventSimTicketQty, setEventSimTicketQty] = useState<number>(10);
+  const [activeAdminEvents, setActiveAdminEvents] = useState<CommunityEvent[]>([]);
+  const [eventOverrides, setEventOverrides] = useState<Record<string, number | null>>({});
 
   // Master Data Tabs & Filters State
   const [selectedMasterTab, setSelectedMasterTab] = useState("Produk & Kategori");
@@ -865,6 +936,203 @@ export default function SettingsPage() {
     window.addEventListener("subscription_state_updated", handleSubscriptionUpdate);
     return () => window.removeEventListener("subscription_state_updated", handleSubscriptionUpdate);
   }, [user, isTenantOwner]);
+
+  // Load Organizers, Event Policy, and Events
+  useEffect(() => {
+    fetch("/api/events/admin/organizers")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data)) {
+          setOrganizers(data.data);
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/events/admin/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && data.data) {
+          setEventPlatformFee(data.data.defaultPlatformFeePercent ?? 20);
+          setEventPolicyEffectiveDate(data.data.effectiveDate || "2026-01-01T00:00:00.000Z");
+          setEventPolicyNotes(data.data.policyNotes || "");
+          setEventPolicyHistory(data.data.history || []);
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/events/admin")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.data)) {
+          setActiveAdminEvents(data.data);
+          const overrides: Record<string, number | null> = {};
+          data.data.forEach((evt: CommunityEvent) => {
+            overrides[evt.id] = evt.customPlatformFeePercent ?? null;
+          });
+          setEventOverrides(overrides);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggleOrganizerStatus = async (orgId: string, currentStatus: "ACTIVE" | "INACTIVE") => {
+    const nextStatus = currentStatus === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    try {
+      const res = await fetch("/api/events/admin/organizers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: orgId, status: nextStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setOrganizers((prev) =>
+          prev.map((o) => (o.id === orgId ? { ...o, status: nextStatus, updatedAt: new Date().toISOString() } : o))
+        );
+        showMasterToast(`Status akun penyelenggara diubah menjadi ${nextStatus === "ACTIVE" ? "AKTIF" : "NONAKTIF"}.`);
+      } else {
+        showMasterToast(data.error || "Gagal mengubah status penyelenggara.");
+      }
+    } catch {
+      showMasterToast("Terjadi kesalahan koneksi saat mengubah status.");
+    }
+  };
+
+  const handleCreateOrganizerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddOrgError("");
+    if (!newOrgName.trim() || !newOrgPIC.trim() || !newOrgPhone.trim() || !newOrgEmail.trim()) {
+      setAddOrgError("Seluruh field bertanda bintang (*) wajib diisi.");
+      return;
+    }
+
+    setIsSubmittingOrg(true);
+    try {
+      const res = await fetch("/api/events/admin/organizers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newOrgName.trim(),
+          category: newOrgCategory.trim(),
+          contactPerson: newOrgPIC.trim(),
+          phone: newOrgPhone.trim(),
+          email: newOrgEmail.trim().toLowerCase(),
+          notes: newOrgNotes.trim(),
+          initialStatus: newOrgStatus,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setOrganizers((prev) => [data.data, ...prev]);
+        setIsAddOrganizerModalOpen(false);
+        setNewOrgName("");
+        setNewOrgCategory("Komunitas Kreatif");
+        setNewOrgPIC("");
+        setNewOrgPhone("");
+        setNewOrgEmail("");
+        setNewOrgNotes("");
+        setNewOrgStatus("ACTIVE");
+        showMasterToast(`Penyelenggara [${data.data.name}] berhasil didaftarkan.`);
+      } else {
+        setAddOrgError(data.error || "Gagal mendaftarkan penyelenggara.");
+      }
+    } catch {
+      setAddOrgError("Terjadi kesalahan jaringan saat mendaftarkan penyelenggara.");
+    } finally {
+      setIsSubmittingOrg(false);
+    }
+  };
+
+  const handleGenerateActivationLink = async (orgId: string) => {
+    setIsGeneratingInvite(true);
+    setCopiedLink(false);
+    try {
+      const res = await fetch("/api/events/admin/organizers/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizerId: orgId }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        const fullUrl = `${window.location.origin}${data.data.activationUrl}`;
+        setActivationModalData({
+          organizerName: data.data.organizer.name,
+          organizerEmail: data.data.organizer.email,
+          activationUrl: fullUrl,
+          expiresAt: data.data.expiresAt,
+        });
+        fetch("/api/events/admin/organizers")
+          .then((r) => r.json())
+          .then((d) => {
+            if (d.success && Array.isArray(d.data)) setOrganizers(d.data);
+          })
+          .catch(() => {});
+        showMasterToast(`Tautan aktivasi untuk [${data.data.organizer.name}] berhasil diterbitkan.`);
+      } else {
+        showMasterToast(data.error || "Gagal menerbitkan tautan aktivasi.");
+      }
+    } catch {
+      showMasterToast("Terjadi kesalahan jaringan saat menerbitkan tautan aktivasi.");
+    } finally {
+      setIsGeneratingInvite(false);
+    }
+  };
+
+  const handleSaveEventRevenuePolicy = async () => {
+    setIsSavingEventPolicy(true);
+    setEventPolicyFeedback("");
+    try {
+      const res = await fetch("/api/events/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          defaultPlatformFeePercent: eventPlatformFee,
+          policyNotes: eventPolicyNotes,
+          effectiveDate: eventPolicyEffectiveDate,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        setEventPolicyHistory(data.data.history || []);
+        setEventPolicyFeedback(`Kebijakan komisi platform berhasil disimpan (${eventPlatformFee}% DAGO / ${100 - eventPlatformFee}% Penyelenggara).`);
+        showMasterToast("Kebijakan komisi Event Marketplace berhasil disimpan.");
+        updateSettings({
+          eventRevenueSharing: data.data,
+        });
+      } else {
+        setEventPolicyFeedback(`Error: ${data.error || "Gagal menyimpan kebijakan."}`);
+      }
+    } catch {
+      setEventPolicyFeedback("Error: Terjadi kesalahan jaringan saat menyimpan kebijakan.");
+    } finally {
+      setIsSavingEventPolicy(false);
+    }
+  };
+
+  const handleSaveEventOverride = async (eventId: string, customFeePercent: number | null) => {
+    try {
+      const res = await fetch("/api/events/admin/commission-override", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId, customPlatformFeePercent: customFeePercent }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEventOverrides((prev) => ({ ...prev, [eventId]: customFeePercent }));
+        setActiveAdminEvents((prev) =>
+          prev.map((e) => (e.id === eventId ? { ...e, customPlatformFeePercent: customFeePercent } : e))
+        );
+        showMasterToast(
+          customFeePercent !== null
+            ? `Override komisi ${customFeePercent}% berhasil disimpan untuk event ini.`
+            : "Override komisi dihapus, kembali ke default platform."
+        );
+      } else {
+        showMasterToast(data.error || "Gagal menyimpan override komisi event.");
+      }
+    } catch {
+      showMasterToast("Terjadi kesalahan koneksi saat menyimpan override event.");
+    }
+  };
 
   useEffect(() => {
     if (!isTenantOwner || !user?.tenant?.id) return;
@@ -2687,230 +2955,1403 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* TAB 2: MITRA & BAGI HASIL */}
+            {/* TAB 2: MITRA & BAGI HASIL — PUSAT ADMINISTRASI TERPADU */}
             {selectedMasterTab === "Mitra & Bagi Hasil" && (
               <div className="p-4 space-y-6">
-                {/* Mitra Status Table */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-bold text-xs text-slate-900 uppercase tracking-wide flex items-center space-x-2">
-                      <Store className="w-4 h-4 text-brand-orange" />
-                      <span>Daftar Mitra F&B & Status Operasional</span>
-                    </h4>
-                  </div>
-                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                    <table className="w-full text-left text-xs border-collapse min-w-[760px]">
-                      <thead className="bg-slate-50">
-                        <tr className="border-b border-slate-200 text-slate-400 uppercase text-[10px]">
-                          <th className="p-3 font-bold">Mitra F&B</th>
-                          <th className="p-3 font-bold">Kode Merchant</th>
-                          <th className="p-3 font-bold">Jam Buka - Tutup Gerai (Revisi 2)</th>
-                          <th className="p-3 font-bold">Status Terima Order</th>
-                          <th className="p-3 font-bold text-right">Aksi Buka / Tutup</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 text-slate-700 bg-white">
-                        {localTenants.map((t) => {
-                          const op = tenantOps[t.id] || {
-                            tenantId: t.id,
-                            tenantName: t.name,
-                            isAcceptingOrders: (allTenantStatuses[t.id] || "ACTIVE") === "ACTIVE",
-                            openTime: "08:00",
-                            closeTime: "21:00",
-                          };
-                          const isAccepting = op.isAcceptingOrders;
-
-                          return (
-                            <tr key={t.id} className="hover:bg-slate-50/50">
-                              <td className="p-3 font-bold text-slate-900">
-                                <div className="flex items-center space-x-2">
-                                  <Store className="w-3.5 h-3.5 text-brand-orange shrink-0" />
-                                  <span>{t.name}</span>
-                                  <span className="text-[10px] text-slate-500 font-normal">({t.badge})</span>
-                                </div>
-                              </td>
-                              <td className="p-3 font-mono text-slate-500">{t.code}</td>
-                              <td className="p-3">
-                                <div className="flex items-center space-x-1.5">
-                                  <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                  <input
-                                    type="time"
-                                    value={op.openTime || "08:00"}
-                                    onChange={(e) => handleUpdateTenantOperation(t.id, "openTime", e.target.value)}
-                                    className="px-1.5 py-1 border border-slate-200 rounded text-xs font-mono font-bold"
-                                    title="Jam Buka Gerai"
-                                  />
-                                  <span className="text-slate-400">-</span>
-                                  <input
-                                    type="time"
-                                    value={op.closeTime || "21:00"}
-                                    onChange={(e) => handleUpdateTenantOperation(t.id, "closeTime", e.target.value)}
-                                    className="px-1.5 py-1 border border-slate-200 rounded text-xs font-mono font-bold"
-                                    title="Jam Tutup Gerai"
-                                  />
-                                </div>
-                              </td>
-                              <td className="p-3">
-                                <span
-                                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center space-x-1.5 ${
-                                    isAccepting
-                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                      : "bg-rose-50 text-rose-700 border-rose-200"
-                                  }`}
-                                >
-                                  <span className={`w-1.5 h-1.5 rounded-full ${isAccepting ? "bg-emerald-600" : "bg-red-600"}`} />
-                                  <span>{isAccepting ? "OPEN ORDER (Buka)" : "TUTUP SEMENTARA"}</span>
-                                </span>
-                              </td>
-                              <td className="p-3 text-right space-x-2">
-                                <Button
-                                  size="sm"
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => {
-                                    const next = !isAccepting;
-                                    handleUpdateTenantOperation(t.id, "isAcceptingOrders", next);
-                                    setTenantStatus(t.id, next ? "ACTIVE" : "INACTIVE");
-                                    refreshAllTenantStatuses();
-                                    showMasterToast(`Status order ${t.name} diubah menjadi ${next ? "Open Order (Buka)" : "Tutup Sementara"}.`);
-                                  }}
-                                  className={`h-7 text-xs font-bold px-2.5 rounded-xl ${
-                                    isAccepting
-                                      ? "border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
-                                      : "border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
-                                  }`}
-                                >
-                                  <Power className="w-3 h-3 mr-1" />
-                                  <span>{isAccepting ? "Tutup Order" : "Buka Order"}</span>
-                                </Button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                {/* Sub-Navigasi Administrasi Platform */}
+                <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/60">
+                  <button
+                    type="button"
+                    onClick={() => setPartnerSubTab("MANAJEMEN_MITRA")}
+                    className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                      partnerSubTab === "MANAJEMEN_MITRA"
+                        ? "bg-white dark:bg-slate-700 text-[#3B7A57] dark:text-[#52B788] shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Manajemen Mitra & Akun Terpadu</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPartnerSubTab("BAGI_HASIL_FNB")}
+                    className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                      partnerSubTab === "BAGI_HASIL_FNB"
+                        ? "bg-white dark:bg-slate-700 text-brand-orange shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <Coffee className="w-3.5 h-3.5" />
+                    <span>Bagi Hasil & Operasional F&B</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPartnerSubTab("BAGI_HASIL_EVENTS")}
+                    className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                      partnerSubTab === "BAGI_HASIL_EVENTS"
+                        ? "bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Bagi Hasil Event Marketplace</span>
+                  </button>
                 </div>
 
-                {/* Revenue Sharing Configuration */}
-                <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center space-x-2">
-                        <Coins className="w-4 h-4 text-primary" />
-                        <span>Skema Bagi Hasil Mitra (Flexible Revenue Sharing)</span>
-                      </h4>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Konfigurasi persentase bagi hasil individual per tenant/mitra F&B. Berlaku pada saat transaksi diproses.
-                      </p>
+                {/* SUB-TAB 1: MANAJEMEN MITRA & AKUN TERPADU */}
+                {partnerSubTab === "MANAJEMEN_MITRA" && (
+                  <div className="space-y-4">
+                    {/* Header & Action Button */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center space-x-2">
+                          <Users className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                          <span>Direktori Mitra & Hak Akses Akun Platform</span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                          Pusat administrasi akun mitra kuliner F&B dan komunitas penyelenggara event DAGO Creative Hub.
+                        </p>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        type="button"
+                        onClick={() => setIsAddOrganizerModalOpen(true)}
+                        className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl h-8 px-3.5 space-x-1.5 shadow-xs shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Tambah Penyelenggara Event</span>
+                      </Button>
                     </div>
-                  </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {localTenants.map((tenant) => {
-                      const config = revenueSplits[tenant.id] || DEFAULT_TENANT_REVENUE_SPLITS[tenant.id] || {
-                        tenantId: tenant.id,
-                        tenantName: tenant.name,
-                        tenantSharePercent: 85,
-                        dagoSharePercent: 15,
-                        status: "ACTIVE",
-                      };
-                      const hasError = !!revenueSplitErrors[tenant.id];
+                    {/* Filter & Search Toolbar */}
+                    <div className="p-3 bg-slate-50/80 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-3">
+                      <div className="relative flex-1 min-w-[200px]">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={partnerSearchQuery}
+                          onChange={(e) => setPartnerSearchQuery(e.target.value)}
+                          placeholder="Cari nama mitra, PIC, email, atau modul..."
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                        />
+                      </div>
 
-                      const simGross = 100000;
-                      const simTenant = Math.round(simGross * (config.tenantSharePercent / 100));
-                      const simDago = simGross - simTenant;
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[11px] font-semibold text-slate-500">Tipe:</span>
+                        <select
+                          value={partnerTypeFilter}
+                          onChange={(e) => setPartnerTypeFilter(e.target.value as any)}
+                          className="text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 font-medium"
+                        >
+                          <option value="ALL">Semua Tipe Mitra</option>
+                          <option value="FNB">Mitra F&B Kuliner</option>
+                          <option value="EVENT">Penyelenggara Event</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[11px] font-semibold text-slate-500">Status:</span>
+                        <select
+                          value={partnerStatusFilter}
+                          onChange={(e) => setPartnerStatusFilter(e.target.value as any)}
+                          className="text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 font-medium"
+                        >
+                          <option value="ALL">Semua Status</option>
+                          <option value="ACTIVE">Aktif</option>
+                          <option value="INACTIVE">Nonaktif</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Combined Partners Directory Table */}
+                    {(() => {
+                      // 1. Map F&B tenants
+                      const fnbRows = localTenants.map((t) => {
+                        const status = allTenantStatuses[t.id] || "ACTIVE";
+                        const prof = DEFAULT_TENANT_PROFILES[t.id];
+                        const email =
+                          t.id === "tenant-ks"
+                            ? "owner.kopisenja@dagoeng.com"
+                            : t.id === "tenant-kitchen"
+                            ? "owner.dapurmama@dagoeng.com"
+                            : t.id === "tenant-bakery"
+                            ? "owner.manisbakery@dagoeng.com"
+                            : "owner.warungbunarti@dagoeng.com";
+                        const contactPerson =
+                          t.id === "tenant-ks"
+                            ? "I Wayan Pratama"
+                            : t.id === "tenant-kitchen"
+                            ? "Siti Aminah"
+                            : t.id === "tenant-bakery"
+                            ? "David Santoso"
+                            : "Bu Narti";
+
+                        return {
+                          id: t.id,
+                          name: t.name,
+                          type: "FNB" as const,
+                          categoryOrBadge: t.badge,
+                          contactPerson,
+                          phone: prof?.contactPhone || "+62 812-3456-7890",
+                          email,
+                          status,
+                          serviceModule: "FNB",
+                          scopeLevel: "TENANT",
+                          roleName: "Tenant Owner (F&B)",
+                          permissions: [
+                            "dashboard:view",
+                            "orders:view",
+                            "tables:view",
+                            "inventory:view",
+                            "menu:view",
+                            "menu:manage",
+                            "reports:view",
+                          ],
+                          bankInfo: {
+                            bankName: prof?.bankName || "BCA",
+                            accountNumber: prof?.bankAccountNumber || "8830192841",
+                            accountHolder: prof?.bankAccountHolder || t.name,
+                          },
+                          notes: "Mitra gerai kuliner F&B terintegrasi POS multi-tenant.",
+                        };
+                      });
+
+                      // 2. Map Community Organizers
+                      const eventRows = organizers.map((o) => ({
+                        id: o.id,
+                        name: o.name,
+                        type: "EVENT" as const,
+                        categoryOrBadge: o.category,
+                        contactPerson: o.contactPerson,
+                        phone: o.phone,
+                        email: o.email,
+                        status: o.status,
+                        activationStatus: (o as any).activationStatus || (o.status === "INACTIVE" ? "INACTIVE" : "PENDING_ACTIVATION"),
+                        serviceModule: "CO_WORKING / Event",
+                        scopeLevel: "TENANT",
+                        roleName: "Penyelenggara Event",
+                        permissions: [
+                          "events:manage_own",
+                          "events:portal_access",
+                          "events:checkin_attendee",
+                          "events:view_revenue",
+                        ],
+                        notes: o.notes || "Mitra komunitas penyelenggara event di DAGO Hub.",
+                      }));
+
+                      const combined = [...fnbRows, ...eventRows].filter((item) => {
+                        if (partnerTypeFilter !== "ALL" && item.type !== partnerTypeFilter) return false;
+                        if (partnerStatusFilter !== "ALL" && item.status !== partnerStatusFilter) return false;
+                        if (partnerSearchQuery.trim()) {
+                          const q = partnerSearchQuery.toLowerCase();
+                          const matchName = item.name.toLowerCase().includes(q);
+                          const matchPic = item.contactPerson.toLowerCase().includes(q);
+                          const matchEmail = item.email.toLowerCase().includes(q);
+                          const matchModule = item.serviceModule.toLowerCase().includes(q);
+                          return matchName || matchPic || matchEmail || matchModule;
+                        }
+                        return true;
+                      });
 
                       return (
-                        <div
-                          key={tenant.id}
-                          className={`p-4 rounded-xl border transition-all ${hasError
-                            ? "border-red-300 bg-red-50/40"
-                            : "border-slate-200 bg-slate-50/60 hover:bg-slate-50"
-                            }`}
+                        <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 shadow-2xs">
+                          <table className="w-full text-left text-xs border-collapse min-w-[850px]">
+                            <thead className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800">
+                              <tr className="text-slate-400 dark:text-slate-400 uppercase text-[10px] tracking-wider">
+                                <th className="p-3 font-bold">Mitra / Organisasi</th>
+                                <th className="p-3 font-bold">Tipe & Modul</th>
+                                <th className="p-3 font-bold">Penanggung Jawab (PIC)</th>
+                                <th className="p-3 font-bold">Akun Login Terhubung</th>
+                                <th className="p-3 font-bold">Status Akses & Aktivasi</th>
+                                <th className="p-3 font-bold text-right">Aksi Kelola</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                              {combined.length === 0 ? (
+                                <tr>
+                                  <td colSpan={6} className="p-6 text-center text-slate-400 text-xs">
+                                    Tidak ada mitra yang cocok dengan filter pencarian.
+                                  </td>
+                                </tr>
+                              ) : (
+                                combined.map((p) => {
+                                  const isActive = p.status === "ACTIVE";
+
+                                  return (
+                                    <tr key={`${p.type}-${p.id}`} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                                      <td className="p-3">
+                                        <div className="flex items-center space-x-2.5">
+                                          <div
+                                            className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                                              p.type === "FNB"
+                                                ? "bg-amber-100 dark:bg-amber-950/60 text-brand-orange"
+                                                : "bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788]"
+                                            }`}
+                                          >
+                                            {p.type === "FNB" ? (
+                                              <Store className="w-3.5 h-3.5" />
+                                            ) : (
+                                              <Calendar className="w-3.5 h-3.5" />
+                                            )}
+                                          </div>
+                                          <div>
+                                            <div className="font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-1.5">
+                                              <span>{p.name}</span>
+                                            </div>
+                                            <div className="text-[10px] text-slate-400">
+                                              {p.categoryOrBadge}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="p-3">
+                                        <div className="space-y-1">
+                                          <span
+                                            className={`inline-block text-[9px] font-bold px-2 py-0.5 rounded-md ${
+                                              p.type === "FNB"
+                                                ? "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800"
+                                                : "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                            }`}
+                                          >
+                                            {p.type === "FNB" ? "Mitra F&B" : "Penyelenggara Event"}
+                                          </span>
+                                          <div className="text-[10px] text-slate-500 font-mono">
+                                            Modul: {p.serviceModule}
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="p-3">
+                                        <div className="font-semibold text-slate-800 dark:text-slate-200">
+                                          {p.contactPerson}
+                                        </div>
+                                        <div className="text-[10px] text-slate-400 font-mono">
+                                          {p.phone}
+                                        </div>
+                                      </td>
+                                      <td className="p-3">
+                                        <div className="font-mono text-[11px] text-slate-700 dark:text-slate-300">
+                                          {p.email}
+                                        </div>
+                                        <div className="text-[10px] text-slate-400">
+                                          Scope: {p.scopeLevel}
+                                        </div>
+                                      </td>
+                                      <td className="p-3">
+                                        <div className="space-y-1">
+                                          <span
+                                            className={`inline-flex items-center space-x-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                              isActive
+                                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                                : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                                            }`}
+                                          >
+                                            <span
+                                              className={`w-1.5 h-1.5 rounded-full ${
+                                                isActive ? "bg-emerald-500" : "bg-rose-500"
+                                              }`}
+                                            />
+                                            <span>{isActive ? "AKTIF" : "NONAKTIF"}</span>
+                                          </span>
+
+                                          {/* Activation status for Event Organizer */}
+                                          {p.type === "EVENT" && (
+                                            <div>
+                                              {!isActive ? (
+                                                <span className="text-[9px] text-rose-500 font-medium">Akses Ditangguhkan</span>
+                                              ) : (p as any).activationStatus === "ACTIVATED" ? (
+                                                <span className="inline-flex items-center text-[9px] font-bold text-emerald-700 dark:text-emerald-400">
+                                                  <Check className="w-2.5 h-2.5 mr-0.5" />
+                                                  <span>Sudah Diaktifkan</span>
+                                                </span>
+                                              ) : (p as any).activationStatus === "EXPIRED" ? (
+                                                <span className="inline-flex items-center text-[9px] font-bold text-amber-700 dark:text-amber-400">
+                                                  <span>Token Kedaluwarsa</span>
+                                                </span>
+                                              ) : (
+                                                <span className="inline-flex items-center text-[9px] font-bold text-amber-600 dark:text-amber-400">
+                                                  <span>Menunggu Aktivasi</span>
+                                                </span>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="p-3 text-right">
+                                        <div className="inline-flex items-center space-x-1.5">
+                                          {p.type === "EVENT" && (
+                                            <Button
+                                              size="sm"
+                                              type="button"
+                                              variant="outline"
+                                              onClick={() => handleGenerateActivationLink(p.id)}
+                                              disabled={isGeneratingInvite || !isActive}
+                                              className="h-7 text-[11px] font-bold px-2.5 rounded-lg border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300 dark:bg-emerald-950/40 disabled:opacity-40"
+                                              title="Terbitkan tautan aktivasi mandiri berdurasi 48 jam"
+                                            >
+                                              <Key className="w-3 h-3 mr-1 text-[#3B7A57]" />
+                                              <span>Tautan Aktivasi</span>
+                                            </Button>
+                                          )}
+
+                                          <Button
+                                            size="sm"
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => {
+                                              if (p.type === "FNB") {
+                                                const next = !isActive;
+                                                setTenantStatus(p.id, next ? "ACTIVE" : "INACTIVE");
+                                                refreshAllTenantStatuses();
+                                                showMasterToast(
+                                                  `Status akun ${p.name} diubah menjadi ${
+                                                    next ? "AKTIF" : "NONAKTIF"
+                                                  }.`
+                                                );
+                                              } else {
+                                                handleToggleOrganizerStatus(p.id, p.status);
+                                              }
+                                            }}
+                                            className={`h-7 text-[11px] font-bold px-2.5 rounded-lg ${
+                                              isActive
+                                                ? "border-rose-200 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40"
+                                                : "border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                                            }`}
+                                            title={isActive ? "Nonaktifkan hak akses akun" : "Aktifkan hak akses akun"}
+                                          >
+                                            <Power className="w-3 h-3 mr-1" />
+                                            <span>{isActive ? "Nonaktifkan" : "Aktifkan"}</span>
+                                          </Button>
+
+                                          <Button
+                                            size="sm"
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => setSelectedPartnerDetail(p as any)}
+                                            className="h-7 text-[11px] font-bold px-2.5 rounded-lg border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                            title="Lihat detail identitas, RBAC, dan relasi data"
+                                          >
+                                            <Eye className="w-3 h-3 mr-1 text-slate-500" />
+                                            <span>Detail</span>
+                                          </Button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* SUB-TAB 2: BAGI HASIL MITRA F&B */}
+                {partnerSubTab === "BAGI_HASIL_FNB" && (
+                  <div className="space-y-6">
+                    {/* Mitra Operational Hours Table */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center space-x-2">
+                          <Store className="w-4 h-4 text-brand-orange" />
+                          <span>Daftar Mitra F&B & Status Operasional</span>
+                        </h4>
+                      </div>
+                      <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 shadow-2xs">
+                        <table className="w-full text-left text-xs border-collapse min-w-[760px]">
+                          <thead className="bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-800">
+                            <tr className="text-slate-400 dark:text-slate-400 uppercase text-[10px]">
+                              <th className="p-3 font-bold">Mitra F&B</th>
+                              <th className="p-3 font-bold">Kode Merchant</th>
+                              <th className="p-3 font-bold">Jam Buka - Tutup Gerai</th>
+                              <th className="p-3 font-bold">Status Terima Order</th>
+                              <th className="p-3 font-bold text-right">Aksi Buka / Tutup</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                            {localTenants.map((t) => {
+                              const op = tenantOps[t.id] || {
+                                tenantId: t.id,
+                                tenantName: t.name,
+                                isAcceptingOrders: (allTenantStatuses[t.id] || "ACTIVE") === "ACTIVE",
+                                openTime: "08:00",
+                                closeTime: "21:00",
+                              };
+                              const isAccepting = op.isAcceptingOrders;
+
+                              return (
+                                <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                                  <td className="p-3 font-bold text-slate-900 dark:text-slate-100">
+                                    <div className="flex items-center space-x-2">
+                                      <Store className="w-3.5 h-3.5 text-brand-orange shrink-0" />
+                                      <span>{t.name}</span>
+                                      <span className="text-[10px] text-slate-500 font-normal">({t.badge})</span>
+                                    </div>
+                                  </td>
+                                  <td className="p-3 font-mono text-slate-500">{t.code}</td>
+                                  <td className="p-3">
+                                    <div className="flex items-center space-x-1.5">
+                                      <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                      <input
+                                        type="time"
+                                        value={op.openTime || "08:00"}
+                                        onChange={(e) => handleUpdateTenantOperation(t.id, "openTime", e.target.value)}
+                                        className="px-1.5 py-1 border border-slate-200 dark:border-slate-700 rounded text-xs font-mono font-bold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                                        title="Jam Buka Gerai"
+                                      />
+                                      <span className="text-slate-400">-</span>
+                                      <input
+                                        type="time"
+                                        value={op.closeTime || "21:00"}
+                                        onChange={(e) => handleUpdateTenantOperation(t.id, "closeTime", e.target.value)}
+                                        className="px-1.5 py-1 border border-slate-200 dark:border-slate-700 rounded text-xs font-mono font-bold bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                                        title="Jam Tutup Gerai"
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="p-3">
+                                    <span
+                                      className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border inline-flex items-center space-x-1.5 ${
+                                        isAccepting
+                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800"
+                                          : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800"
+                                      }`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full ${isAccepting ? "bg-emerald-600" : "bg-red-600"}`} />
+                                      <span>{isAccepting ? "OPEN ORDER (Buka)" : "TUTUP SEMENTARA"}</span>
+                                    </span>
+                                  </td>
+                                  <td className="p-3 text-right">
+                                    <Button
+                                      size="sm"
+                                      type="button"
+                                      variant="outline"
+                                      onClick={() => {
+                                        const next = !isAccepting;
+                                        handleUpdateTenantOperation(t.id, "isAcceptingOrders", next);
+                                        setTenantStatus(t.id, next ? "ACTIVE" : "INACTIVE");
+                                        refreshAllTenantStatuses();
+                                        showMasterToast(`Status order ${t.name} diubah menjadi ${next ? "Open Order (Buka)" : "Tutup Sementara"}.`);
+                                      }}
+                                      className={`h-7 text-xs font-bold px-2.5 rounded-xl ${
+                                        isAccepting
+                                          ? "border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                                          : "border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-800 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+                                      }`}
+                                    >
+                                      <Power className="w-3 h-3 mr-1" />
+                                      <span>{isAccepting ? "Tutup Order" : "Buka Order"}</span>
+                                    </Button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* F&B Flexible Revenue Sharing */}
+                    <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center space-x-2">
+                            <Coins className="w-4 h-4 text-brand-orange" />
+                            <span>Skema Bagi Hasil Mitra F&B (Flexible Revenue Sharing)</span>
+                          </h4>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            Konfigurasi persentase bagi hasil individual per tenant/mitra F&B. Berlaku pada saat transaksi diproses.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {localTenants.map((tenant) => {
+                          const config = revenueSplits[tenant.id] || DEFAULT_TENANT_REVENUE_SPLITS[tenant.id] || {
+                            tenantId: tenant.id,
+                            tenantName: tenant.name,
+                            tenantSharePercent: 85,
+                            dagoSharePercent: 15,
+                            status: "ACTIVE",
+                          };
+                          const hasError = !!revenueSplitErrors[tenant.id];
+
+                          const simGross = 100000;
+                          const simTenant = Math.round(simGross * (config.tenantSharePercent / 100));
+                          const simDago = simGross - simTenant;
+
+                          return (
+                            <div
+                              key={tenant.id}
+                              className={`p-4 rounded-xl border transition-all ${
+                                hasError
+                                  ? "border-red-300 bg-red-50/40 dark:border-red-800 dark:bg-red-950/20"
+                                  : "border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                                <div className="flex items-center space-x-2">
+                                  <Store className="w-4 h-4 text-brand-orange" />
+                                  <span className="font-bold text-slate-900 dark:text-slate-100">{tenant.name}</span>
+                                  <span className="text-[10px] text-slate-500 font-mono">({tenant.code})</span>
+                                </div>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
+                                  STATUS: AKTIF
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-3 mt-3">
+                                <div>
+                                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                                    Bagian Mitra / Tenant (%)
+                                  </label>
+                                  <div className="flex items-center space-x-1">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      step={0.5}
+                                      value={config.tenantSharePercent}
+                                      onChange={(e) => handleTenantSplitChange(tenant.id, parseFloat(e.target.value))}
+                                      className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900"
+                                    />
+                                    <span className="font-bold text-slate-500">%</span>
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                                    Bagian DAGO Hub (%)
+                                  </label>
+                                  <div className="flex items-center space-x-1">
+                                    <input
+                                      type="number"
+                                      disabled
+                                      value={config.dagoSharePercent}
+                                      className="w-full px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 cursor-not-allowed"
+                                    />
+                                    <span className="font-bold text-slate-500">%</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {hasError && (
+                                <p className="text-[11px] text-red-600 dark:text-red-400 font-semibold mt-2">
+                                  {revenueSplitErrors[tenant.id]}
+                                </p>
+                              )}
+
+                              {/* Estimasi Perhitungan Preview */}
+                              <div className="mt-3 p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                                <span className="text-slate-400">Estimasi Rp 100k:</span>
+                                <span className="font-mono">
+                                  Mitra: <strong className="text-emerald-700 dark:text-emerald-400">Rp {simTenant.toLocaleString("id-ID")}</strong> | DAGO: <strong className="text-brand-orange">Rp {simDago.toLocaleString("id-ID")}</strong>
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="mt-4 p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-[11px] text-amber-900 dark:text-amber-200 space-y-1">
+                        <p className="font-semibold">Ketentuan Settlement Multi-Tenant & Immutability F&B:</p>
+                        <p>• Perubahan persentase bagi hasil di atas hanya berlaku untuk transaksi baru yang diproses setelah penyimpanan.</p>
+                        <p>• Transaksi historis yang telah berstatus PAID tetap mengunci pembagian pendapatan yang berlaku pada saat transaksi diselesaikan.</p>
+                      </div>
+
+                      <div className="flex justify-end mt-4">
+                        <Button
+                          type="button"
+                          onClick={handleSaveSettings}
+                          size="sm"
+                          className="bg-brand-orange hover:bg-orange-600 text-white font-bold px-5 space-x-1.5 shadow-sm"
                         >
-                          <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                            <div className="flex items-center space-x-2">
-                              <Store className="w-4 h-4 text-brand-orange" />
-                              <span className="font-bold text-slate-900">{tenant.name}</span>
-                              <span className="text-[10px] text-slate-500 font-mono">({tenant.code})</span>
-                            </div>
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                              STATUS: AKTIF
-                            </span>
+                          <Save className="w-4 h-4" />
+                          <span>Simpan Skema Bagi Hasil F&B</span>
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SUB-TAB 3: BAGI HASIL EVENT MARKETPLACE */}
+                {partnerSubTab === "BAGI_HASIL_EVENTS" && (
+                  <div className="space-y-6">
+                    {/* Header Policy */}
+                    <div>
+                      <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center space-x-2">
+                        <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>Kebijakan Komisi Bagi Hasil Event Marketplace</span>
+                      </h4>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Konfigurasi persentase komisi bagi hasil platform DAGO Creative Hub dan hak penyelenggara komunitas untuk penjualan tiket event publik.
+                      </p>
+                    </div>
+
+                    {/* Section 1: Default Platform Policy Form */}
+                    <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                        <span className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+                          <Percent className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                          <span>1. Tarif Komisi Standar Platform (Default Policy)</span>
+                        </span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
+                          TOTAL PEMBAGIAN: 100% (SEIMBANG)
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">
+                            Komisi Platform DAGO Hub (%)
+                          </label>
+                          <div className="flex items-center space-x-1.5">
+                            <input
+                              type="number"
+                              min={0}
+                              max={100}
+                              step={1}
+                              value={eventPlatformFee}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value);
+                                setEventPlatformFee(isNaN(val) ? 0 : Math.max(0, Math.min(100, val)));
+                              }}
+                              className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-xs"
+                            />
+                            <span className="font-bold text-slate-500 text-xs">%</span>
                           </div>
+                          <span className="text-[10px] text-slate-400 mt-1 block">Default platform: 20%</span>
+                        </div>
 
-                          <div className="grid grid-cols-2 gap-3 mt-3">
-                            <div>
-                              <label className="block text-slate-700 font-semibold mb-1">
-                                Bagian Mitra / Tenant (%)
-                              </label>
-                              <div className="flex items-center space-x-1">
-                                <input
-                                  type="number"
-                                  min={0}
-                                  max={100}
-                                  step={0.5}
-                                  value={config.tenantSharePercent}
-                                  onChange={(e) => handleTenantSplitChange(tenant.id, parseFloat(e.target.value))}
-                                  className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg font-bold text-slate-900 bg-white"
-                                />
-                                <span className="font-bold text-slate-500">%</span>
-                              </div>
+                        <div>
+                          <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">
+                            Bagian Penyelenggara Komunitas (%)
+                          </label>
+                          <div className="flex items-center space-x-1.5">
+                            <input
+                              type="number"
+                              disabled
+                              value={100 - eventPlatformFee}
+                              className="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 cursor-not-allowed text-xs"
+                            />
+                            <span className="font-bold text-slate-500 text-xs">%</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 mt-1 block">Otomatis dihitung (100% - Komisi)</span>
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">
+                            Tanggal Efektif Berlaku
+                          </label>
+                          <input
+                            type="date"
+                            value={eventPolicyEffectiveDate.split("T")[0]}
+                            onChange={(e) => setEventPolicyEffectiveDate(new Date(e.target.value).toISOString())}
+                            className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-xs"
+                          />
+                          <span className="text-[10px] text-slate-400 mt-1 block">Mulai berlaku untuk tiket baru</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">
+                          Catatan / Alasan Penetapan Kebijakan
+                        </label>
+                        <input
+                          type="text"
+                          value={eventPolicyNotes}
+                          onChange={(e) => setEventPolicyNotes(e.target.value)}
+                          placeholder="Contoh: Penyesuaian komisi platform semester gasal 2026..."
+                          className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900"
+                        />
+                      </div>
+
+                      {eventPolicyFeedback && (
+                        <div
+                          className={`p-2.5 rounded-lg text-xs font-semibold ${
+                            eventPolicyFeedback.startsWith("Error")
+                              ? "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
+                              : "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
+                          }`}
+                        >
+                          {eventPolicyFeedback}
+                        </div>
+                      )}
+
+                      <div className="flex justify-end pt-2">
+                        <Button
+                          type="button"
+                          onClick={handleSaveEventRevenuePolicy}
+                          disabled={isSavingEventPolicy}
+                          size="sm"
+                          className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold px-4 text-xs rounded-xl shadow-xs"
+                        >
+                          <Save className="w-3.5 h-3.5 mr-1.5" />
+                          <span>{isSavingEventPolicy ? "Menyimpan..." : "Simpan Kebijakan Komisi Platform"}</span>
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Section 2: Interactive Revenue Simulation */}
+                    <div className="p-4 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-700">
+                        <span className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+                          <Calculator className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                          <span>2. Simulasi Interaktif Pembagian Pendapatan Tiket</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400">Model Komisi: {eventPlatformFee}% DAGO / {100 - eventPlatformFee}% Komunitas</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1 text-[11px]">
+                            Harga Tiket Peserta (Rp)
+                          </label>
+                          <input
+                            type="number"
+                            step={5000}
+                            min={0}
+                            value={eventSimTicketPrice}
+                            onChange={(e) => setEventSimTicketPrice(Math.max(0, parseFloat(e.target.value) || 0))}
+                            className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1 text-[11px]">
+                            Estimasi Jumlah Tiket Terjual
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={500}
+                            value={eventSimTicketQty}
+                            onChange={(e) => setEventSimTicketQty(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg text-xs font-mono font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                          />
+                        </div>
+                      </div>
+
+                      {(() => {
+                        const gross = eventSimTicketPrice * eventSimTicketQty;
+                        const platformFeeAmount = Math.round((gross * eventPlatformFee) / 100);
+                        const organizerAmount = gross - platformFeeAmount;
+
+                        return (
+                          <div className="mt-2 p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
+                            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Omset Bruto</span>
+                              <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100 font-mono">
+                                Rp {gross.toLocaleString("id-ID")}
+                              </span>
                             </div>
-
-                            <div>
-                              <label className="block text-slate-700 font-semibold mb-1">
-                                Bagian DAGO Hub (%)
-                              </label>
-                              <div className="flex items-center space-x-1">
-                                <input
-                                  type="number"
-                                  disabled
-                                  value={config.dagoSharePercent}
-                                  className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg font-bold text-slate-500 bg-slate-100 cursor-not-allowed"
-                                />
-                                <span className="font-bold text-slate-500">%</span>
-                              </div>
+                            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                              <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 block">
+                                Hak Penyelenggara ({100 - eventPlatformFee}%)
+                              </span>
+                              <span className="text-sm font-extrabold text-[#3B7A57] dark:text-[#52B788] font-mono">
+                                Rp {organizerAmount.toLocaleString("id-ID")}
+                              </span>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                              <span className="text-[10px] uppercase font-bold text-slate-500 block">
+                                Komisi DAGO Hub ({eventPlatformFee}%)
+                              </span>
+                              <span className="text-sm font-extrabold text-slate-700 dark:text-slate-300 font-mono">
+                                Rp {platformFeeAmount.toLocaleString("id-ID")}
+                              </span>
                             </div>
                           </div>
+                        );
+                      })()}
+                    </div>
 
-                          {hasError && (
-                            <p className="text-[11px] text-red-600 font-semibold mt-2">
-                              {revenueSplitErrors[tenant.id]}
+                    {/* Section 3: Per-Event Commission Overrides */}
+                    <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                        <div>
+                          <span className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+                            <Award className="w-4 h-4 text-brand-orange" />
+                            <span>3. Override Tarif Komisi Khusus Per Event (Admin Only)</span>
+                          </span>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Admin Dago dapat menetapkan persentase komisi khusus untuk event kolaborasi tertentu. Event tanpa override otomatis mengikuti default platform ({eventPlatformFee}%).
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                        <table className="w-full text-left text-xs border-collapse min-w-[700px]">
+                          <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-800">
+                            <tr className="text-slate-400 uppercase text-[10px]">
+                              <th className="p-2.5 font-bold">Event & Penyelenggara</th>
+                              <th className="p-2.5 font-bold">Harga Tiket</th>
+                              <th className="p-2.5 font-bold">Status Kebijakan Komisi</th>
+                              <th className="p-2.5 font-bold text-right">Aksi Override Komisi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                            {activeAdminEvents.filter((e) => e.isPaid).length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="p-4 text-center text-slate-400 text-xs">
+                                  Belum ada event berbayar yang terdaftar.
+                                </td>
+                              </tr>
+                            ) : (
+                              activeAdminEvents
+                                .filter((e) => e.isPaid)
+                                .map((evt) => {
+                                  const currentOverride = eventOverrides[evt.id] ?? evt.customPlatformFeePercent ?? null;
+                                  const isCustom = currentOverride !== null && currentOverride !== undefined;
+                                  const effectiveRate = isCustom ? currentOverride : eventPlatformFee;
+
+                                  return (
+                                    <tr key={evt.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                                      <td className="p-2.5">
+                                        <div className="font-bold text-slate-900 dark:text-slate-100">{evt.title}</div>
+                                        <div className="text-[10px] text-slate-400">{evt.organizerName}</div>
+                                      </td>
+                                      <td className="p-2.5 font-mono font-bold text-slate-800 dark:text-slate-200">
+                                        Rp {(evt.price || 0).toLocaleString("id-ID")}
+                                      </td>
+                                      <td className="p-2.5">
+                                        {isCustom ? (
+                                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
+                                            <span>CUSTOM: {effectiveRate}% DAGO / {100 - effectiveRate}% Mitra</span>
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                            <span>DEFAULT PLATFORM ({eventPlatformFee}% / {100 - eventPlatformFee}%)</span>
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="p-2.5 text-right">
+                                        <div className="inline-flex items-center space-x-2">
+                                          <input
+                                            type="number"
+                                            min={0}
+                                            max={100}
+                                            placeholder={`${eventPlatformFee}%`}
+                                            value={currentOverride ?? ""}
+                                            onChange={(e) => {
+                                              const val = e.target.value === "" ? null : parseFloat(e.target.value);
+                                              setEventOverrides((prev) => ({
+                                                ...prev,
+                                                [evt.id]: val === null || isNaN(val) ? null : Math.max(0, Math.min(100, val)),
+                                              }));
+                                            }}
+                                            className="w-16 px-2 py-1 text-xs border border-slate-300 dark:border-slate-700 rounded text-center font-bold bg-white dark:bg-slate-900"
+                                          />
+                                          <Button
+                                            size="sm"
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => handleSaveEventOverride(evt.id, eventOverrides[evt.id] ?? null)}
+                                            className="h-7 text-[11px] font-bold px-2 rounded-lg"
+                                          >
+                                            Simpan
+                                          </Button>
+                                          {isCustom && (
+                                            <Button
+                                              size="sm"
+                                              type="button"
+                                              variant="ghost"
+                                              onClick={() => handleSaveEventOverride(evt.id, null)}
+                                              className="h-7 text-[11px] text-slate-400 hover:text-red-600 px-1.5"
+                                              title="Kembalikan ke default platform"
+                                            >
+                                              Reset
+                                            </Button>
+                                          )}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Section 4: Immutability & Business Rules Note */}
+                    <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl text-[11px] text-emerald-950 dark:text-emerald-200 space-y-1.5">
+                      <p className="font-bold flex items-center space-x-1.5">
+                        <ShieldCheck className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                        <span>Prinsip Keamanan Finansial & Snapshot Immutability:</span>
+                      </p>
+                      <ul className="list-disc list-inside space-y-0.5 text-[10px] text-emerald-900 dark:text-emerald-300 pl-1">
+                        <li>
+                          <strong>Snapshot Transaksi:</strong> Setiap pemesanan tiket yang berstatus <code>PAID</code> membekukan snapshot nominal komisi platform dan hak payout penyelenggara pada saat transaksi dibuat. Perubahan persentase komisi di halaman ini HANYA berlaku untuk tiket baru.
+                        </li>
+                        <li>
+                          <strong>Dasar Perhitungan Bersih:</strong> Tiket yang berstatus <code>PENDING</code> atau <code>CANCELLED</code> tidak dihitung sebagai omset final.
+                        </li>
+                        <li>
+                          <strong>Pemisahan Rekonsiliasi:</strong> Penghitungan estimasi bagi hasil tidak sama dengan pencairan dana (payout). Pencairan nyata memerlukan proses settlement verifikasi berkala.
+                        </li>
+                      </ul>
+                    </div>
+
+                    {/* Section 5: Policy Change History Log */}
+                    <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
+                        <span className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+                          <History className="w-4 h-4 text-slate-500" />
+                          <span>4. Riwayat Perubahan Kebijakan Komisi (Audit Trail)</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400">Total {eventPolicyHistory.length} entri terekam</span>
+                      </div>
+
+                      <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                        <table className="w-full text-left text-xs border-collapse min-w-[650px]">
+                          <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-800">
+                            <tr className="text-slate-400 uppercase text-[10px]">
+                              <th className="p-2.5 font-bold">Waktu Perubahan</th>
+                              <th className="p-2.5 font-bold">Diubah Oleh</th>
+                              <th className="p-2.5 font-bold">Tarif Komisi</th>
+                              <th className="p-2.5 font-bold">Catatan / Alasan</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                            {eventPolicyHistory.length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="p-3 text-center text-slate-400 text-xs">
+                                  Belum ada catatan riwayat perubahan.
+                                </td>
+                              </tr>
+                            ) : (
+                              eventPolicyHistory.map((item) => (
+                                <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                                  <td className="p-2.5 font-mono text-[11px] text-slate-500">
+                                    {new Date(item.changedAt).toLocaleString("id-ID")}
+                                  </td>
+                                  <td className="p-2.5 font-semibold text-slate-800 dark:text-slate-200">
+                                    {item.changedBy}
+                                  </td>
+                                  <td className="p-2.5 font-mono font-bold">
+                                    <span className="text-slate-400 line-through mr-1">{item.previousPlatformFeePercent}%</span>
+                                    <span className="text-[#3B7A57] dark:text-[#52B788]">➔ {item.newPlatformFeePercent}% DAGO</span>
+                                  </td>
+                                  <td className="p-2.5 text-slate-600 dark:text-slate-400">
+                                    {item.reason}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* MODAL 1: TAMBAH PENYELENGGARA EVENT */}
+                {isAddOrganizerModalOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
+                            <Plus className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
+                              Daftarkan Penyelenggara Event Baru
+                            </h3>
+                            <p className="text-[10px] text-slate-400">
+                              Pemberian hak akses dan pembuatan profil komunitas di DAGO Creative Hub
                             </p>
-                          )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddOrganizerModalOpen(false)}
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
 
-                          {/* Estimasi Perhitungan Preview */}
-                          <div className="mt-3 p-2.5 bg-white border border-slate-200 rounded-lg text-[11px] text-slate-600 flex items-center justify-between">
-                            <span className="text-slate-400">Estimasi Rp 100k:</span>
-                            <span className="font-mono">
-                              Mitra: <strong className="text-emerald-700">Rp {simTenant.toLocaleString("id-ID")}</strong> | DAGO: <strong className="text-brand-orange">Rp {simDago.toLocaleString("id-ID")}</strong>
+                      <form onSubmit={handleCreateOrganizerSubmit} className="space-y-3.5">
+                        {addOrgError && (
+                          <div className="p-2.5 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs">
+                            {addOrgError}
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Nama Komunitas / Penyelenggara *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={newOrgName}
+                            onChange={(e) => setNewOrgName(e.target.value)}
+                            placeholder="Contoh: Bandung Indie Filmmakers Guild"
+                            className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              Kategori Komunitas
+                            </label>
+                            <input
+                              type="text"
+                              value={newOrgCategory}
+                              onChange={(e) => setNewOrgCategory(e.target.value)}
+                              placeholder="Kolektif Seni / Teknologi / Kopi"
+                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              Nama Penanggung Jawab (PIC) *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={newOrgPIC}
+                              onChange={(e) => setNewOrgPIC(e.target.value)}
+                              placeholder="Nama koordinator komunitas"
+                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              Nomor Telepon / WhatsApp *
+                            </label>
+                            <input
+                              type="tel"
+                              required
+                              value={newOrgPhone}
+                              onChange={(e) => setNewOrgPhone(e.target.value)}
+                              placeholder="+62 812-xxxx-xxxx"
+                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              Alamat Email Login Terhubung *
+                            </label>
+                            <input
+                              type="email"
+                              required
+                              value={newOrgEmail}
+                              onChange={(e) => setNewOrgEmail(e.target.value)}
+                              placeholder="kontak@komunitas.id"
+                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              Status Akses Awal
+                            </label>
+                            <select
+                              value={newOrgStatus}
+                              onChange={(e) => setNewOrgStatus(e.target.value as any)}
+                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                            >
+                              <option value="ACTIVE">AKTIF (Dapat Login & Ajukan Event)</option>
+                              <option value="INACTIVE">NONAKTIF (Tertunda / Review)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                              Cakupan Hak Akses (RBAC)
+                            </label>
+                            <input
+                              type="text"
+                              disabled
+                              value="Scope: TENANT (events:manage_own)"
+                              className="w-full px-3 py-2 text-xs border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-mono text-[11px]"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                            Catatan Kerjasama (Opsional)
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={newOrgNotes}
+                            onChange={(e) => setNewOrgNotes(e.target.value)}
+                            placeholder="Informasi tambahan mengenai MOU atau jadwal kegiatan komunitas..."
+                            className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                          />
+                        </div>
+
+                        <div className="pt-2 flex items-center justify-end space-x-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setIsAddOrganizerModalOpen(false)}
+                            className="text-xs h-9 px-4 rounded-xl"
+                          >
+                            Batal
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={isSubmittingOrg}
+                            className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-9 px-4 rounded-xl shadow-xs"
+                          >
+                            {isSubmittingOrg ? "Menyimpan..." : "Simpan Penyelenggara"}
+                          </Button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
+
+                {/* MODAL AKTIVASI: SALIN TAUTAN AKTIVASI PENYELENGGARA */}
+                {activationModalData && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
+                            <Key className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
+                              Tautan Aktivasi Akun Penyelenggara
+                            </h3>
+                            <p className="text-[10px] text-slate-400">
+                              Masa berlaku 48 jam • Satu kali pakai • Token di-hash secara aman
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActivationModalData(null);
+                            setCopiedLink(false);
+                          }}
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3 border border-slate-200 dark:border-slate-800 text-xs space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Penyelenggara:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{activationModalData.organizerName}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Email Akun:</span>
+                          <span className="font-mono text-slate-800 dark:text-slate-200">{activationModalData.organizerEmail}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Kedaluwarsa:</span>
+                          <span className="text-amber-600 dark:text-amber-400 font-medium">48 Jam (sejak diterbitkan)</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                          Tautan Aktivasi (Berikan kepada Penyelenggara secara Manual):
+                        </label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={activationModalData.activationUrl}
+                            className="w-full px-3 py-2 text-xs font-mono bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-200 select-all"
+                            onClick={(e) => (e.target as HTMLInputElement).select()}
+                          />
+                          <Button
+                            type="button"
+                            onClick={() => {
+                              if (navigator?.clipboard?.writeText) {
+                                navigator.clipboard.writeText(activationModalData.activationUrl);
+                              }
+                              setCopiedLink(true);
+                              showMasterToast("Tautan aktivasi berhasil disalin ke clipboard.");
+                              setTimeout(() => setCopiedLink(false), 3000);
+                            }}
+                            className={`h-9 px-3 shrink-0 rounded-xl text-xs font-bold transition-all ${
+                              copiedLink
+                                ? "bg-emerald-600 text-white"
+                                : "bg-[#3B7A57] hover:bg-[#2D5F43] text-white"
+                            }`}
+                          >
+                            {copiedLink ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 mr-1" />
+                                <span>Tersalin!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5 mr-1" />
+                                <span>Salin Tautan</span>
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-xl p-2.5">
+                        <span className="font-semibold text-amber-800 dark:text-amber-300">Catatan Keamanan:</span> Tautan ini hanya berlaku untuk 1 kali aktivasi password. Token mentah tidak disimpan dan tidak akan ditampilkan kembali setelah jendela ini ditutup.
+                      </div>
+
+                      <div className="flex justify-end pt-2 border-t border-slate-200 dark:border-slate-800">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setActivationModalData(null);
+                            setCopiedLink(false);
+                          }}
+                          className="text-xs font-bold h-8 px-4 rounded-xl border-slate-300 dark:border-slate-700"
+                        >
+                          Tutup
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* MODAL 2: DETAIL & HAK AKSES MITRA */}
+                {selectedPartnerDetail && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                        <div className="flex items-center space-x-2.5">
+                          <div
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                              selectedPartnerDetail.type === "FNB"
+                                ? "bg-amber-100 dark:bg-amber-950/60 text-brand-orange"
+                                : "bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788]"
+                            }`}
+                          >
+                            {selectedPartnerDetail.type === "FNB" ? (
+                              <Store className="w-4 h-4" />
+                            ) : (
+                              <Calendar className="w-4 h-4" />
+                            )}
+                          </div>
+                          <div>
+                            <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-100">
+                              {selectedPartnerDetail.name}
+                            </h3>
+                            <span className="text-[10px] text-slate-400">
+                              {selectedPartnerDetail.categoryOrBadge} • {selectedPartnerDetail.type === "FNB" ? "Mitra Kuliner F&B" : "Komunitas Penyelenggara Event"}
                             </span>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPartnerDetail(null)}
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
 
-                  <div className="mt-4 p-3 bg-amber-50/70 border border-amber-200 rounded-xl text-[11px] text-amber-900 space-y-1">
-                    <p className="font-semibold">Ketentuan Settlement Multi-Tenant & Immutability:</p>
-                    <p>• Perubahan persentase bagi hasil di atas hanya berlaku untuk transaksi baru yang diproses setelah penyimpanan.</p>
-                    <p>• Transaksi historis yang telah berstatus PAID tetap mengunci pembagian pendapatan yang berlaku pada saat transaksi diselesaikan.</p>
-                  </div>
+                      <div className="space-y-3 text-xs">
+                        <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Penanggung Jawab (PIC)</span>
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">{selectedPartnerDetail.contactPerson}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Kontak Telepon / WA</span>
+                            <span className="font-mono text-slate-700 dark:text-slate-300">{selectedPartnerDetail.phone}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Akun Login Terdaftar</span>
+                            <span className="font-mono text-slate-700 dark:text-slate-300">{selectedPartnerDetail.email}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Status Akses Akun</span>
+                            <span
+                              className={`inline-flex items-center space-x-1 font-bold ${
+                                selectedPartnerDetail.status === "ACTIVE"
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-rose-600 dark:text-rose-400"
+                              }`}
+                            >
+                              <span>{selectedPartnerDetail.status === "ACTIVE" ? "AKTIF (Dapat Login)" : "NONAKTIF (Diblokir)"}</span>
+                            </span>
+                          </div>
+                        </div>
 
-                  <div className="flex justify-end mt-4">
-                    <Button
-                      type="button"
-                      onClick={handleSaveSettings}
-                      size="sm"
-                      className="bg-brand-orange hover:bg-orange-600 text-white font-bold px-5 space-x-1.5 shadow-sm"
-                    >
-                      <Save className="w-4 h-4" />
-                      <span>Simpan Skema Bagi Hasil</span>
-                    </Button>
+                        {/* RBAC & Isolation Context */}
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1.5">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                            Aturan Hak Akses & Isolasi Data (RBAC)
+                          </span>
+                          <div className="grid grid-cols-2 gap-2 text-[11px]">
+                            <div>
+                              <span className="text-slate-500">Scope Level: </span>
+                              <strong className="font-mono text-slate-800 dark:text-slate-200">{selectedPartnerDetail.scopeLevel}</strong>
+                            </div>
+                            <div>
+                              <span className="text-slate-500">Peran Sistem: </span>
+                              <strong className="text-slate-800 dark:text-slate-200">{selectedPartnerDetail.roleName}</strong>
+                            </div>
+                          </div>
+                          <div className="pt-1.5 border-t border-slate-200 dark:border-slate-700">
+                            <span className="text-[10px] text-slate-400 block mb-1">Daftar Kode Izin (Permissions):</span>
+                            <div className="flex flex-wrap gap-1">
+                              {selectedPartnerDetail.permissions.map((code) => (
+                                <span
+                                  key={code}
+                                  className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-[9px] text-slate-600 dark:text-slate-300"
+                                >
+                                  {code}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {selectedPartnerDetail.bankInfo && (
+                          <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                              Rekening Settlement / Pencairan Bagi Hasil
+                            </span>
+                            <p className="font-mono text-slate-800 dark:text-slate-200 text-xs">
+                              {selectedPartnerDetail.bankInfo.bankName} — {selectedPartnerDetail.bankInfo.accountNumber} ({selectedPartnerDetail.bankInfo.accountHolder})
+                            </p>
+                          </div>
+                        )}
+
+                        {selectedPartnerDetail.notes && (
+                          <div className="text-[11px] text-slate-500 italic p-2 bg-slate-50 dark:bg-slate-800/30 rounded-lg">
+                            "{selectedPartnerDetail.notes}"
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-2 flex justify-end">
+                        <Button
+                          type="button"
+                          onClick={() => setSelectedPartnerDetail(null)}
+                          className="text-xs h-8 px-4 rounded-xl bg-slate-800 text-white hover:bg-slate-700"
+                        >
+                          Tutup
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 

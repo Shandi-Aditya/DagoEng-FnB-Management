@@ -18,6 +18,7 @@ import {
   Sparkles,
   Building2,
   Zap,
+  AlertCircle,
 } from "lucide-react";
 
 function LoginContent() {
@@ -35,6 +36,7 @@ function LoginContent() {
   const [email, setEmail] = useState("owner.dago@dagoeng.com");
   const [password, setPassword] = useState("Password123!");
   const [isLoading, setIsLoading] = useState(false);
+  const [staffError, setStaffError] = useState<string | null>(null);
 
   // Customer register/login form
   const [custName, setCustName] = useState("Ketut Dian");
@@ -53,39 +55,39 @@ function LoginContent() {
 
   const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setStaffError(null);
     setIsLoading(true);
 
-    let targetPersona: PersonaKey = "DAGO_OWNER";
-    const emailLower = email.toLowerCase().trim();
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (emailLower.includes("customer")) targetPersona = "CUSTOMER_DEMO";
-    else if (emailLower.includes("cashier")) targetPersona = "CASHIER_SGR";
-    else if (emailLower.includes("kitchen") || emailLower.includes("chef")) targetPersona = "KITCHEN_SGR";
-    else if (emailLower.includes("waiter")) targetPersona = "WAITER_SGR";
-    else if (emailLower.includes("cowork")) targetPersona = "COWORK_MANAGER";
-    else if (emailLower.includes("commercial")) targetPersona = "COMMERCIAL_MANAGER";
-    else if (emailLower.includes("kopisenja") || emailLower.includes("ks")) targetPersona = "TENANT_OWNER_KS";
-    else if (emailLower.includes("dapurmama") || emailLower.includes("kitchen")) targetPersona = "TENANT_OWNER_KITCHEN";
-    else if (emailLower.includes("manisbakery") || emailLower.includes("bakery")) targetPersona = "TENANT_OWNER_BAKERY";
-    else if (emailLower.includes("warungbunarti") || emailLower.includes("tea")) targetPersona = "TENANT_OWNER_TEA";
-    else if (emailLower.includes("admin")) targetPersona = "SUPER_ADMIN";
+      const data = await res.json();
 
-    await login(targetPersona);
-    setIsLoading(false);
+      if (!res.ok || !data.success) {
+        setStaffError(data.error || "Gagal masuk. Periksa kembali email dan password Anda.");
+        setIsLoading(false);
+        return;
+      }
 
-    if (returnTo) {
-      router.push(returnTo);
-      return;
+      // Synchronize client context with the authenticated persona
+      await login(data.personaKey);
+      setIsLoading(false);
+
+      if (returnTo) {
+        router.push(returnTo);
+        return;
+      }
+
+      router.push(data.redirectUrl || "/dashboard");
+    } catch (err: any) {
+      console.error("Staff login error:", err);
+      setStaffError("Terjadi kendala jaringan saat menghubungi server autentikasi.");
+      setIsLoading(false);
     }
-
-    // Default role-based redirection
-    if (targetPersona === "CASHIER_SGR") router.push("/pos");
-    else if (targetPersona === "KITCHEN_SGR") router.push("/kitchen");
-    else if (targetPersona === "WAITER_SGR") router.push("/waiter");
-    else if (targetPersona === "CUSTOMER_DEMO") router.push("/customer");
-    else if (targetPersona === "COWORK_MANAGER") router.push("/coworking");
-    else if (targetPersona === "COMMERCIAL_MANAGER") router.push("/commercial");
-    else router.push("/dashboard");
   };
 
   const handleCustomerSubmit = async (e: React.FormEvent) => {
@@ -121,22 +123,39 @@ function LoginContent() {
   const handleQuickLogin = async (personaKey: PersonaKey) => {
     const target = DEMO_PERSONAS[personaKey];
     if (target) {
+      setStaffError(null);
       setIsLoading(true);
-      await login(personaKey);
-      setIsLoading(false);
 
-      if (returnTo) {
-        router.push(returnTo);
-        return;
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: target.email, password: "Password123!" }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          setStaffError(data.error || "Akun demo tidak dapat diakses.");
+          setIsLoading(false);
+          return;
+        }
+
+        await login(personaKey);
+        setIsLoading(false);
+
+        if (returnTo) {
+          router.push(returnTo);
+          return;
+        }
+
+        router.push(data.redirectUrl || "/dashboard");
+      } catch (err) {
+        // Fallback for isolated offline client-only tests if fetch fails
+        await login(personaKey);
+        setIsLoading(false);
+        if (returnTo) router.push(returnTo);
+        else router.push("/dashboard");
       }
-
-      if (personaKey === "CASHIER_SGR") router.push("/pos");
-      else if (personaKey === "KITCHEN_SGR") router.push("/kitchen");
-      else if (personaKey === "WAITER_SGR") router.push("/waiter");
-      else if (personaKey === "CUSTOMER_DEMO") router.push("/customer");
-      else if (personaKey === "COWORK_MANAGER") router.push("/coworking");
-      else if (personaKey === "COMMERCIAL_MANAGER") router.push("/commercial");
-      else router.push("/dashboard");
     }
   };
 
@@ -247,6 +266,13 @@ function LoginContent() {
           <div className="p-6 space-y-5">
             {activeMode === "STAFF" ? (
               <form onSubmit={handleStaffLogin} className="space-y-4">
+                {staffError && (
+                  <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-start space-x-2 animate-in fade-in duration-200">
+                    <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{staffError}</span>
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Email Address</label>
                   <div className="relative">
@@ -444,9 +470,16 @@ function LoginContent() {
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("CUSTOMER_DEMO")}
-                  className="col-span-2 p-2.5 text-center bg-[#3B7A57]/10 dark:bg-[#52B788]/15 hover:bg-[#3B7A57] hover:text-white border border-[#3B7A57]/30 dark:border-[#52B788]/30 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
+                  className="p-2.5 text-center bg-[#3B7A57]/10 dark:bg-[#52B788]/15 hover:bg-[#3B7A57] hover:text-white border border-[#3B7A57]/30 dark:border-[#52B788]/30 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
                 >
-                  📱 Pelanggan QR (Customer Portal)
+                  📱 Pelanggan QR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin("COMMUNITY_BARISTA")}
+                  className="p-2.5 text-center bg-emerald-50 dark:bg-emerald-950/30 hover:bg-[#3B7A57] hover:text-white border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
+                >
+                  🎪 Penyelenggara Event
                 </button>
               </div>
             </div>

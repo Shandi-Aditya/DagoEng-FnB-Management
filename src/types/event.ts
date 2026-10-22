@@ -41,6 +41,9 @@ export interface CommunityEvent {
   // Capacity & Quota
   maxCapacity?: number;
 
+  // Revenue sharing override (Admin only)
+  customPlatformFeePercent?: number | null;
+
   // Guidelines & attendee instructions
   guidelines?: string[] | null;
 
@@ -140,4 +143,62 @@ export interface EventOperationalStats {
   totalTicketRevenue: number;
   platformCommissionRevenue: number;
   organizerPayoutTotal: number;
+}
+
+export interface EventRevenueSharingPolicy {
+  defaultPlatformFeePercent: number; // default 20 (20% DAGO Platform)
+  defaultOrganizerSharePercent: number; // default 80 (80% Penyelenggara)
+  minPlatformFeePercent: number; // default 0
+  maxPlatformFeePercent: number; // default 100
+  effectiveDate: string; // ISO date
+  policyNotes?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+  history?: Array<{
+    id: string;
+    changedAt: string;
+    changedBy: string;
+    previousPlatformFeePercent: number;
+    newPlatformFeePercent: number;
+    reason: string;
+  }>;
+}
+
+export const DEFAULT_EVENT_POLICY: EventRevenueSharingPolicy = {
+  defaultPlatformFeePercent: 20,
+  defaultOrganizerSharePercent: 80,
+  minPlatformFeePercent: 0,
+  maxPlatformFeePercent: 100,
+  effectiveDate: "2026-01-01T00:00:00.000Z",
+  policyNotes: "Kebijakan komisi standar platform DAGO Creative Hub (20% Platform / 80% Penyelenggara Komunitas).",
+  history: [
+    {
+      id: "hist-init-2026",
+      changedAt: "2026-01-01T00:00:00.000Z",
+      changedBy: "Platform Super Admin",
+      previousPlatformFeePercent: 20,
+      newPlatformFeePercent: 20,
+      reason: "Inisialisasi kebijakan bagi hasil awal Dago Creative Hub.",
+    },
+  ],
+};
+
+export interface OrganizerPortalSummary {
+  organizerEmail: string;
+  organizerName: string;
+  totalEvents: number;
+  approvedEvents: number;
+  pendingEvents: number;
+  revisionEvents: number;
+  totalAttendees: number;
+  totalTicketsSold: number;
+  grossRevenue: number;
+  platformFeeAmount: number;
+  organizerPayoutAmount: number; // 80% payout
+}
+
+export interface OrganizerPortalData {
+  summary: OrganizerPortalSummary;
+  events: CommunityEvent[];
+  bookings: EventTicketOrder[];
 }

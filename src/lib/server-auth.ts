@@ -2,6 +2,12 @@ import { NextRequest } from "next/server";
 import { RoleSlug, ScopeLevel } from "@/types/auth";
 import { db } from "./db";
 import { hashSessionToken, SESSION_COOKIE_NAME } from "./session";
+import { isOrganizerActive, getOrganizerById } from "./organizers";
+import {
+  getOrganizerSession,
+  withDbTimeout,
+  isLocalDevFallbackAllowed,
+} from "./organizer-activation";
 
 export interface ServerAuthResult {
   isAuthenticated: boolean;
@@ -179,46 +185,62 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
   // 1. Check database session cookie
   const sessionCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (sessionCookie) {
+    const sessionTokenHash = hashSessionToken(sessionCookie);
     try {
-      const sessionTokenHash = hashSessionToken(sessionCookie);
-      const session = await db.session.findUnique({
-        where: { sessionTokenHash },
-        include: {
-          user: {
-            include: {
-              userRoles: {
-                include: {
-                  role: true,
-                  organization: true,
-                  outlet: true,
+      const session = await withDbTimeout(() =>
+        db.session.findUnique({
+          where: { sessionTokenHash },
+          include: {
+            user: {
+              include: {
+                userRoles: {
+                  include: {
+                    role: true,
+                    organization: true,
+                    outlet: true,
+                  },
                 },
               },
             },
           },
-        },
-      });
-
+        })
+      );
       if (session && session.expiresAt > new Date() && session.user.isActive) {
         const primaryRole = session.user.userRoles[0];
-        if (primaryRole) {
-          const scopeLevel: ScopeLevel = primaryRole.outlet
+        const scopeLevel: ScopeLevel =
+          (primaryRole?.scopeLevel as ScopeLevel) ||
+          (primaryRole?.outlet
             ? "OUTLET"
-            : primaryRole.organization
+            : primaryRole?.organization
             ? "ORGANIZATION"
-            : "PLATFORM";
+            : "PLATFORM");
 
-          return {
-            isAuthenticated: true,
-            role: primaryRole.role.slug as RoleSlug,
-            userId: session.user.id,
-            email: session.user.email,
-            name: session.user.name,
-            scopeLevel,
-          };
-        }
+        return {
+          isAuthenticated: true,
+          role: (primaryRole?.role?.slug as RoleSlug) || "CUSTOMER",
+          userId: session.user.id,
+          email: session.user.email,
+          name: session.user.name,
+          scopeLevel,
+        };
       }
     } catch {
-      // Database unavailable or query error, fall through to verified persona cookie
+      // Database unavailable or query error, fall through to session store
+    }
+
+    // Check dynamic organizer session store (allowed ONLY in local dev/test fallback mode)
+    if (isLocalDevFallbackAllowed()) {
+      const orgSession = getOrganizerSession(sessionTokenHash);
+      if (orgSession && orgSession.expiresAt > new Date()) {
+        return {
+          isAuthenticated: true,
+          role: "CUSTOMER",
+          userId: orgSession.userId,
+          email: orgSession.email,
+          name: orgSession.name,
+          scopeLevel: "TENANT",
+        };
+      }
     }
   }
 
@@ -267,7 +289,7 @@ export interface OrganizerAuthResult {
  */
 export async function assertOrganizerAuth(
   req: NextRequest,
-  targetEmail?: string | null
+  targetEmailOrId?: string | null
 ): Promise<OrganizerAuthResult> {
   const auth = await getRequestAuthUser(req);
 
@@ -287,7 +309,7 @@ export async function assertOrganizerAuth(
 
   if (isHubAdmin) {
     // Hub Admin is permitted to supervise any community event
-    const effectiveEmail = (targetEmail || auth.email || "").toLowerCase().trim();
+    const effectiveEmail = (targetEmailOrId || auth.email || "").toLowerCase().trim();
     return {
       authorized: true,
       email: effectiveEmail,
@@ -310,11 +332,30 @@ export async function assertOrganizerAuth(
     };
   }
 
+  let targetEmailResolved = targetEmailOrId ? targetEmailOrId.toLowerCase().trim() : null;
+  if (targetEmailResolved && targetEmailResolved.startsWith("org-")) {
+    const orgRecord = getOrganizerById(targetEmailOrId!);
+    if (orgRecord) {
+      targetEmailResolved = orgRecord.email.toLowerCase().trim();
+    }
+  }
+
   // If client specified a target email that differs from authenticated session email, REJECT!
-  if (targetEmail && targetEmail.toLowerCase().trim() !== sessionEmail) {
+  if (targetEmailResolved && targetEmailResolved !== sessionEmail) {
     return {
       authorized: false,
-      error: `FORBIDDEN: Pelanggaran isolasi data. Akun terautentikasi Anda (${sessionEmail}) tidak memiliki izin mengakses data milik ${targetEmail}.`,
+      error: `FORBIDDEN: Pelanggaran isolasi data. Akun terautentikasi Anda (${sessionEmail}) tidak memiliki izin mengakses data milik ${targetEmailOrId}.`,
+      email: sessionEmail,
+      isAdmin: false,
+      userId: auth.userId,
+    };
+  }
+
+  // Check if organizer account has been deactivated by Platform Admin
+  if (!isOrganizerActive(sessionEmail)) {
+    return {
+      authorized: false,
+      error: `FORBIDDEN: Akun penyelenggara [${sessionEmail}] saat ini dinonaktifkan oleh Administrator Platform. Silakan hubungi manajemen DAGO Creative Hub.`,
       email: sessionEmail,
       isAdmin: false,
       userId: auth.userId,
@@ -399,3 +440,6 @@ export function maskPhoneNumber(phone: string): string {
   if (clean.length < 8) return "••••••••";
   return `${clean.slice(0, 4)}••••${clean.slice(-4)}`;
 }
+
+// Alias for getRequestAuthUser
+export const getServerAuthSession = getRequestAuthUser;

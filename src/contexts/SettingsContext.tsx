@@ -106,6 +106,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
             ...DEFAULT_PLATFORM_SETTINGS.tenantOperations,
             ...(parsed.tenantOperations || {}),
           },
+          eventRevenueSharing: {
+            ...DEFAULT_PLATFORM_SETTINGS.eventRevenueSharing,
+            ...(parsed.eventRevenueSharing || {}),
+            history: parsed.eventRevenueSharing?.history || DEFAULT_PLATFORM_SETTINGS.eventRevenueSharing.history,
+          },
         });
       }
     } catch (e) {

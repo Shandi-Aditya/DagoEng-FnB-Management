@@ -65,7 +65,7 @@ export async function PATCH(
     console.error(`PATCH /api/events/bookings/${params.id} error:`, error);
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memperbarui tiket peserta." },
-      { status: 500 }
+      { status: 400 }
     );
   }
 }

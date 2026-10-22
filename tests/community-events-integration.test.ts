@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import fs from "fs";
+import path from "path";
 import {
   createEventBooking,
   getEventBookings,
@@ -12,12 +14,21 @@ import {
 } from "../src/lib/events";
 import { CommunityEvent } from "../src/types/event";
 
+const DATA_DIR = path.join(process.cwd(), "data");
+const EVENTS_FILE = path.join(DATA_DIR, "events.json");
+const BOOKINGS_FILE = path.join(DATA_DIR, "event_bookings.json");
+
 describe("Community Events Integrated Module (DAGO Creative Hub)", () => {
   let freeEvent: CommunityEvent;
   let paidEvent: CommunityEvent;
   let limitedEvent: CommunityEvent;
+  let originalEventsBackup: string | null = null;
+  let originalBookingsBackup: string | null = null;
 
   beforeAll(async () => {
+    if (fs.existsSync(EVENTS_FILE)) originalEventsBackup = fs.readFileSync(EVENTS_FILE, "utf-8");
+    if (fs.existsSync(BOOKINGS_FILE)) originalBookingsBackup = fs.readFileSync(BOOKINGS_FILE, "utf-8");
+
     const timestamp = Date.now();
     // Create dedicated clean events with ample capacity for test execution
     const freeSub = await createEventSubmission({
@@ -222,6 +233,30 @@ describe("Community Events Integrated Module (DAGO Creative Hub)", () => {
     expect(cancelledCheckIn?.checkInTime).toBeFalsy();
   });
 
+  it("6b. (T-1) harus menolak check-in berulang terhadap tiket yang sudah hadir", async () => {
+    const booking = await createEventBooking({
+      eventId: freeEvent.id,
+      guestName: "Dono Kasino",
+      guestEmail: `dono-${Date.now()}@example.com`,
+      guestPhone: "081299991111",
+      ticketCount: 1,
+    });
+
+    // Check-in pertama sukses
+    const firstCheckIn = await updateBookingCheckIn(booking.id, "CHECKED_IN");
+    expect(firstCheckIn.checkInStatus).toBe("CHECKED_IN");
+
+    // Check-in kedua DITOLAK
+    await expect(
+      updateBookingCheckIn(booking.id, "CHECKED_IN")
+    ).rejects.toThrow("Tiket sudah digunakan untuk check-in sebelumnya");
+
+    // Fitur koreksi/undo tetap berfungsi normal
+    const undone = await updateBookingCheckIn(booking.id, "REGISTERED");
+    expect(undone.checkInStatus).toBe("REGISTERED");
+    expect(undone.checkInTime).toBeNull();
+  });
+
   it("7. harus mendukung update status pembayaran tiket", async () => {
     const booking = await createEventBooking({
       eventId: paidEvent.id,
@@ -233,6 +268,66 @@ describe("Community Events Integrated Module (DAGO Creative Hub)", () => {
 
     const updated = await updateBookingPaymentStatus(booking.id, "CANCELLED");
     expect(updated?.paymentStatus).toBe("CANCELLED");
+  });
+
+  it("7b. (T-2) harus menolak check-in tiket yang berstatus CANCELLED", async () => {
+    const booking = await createEventBooking({
+      eventId: freeEvent.id,
+      guestName: "Indro Warkop",
+      guestEmail: `indro-${Date.now()}@example.com`,
+      guestPhone: "081299992222",
+      ticketCount: 1,
+    });
+
+    // Batalkan tiket
+    await updateBookingPaymentStatus(booking.id, "CANCELLED");
+
+    // Check-in tiket batal DITOLAK
+    await expect(
+      updateBookingCheckIn(booking.id, "CHECKED_IN")
+    ).rejects.toThrow("Tiket dengan status CANCELLED tidak dapat digunakan untuk check-in");
+  });
+
+  it("7c. (Two-Step Reversal Guard) pembatalan pembayaran tiket CHECKED_IN harus ditolak sampai kehadiran dikoreksi", async () => {
+    const booking = await createEventBooking({
+      eventId: freeEvent.id,
+      guestName: "Mat Solar",
+      guestEmail: `matsolar-${Date.now()}@example.com`,
+      guestPhone: "081299993333",
+      ticketCount: 1,
+    });
+
+    // 1. Tandai hadir terlebih dahulu
+    const checkedIn = await updateBookingCheckIn(booking.id, "CHECKED_IN");
+    expect(checkedIn.checkInStatus).toBe("CHECKED_IN");
+    expect(checkedIn.checkInTime).toBeTruthy();
+    const originalCheckInTime = checkedIn.checkInTime;
+
+    // 2. Pembatalan pembayaran langsung saat tiket masih CHECKED_IN DITOLAK
+    await expect(
+      updateBookingPaymentStatus(booking.id, "CANCELLED")
+    ).rejects.toThrow("Tiket sudah digunakan untuk check-in. Batalkan status kehadiran terlebih dahulu sebelum membatalkan pembayaran.");
+
+    // 3. Pastikan status pembayaran dan histori kehadiran TIDAK berubah saat ditolak
+    const currentBooking = await getBookingById(booking.id);
+    expect(currentBooking?.paymentStatus).toBe("PAID");
+    expect(currentBooking?.checkInStatus).toBe("CHECKED_IN");
+    expect(currentBooking?.checkInTime).toBe(originalCheckInTime);
+
+    // 4. Koreksi kehadiran yang sah (admin membatalkan tanda hadir ke REGISTERED)
+    const corrected = await updateBookingCheckIn(booking.id, "REGISTERED");
+    expect(corrected.checkInStatus).toBe("REGISTERED");
+    expect(corrected.checkInTime).toBeNull();
+
+    // 5. Setelah kehadiran dikoreksi ke REGISTERED, pembatalan pembayaran berhasil
+    const cancelled = await updateBookingPaymentStatus(booking.id, "CANCELLED");
+    expect(cancelled.paymentStatus).toBe("CANCELLED");
+    expect(cancelled.checkInStatus).toBe("REGISTERED");
+
+    // 6. Tiket yang sudah CANCELLED tetap tidak dapat check-in kembali
+    await expect(
+      updateBookingCheckIn(booking.id, "CHECKED_IN")
+    ).rejects.toThrow("Tiket dengan status CANCELLED tidak dapat digunakan untuk check-in");
   });
 
   it("8. harus mengagregasi statistik operasional dan finansial event dengan presisi", async () => {
@@ -282,5 +377,14 @@ describe("Community Events Integrated Module (DAGO Creative Hub)", () => {
         ticketCount: 1,
       })
     ).rejects.toThrow("Kapasitas venue atau kuota tiket telah penuh");
+  });
+
+  afterAll(() => {
+    if (originalEventsBackup !== null) {
+      fs.writeFileSync(EVENTS_FILE, originalEventsBackup, "utf-8");
+    }
+    if (originalBookingsBackup !== null) {
+      fs.writeFileSync(BOOKINGS_FILE, originalBookingsBackup, "utf-8");
+    }
   });
 });

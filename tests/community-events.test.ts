@@ -1,4 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import fs from "fs";
+import path from "path";
 import {
   validateEventSubmission,
   checkRateLimit,
@@ -17,7 +19,24 @@ import { CommunityEvent, EventSubmissionPayload } from "../src/types/event";
 import { AuthenticatedUser } from "../src/types/auth";
 import { NextRequest } from "next/server";
 
+const DATA_DIR = path.join(process.cwd(), "data");
+const EVENTS_FILE = path.join(DATA_DIR, "events.json");
+
 describe("Community Events Module — Unit & Integration Tests", () => {
+  let originalEventsBackup: string | null = null;
+
+  beforeAll(() => {
+    if (fs.existsSync(EVENTS_FILE)) {
+      originalEventsBackup = fs.readFileSync(EVENTS_FILE, "utf-8");
+    }
+  });
+
+  afterAll(() => {
+    if (originalEventsBackup !== null) {
+      fs.writeFileSync(EVENTS_FILE, originalEventsBackup, "utf-8");
+    }
+  });
+
   describe("1. Submission Validation", () => {
     const validPayload: EventSubmissionPayload = {
       organizerName: "Bandung Creative Labs",
@@ -102,6 +121,43 @@ describe("Community Events Module — Unit & Integration Tests", () => {
       const res = validateEventSubmission(invalidUrl);
       expect(res.valid).toBe(false);
       expect(res.errors.some((e) => e.includes("eksternal"))).toBe(true);
+    });
+
+    it("should reject negative, zero, fraction, and invalid maxCapacity (T-4)", () => {
+      const negativeCap = { ...validPayload, maxCapacity: -10 };
+      const resNeg = validateEventSubmission(negativeCap);
+      expect(resNeg.valid).toBe(false);
+      expect(resNeg.errors.some((e) => e.includes("Kapasitas maksimal"))).toBe(true);
+
+      const zeroCap = { ...validPayload, maxCapacity: 0 };
+      const resZero = validateEventSubmission(zeroCap);
+      expect(resZero.valid).toBe(false);
+      expect(resZero.errors.some((e) => e.includes("Kapasitas maksimal"))).toBe(true);
+
+      const fractionCap = { ...validPayload, maxCapacity: 12.5 };
+      const resFraction = validateEventSubmission(fractionCap);
+      expect(resFraction.valid).toBe(false);
+      expect(resFraction.errors.some((e) => e.includes("Kapasitas maksimal"))).toBe(true);
+
+      const nanCap = { ...validPayload, maxCapacity: NaN };
+      const resNan = validateEventSubmission(nanCap);
+      expect(resNan.valid).toBe(false);
+      expect(resNan.errors.some((e) => e.includes("Kapasitas maksimal"))).toBe(true);
+
+      const stringCap = { ...validPayload, maxCapacity: "invalid" as any };
+      const resString = validateEventSubmission(stringCap);
+      expect(resString.valid).toBe(false);
+      expect(resString.errors.some((e) => e.includes("Kapasitas maksimal"))).toBe(true);
+    });
+
+    it("should accept valid integer maxCapacity and omitted optional maxCapacity (T-4)", () => {
+      const validCap = { ...validPayload, maxCapacity: 100 };
+      const resValid = validateEventSubmission(validCap);
+      expect(resValid.valid).toBe(true);
+
+      const omittedCap = { ...validPayload, maxCapacity: undefined };
+      const resOmitted = validateEventSubmission(omittedCap);
+      expect(resOmitted.valid).toBe(true);
     });
   });
 

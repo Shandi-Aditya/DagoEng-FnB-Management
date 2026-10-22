@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import fs from "fs";
+import path from "path";
 import { NextRequest } from "next/server";
 import {
   createEventSubmission,
@@ -12,6 +14,10 @@ import {
 import { assertOrganizerAuth } from "../src/lib/server-auth";
 import { CommunityEvent, EventTicketOrder } from "../src/types/event";
 
+const DATA_DIR = path.join(process.cwd(), "data");
+const EVENTS_FILE = path.join(DATA_DIR, "events.json");
+const BOOKINGS_FILE = path.join(DATA_DIR, "event_bookings.json");
+
 describe("Community Organizer Portal & Cross-Community Isolation", () => {
   const orgEmailA = `guild-${Date.now()}@dagocreative.id`;
   const orgEmailB = `bandungdev-${Date.now()}@bandungdev.org`;
@@ -19,8 +25,13 @@ describe("Community Organizer Portal & Cross-Community Isolation", () => {
   let eventA: CommunityEvent;
   let eventB: CommunityEvent;
   let bookingA: EventTicketOrder;
+  let originalEventsBackup: string | null = null;
+  let originalBookingsBackup: string | null = null;
 
   beforeAll(async () => {
+    if (fs.existsSync(EVENTS_FILE)) originalEventsBackup = fs.readFileSync(EVENTS_FILE, "utf-8");
+    if (fs.existsSync(BOOKINGS_FILE)) originalBookingsBackup = fs.readFileSync(BOOKINGS_FILE, "utf-8");
+
     // 1. Create Event for Organizer A
     const subA = await createEventSubmission({
       organizerName: "Dago Barista Guild",
@@ -218,5 +229,14 @@ describe("Community Organizer Portal & Cross-Community Isolation", () => {
       expect(spec.sourceType).toBe("ORGANIZER_SPECIFIED");
       expect(spec.capacity).toBe(35);
     });
+  });
+
+  afterAll(() => {
+    if (originalEventsBackup !== null) {
+      fs.writeFileSync(EVENTS_FILE, originalEventsBackup, "utf-8");
+    }
+    if (originalBookingsBackup !== null) {
+      fs.writeFileSync(BOOKINGS_FILE, originalBookingsBackup, "utf-8");
+    }
   });
 });

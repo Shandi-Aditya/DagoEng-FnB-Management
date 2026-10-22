@@ -91,6 +91,7 @@ export async function PUT(
       externalRegistrationUrl: body.externalRegistrationUrl,
       organizerName: body.organizerName,
       guidelines: body.guidelines,
+      customPlatformFeePercent: body.customPlatformFeePercent,
     };
 
     const updated = await updateEventDetails(id, allowedUpdates);

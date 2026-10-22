@@ -1,0 +1,18 @@
+{
+  "defaultPlatformFeePercent": 20,
+  "defaultOrganizerSharePercent": 80,
+  "minPlatformFeePercent": 0,
+  "maxPlatformFeePercent": 100,
+  "effectiveDate": "2026-01-01T00:00:00.000Z",
+  "policyNotes": "Kebijakan komisi standar platform DAGO Creative Hub (20% Platform / 80% Penyelenggara Komunitas).",
+  "history": [
+    {
+      "id": "hist-init-2026",
+      "changedAt": "2026-01-01T00:00:00.000Z",
+      "changedBy": "Platform Super Admin",
+      "previousPlatformFeePercent": 20,
+      "newPlatformFeePercent": 20,
+      "reason": "Inisialisasi kebijakan bagi hasil awal Dago Creative Hub."
+    }
+  ]
+}

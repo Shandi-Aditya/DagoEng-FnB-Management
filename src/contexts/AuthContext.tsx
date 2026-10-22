@@ -1,25 +1,10 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { AuthenticatedUser, RoleSlug, BusinessModuleCode, ScopeLevel } from "@/types/auth";
+import { AuthenticatedUser, RoleSlug, BusinessModuleCode, ScopeLevel, PersonaKey } from "@/types/auth";
 import { getTenantName } from "@/lib/tenant";
 
-export type PersonaKey =
-  | "DAGO_OWNER"
-  | "TENANT_OWNER_KS"
-  | "TENANT_OWNER_KITCHEN"
-  | "TENANT_OWNER_BAKERY"
-  | "TENANT_OWNER_TEA"
-  | "COWORK_MANAGER"
-  | "COMMERCIAL_MANAGER"
-  | "CASHIER_SGR"
-  | "KITCHEN_SGR"
-  | "WAITER_SGR"
-  | "CUSTOMER_DEMO"
-  | "SUPER_ADMIN"
-  | "COMMUNITY_BARISTA"
-  | "COMMUNITY_BANDUNGDEV"
-  | "COMMUNITY_AKSARAPRIANGAN";
+export type { PersonaKey } from "@/types/auth";
 
 interface AuthContextType {
   user: AuthenticatedUser | null;

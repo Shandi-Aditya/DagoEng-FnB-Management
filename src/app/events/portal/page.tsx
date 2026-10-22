@@ -33,8 +33,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { CommunityEvent, EventTicketOrder } from "@/types/event";
-import { OrganizerPortalData } from "@/lib/events";
+import { CommunityEvent, EventTicketOrder, OrganizerPortalData } from "@/types/event";
 import { useAuth, PersonaKey } from "@/contexts/AuthContext";
 
 const PRESET_ORGANIZERS = [
@@ -135,7 +134,7 @@ export default function CommunityOrganizerPortalPage() {
   };
 
   const handleCheckInToggle = async (booking: EventTicketOrder) => {
-    if (!activeEmail) return;
+    if (!activeEmail || booking.paymentStatus === "CANCELLED") return;
     try {
       setIsUpdatingCheckIn(booking.id);
       const nextStatus = booking.checkInStatus === "CHECKED_IN" ? "REGISTERED" : "CHECKED_IN";
@@ -435,35 +434,50 @@ export default function CommunityOrganizerPortalPage() {
                 </div>
               </Card>
 
-              <Card className="p-4 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
-                <div className="flex items-center justify-between pb-2">
-                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Hak Payout Anda (80%)</span>
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
-                    <TrendingUp className="w-4 h-4" />
-                  </div>
-                </div>
-                <div className="text-2xl font-black text-[#3B7A57] dark:text-[#52B788]">
-                  Rp {portalData.summary.organizerPayoutAmount.toLocaleString("id-ID")}
-                </div>
-                <div className="text-[10px] text-emerald-600 font-medium mt-1">
-                  80% dari total omset tiket Rp {portalData.summary.grossRevenue.toLocaleString("id-ID")}
-                </div>
-              </Card>
+              {(() => {
+                const orgPercent = portalData.summary.grossRevenue > 0
+                  ? Math.round((portalData.summary.organizerPayoutAmount / portalData.summary.grossRevenue) * 100)
+                  : 80;
+                const dagoPercent = 100 - orgPercent;
 
-              <Card className="p-4 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
-                <div className="flex items-center justify-between pb-2">
-                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Bagi Hasil Dago (20%)</span>
-                  <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
-                    <DollarSign className="w-4 h-4" />
-                  </div>
-                </div>
-                <div className="text-2xl font-black text-slate-700 dark:text-slate-300">
-                  Rp {portalData.summary.platformFeeAmount.toLocaleString("id-ID")}
-                </div>
-                <div className="text-[10px] text-slate-400 mt-1">
-                  Dukungan venue & platform Dago Hub
-                </div>
-              </Card>
+                return (
+                  <>
+                    <Card className="p-4 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
+                      <div className="flex items-center justify-between pb-2">
+                        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                          Hak Payout Anda ({orgPercent}%)
+                        </span>
+                        <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
+                          <TrendingUp className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-black text-[#3B7A57] dark:text-[#52B788]">
+                        Rp {portalData.summary.organizerPayoutAmount.toLocaleString("id-ID")}
+                      </div>
+                      <div className="text-[10px] text-emerald-600 font-medium mt-1">
+                        {orgPercent}% dari total omset tiket Rp {portalData.summary.grossRevenue.toLocaleString("id-ID")}
+                      </div>
+                    </Card>
+
+                    <Card className="p-4 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
+                      <div className="flex items-center justify-between pb-2">
+                        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                          Bagi Hasil Dago ({dagoPercent}%)
+                        </span>
+                        <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center justify-center">
+                          <DollarSign className="w-4 h-4" />
+                        </div>
+                      </div>
+                      <div className="text-2xl font-black text-slate-700 dark:text-slate-300">
+                        Rp {portalData.summary.platformFeeAmount.toLocaleString("id-ID")}
+                      </div>
+                      <div className="text-[10px] text-slate-400 mt-1">
+                        Dukungan venue & platform Dago Hub
+                      </div>
+                    </Card>
+                  </>
+                );
+              })()}
             </div>
 
             {/* 4. Tab Navigation */}
@@ -769,22 +783,33 @@ export default function CommunityOrganizerPortalPage() {
                             <td className="py-2.5 px-3 text-right whitespace-nowrap">
                               <Button
                                 size="sm"
-                                disabled={isUpdatingCheckIn === b.id}
+                                disabled={isUpdatingCheckIn === b.id || b.paymentStatus === "CANCELLED"}
                                 onClick={() => handleCheckInToggle(b)}
-                                className={`h-7 px-2.5 text-[11px] font-semibold rounded-lg cursor-pointer ${
-                                  b.checkInStatus === "CHECKED_IN"
-                                    ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
-                                    : "bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs"
+                                className={`h-7 px-2.5 text-[11px] font-semibold rounded-lg ${
+                                  b.paymentStatus === "CANCELLED"
+                                    ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-800"
+                                    : b.checkInStatus === "CHECKED_IN"
+                                    ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                                    : "bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs cursor-pointer"
                                 }`}
+                                title={b.paymentStatus === "CANCELLED" ? "Tiket yang dibatalkan tidak dapat check-in" : undefined}
                               >
                                 {isUpdatingCheckIn === b.id ? (
                                   <RefreshCw className="w-3 h-3 animate-spin mr-1" />
+                                ) : b.paymentStatus === "CANCELLED" ? (
+                                  <X className="w-3 h-3 mr-1" />
                                 ) : b.checkInStatus === "CHECKED_IN" ? (
                                   <RotateCcw className="w-3 h-3 mr-1" />
                                 ) : (
                                   <UserCheck className="w-3 h-3 mr-1" />
                                 )}
-                                <span>{b.checkInStatus === "CHECKED_IN" ? "Batalkan" : "Tandai Hadir"}</span>
+                                <span>
+                                  {b.paymentStatus === "CANCELLED"
+                                    ? "Dibatalkan"
+                                    : b.checkInStatus === "CHECKED_IN"
+                                    ? "Batalkan"
+                                    : "Tandai Hadir"}
+                                </span>
                               </Button>
                             </td>
                           </tr>
