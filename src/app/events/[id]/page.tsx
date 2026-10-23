@@ -27,6 +27,7 @@ import {
   Building,
   Phone,
   Mail,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -57,10 +58,9 @@ export default function EventDetailPage() {
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
-  // Payment Simulation State for Paid Events
+  // Payment Instruction State for Paid Events
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [pendingTicket, setPendingTicket] = useState<EventTicketOrder | null>(null);
-  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
 
   // Issued Digital E-Ticket State
   const [issuedTicket, setIssuedTicket] = useState<EventTicketOrder | null>(null);
@@ -180,15 +180,11 @@ export default function EventDetailPage() {
     }
   };
 
-  const handleConfirmPayment = () => {
+  const handleProceedToTicketView = () => {
     if (!pendingTicket) return;
-    setIsVerifyingPayment(true);
-    setTimeout(() => {
-      setIsVerifyingPayment(false);
-      setIsPaymentModalOpen(false);
-      setIssuedTicket(pendingTicket);
-      setIsTicketModalOpen(true);
-    }, 1200);
+    setIsPaymentModalOpen(false);
+    setIssuedTicket(pendingTicket);
+    setIsTicketModalOpen(true);
   };
 
   const handleCopyTicketCode = () => {
@@ -374,6 +370,78 @@ export default function EventDetailPage() {
                 </span>
               </div>
 
+              {/* Public Ticket Availability Progress Bar */}
+              {event.availability ? (
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-1.5">
+                      <Ticket className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                        Ketersediaan Tiket
+                      </span>
+                    </div>
+                    {event.availability.isSoldOut ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-900/50">
+                        Tiket Habis
+                      </span>
+                    ) : event.availability.occupancyRate >= 80 ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-900/50">
+                        Sisa Sedikit
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50">
+                        Tiket Tersedia
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-600 dark:text-slate-400 font-medium">
+                      <strong className="text-slate-900 dark:text-slate-100 font-bold">{event.availability.ticketsReserved}</strong> dari{" "}
+                      <strong className="text-slate-900 dark:text-slate-100 font-bold">{event.availability.totalCapacity}</strong> tiket terisi
+                    </span>
+                    <span className="font-bold text-[#3B7A57] dark:text-[#52B788]">
+                      {event.availability.occupancyRate}%
+                    </span>
+                  </div>
+
+                  <div
+                    className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2 overflow-hidden"
+                    role="progressbar"
+                    aria-valuenow={event.availability.occupancyRate}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label="Progres Ketersediaan Tiket"
+                  >
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        event.availability.isSoldOut
+                          ? "bg-rose-500"
+                          : event.availability.occupancyRate >= 80
+                          ? "bg-amber-500"
+                          : "bg-[#3B7A57] dark:bg-[#52B788]"
+                      }`}
+                      style={{ width: `${Math.min(100, Math.max(0, event.availability.occupancyRate))}%` }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-0.5">
+                    <span>
+                      {event.availability.isSoldOut ? (
+                        <span className="text-rose-600 dark:text-rose-400 font-semibold">Semua tiket telah dipesan</span>
+                      ) : (
+                        <span>
+                          <strong className="text-slate-800 dark:text-slate-200 font-semibold">{event.availability.ticketsRemaining}</strong> tiket tersisa
+                        </span>
+                      )}
+                    </span>
+                    <span className="italic text-[9.5px]">
+                      {event.availability.isConfirmed ? "Kapasitas terverifikasi" : "Estimasi venue"}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+
               {/* Schedule Row */}
               <div className="flex items-start space-x-3 text-xs">
                 <Calendar className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
@@ -413,6 +481,14 @@ export default function EventDetailPage() {
                   <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-center text-xs text-slate-500 dark:text-slate-400 font-medium">
                     Acara ini telah selesai dilaksanakan.
                   </div>
+                ) : event.availability?.isSoldOut ? (
+                  <Button
+                    disabled
+                    className="w-full bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs py-3 rounded-xl cursor-not-allowed flex items-center justify-center space-x-2"
+                  >
+                    <Ticket className="w-4 h-4" />
+                    <span>Tiket Habis Terjual (Sold Out)</span>
+                  </Button>
                 ) : (
                   <>
                     <Button
@@ -607,61 +683,73 @@ export default function EventDetailPage() {
       )}
 
       {/* ===================================================================== */}
-      {/* ===================================================================== */}
-      {/* 2. MODAL PEMBAYARAN QRIS UNTUK EVENT BERBAYAR */}
+      {/* 2. MODAL INSTRUKSI PEMBAYARAN TIKET BERBAYAR */}
       {/* ===================================================================== */}
       {isPaymentModalOpen && pendingTicket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Pembayaran QRIS Dago Hub</span>
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Instruksi Pembayaran Tiket</span>
               <span className="text-[10px] font-mono bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">
-                SIMULASI SISTEM
+                MENUNGGU VERIFIKASI
               </span>
             </div>
 
             <div className="space-y-1">
-              <span className="text-[11px] text-slate-400">Total Nominal Tiket:</span>
+              <span className="text-[11px] text-slate-400">Total Nominal Pembayaran:</span>
               <h2 className="text-2xl font-black text-[#3B7A57] dark:text-[#52B788]">
                 {formatCurrencyIDR(pendingTicket.totalPrice)}
               </h2>
-              <p className="text-[11px] text-slate-500 font-medium">{pendingTicket.ticketCount}x Tiket • {pendingTicket.eventTitle}</p>
+              <p className="text-[11px] text-slate-500 font-medium">
+                {pendingTicket.ticketCount}x Tiket • {pendingTicket.eventTitle}
+              </p>
             </div>
 
-            {/* Simulated QR Code Canvas */}
-            <div className="p-4 bg-white rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 inline-block shadow-inner">
-              <div className="w-44 h-44 bg-slate-900 rounded-xl p-2 flex flex-col items-center justify-center relative overflow-hidden">
-                <QrCode className="w-36 h-36 text-white" />
-                <div className="absolute inset-0 bg-amber-500/10 pointer-events-none" />
+            {/* Booking Code Banner */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/70 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
+              <span className="text-[10px] text-slate-400 uppercase font-semibold block mb-0.5">
+                Kode Booking Registrasi:
+              </span>
+              <span className="font-mono font-bold text-base text-slate-900 dark:text-white">
+                {pendingTicket.ticketCode}
+              </span>
+            </div>
+
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/50 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 text-left leading-relaxed space-y-1.5">
+              <div className="flex items-center space-x-1.5 font-bold text-amber-900 dark:text-amber-100">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>Status Pemesanan: Menunggu Verifikasi</span>
               </div>
-              <p className="text-[10px] text-slate-400 font-mono mt-2">NMID: SIMULASI-DAGO-QRIS-2026</p>
+              <p>
+                Pemesanan tiket Anda telah tersimpan di sistem. Selesaikan pembayaran nominal tepat melalui transfer bank atau kasir operasional DAGO Creative Hub.
+              </p>
+              <p className="text-[10px] text-amber-700 dark:text-amber-300 font-medium">
+                Tiket akan diverifikasi dan disahkan oleh panitia/administrator sebelum acara berlangsung.
+              </p>
             </div>
 
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/40 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 text-left leading-relaxed">
-              <span className="font-bold block mb-0.5">ℹ️ Mode Simulasi Pembayaran DAGO:</span>
-              Layar ini adalah simulasi QRIS terintegrasi sistem DAGO Creative Hub. Tiket Anda disimpan dengan status <span className="font-bold underline">MENUNGGU VERIFIKASI</span> hingga diverifikasi oleh tim kurator/admin.
+            <div className="space-y-2 pt-1">
+              <Button
+                onClick={handleProceedToTicketView}
+                className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md cursor-pointer flex items-center justify-center space-x-1.5"
+              >
+                <Ticket className="w-3.5 h-3.5" />
+                <span>Lihat E-Tiket (Menunggu Verifikasi)</span>
+              </Button>
+              <button
+                type="button"
+                onClick={() => setIsPaymentModalOpen(false)}
+                className="w-full text-center text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 py-1 font-medium transition-colors cursor-pointer"
+              >
+                Tutup Panduan Pembayaran
+              </button>
             </div>
-
-            <Button
-              onClick={handleConfirmPayment}
-              disabled={isVerifyingPayment}
-              className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md cursor-pointer"
-            >
-              {isVerifyingPayment ? (
-                <div className="flex items-center space-x-2">
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Merekam Konfirmasi Simulasi...</span>
-                </div>
-              ) : (
-                "Konfirmasi Bukti Pembayaran Simulasi"
-              )}
-            </Button>
           </div>
         </div>
       )}
 
       {/* ===================================================================== */}
-      {/* 3. MODAL DIGITAL E-TIKET RESMI (KONFIRMASI PENDAFTARAN) */}
+      {/* 3. MODAL DIGITAL E-TIKET RESMI (DATA LANGSUNG DARI SERVER) */}
       {/* ===================================================================== */}
       {isTicketModalOpen && issuedTicket && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150">
@@ -674,12 +762,12 @@ export default function EventDetailPage() {
                 </span>
                 <h3 className="text-base font-black">DAGO Creative Hub</h3>
               </div>
-              <Badge className={`border-0 text-[10px] font-bold ${
+              <Badge className={`border-0 text-[10px] font-black tracking-wide ${
                 issuedTicket.paymentStatus === "PAID"
-                  ? "bg-white/20 text-white"
+                  ? "bg-emerald-400 text-slate-900"
                   : "bg-amber-400 text-slate-900"
               }`}>
-                {issuedTicket.paymentStatus === "PAID" ? "TERKONFIRMASI" : "MENUNGGU VERIFIKASI"}
+                {issuedTicket.paymentStatus === "PAID" ? "TERKONFIRMASI (LUNAS)" : "MENUNGGU VERIFIKASI PEMBAYARAN"}
               </Badge>
             </div>
 
@@ -730,15 +818,31 @@ export default function EventDetailPage() {
                 </div>
               </div>
 
-              {/* Visual Simulated Check-In QR Bar */}
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 flex items-center space-x-3">
-                <div className="w-12 h-12 bg-slate-900 rounded-xl p-1 text-white flex items-center justify-center shrink-0">
-                  <QrCode className="w-9 h-9" />
+              {/* QR Code Bar with Status Enforcement */}
+              {issuedTicket.paymentStatus === "PAID" ? (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-slate-900 rounded-xl p-1 text-white flex items-center justify-center shrink-0">
+                    <QrCode className="w-9 h-9" />
+                  </div>
+                  <div className="text-[11px] text-emerald-900 dark:text-emerald-200 leading-snug">
+                    <span className="font-bold block text-emerald-800 dark:text-emerald-300">QR Check-in Aktif</span>
+                    Tunjukkan e-tiket atau kode booking ini kepada panitia acara di venue saat registrasi ulang.
+                  </div>
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
-                  Tunjukkan e-tiket atau kode booking ini kepada panitia acara di venue saat registrasi ulang.
+              ) : (
+                <div className="p-3.5 bg-amber-50/80 dark:bg-amber-950/30 rounded-2xl border border-amber-200/80 dark:border-amber-800/60 flex items-center space-x-3 text-left">
+                  <div className="w-12 h-12 bg-slate-900 rounded-xl p-1 text-amber-400 flex items-center justify-center shrink-0 relative overflow-hidden">
+                    <QrCode className="w-8 h-8 opacity-30" />
+                    <Lock className="w-4 h-4 text-amber-400 absolute" />
+                  </div>
+                  <div className="text-[11px] text-amber-900 dark:text-amber-200 leading-snug">
+                    <span className="font-bold block text-amber-800 dark:text-amber-300 mb-0.5">
+                      QR Check-in Belum Aktif
+                    </span>
+                    Tiket berstatus <span className="font-semibold underline">Menunggu Verifikasi Pembayaran</span>. Selesaikan pembayaran sebelum acara agar diverifikasi lunas dan dapat digunakan untuk check-in.
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex items-center space-x-3 pt-2">

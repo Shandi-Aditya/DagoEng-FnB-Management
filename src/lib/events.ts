@@ -16,6 +16,7 @@ import {
   DEFAULT_EVENT_POLICY,
   OrganizerPortalSummary,
   OrganizerPortalData,
+  EventTicketAvailability,
 } from "@/types/event";
 
 export {
@@ -23,6 +24,7 @@ export {
   DEFAULT_EVENT_POLICY,
   type OrganizerPortalSummary,
   type OrganizerPortalData,
+  type EventTicketAvailability,
 };
 
 const DATA_FILE = path.join(process.cwd(), "data", "events.json");
@@ -375,93 +377,19 @@ export function isSafePublicUrl(urlString: string): { safe: boolean; reason?: st
   }
 }
 
-export type VenueCapacitySource =
-  | "ORGANIZER_SPECIFIED"
-  | "COWORKING_FACILITY_SPEC"
-  | "UNCONFIRMED_ESTIMATE";
+import {
+  type VenueCapacitySource,
+  type VenueCapacityResolution,
+  resolveVenueCapacity,
+  getEventCapacity,
+} from "./event-capacity";
 
-export interface VenueCapacityResolution {
-  capacity: number;
-  isConfirmed: boolean;
-  source: VenueCapacitySource;
-  sourceType: VenueCapacitySource;
-  sourceDescription: string;
-}
-
-/**
- * Resolves venue seating capacity and traces data origin.
- * IMPORTANT AUDIT COMPLIANCE:
- * - Only coworking meeting rooms (Seminyak: 6, Ubud: 12) have confirmed specs in codebase.
- * - Public hub venues (Amphitheater, Main Hall, Tech Lab, Maker Space) do not have official database tables yet.
- *   They are explicitly flagged as UNCONFIRMED_ESTIMATE so assumed numbers are never treated as facts.
- */
-export function resolveVenueCapacity(
-  eventOrLocation: string | Pick<CommunityEvent, "location" | "maxCapacity">,
-  explicitMaxCapacity?: number
-): VenueCapacityResolution {
-  const location =
-    typeof eventOrLocation === "string" ? eventOrLocation : eventOrLocation.location;
-  const maxCapacity =
-    typeof eventOrLocation === "string"
-      ? explicitMaxCapacity
-      : eventOrLocation.maxCapacity ?? explicitMaxCapacity;
-
-  // 1. Explicit quota specified by organizer or hub curator
-  if (typeof maxCapacity === "number" && maxCapacity > 0) {
-    return {
-      capacity: maxCapacity,
-      isConfirmed: true,
-      source: "ORGANIZER_SPECIFIED",
-      sourceType: "ORGANIZER_SPECIFIED",
-      sourceDescription: "Kuota tiket ditentukan secara definitif oleh penyelenggara/admin pada formulir event.",
-    };
-  }
-
-  const loc = (location || "").toLowerCase();
-
-  // 2. Confirmed facility specifications from Coworking Module (src/features/coworking/coworking-data.ts)
-  if (loc.includes("boardroom") || (loc.includes("meeting") && loc.includes("12"))) {
-    return {
-      capacity: 12,
-      isConfirmed: true,
-      source: "COWORKING_FACILITY_SPEC",
-      sourceType: "COWORKING_FACILITY_SPEC",
-      sourceDescription: "Berdasarkan spesifikasi fasilitas resmi Boardroom Ubud (12 Pax).",
-    };
-  }
-  if (loc.includes("seminyak") || (loc.includes("meeting") && loc.includes("6"))) {
-    return {
-      capacity: 6,
-      isConfirmed: true,
-      source: "COWORKING_FACILITY_SPEC",
-      sourceType: "COWORKING_FACILITY_SPEC",
-      sourceDescription: "Berdasarkan spesifikasi fasilitas resmi Meeting Room Seminyak (6 Pax).",
-    };
-  }
-
-  // 3. Unconfirmed Public Hub Venues (Estimates only - NOT yet confirmed by official hub master configuration)
-  let estimatedCap = 50;
-  if (loc.includes("main hall")) estimatedCap = 120;
-  else if (loc.includes("amphitheater")) estimatedCap = 80;
-  else if (loc.includes("tech lab")) estimatedCap = 35;
-  else if (loc.includes("maker space") || loc.includes("maker")) estimatedCap = 25;
-
-  return {
-    capacity: estimatedCap,
-    isConfirmed: false,
-    source: "UNCONFIRMED_ESTIMATE",
-    sourceType: "UNCONFIRMED_ESTIMATE",
-    sourceDescription: `Kapasitas fisik belum memiliki master data resmi (belum dikonfirmasi di database, estimasi default operasional sementara: ${estimatedCap} pax).`,
-  };
-}
-
-/**
- * Returns the maximum seating/ticket capacity for an event.
- * Uses event.maxCapacity if specified, otherwise matches venue name or defaults to 50.
- */
-export function getEventCapacity(event: Pick<CommunityEvent, "location" | "maxCapacity">): number {
-  return resolveVenueCapacity(event).capacity;
-}
+export {
+  type VenueCapacitySource,
+  type VenueCapacityResolution,
+  resolveVenueCapacity,
+  getEventCapacity,
+};
 
 /**
  * Sanitizes event object for public consumption.
@@ -501,14 +429,57 @@ export async function getApprovedEvents(): Promise<PublicCommunityEvent[]> {
 }
 
 /**
+ * Computes live ticket availability metrics for an event based on confirmed capacity and active bookings.
+ * Follows exact quota rules: CANCELLED bookings are excluded; PENDING and PAID hold quota.
+ */
+export function getEventTicketAvailability(eventId: string): EventTicketAvailability {
+  const allEvents = loadEventsFromDisk();
+  const event = allEvents.find((e) => e.id === eventId);
+  if (!event) {
+    throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
+  }
+
+  const capacityRes = resolveVenueCapacity(event);
+  const totalCapacity = capacityRes.capacity;
+  const allBookings = loadBookingsFromDisk();
+  const activeBookings = allBookings.filter(
+    (b) => b.eventId === eventId && b.paymentStatus !== "CANCELLED"
+  );
+
+  const ticketsReserved = activeBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+  const ticketsRemaining = Math.max(0, totalCapacity - ticketsReserved);
+  const occupancyRate =
+    totalCapacity > 0 ? Math.min(100, Math.round((ticketsReserved / totalCapacity) * 100)) : 0;
+  const isSoldOut = ticketsRemaining <= 0;
+
+  return {
+    totalCapacity,
+    ticketsReserved,
+    ticketsRemaining,
+    occupancyRate,
+    isConfirmed: capacityRes.isConfirmed,
+    capacitySource: capacityRes.source,
+    capacityDescription: capacityRes.sourceDescription,
+    isSoldOut,
+  };
+}
+
+/**
  * Get a single approved event by ID for public detail page.
  * Returns null if not found or if the status is not APPROVED.
+ * Includes calculated real-time ticket availability.
  */
 export async function getPublicEventById(id: string): Promise<PublicCommunityEvent | null> {
   const all = loadEventsFromDisk();
   const event = all.find((e) => e.id === id && e.status === "APPROVED");
   if (!event) return null;
-  return toPublicEvent(event);
+  const publicEvt = toPublicEvent(event);
+  try {
+    publicEvt.availability = getEventTicketAvailability(event.id);
+  } catch {
+    // If calculating availability fails, keep public event intact
+  }
+  return publicEvt;
 }
 
 /**
@@ -1224,42 +1195,141 @@ export async function createEventBooking(
   });
 }
 
+export interface CheckInOptions {
+  incrementQty?: number;
+  targetQty?: number;
+  reset?: boolean;
+}
+
+let checkInLockPromise: Promise<void> = Promise.resolve();
+
 /**
  * Updates attendee check-in status (Admin/Staff check-in on event day).
+ * Supports partial check-in based on ticket QTY (e.g. 1 of 3, 2 of 3, 3 of 3).
+ * Uses in-memory promise lock to ensure atomic mutation and prevent concurrent over-check-in.
  */
 export async function updateBookingCheckIn(
   bookingId: string,
-  status: AttendeeCheckInStatus
+  status: AttendeeCheckInStatus,
+  options?: CheckInOptions
 ): Promise<EventTicketOrder> {
-  const allBookings = loadBookingsFromDisk();
-  const index = allBookings.findIndex((b) => b.id === bookingId);
-  if (index === -1) {
-    throw new Error(`Pemesanan tiket dengan ID ${bookingId} tidak ditemukan.`);
+  let release: () => void = () => {};
+  const currentLock = checkInLockPromise;
+  checkInLockPromise = new Promise((resolve) => {
+    release = resolve;
+  });
+
+  try {
+    await currentLock;
+    const allBookings = loadBookingsFromDisk();
+    const index = allBookings.findIndex((b) => b.id === bookingId);
+    if (index === -1) {
+      throw new Error(`Pemesanan tiket dengan ID ${bookingId} tidak ditemukan.`);
+    }
+
+    const existing = allBookings[index];
+    const ticketCount =
+      typeof existing.ticketCount === "number" && existing.ticketCount > 0
+        ? existing.ticketCount
+        : 1;
+    const currentCheckedInQty =
+      typeof existing.checkedInQty === "number"
+        ? existing.checkedInQty
+        : existing.checkInStatus === "CHECKED_IN"
+        ? ticketCount
+        : 0;
+
+    // 1. Validasi status: hanya CHECKED_IN, PARTIALLY_CHECKED_IN, atau REGISTERED yang sah
+    if (status !== "CHECKED_IN" && status !== "PARTIALLY_CHECKED_IN" && status !== "REGISTERED") {
+      throw new Error(
+        "Status check-in tidak valid (harus CHECKED_IN, PARTIALLY_CHECKED_IN, atau REGISTERED)."
+      );
+    }
+
+    // 2. Tolak check-in jika tiket berstatus CANCELLED
+    if (
+      existing.paymentStatus === "CANCELLED" &&
+      (status === "CHECKED_IN" ||
+        status === "PARTIALLY_CHECKED_IN" ||
+        (options?.incrementQty ?? 0) > 0)
+    ) {
+      throw new Error("Tiket dengan status CANCELLED tidak dapat digunakan untuk check-in.");
+    }
+
+    // 3. Tolak check-in jika tiket berbayar belum diverifikasi lunas (status masih PENDING)
+    if (
+      existing.paymentStatus !== "PAID" &&
+      existing.totalPrice > 0 &&
+      (status === "CHECKED_IN" ||
+        status === "PARTIALLY_CHECKED_IN" ||
+        (options?.incrementQty ?? 0) > 0)
+    ) {
+      throw new Error(
+        "Tiket berbayar belum diverifikasi lunas (status pembayaran masih PENDING). Silakan verifikasi pembayaran terlebih dahulu sebelum check-in."
+      );
+    }
+
+    let newCheckedInQty = currentCheckedInQty;
+    let newStatus: AttendeeCheckInStatus = status;
+
+    // Skenario A: Reset atau Batalkan Kehadiran
+    if (status === "REGISTERED" || options?.reset) {
+      newCheckedInQty = 0;
+      newStatus = "REGISTERED";
+    } else {
+      // Skenario B: Check-In (Increment atau Target)
+      if (currentCheckedInQty >= ticketCount) {
+        throw new Error(
+          "Tiket sudah digunakan untuk check-in sebelumnya (semua tiket dalam pemesanan ini sudah selesai check-in)."
+        );
+      }
+
+      let increment = 1;
+      if (options?.incrementQty !== undefined) {
+        increment = options.incrementQty;
+      } else if (options?.targetQty !== undefined) {
+        increment = options.targetQty - currentCheckedInQty;
+      } else if (status === "CHECKED_IN") {
+        // Direct CHECKED_IN call without options checks in all remaining tickets
+        increment = ticketCount - currentCheckedInQty;
+      }
+
+      if (increment <= 0) {
+        throw new Error("Kuantitas check-in yang ditambahkan harus lebih besar dari 0.");
+      }
+
+      if (currentCheckedInQty + increment > ticketCount) {
+        throw new Error(
+          `Jumlah check-in melebihi total tiket pemesanan (${ticketCount}). Sisa tiket belum check-in: ${
+            ticketCount - currentCheckedInQty
+          }.`
+        );
+      }
+
+      newCheckedInQty = currentCheckedInQty + increment;
+      if (newCheckedInQty === ticketCount) {
+        newStatus = "CHECKED_IN";
+      } else {
+        newStatus = "PARTIALLY_CHECKED_IN";
+      }
+    }
+
+    const updated: EventTicketOrder = {
+      ...existing,
+      ticketCount,
+      checkedInQty: newCheckedInQty,
+      checkInStatus: newStatus,
+      checkInTime: newCheckedInQty > 0 ? existing.checkInTime || new Date().toISOString() : null,
+      updatedAt: new Date().toISOString(),
+    };
+
+    allBookings[index] = updated;
+    saveBookingsToDisk(allBookings);
+
+    return updated;
+  } finally {
+    release();
   }
-
-  const existing = allBookings[index];
-
-  // T-2: Tolak check-in jika tiket berstatus CANCELLED
-  if (existing.paymentStatus === "CANCELLED" && status === "CHECKED_IN") {
-    throw new Error("Tiket dengan status CANCELLED tidak dapat digunakan untuk check-in.");
-  }
-
-  // T-1: Tolak check-in berulang jika tiket sudah berstatus CHECKED_IN
-  if (existing.checkInStatus === "CHECKED_IN" && status === "CHECKED_IN") {
-    throw new Error("Tiket sudah digunakan untuk check-in sebelumnya (tidak dapat check-in berulang).");
-  }
-
-  const updated: EventTicketOrder = {
-    ...existing,
-    checkInStatus: status,
-    checkInTime: status === "CHECKED_IN" ? new Date().toISOString() : null,
-    updatedAt: new Date().toISOString(),
-  };
-
-  allBookings[index] = updated;
-  saveBookingsToDisk(allBookings);
-
-  return updated;
 }
 
 /**
@@ -1348,7 +1418,23 @@ export async function getOrganizerPortalData(
 
   const eventIds = new Set(myEvents.map((e) => e.id));
   const allBookings = loadBookingsFromDisk();
-  const myBookings = allBookings.filter((b) => eventIds.has(b.eventId));
+  const myBookings = allBookings
+    .filter((b) => eventIds.has(b.eventId))
+    .map((b) => {
+      const ticketCount =
+        typeof b.ticketCount === "number" && b.ticketCount > 0 ? b.ticketCount : 1;
+      const checkedInQty =
+        typeof b.checkedInQty === "number"
+          ? b.checkedInQty
+          : b.checkInStatus === "CHECKED_IN"
+          ? ticketCount
+          : 0;
+      return {
+        ...b,
+        ticketCount,
+        checkedInQty,
+      };
+    });
 
   const approvedEvents = myEvents.filter((e) => e.status === "APPROVED").length;
   const pendingEvents = myEvents.filter((e) => e.status === "PENDING").length;
@@ -1390,7 +1476,8 @@ export async function getOrganizerPortalData(
 export async function organizerCheckInAttendee(
   organizerEmail: string,
   bookingId: string,
-  checkInStatus: AttendeeCheckInStatus
+  checkInStatus: AttendeeCheckInStatus,
+  options?: CheckInOptions
 ): Promise<EventTicketOrder> {
   const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
   const allBookings = loadBookingsFromDisk();
@@ -1410,7 +1497,7 @@ export async function organizerCheckInAttendee(
     throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk mengelola peserta event milik komunitas lain.");
   }
 
-  return updateBookingCheckIn(bookingId, checkInStatus);
+  return updateBookingCheckIn(bookingId, checkInStatus, options);
 }
 
 /**

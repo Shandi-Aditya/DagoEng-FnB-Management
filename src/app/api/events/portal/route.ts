@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrganizerPortalData, organizerResubmitEvent } from "@/lib/events";
 import { assertOrganizerAuth, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
+import { loadOrganizersFromDisk } from "@/lib/organizers";
 
 export const dynamic = "force-dynamic";
 
@@ -35,11 +36,48 @@ export async function GET(req: NextRequest) {
       guestPhone: maskPhoneNumber(b.guestPhone),
     }));
 
+    // Multi-Tenant Isolation: Determine strictly which communities this user is authorized to manage
+    const allOrganizers = loadOrganizersFromDisk();
+    let accessibleCommunities: Array<{ id: string; name: string; email: string; category?: string }> = [];
+
+    if (auth.isAdmin) {
+      // Platform / Hub Admin has oversight over registered communities
+      accessibleCommunities = allOrganizers
+        .filter((o) => o.status === "ACTIVE")
+        .map((o) => ({
+          id: o.id,
+          name: o.name,
+          email: o.email,
+          category: o.category,
+        }));
+    } else {
+      // Regular Organizer can ONLY see and access their own verified community
+      accessibleCommunities = allOrganizers
+        .filter((o) => o.status === "ACTIVE" && o.email.toLowerCase() === auth.email!.toLowerCase())
+        .map((o) => ({
+          id: o.id,
+          name: o.name,
+          email: o.email,
+          category: o.category,
+        }));
+
+      if (accessibleCommunities.length === 0 && portalData.events.length > 0) {
+        accessibleCommunities.push({
+          id: `org-${auth.email.replace(/[^a-zA-Z0-9]/g, "")}`,
+          name: portalData.summary.organizerName || "Komunitas Saya",
+          email: auth.email,
+          category: portalData.events[0]?.category,
+        });
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         ...portalData,
         organizerEmail: auth.email,
+        isAdmin: auth.isAdmin,
+        accessibleCommunities,
         bookings: sanitizedBookings,
       },
     });

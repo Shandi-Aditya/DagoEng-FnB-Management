@@ -1,5 +1,81 @@
 [
   {
+    "id": "evt-1792741538897-6qi0p",
+    "title": "asdfghjkl",
+    "category": "COMMUNITY",
+    "description": "dfghjklsdfghljkl;'\nlknjbhvgcjvklbj;kml',",
+    "startDate": "2026-10-29T07:44:00.000Z",
+    "endDate": "2026-10-31T07:44:00.000Z",
+    "location": "Singaraja, Bali",
+    "isPaid": true,
+    "price": 56000,
+    "posterUrl": "https://cdn.pixabay.com/photo/2017/12/08/11/53/event-party-3005668_1280.jpg",
+    "externalRegistrationUrl": "https://app.balitrailrunning.com/events",
+    "organizerName": "tes dix",
+    "organizerEmail": "sansaditya210005@gmail.com",
+    "organizerPhone": "+628573765457255",
+    "guidelines": [
+      "ygik",
+      "gjrdhz",
+      "rfdbjvt",
+      "fyub",
+      "poi;;'",
+      "tes"
+    ],
+    "status": "APPROVED",
+    "createdAt": "2026-10-23T07:45:38.898Z",
+    "updatedAt": "2026-10-23T07:46:17.332Z"
+  },
+  {
+    "id": "evt-1792740501383-3kriy",
+    "title": "asdfghjkl",
+    "category": "COMMUNITY",
+    "description": "sdxcfgvhbjnkml,;.'",
+    "startDate": "2026-11-07T07:27:00.000Z",
+    "endDate": "2026-11-09T07:27:00.000Z",
+    "location": "Singaraja, Bali",
+    "isPaid": true,
+    "price": 1000,
+    "posterUrl": "https://cdn.pixabay.com/photo/2017/12/08/11/53/event-party-3005668_1280.jpg",
+    "externalRegistrationUrl": "https://app.balitrailrunning.com/events",
+    "organizerName": "tes",
+    "organizerEmail": "sansaditya210005@gmail.com",
+    "organizerPhone": "+62822731053599",
+    "guidelines": [
+      "asdfcghbjkml,;.",
+      "sdfghjkl;",
+      "fghjk"
+    ],
+    "status": "APPROVED",
+    "createdAt": "2026-10-23T07:28:21.384Z",
+    "updatedAt": "2026-10-23T07:29:04.641Z"
+  },
+  {
+    "id": "evt-1792720022816-ia2wx",
+    "title": "tess",
+    "category": "OTHER",
+    "description": "1234567890",
+    "startDate": "2026-10-25T01:30:00.000Z",
+    "endDate": "2026-10-26T01:30:00.000Z",
+    "location": "hotel tes",
+    "isPaid": false,
+    "price": 0,
+    "posterUrl": "https://cdn.pixabay.com/photo/2017/12/08/11/53/event-party-3005668_1280.jpg",
+    "externalRegistrationUrl": "https://app.balitrailrunning.com/events",
+    "organizerName": "tes",
+    "organizerEmail": "sansaditya210005@gmail.com",
+    "organizerPhone": "+62822731053599",
+    "guidelines": [
+      "tes",
+      "1",
+      "2",
+      "3"
+    ],
+    "status": "APPROVED",
+    "createdAt": "2026-10-23T01:47:02.817Z",
+    "updatedAt": "2026-10-23T01:58:14.111Z"
+  },
+  {
     "id": "evt-1792573181344-sa2wb",
     "title": "Tech Jam Coding Bootcamp 1792573181339 (Revisi)",
     "category": "TECH",
@@ -15,10 +91,11 @@
     "organizerEmail": "bandungdev-1792573181322@bandungdev.org",
     "organizerPhone": "081234567822",
     "guidelines": null,
-    "status": "PENDING",
+    "status": "REJECTED",
     "createdAt": "2026-10-21T08:59:41.344Z",
-    "updatedAt": "2026-10-21T08:59:41.375Z",
-    "revisionNotes": null
+    "updatedAt": "2026-10-23T07:58:56.113Z",
+    "revisionNotes": null,
+    "rejectionReason": "p"
   },
   {
     "id": "evt-1792573181327-0vl5c",
@@ -119,9 +196,10 @@
     "organizerEmail": "sec@dagoeng.com",
     "organizerPhone": "081233221100",
     "guidelines": null,
-    "status": "PENDING",
+    "status": "REJECTED",
     "createdAt": "2026-10-21T08:59:40.381Z",
-    "updatedAt": "2026-10-21T08:59:40.387Z"
+    "updatedAt": "2026-10-23T07:58:42.344Z",
+    "rejectionReason": "[p"
   },
   {
     "id": "evt-1792573180374-q94ec",

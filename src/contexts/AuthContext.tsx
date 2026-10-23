@@ -11,7 +11,7 @@ interface AuthContextType {
   activeOrgModules: BusinessModuleCode[];
   toggleOrgModule: (moduleCode: BusinessModuleCode) => void;
   isLoading: boolean;
-  login: (personaKey?: PersonaKey) => Promise<boolean>;
+  login: (personaKey?: PersonaKey, customUser?: AuthenticatedUser) => Promise<boolean>;
   loginCustomer: (customerData: { name: string; phone: string; email?: string }) => Promise<AuthenticatedUser>;
   logout: () => Promise<void>;
   switchPersona: (personaKey: PersonaKey) => Promise<void>;
@@ -346,14 +346,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  const login = async (personaKey: PersonaKey = "DAGO_OWNER") => {
+  const login = async (personaKey?: PersonaKey, customUser?: AuthenticatedUser) => {
     setIsLoading(true);
-    const targetUser = DEMO_PERSONAS[personaKey];
-    setUser(targetUser);
-    localStorage.removeItem("dagoeng_is_logged_out");
-    localStorage.removeItem("dagoeng_custom_customer");
-    localStorage.setItem("dagoeng_active_persona", personaKey);
-    syncPersonaCookie(personaKey);
+    if (customUser) {
+      setUser(customUser);
+      localStorage.removeItem("dagoeng_is_logged_out");
+      localStorage.setItem("dagoeng_custom_customer", JSON.stringify(customUser));
+      localStorage.removeItem("dagoeng_active_persona");
+      syncPersonaCookie(null);
+      if (customUser.email) {
+        localStorage.setItem("dago_organizer_email", customUser.email);
+      }
+    } else {
+      const key = personaKey || "DAGO_OWNER";
+      const targetUser = DEMO_PERSONAS[key];
+      setUser(targetUser);
+      localStorage.removeItem("dagoeng_is_logged_out");
+      localStorage.removeItem("dagoeng_custom_customer");
+      localStorage.setItem("dagoeng_active_persona", key);
+      syncPersonaCookie(key);
+      if (targetUser?.email) {
+        localStorage.setItem("dago_organizer_email", targetUser.email);
+      }
+    }
     setIsLoading(false);
     return true;
   };

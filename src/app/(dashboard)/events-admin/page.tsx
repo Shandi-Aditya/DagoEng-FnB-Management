@@ -139,6 +139,12 @@ export default function AdminEventsPage() {
 
   const handleCheckInToggle = async (booking: EventTicketOrder) => {
     if (booking.paymentStatus === "CANCELLED") return;
+    if (booking.paymentStatus === "PENDING" && booking.checkInStatus !== "CHECKED_IN") {
+      setActionErrorMessage(
+        `Tiket ${booking.ticketCode} (${booking.guestName}) belum diverifikasi lunas (status masih PENDING). Silakan verifikasi pembayaran terlebih dahulu sebelum menandai hadir.`
+      );
+      return;
+    }
     try {
       setIsUpdatingCheckIn(booking.id);
       const nextStatus = booking.checkInStatus === "CHECKED_IN" ? "REGISTERED" : "CHECKED_IN";
@@ -589,17 +595,26 @@ export default function AdminEventsPage() {
       )}
 
       {actionErrorMessage && (
-        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex items-center justify-between">
+        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center space-x-2">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" />
             <span>{actionErrorMessage}</span>
           </div>
-          <button
-            onClick={() => setActionErrorMessage(null)}
-            className="text-xs font-bold underline ml-4"
-          >
-            Tutup
-          </button>
+          <div className="flex items-center space-x-3">
+            {actionErrorMessage.includes("CUSTOMER") && (
+              <Link href="/events/portal">
+                <Button size="sm" className="h-7 text-[11px] bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-lg px-2.5">
+                  Buka Portal Penyelenggara
+                </Button>
+              </Link>
+            )}
+            <button
+              onClick={() => setActionErrorMessage(null)}
+              className="text-xs font-bold underline cursor-pointer"
+            >
+              Tutup
+            </button>
+          </div>
         </div>
       )}
 

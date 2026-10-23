@@ -15,6 +15,8 @@ import {
   createEventBooking,
   setEventCommissionOverride,
   getAdminEvents,
+  createEventSubmission,
+  updateEventStatus,
 } from "@/lib/events";
 import { assertOrganizerAuth, assertEventAdmin } from "@/lib/server-auth";
 import { NextRequest } from "next/server";
@@ -299,17 +301,35 @@ describe("Platform Administration & Event Marketplace Revenue Sharing", () => {
       }).toThrow(/antara 0% hingga 100%/);
     });
 
+    async function getOrCreateValidPaidEventFixture() {
+      const timestamp = Date.now();
+      const submission = await createEventSubmission({
+        organizerName: "Dago Specialty Coffee Society",
+        organizerEmail: `revenue_fixture_${timestamp}@dagocreative.id`,
+        organizerPhone: "+62 812-9876-5432",
+        title: `Latte Art Sensory Workshop Fixture ${timestamp}`,
+        category: "WORKSHOP",
+        description: "Workshop kalibrasi rasa dan kompetisi persahabatan latte art.",
+        startDate: new Date(Date.now() + 3 * 24 * 3600 * 1000).toISOString(),
+        endDate: new Date(Date.now() + 3 * 24 * 3600 * 1000 + 4 * 3600 * 1000).toISOString(),
+        location: "Amphitheater Dago Creative Hub",
+        maxCapacity: 80,
+        isPaid: true,
+        price: 35000,
+        posterUrl: "https://images.unsplash.com/photo-1511920170033-f8396924c348",
+      });
+      return await updateEventStatus(submission.id, "APPROVED");
+    }
+
     it("should calculate ticket booking with custom per-event override", async () => {
-      // Find or setup an event with override
-      const events = await getAdminEvents();
-      const paidEvent = events.find((e) => e.isPaid && e.price > 0);
+      const paidEvent = await getOrCreateValidPaidEventFixture();
       expect(paidEvent).toBeDefined();
 
       // Set custom override 10%
-      await setEventCommissionOverride(paidEvent!.id, 10);
+      await setEventCommissionOverride(paidEvent.id, 10);
 
       const booking = await createEventBooking({
-        eventId: paidEvent!.id,
+        eventId: paidEvent.id,
         guestName: "Doni Pratama",
         guestEmail: `doni_${Date.now()}@gmail.com`,
         guestPhone: "+62 812-4455-6677",
@@ -323,22 +343,21 @@ describe("Platform Administration & Event Marketplace Revenue Sharing", () => {
       expect(booking.organizerRevenueAmount).toBe(booking.totalPrice - expectedPlatformFee);
 
       // Clean up override: reset to null (default)
-      await setEventCommissionOverride(paidEvent!.id, null);
+      await setEventCommissionOverride(paidEvent.id, null);
     });
 
     it("should fallback to platform default commission when event override is null", async () => {
-      const events = await getAdminEvents();
-      const paidEvent = events.find((e) => e.isPaid && e.price > 0);
+      const paidEvent = await getOrCreateValidPaidEventFixture();
       expect(paidEvent).toBeDefined();
 
       // Ensure no override
-      await setEventCommissionOverride(paidEvent!.id, null);
+      await setEventCommissionOverride(paidEvent.id, null);
 
       // Set policy to 20%
       updateEventRevenuePolicy({ defaultPlatformFeePercent: 20 });
 
       const booking = await createEventBooking({
-        eventId: paidEvent!.id,
+        eventId: paidEvent.id,
         guestName: "Rani Widuri",
         guestEmail: `rani_${Date.now()}@gmail.com`,
         guestPhone: "+62 813-7788-9900",

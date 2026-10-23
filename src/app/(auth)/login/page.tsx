@@ -73,8 +73,8 @@ function LoginContent() {
         return;
       }
 
-      // Synchronize client context with the authenticated persona
-      await login(data.personaKey);
+      // Synchronize client context with the authenticated persona or custom user
+      await login(data.personaKey, data.user);
       setIsLoading(false);
 
       if (returnTo) {

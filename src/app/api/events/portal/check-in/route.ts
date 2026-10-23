@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, bookingId, checkInStatus } = body;
+    const { email, bookingId, checkInStatus, incrementQty, targetQty, reset } = body;
 
     const auth = await assertOrganizerAuth(req, email);
     if (!auth.authorized || !auth.email) {
@@ -37,11 +37,15 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    if (checkInStatus !== "CHECKED_IN" && checkInStatus !== "REGISTERED") {
+    if (
+      checkInStatus !== "CHECKED_IN" &&
+      checkInStatus !== "PARTIALLY_CHECKED_IN" &&
+      checkInStatus !== "REGISTERED"
+    ) {
       return NextResponse.json(
         {
           success: false,
-          error: "Status check-in tidak valid (harus CHECKED_IN atau REGISTERED).",
+          error: "Status check-in tidak valid (harus CHECKED_IN, PARTIALLY_CHECKED_IN, atau REGISTERED).",
         },
         { status: 400 }
       );
@@ -50,15 +54,20 @@ export async function PATCH(req: NextRequest) {
     const updated = await organizerCheckInAttendee(
       auth.email,
       bookingId,
-      checkInStatus as AttendeeCheckInStatus
+      checkInStatus as AttendeeCheckInStatus,
+      { incrementQty, targetQty, reset }
     );
+
+    const message =
+      updated.checkInStatus === "CHECKED_IN"
+        ? `Check-in selesai! Seluruh tiket (${updated.checkedInQty}/${updated.ticketCount}) telah hadir di venue.`
+        : updated.checkInStatus === "PARTIALLY_CHECKED_IN"
+        ? `Kehadiran parsial tercatat: ${updated.checkedInQty} dari ${updated.ticketCount} tiket telah hadir.`
+        : "Status kehadiran peserta berhasil dibatalkan.";
 
     return NextResponse.json({
       success: true,
-      message:
-        checkInStatus === "CHECKED_IN"
-          ? "Peserta berhasil ditandai hadir di venue!"
-          : "Status kehadiran peserta berhasil dibatalkan.",
+      message,
       data: updated,
     });
   } catch (err: any) {

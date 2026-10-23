@@ -41,6 +41,11 @@ export async function POST(req: NextRequest) {
         organizerId: result.organizer.id,
         organizerName: result.organizer.name,
         email: result.organizer.email,
+        organizer: {
+          id: result.organizer.id,
+          name: result.organizer.name,
+          email: result.organizer.email,
+        },
         activationUrl: result.activationUrl,
         expiresAt: result.record.expiresAt,
       },

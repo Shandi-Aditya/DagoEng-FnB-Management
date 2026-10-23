@@ -1054,9 +1054,11 @@ export default function SettingsPage() {
       const data = await res.json();
       if (data.success && data.data) {
         const fullUrl = `${window.location.origin}${data.data.activationUrl}`;
+        const orgName = data.data.organizer?.name || data.data.organizerName || "Komunitas";
+        const orgEmail = data.data.organizer?.email || data.data.email || "";
         setActivationModalData({
-          organizerName: data.data.organizer.name,
-          organizerEmail: data.data.organizer.email,
+          organizerName: orgName,
+          organizerEmail: orgEmail,
           activationUrl: fullUrl,
           expiresAt: data.data.expiresAt,
         });
@@ -1066,7 +1068,7 @@ export default function SettingsPage() {
             if (d.success && Array.isArray(d.data)) setOrganizers(d.data);
           })
           .catch(() => {});
-        showMasterToast(`Tautan aktivasi untuk [${data.data.organizer.name}] berhasil diterbitkan.`);
+        showMasterToast(`Tautan aktivasi untuk [${orgName}] berhasil diterbitkan.`);
       } else {
         showMasterToast(data.error || "Gagal menerbitkan tautan aktivasi.");
       }

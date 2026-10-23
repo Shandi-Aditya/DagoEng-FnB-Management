@@ -72,6 +72,7 @@ export interface PublicCommunityEvent {
   organizerName: string;
   status: "APPROVED";
   guidelines?: string[] | null;
+  availability?: EventTicketAvailability;
   createdAt: string;
 }
 
@@ -96,7 +97,18 @@ export interface EventSubmissionPayload {
 
 export type TicketPaymentMethod = "FREE" | "QRIS" | "CASH" | "TRANSFER";
 export type TicketPaymentStatus = "PAID" | "PENDING" | "CANCELLED";
-export type AttendeeCheckInStatus = "REGISTERED" | "CHECKED_IN";
+export type AttendeeCheckInStatus = "REGISTERED" | "PARTIALLY_CHECKED_IN" | "CHECKED_IN";
+
+export interface EventTicketAvailability {
+  totalCapacity: number;
+  ticketsReserved: number;
+  ticketsRemaining: number;
+  occupancyRate: number;
+  isConfirmed: boolean;
+  capacitySource: string;
+  capacityDescription: string;
+  isSoldOut: boolean;
+}
 
 export interface EventTicketOrder {
   id: string; // e.g. "tkt-1729000-abc12"
@@ -110,6 +122,7 @@ export interface EventTicketOrder {
   guestPhone: string;
   institution?: string | null;
   ticketCount: number;
+  checkedInQty?: number; // Jumlah tiket yang sudah check-in (0 <= checkedInQty <= ticketCount)
   unitPrice: number;
   totalPrice: number;
   platformFeePercent: number; // e.g. 20%
@@ -197,8 +210,18 @@ export interface OrganizerPortalSummary {
   organizerPayoutAmount: number; // 80% payout
 }
 
+export interface AccessibleCommunitySummary {
+  id: string;
+  name: string;
+  email: string;
+  category?: string;
+}
+
 export interface OrganizerPortalData {
   summary: OrganizerPortalSummary;
   events: CommunityEvent[];
   bookings: EventTicketOrder[];
+  organizerEmail?: string;
+  isAdmin?: boolean;
+  accessibleCommunities?: AccessibleCommunitySummary[];
 }

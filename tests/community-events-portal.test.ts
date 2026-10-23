@@ -6,6 +6,7 @@ import {
   createEventSubmission,
   updateEventStatus,
   createEventBooking,
+  updateBookingPaymentStatus,
   getOrganizerPortalData,
   organizerCheckInAttendee,
   organizerResubmitEvent,
@@ -100,7 +101,17 @@ describe("Community Organizer Portal & Cross-Community Isolation", () => {
     expect(portalDataB.bookings.some((b) => b.id === bookingA.id)).toBe(false);
   });
 
-  it("3. Penyelenggara A dapat menandai hadir peserta pada event miliknya", async () => {
+  it("3. Penyelenggara A DITOLAK saat check-in tiket berbayar yang belum diverifikasi (PENDING)", async () => {
+    // bookingA adalah tiket berbayar (Rp 50.000) dan masih berstatus PENDING
+    await expect(
+      organizerCheckInAttendee(orgEmailA, bookingA.id, "CHECKED_IN")
+    ).rejects.toThrow("Tiket berbayar belum diverifikasi lunas (status pembayaran masih PENDING). Silakan verifikasi pembayaran terlebih dahulu sebelum check-in.");
+  });
+
+  it("3b. Penyelenggara A dapat menandai hadir peserta setelah pembayaran diverifikasi lunas", async () => {
+    // Verifikasi pembayaran lunas
+    await updateBookingPaymentStatus(bookingA.id, "PAID");
+
     const checkedIn = await organizerCheckInAttendee(
       orgEmailA,
       bookingA.id,
@@ -109,6 +120,11 @@ describe("Community Organizer Portal & Cross-Community Isolation", () => {
 
     expect(checkedIn.checkInStatus).toBe("CHECKED_IN");
     expect(checkedIn.checkInTime).toBeDefined();
+
+    // Tolak check-in berulang (T-1)
+    await expect(
+      organizerCheckInAttendee(orgEmailA, bookingA.id, "CHECKED_IN")
+    ).rejects.toThrow("Tiket sudah digunakan untuk check-in sebelumnya");
   });
 
   it("4. NEGATIVE TEST: Penyelenggara B DITOLAK saat mencoba check-in peserta milik Komunitas A", async () => {

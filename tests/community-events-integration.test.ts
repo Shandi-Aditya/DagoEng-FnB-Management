@@ -270,6 +270,28 @@ describe("Community Events Integrated Module (DAGO Creative Hub)", () => {
     expect(updated?.paymentStatus).toBe("CANCELLED");
   });
 
+  it("7a. (T-3) harus menolak check-in tiket berbayar yang belum diverifikasi lunas (status PENDING)", async () => {
+    const booking = await createEventBooking({
+      eventId: paidEvent.id,
+      guestName: "Bambang Pamungkas",
+      guestEmail: `bambang-${Date.now()}@example.com`,
+      guestPhone: "081399887766",
+      ticketCount: 1,
+    });
+    expect(booking.paymentStatus).toBe("PENDING");
+
+    // Check-in tiket berbayar PENDING DITOLAK
+    await expect(
+      updateBookingCheckIn(booking.id, "CHECKED_IN")
+    ).rejects.toThrow("Tiket berbayar belum diverifikasi lunas (status pembayaran masih PENDING). Silakan verifikasi pembayaran terlebih dahulu sebelum check-in.");
+
+    // Setelah diverifikasi lunas (PAID), check-in DIIZINKAN
+    await updateBookingPaymentStatus(booking.id, "PAID");
+    const checkedIn = await updateBookingCheckIn(booking.id, "CHECKED_IN");
+    expect(checkedIn.checkInStatus).toBe("CHECKED_IN");
+    expect(checkedIn.checkInTime).toBeTruthy();
+  });
+
   it("7b. (T-2) harus menolak check-in tiket yang berstatus CANCELLED", async () => {
     const booking = await createEventBooking({
       eventId: freeEvent.id,

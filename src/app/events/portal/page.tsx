@@ -33,24 +33,12 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { CommunityEvent, EventTicketOrder, OrganizerPortalData } from "@/types/event";
+import { CommunityEvent, EventTicketOrder, OrganizerPortalData, AttendeeCheckInStatus } from "@/types/event";
+import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { useAuth, PersonaKey } from "@/contexts/AuthContext";
 
-const PRESET_ORGANIZERS = [
-  { name: "Dago Barista Guild", email: "baristaguild@dagocreative.id", persona: "COMMUNITY_BARISTA" as PersonaKey },
-  { name: "Bandung Dev Community", email: "halo@bandungdev.org", persona: "COMMUNITY_BANDUNGDEV" as PersonaKey },
-  { name: "Aksara Priangan Studio", email: "info@aksarapriangan.id", persona: "COMMUNITY_AKSARAPRIANGAN" as PersonaKey },
-  { name: "Dago Berkebun", email: "kontak@dagohijau.id", persona: undefined },
-];
-
-const EMAIL_TO_PERSONA: Record<string, PersonaKey> = {
-  "baristaguild@dagocreative.id": "COMMUNITY_BARISTA",
-  "halo@bandungdev.org": "COMMUNITY_BANDUNGDEV",
-  "info@aksarapriangan.id": "COMMUNITY_AKSARAPRIANGAN",
-};
-
 export default function CommunityOrganizerPortalPage() {
-  const { user, switchPersona } = useAuth();
+  const { user } = useAuth();
   const [organizerEmail, setOrganizerEmail] = useState("");
   const [activeEmail, setActiveEmail] = useState("");
   const [portalData, setPortalData] = useState<OrganizerPortalData | null>(null);
@@ -75,39 +63,47 @@ export default function CommunityOrganizerPortalPage() {
 
   // Synchronize on mount or user changes
   useEffect(() => {
-    if (user?.email) {
-      setOrganizerEmail(user.email);
-      loadPortalData(user.email);
-    } else {
-      // Default initial view: attempt to load Barista Guild
-      const defaultEmail = PRESET_ORGANIZERS[0].email;
-      setOrganizerEmail(defaultEmail);
-      loadPortalData(defaultEmail);
-    }
+    // If user email exists in context, try that; otherwise call without query param to let server session resolve!
+    const targetEmail = user?.email || localStorage.getItem("dago_organizer_email");
+    loadPortalData(targetEmail || undefined);
   }, [user?.email, user?.role?.slug]);
 
-  const loadPortalData = async (email: string) => {
-    if (!email || !email.includes("@")) {
-      setErrorMessage("Masukkan alamat email yang valid.");
-      return;
-    }
-
+  const loadPortalData = async (email?: string) => {
     try {
       setIsLoading(true);
       setErrorMessage(null);
 
-      const res = await fetch(`/api/events/portal?email=${encodeURIComponent(email)}`);
+      const queryParam = email && email.includes("@") ? `?email=${encodeURIComponent(email)}` : "";
+      const res = await fetch(`/api/events/portal${queryParam}`);
       const json = await res.json();
 
       if (!res.ok || !json.success) {
+        // Self-heal: If 403 Data Isolation error occurs due to stale query email from previous login session,
+        // clear stale storage and re-fetch using authenticated server session cookie!
+        if (email && (json.error?.includes("Pelanggaran isolasi data") || json.error?.includes("FORBIDDEN"))) {
+          localStorage.removeItem("dago_organizer_email");
+          const retryRes = await fetch("/api/events/portal");
+          const retryJson = await retryRes.json();
+          if (retryRes.ok && retryJson.success) {
+            setPortalData(retryJson.data);
+            const verifiedEmail = retryJson.data.organizerEmail || "";
+            setActiveEmail(verifiedEmail);
+            setOrganizerEmail(verifiedEmail);
+            localStorage.setItem("dago_organizer_email", verifiedEmail);
+            return;
+          }
+        }
+
         setErrorMessage(json.error || "Gagal memuat portal komunitas.");
         setPortalData(null);
         return;
       }
 
       setPortalData(json.data);
-      setActiveEmail(email);
-      localStorage.setItem("dago_organizer_email", email);
+      const verifiedEmail = json.data.organizerEmail || email || "";
+      setActiveEmail(verifiedEmail);
+      setOrganizerEmail(verifiedEmail);
+      localStorage.setItem("dago_organizer_email", verifiedEmail);
     } catch (err: any) {
       setErrorMessage(err.message || "Terjadi kesalahan jaringan.");
     } finally {
@@ -120,24 +116,42 @@ export default function CommunityOrganizerPortalPage() {
     loadPortalData(organizerEmail);
   };
 
-  const handleSelectPreset = async (preset: typeof PRESET_ORGANIZERS[0]) => {
-    setOrganizerEmail(preset.email);
-    const isHubAdmin =
-      user?.role?.slug === "SUPER_ADMIN" ||
-      user?.role?.slug === "OWNER" ||
-      user?.role?.slug === "MANAGER";
-
-    if (!isHubAdmin && preset.persona) {
-      await switchPersona(preset.persona);
-    }
-    await loadPortalData(preset.email);
+  const handleSelectCommunity = async (comm: { id: string; name: string; email: string }) => {
+    setOrganizerEmail(comm.email);
+    await loadPortalData(comm.email);
   };
 
-  const handleCheckInToggle = async (booking: EventTicketOrder) => {
+  const handleCheckInTicket = async (
+    booking: EventTicketOrder,
+    action: "INCREMENT" | "RESET"
+  ) => {
     if (!activeEmail || booking.paymentStatus === "CANCELLED") return;
+    if (booking.paymentStatus === "PENDING" && action === "INCREMENT") {
+      setErrorMessage(
+        `Tiket ${booking.ticketCode} (${booking.guestName}) belum diverifikasi lunas (status masih PENDING). Konfirmasi pembayaran terlebih dahulu sebelum check-in.`
+      );
+      return;
+    }
+
+    const currentQty =
+      booking.checkedInQty ?? (booking.checkInStatus === "CHECKED_IN" ? booking.ticketCount : 0);
+    if (action === "INCREMENT" && currentQty >= booking.ticketCount) {
+      setErrorMessage(
+        `Semua tiket untuk pesanan ${booking.ticketCode} sudah selesai check-in (${booking.ticketCount}/${booking.ticketCount}).`
+      );
+      return;
+    }
+
     try {
       setIsUpdatingCheckIn(booking.id);
-      const nextStatus = booking.checkInStatus === "CHECKED_IN" ? "REGISTERED" : "CHECKED_IN";
+      setErrorMessage(null);
+
+      const targetStatus: AttendeeCheckInStatus =
+        action === "RESET"
+          ? "REGISTERED"
+          : currentQty + 1 >= booking.ticketCount
+          ? "CHECKED_IN"
+          : "PARTIALLY_CHECKED_IN";
 
       const res = await fetch("/api/events/portal/check-in", {
         method: "PATCH",
@@ -145,7 +159,9 @@ export default function CommunityOrganizerPortalPage() {
         body: JSON.stringify({
           email: activeEmail,
           bookingId: booking.id,
-          checkInStatus: nextStatus,
+          checkInStatus: targetStatus,
+          incrementQty: action === "INCREMENT" ? 1 : undefined,
+          reset: action === "RESET",
         }),
       });
 
@@ -155,27 +171,19 @@ export default function CommunityOrganizerPortalPage() {
         return;
       }
 
+      const updatedBooking: EventTicketOrder = json.data;
+
       // Update state locally
       if (portalData) {
         setPortalData({
           ...portalData,
           bookings: portalData.bookings.map((b) =>
-            b.id === booking.id
-              ? {
-                  ...b,
-                  checkInStatus: nextStatus,
-                  checkInTime: nextStatus === "CHECKED_IN" ? new Date().toISOString() : null,
-                }
-              : b
+            b.id === booking.id ? updatedBooking : b
           ),
         });
       }
 
-      setSuccessMessage(
-        nextStatus === "CHECKED_IN"
-          ? `Peserta ${booking.guestName} berhasil ditandai hadir!`
-          : `Kehadiran peserta ${booking.guestName} dibatalkan.`
-      );
+      setSuccessMessage(json.message || "Status kehadiran berhasil diperbarui.");
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       setErrorMessage(err.message || "Gagal memperbarui status.");
@@ -339,63 +347,93 @@ export default function CommunityOrganizerPortalPage() {
           </div>
         )}
 
-        {/* 2. Organizer Switcher & Verification Header */}
+        {/* 2. Organizer Profile & Verification Header */}
         <Card className="p-5 sm:p-6 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[#3B7A57] dark:text-[#52B788] text-[10px] font-bold">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Akses Mandiri Terverifikasi Server</span>
+                <span>
+                  {portalData?.isAdmin
+                    ? "Mode Supervisi Administrator Hub"
+                    : "Dashboard Penyelenggara Terverifikasi"}
+                </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
                 {portalData?.summary.organizerName || "Portal Komunitas Dago Hub"}
               </h1>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Akses terisolasi untuk memantau pengajuan event, penjualan tiket, estimasi hak bagi hasil 80%, dan check-in peserta.
+                {portalData?.isAdmin
+                  ? "Akses pengawasan platform untuk memantau aktivitas, penjualan tiket, dan operasional seluruh komunitas."
+                  : "Akses terisolasi untuk memantau pengajuan event, penjualan tiket, estimasi hak bagi hasil 80%, dan check-in peserta."}
               </p>
             </div>
 
-            {/* Email Switcher Form */}
-            <form onSubmit={handleOrganizerSubmit} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  value={organizerEmail}
-                  onChange={(e) => setOrganizerEmail(e.target.value)}
-                  placeholder="Email Penyelenggara..."
-                  className="w-full sm:w-64 pl-9 pr-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
-                />
+            {/* Profile Action Area: Clean Personal View for Organizer, Switcher for Hub Admin */}
+            {portalData?.isAdmin ? (
+              <form onSubmit={handleOrganizerSubmit} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="email"
+                    value={organizerEmail}
+                    onChange={(e) => setOrganizerEmail(e.target.value)}
+                    placeholder="Email Komunitas..."
+                    className="w-full sm:w-64 pl-9 pr-3 py-2 text-xs rounded-xl border bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl"
+                >
+                  {isLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+                  <span>Buka Portal</span>
+                </Button>
+              </form>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs">
+                  <Mail className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{activeEmail || organizerEmail}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadPortalData(activeEmail || organizerEmail)}
+                  disabled={isLoading}
+                  className="text-xs h-9 px-3 rounded-xl border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  title="Segarkan data terbaru"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-slate-600 dark:text-slate-300 ${isLoading ? "animate-spin" : ""}`} />
+                  <span className="ml-1.5 hidden sm:inline text-xs font-medium text-slate-700 dark:text-slate-300">Segarkan</span>
+                </Button>
               </div>
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl"
-              >
-                {isLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-                <span>Buka Portal</span>
-              </Button>
-            </form>
+            )}
           </div>
 
-          {/* Quick preset switches for demo / evaluation */}
-          <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Komunitas Terdaftar:</span>
-            {PRESET_ORGANIZERS.map((preset) => (
-              <button
-                key={preset.email}
-                type="button"
-                onClick={() => handleSelectPreset(preset)}
-                className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-all ${
-                  activeEmail === preset.email
-                    ? "bg-[#3B7A57] text-white border-[#3B7A57] shadow-xs"
-                    : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300"
-                }`}
-              >
-                {preset.name}
-              </button>
-            ))}
-          </div>
+          {/* Hub Admin Supervisor Navigation: Only shown when logged in as Platform Admin */}
+          {portalData?.isAdmin && portalData.accessibleCommunities && portalData.accessibleCommunities.length > 0 && (
+            <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Pilih Komunitas (Supervisi Hub):
+              </span>
+              {portalData.accessibleCommunities.map((comm) => (
+                <button
+                  key={comm.email}
+                  type="button"
+                  onClick={() => handleSelectCommunity(comm)}
+                  className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-all ${
+                    activeEmail === comm.email
+                      ? "bg-[#3B7A57] text-white border-[#3B7A57] shadow-xs"
+                      : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300"
+                  }`}
+                >
+                  {comm.name}
+                </button>
+              ))}
+            </div>
+          )}
         </Card>
 
         {portalData && (
@@ -526,8 +564,39 @@ export default function CommunityOrganizerPortalPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {portalData.events.map((evt) => {
                       const eventBookings = portalData.bookings.filter((b) => b.eventId === evt.id);
-                      const paidBookings = eventBookings.filter((b) => b.paymentStatus === "PAID");
-                      const ticketsSold = paidBookings.reduce((s, b) => s + b.ticketCount, 0);
+                      // Anti-double-counting: pesanan CANCELLED tidak mengurangi kuota
+                      const activeBookings = eventBookings.filter((b) => b.paymentStatus !== "CANCELLED");
+                      const paidBookings = activeBookings.filter((b) => b.paymentStatus === "PAID");
+                      const cancelledBookings = eventBookings.filter((b) => b.paymentStatus === "CANCELLED");
+
+                      // Audit Kapasitas: pisahkan angka resmi vs estimasi sementara
+                      const capacityRes = resolveVenueCapacity(evt);
+                      const totalCapacity = capacityRes.capacity;
+                      const isConfirmed = capacityRes.isConfirmed;
+
+                      // Metrik kuota tiket:
+                      // - ticketsReserved: seluruh tiket aktif (PAID + PENDING)
+                      // - ticketsPaid: hanya tiket yang terverifikasi lunas
+                      // - ticketsRemaining: sisa kuota yang masih dapat dipesan
+                      const ticketsReserved = activeBookings.reduce((s, b) => s + b.ticketCount, 0);
+                      const ticketsPaid = paidBookings.reduce((s, b) => s + b.ticketCount, 0);
+                      const ticketsRemaining = Math.max(0, totalCapacity - ticketsReserved);
+                      const occupancyRate = totalCapacity > 0 ? Math.min(100, Math.round((ticketsReserved / totalCapacity) * 100)) : 0;
+
+                      // Progres Check-In aktual di venue (menghitung tiket fisik yang hadir secara parsial / penuh)
+                      const checkedInTickets = paidBookings.reduce(
+                        (sum, b) =>
+                          sum +
+                          (b.checkedInQty ??
+                            (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0)),
+                        0
+                      );
+                      const eligibleTicketsCount = ticketsPaid;
+                      const checkInRate =
+                        eligibleTicketsCount > 0
+                          ? Math.round((checkedInTickets / eligibleTicketsCount) * 100)
+                          : 0;
+
                       const grossSales = paidBookings.reduce((s, b) => s + b.totalPrice, 0);
                       const payoutEst = paidBookings.reduce((s, b) => s + b.organizerRevenueAmount, 0);
 
@@ -595,7 +664,7 @@ export default function CommunityOrganizerPortalPage() {
                               </div>
                               <div className="flex items-center space-x-1.5">
                                 <Users className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                                <span>{ticketsSold} Tiket Terjual</span>
+                                <span>{ticketsPaid} Tiket Lunas</span>
                               </div>
                             </div>
 
@@ -615,11 +684,117 @@ export default function CommunityOrganizerPortalPage() {
                               </div>
                             )}
 
+                            {/* SECTION KUOTA TIKET & PROGRES CHECK-IN */}
+                            <div className="p-3.5 rounded-2xl bg-slate-50/90 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 space-y-3">
+                              {/* Header Status Kapasitas Venue */}
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center space-x-1.5 min-w-0">
+                                  {isConfirmed ? (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
+                                      <ShieldCheck className="w-3 h-3 mr-1 text-emerald-600 dark:text-emerald-400" />
+                                      Kapasitas Resmi: {totalCapacity} Pax
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300" title={capacityRes.sourceDescription}>
+                                      <AlertCircle className="w-3 h-3 mr-1 text-amber-600 dark:text-amber-400" />
+                                      Estimasi Ruang: ~{totalCapacity} Pax (Belum Dikonfirmasi)
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] text-slate-400 flex-shrink-0">
+                                  {isConfirmed ? (evt.maxCapacity ? "Kuota Penyelenggara" : "Master Coworking") : "Estimasi Sementara"}
+                                </span>
+                              </div>
+
+                              {/* 4 Metrik Utama Kuota & Tiket */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                <div className="p-2 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 text-center">
+                                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Total Kuota</span>
+                                  <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{totalCapacity}</span>
+                                  <span className="text-[9px] text-slate-400 block truncate">
+                                    {isConfirmed ? "Resmi" : "Perkiraan"}
+                                  </span>
+                                </div>
+
+                                <div className="p-2 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 text-center">
+                                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">
+                                    {evt.isPaid ? "Tiket Terbit" : "Tiket Terdaftar"}
+                                  </span>
+                                  <span className="text-sm font-bold text-[#3B7A57] dark:text-[#52B788]">{ticketsReserved}</span>
+                                  <span className="text-[9px] text-slate-400 block truncate">
+                                    {evt.isPaid ? `${ticketsPaid} lunas` : "Terdaftar"}
+                                  </span>
+                                </div>
+
+                                <div className="p-2 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 text-center">
+                                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Sisa Kuota</span>
+                                  <span className={`text-sm font-bold ${ticketsRemaining === 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-800 dark:text-slate-100"}`}>
+                                    {ticketsRemaining}
+                                  </span>
+                                  <span className="text-[9px] text-slate-400 block truncate">
+                                    {ticketsRemaining === 0 ? "Penuh" : "Tersedia"}
+                                  </span>
+                                </div>
+
+                                <div className="p-2 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-100 dark:border-slate-700/60 text-center">
+                                  <span className="text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Keterisian</span>
+                                  <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{occupancyRate}%</span>
+                                  <span className="text-[9px] text-slate-400 block truncate">Kapasitas</span>
+                                </div>
+                              </div>
+
+                              {/* Progress Bar 1: Keterisian Kuota Venue */}
+                              <div className="space-y-1">
+                                <div className="flex justify-between items-center text-[10px]">
+                                  <span className="text-slate-500 dark:text-slate-400 font-medium">Keterisian Kuota Venue:</span>
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">
+                                    {ticketsReserved} / {totalCapacity} tiket ({occupancyRate}%)
+                                  </span>
+                                </div>
+                                <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700/70 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full transition-all duration-300 ${
+                                      occupancyRate >= 100
+                                        ? "bg-rose-500"
+                                        : occupancyRate >= 80
+                                        ? "bg-amber-500"
+                                        : "bg-[#3B7A57] dark:bg-[#52B788]"
+                                    }`}
+                                    style={{ width: `${occupancyRate}%` }}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Progress Bar 2: Progres Check-In Peserta Lunas di Venue */}
+                              <div className="space-y-1">
+                                <div className="flex justify-between items-center text-[10px]">
+                                  <span className="text-slate-500 dark:text-slate-400 font-medium">Progres Kehadiran Peserta Lunas:</span>
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">
+                                    {eligibleTicketsCount > 0
+                                      ? `${checkedInTickets} / ${eligibleTicketsCount} tiket hadir (${checkInRate}%)`
+                                      : "Belum ada pesanan lunas"}
+                                  </span>
+                                </div>
+                                <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700/70 rounded-full overflow-hidden">
+                                  <div
+                                    className="h-full bg-emerald-500 transition-all duration-300"
+                                    style={{ width: `${checkInRate}%` }}
+                                  />
+                                </div>
+                              </div>
+
+                              {cancelledBookings.length > 0 && (
+                                <div className="text-[10px] text-slate-400 italic">
+                                  * {cancelledBookings.length} pesanan dibatalkan ({cancelledBookings.reduce((s, b) => s + b.ticketCount, 0)} tiket dikecualikan dari kuota).
+                                </div>
+                              )}
+                            </div>
+
                             {/* Revenue metrics row for paid events */}
                             {evt.isPaid && (
                               <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
                                 <div>
-                                  <span className="text-[10px] text-slate-400 block">Omset Tiket:</span>
+                                  <span className="text-[10px] text-slate-400 block">Omset Tiket Lunas:</span>
                                   <span className="font-bold text-slate-800 dark:text-slate-200">
                                     Rp {grossSales.toLocaleString("id-ID")}
                                   </span>
@@ -719,6 +894,61 @@ export default function CommunityOrganizerPortalPage() {
                   </Button>
                 </div>
 
+                {/* Ringkasan Komposisi Peserta & Check-In */}
+                {(() => {
+                  const relevantBookings = portalData.bookings.filter(
+                    (b) => selectedEventId === "ALL" || b.eventId === selectedEventId
+                  );
+                  const activeB = relevantBookings.filter((b) => b.paymentStatus !== "CANCELLED");
+                  const paidB = activeB.filter((b) => b.paymentStatus === "PAID");
+                  const checkedInTickets = paidB.reduce(
+                    (s, b) =>
+                      s +
+                      (b.checkedInQty ??
+                        (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0)),
+                    0
+                  );
+                  const totalPaidTickets = paidB.reduce((s, b) => s + b.ticketCount, 0);
+                  const pendingB = activeB.filter((b) => b.paymentStatus === "PENDING");
+                  const cancelledB = relevantBookings.filter((b) => b.paymentStatus === "CANCELLED");
+                  const totalTickets = activeB.reduce((s, b) => s + b.ticketCount, 0);
+
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block font-medium">Total Pesanan Aktif</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                          {activeB.length} ({totalTickets} tiket)
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-medium">Tiket Lunas</span>
+                        <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                          {totalPaidTickets} Tiket ({paidB.length} pesanan)
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-sky-600 dark:text-sky-400 block font-medium">Hadir di Venue</span>
+                        <span className="font-bold text-sky-700 dark:text-sky-400">
+                          {checkedInTickets} / {totalPaidTickets} ({totalPaidTickets > 0 ? Math.round((checkedInTickets / totalPaidTickets) * 100) : 0}%)
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-amber-600 dark:text-amber-400 block font-medium">Pending Verifikasi</span>
+                        <span className="font-bold text-amber-700 dark:text-amber-400">
+                          {pendingB.length} Pesanan
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-rose-600 dark:text-rose-400 block font-medium">Dibatalkan</span>
+                        <span className="font-bold text-rose-700 dark:text-rose-400">
+                          {cancelledB.length} Pesanan
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Attendees Table */}
                 <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800">
                   {filteredAttendees.length === 0 ? (
@@ -772,45 +1002,97 @@ export default function CommunityOrganizerPortalPage() {
                             <td className="py-2.5 px-3 text-center whitespace-nowrap">
                               {b.checkInStatus === "CHECKED_IN" ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                                  <Check className="w-3 h-3 mr-1" /> Hadir
+                                  <Check className="w-3 h-3 mr-1" />
+                                  {b.ticketCount > 1
+                                    ? `${b.checkedInQty ?? b.ticketCount}/${b.ticketCount} Selesai`
+                                    : "Hadir"}
+                                </span>
+                              ) : b.checkInStatus === "PARTIALLY_CHECKED_IN" ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300">
+                                  <Clock3 className="w-3 h-3 mr-1" />
+                                  {b.checkedInQty ?? 0}/{b.ticketCount} Hadir (Sisa {(b.ticketCount || 1) - (b.checkedInQty || 0)})
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                                  Belum Hadir
+                                  0/{b.ticketCount} Hadir
                                 </span>
                               )}
                             </td>
                             <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                              <Button
-                                size="sm"
-                                disabled={isUpdatingCheckIn === b.id || b.paymentStatus === "CANCELLED"}
-                                onClick={() => handleCheckInToggle(b)}
-                                className={`h-7 px-2.5 text-[11px] font-semibold rounded-lg ${
-                                  b.paymentStatus === "CANCELLED"
-                                    ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-800"
-                                    : b.checkInStatus === "CHECKED_IN"
-                                    ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
-                                    : "bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs cursor-pointer"
-                                }`}
-                                title={b.paymentStatus === "CANCELLED" ? "Tiket yang dibatalkan tidak dapat check-in" : undefined}
-                              >
-                                {isUpdatingCheckIn === b.id ? (
-                                  <RefreshCw className="w-3 h-3 animate-spin mr-1" />
-                                ) : b.paymentStatus === "CANCELLED" ? (
-                                  <X className="w-3 h-3 mr-1" />
-                                ) : b.checkInStatus === "CHECKED_IN" ? (
-                                  <RotateCcw className="w-3 h-3 mr-1" />
+                              <div className="flex items-center justify-end space-x-1.5">
+                                {b.paymentStatus === "CANCELLED" ? (
+                                  <Button
+                                    size="sm"
+                                    disabled
+                                    className="h-7 px-2.5 text-[11px] font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-800"
+                                    title="Tiket yang dibatalkan tidak dapat check-in"
+                                  >
+                                    <X className="w-3 h-3 mr-1" /> Dibatalkan
+                                  </Button>
+                                ) : (b.checkedInQty || (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0)) < b.ticketCount ? (
+                                  <Button
+                                    size="sm"
+                                    disabled={
+                                      isUpdatingCheckIn === b.id ||
+                                      (b.paymentStatus === "PENDING" && b.totalPrice > 0)
+                                    }
+                                    onClick={() => handleCheckInTicket(b, "INCREMENT")}
+                                    className={`h-7 px-2.5 text-[11px] font-semibold rounded-lg ${
+                                      b.paymentStatus === "PENDING" && b.totalPrice > 0
+                                        ? "bg-slate-100 dark:bg-slate-800 text-slate-400 border border-slate-200 dark:border-slate-700 cursor-not-allowed"
+                                        : "bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs cursor-pointer"
+                                    }`}
+                                    title={
+                                      b.paymentStatus === "PENDING" && b.totalPrice > 0
+                                        ? "Tiket belum diverifikasi lunas (status masih PENDING)"
+                                        : b.ticketCount > 1
+                                        ? `Check-in tiket ke-${(b.checkedInQty || 0) + 1} dari ${b.ticketCount}`
+                                        : "Tandai Hadir"
+                                    }
+                                  >
+                                    {isUpdatingCheckIn === b.id ? (
+                                      <RefreshCw className="w-3 h-3 animate-spin mr-1" />
+                                    ) : (
+                                      <UserCheck className="w-3 h-3 mr-1" />
+                                    )}
+                                    <span>
+                                      {b.paymentStatus === "PENDING" && b.totalPrice > 0
+                                        ? "Belum Lunas"
+                                        : b.ticketCount > 1
+                                        ? `+ Check-In 1 (${(b.checkedInQty || 0) + 1}/${b.ticketCount})`
+                                        : "Tandai Hadir"}
+                                    </span>
+                                  </Button>
                                 ) : (
-                                  <UserCheck className="w-3 h-3 mr-1" />
+                                  <Button
+                                    size="sm"
+                                    disabled={isUpdatingCheckIn === b.id}
+                                    onClick={() => handleCheckInTicket(b, "RESET")}
+                                    className="h-7 px-2.5 text-[11px] font-semibold rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                                    title="Batalkan seluruh kehadiran pada booking ini"
+                                  >
+                                    {isUpdatingCheckIn === b.id ? (
+                                      <RefreshCw className="w-3 h-3 animate-spin mr-1" />
+                                    ) : (
+                                      <RotateCcw className="w-3 h-3 mr-1" />
+                                    )}
+                                    <span>Reset Hadir</span>
+                                  </Button>
                                 )}
-                                <span>
-                                  {b.paymentStatus === "CANCELLED"
-                                    ? "Dibatalkan"
-                                    : b.checkInStatus === "CHECKED_IN"
-                                    ? "Batalkan"
-                                    : "Tandai Hadir"}
-                                </span>
-                              </Button>
+
+                                {/* Quick reset icon if partially checked in */}
+                                {b.checkInStatus === "PARTIALLY_CHECKED_IN" && (b.checkedInQty || 0) > 0 && (
+                                  <button
+                                    type="button"
+                                    disabled={isUpdatingCheckIn === b.id}
+                                    onClick={() => handleCheckInTicket(b, "RESET")}
+                                    className="p-1 rounded-md text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                    title="Reset seluruh kehadiran ke 0"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}

@@ -32,18 +32,30 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { checkInStatus, paymentStatus } = body;
+    const { checkInStatus, paymentStatus, incrementQty, targetQty, reset } = body;
 
     let updated = existing;
 
     if (checkInStatus) {
-      if (checkInStatus !== "CHECKED_IN" && checkInStatus !== "REGISTERED") {
+      if (
+        checkInStatus !== "CHECKED_IN" &&
+        checkInStatus !== "PARTIALLY_CHECKED_IN" &&
+        checkInStatus !== "REGISTERED"
+      ) {
         return NextResponse.json(
-          { success: false, error: "Status kehadiran tidak valid (harus CHECKED_IN atau REGISTERED)." },
+          {
+            success: false,
+            error:
+              "Status kehadiran tidak valid (harus CHECKED_IN, PARTIALLY_CHECKED_IN, atau REGISTERED).",
+          },
           { status: 400 }
         );
       }
-      updated = await updateBookingCheckIn(id, checkInStatus as AttendeeCheckInStatus);
+      updated = await updateBookingCheckIn(id, checkInStatus as AttendeeCheckInStatus, {
+        incrementQty,
+        targetQty,
+        reset,
+      });
     }
 
     if (paymentStatus) {
