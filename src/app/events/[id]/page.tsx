@@ -28,18 +28,21 @@ import {
   Phone,
   Mail,
   Lock,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { PublicCommunityEvent, EventTicketOrder } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function EventDetailPage() {
   const params = useParams();
   const router = useRouter();
   const id = params?.id as string;
+  const { user } = useAuth();
 
   const [event, setEvent] = useState<PublicCommunityEvent | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,6 +58,18 @@ export default function EventDetailPage() {
     institution: "",
     ticketCount: 1,
   });
+
+  // Prefill booking form from authenticated unified session
+  useEffect(() => {
+    if (user && isBookingModalOpen) {
+      setBookingForm((prev) => ({
+        ...prev,
+        guestName: prev.guestName || user.name || "",
+        guestEmail: prev.guestEmail || user.email || "",
+        guestPhone: prev.guestPhone || user.phone || "",
+      }));
+    }
+  }, [user, isBookingModalOpen]);
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
 
@@ -164,6 +179,18 @@ export default function EventDetailPage() {
 
       const orderData: EventTicketOrder = json.data;
 
+      // Save to customer's personal ticket list for Customer Portal integration
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("dago_my_event_tickets");
+          const existingList: EventTicketOrder[] = stored ? JSON.parse(stored) : [];
+          const updated = [orderData, ...existingList.filter((t) => t.id !== orderData.id)];
+          localStorage.setItem("dago_my_event_tickets", JSON.stringify(updated));
+        } catch (e) {
+          console.error("Failed to store ticket in local history", e);
+        }
+      }
+
       setIsBookingModalOpen(false);
 
       if (event.isPaid && orderData.totalPrice > 0) {
@@ -236,22 +263,34 @@ export default function EventDetailPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E2E8F0] transition-colors duration-200">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-40 bg-white/85 dark:bg-[#0F172A]/85 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-40 bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <Link
             href="/events"
-            className="inline-flex items-center text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors"
+            className="inline-flex items-center text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors group"
           >
-            <ArrowLeft className="w-4 h-4 mr-1.5" />
-            Semua Event Komunitas
+            <ArrowLeft className="w-4 h-4 mr-1.5 transition-transform group-hover:-translate-x-1" />
+            <span>Katalog Event</span>
           </Link>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2 sm:space-x-2.5">
+            <Link href="/customer?tab=PROFILE">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-8 px-2.5 sm:px-3 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57] hover:text-[#3B7A57] rounded-xl transition-all"
+              >
+                <Ticket className="w-3.5 h-3.5 mr-1 text-[#3B7A57] dark:text-[#52B788]" />
+                <span className="hidden sm:inline">Tiket Saya</span>
+                <span className="sm:hidden">Tiket</span>
+              </Button>
+            </Link>
+
             <Button
               variant="outline"
               size="sm"
               onClick={handleCopyLink}
-              className="text-xs font-medium border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+              className="text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl"
             >
               {isCopied ? (
                 <>
@@ -271,113 +310,205 @@ export default function EventDetailPage() {
       </header>
 
       {/* Main Container */}
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-        {/* Poster Banner */}
-        <div className="relative rounded-2xl overflow-hidden bg-slate-900 border border-slate-200 dark:border-slate-800 aspect-[16/9] sm:aspect-[21/9] mb-8 shadow-md">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 lg:pb-12">
+        {/* Breadcrumbs */}
+        <nav className="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400 mb-6 font-medium">
+          <Link href="/" className="hover:text-slate-800 dark:hover:text-white transition-colors">
+            Beranda
+          </Link>
+          <span className="text-slate-400">/</span>
+          <Link href="/events" className="hover:text-slate-800 dark:hover:text-white transition-colors">
+            Event Komunitas
+          </Link>
+          <span className="text-slate-400">/</span>
+          <span className="text-slate-800 dark:text-slate-200 font-bold truncate max-w-xs sm:max-w-md">
+            {event.title}
+          </span>
+        </nav>
+
+        {/* Poster Showcase Container with Cinematic Blur Backdrop */}
+        <div className="relative rounded-3xl overflow-hidden bg-slate-900 border border-slate-200/80 dark:border-slate-800 aspect-[16/9] sm:aspect-[21/9] mb-8 shadow-lg group">
+          {/* Blurred Background Glow */}
+          <div
+            className="absolute inset-0 bg-cover bg-center filter blur-2xl opacity-40 scale-110"
+            style={{ backgroundImage: `url(${event.posterUrl})` }}
+          />
+
+          {/* Sharp Foreground Poster */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={event.posterUrl}
             alt={event.title}
-            className="w-full h-full object-cover"
+            className="relative z-10 w-full h-full object-cover sm:object-contain object-center"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+          <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 
           {/* Badges Floating over poster */}
-          <div className="absolute top-4 left-4 flex items-center space-x-2">
-            <Badge className="bg-slate-950/80 backdrop-blur-md text-white border-0 text-xs font-bold px-3 py-1">
+          <div className="absolute top-4 left-4 z-30 flex items-center space-x-2">
+            <Badge className="bg-slate-950/85 backdrop-blur-md text-white border-0 text-xs font-bold px-3 py-1 shadow-xs">
               {event.category}
             </Badge>
             {isPast ? (
-              <Badge variant="outline" className="bg-rose-950/80 text-rose-300 border-rose-800 text-xs px-2.5">
+              <Badge variant="outline" className="bg-rose-950/85 text-rose-300 border-rose-800 text-xs px-2.5 py-1">
                 Event Telah Berlalu
               </Badge>
             ) : (
-              <Badge variant="outline" className="bg-emerald-950/80 text-emerald-300 border-emerald-800 text-xs px-2.5">
+              <Badge variant="outline" className="bg-[#3B7A57]/90 text-white border-emerald-600 text-xs px-2.5 py-1">
                 Event Mendatang
               </Badge>
             )}
           </div>
 
-          <div className="absolute bottom-4 left-4 right-4 text-white">
-            <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold block mb-1">
-              Penyelenggara: {event.organizerName}
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight drop-shadow-md">
+          <div className="absolute bottom-4 left-4 right-4 z-30 text-white">
+            <div className="flex items-center space-x-2 mb-1.5 text-xs text-emerald-300 font-bold drop-shadow-xs">
+              <Users className="w-3.5 h-3.5" />
+              <span>Komunitas: {event.organizerName}</span>
+            </div>
+            <h1 className="text-xl sm:text-3xl lg:text-4xl font-black tracking-tight leading-tight drop-shadow-md">
               {event.title}
             </h1>
           </div>
         </div>
 
-        {/* Content Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column: Description & Program */}
-          <div className="lg:col-span-2 space-y-6">
-            <Card className="p-6 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
-              <h2 className="text-base font-bold text-slate-900 dark:text-white mb-4 pb-2 border-b border-slate-100 dark:border-slate-800">
-                Tentang Acara Ini
+        {/* Content Layout: 2-Column Eventbrite Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column: Details, Highlights, About & Guidelines (Col 8) */}
+          <div className="lg:col-span-8 space-y-6">
+            {/* Quick Highlights Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 sm:p-5 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/90 dark:border-slate-800 shadow-xs">
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Waktu Acara</span>
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <Clock className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                  <span className="truncate">WIB</span>
+                </div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate">
+                  {new Date(event.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Lokasi Venue</span>
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">{event.location.split(",")[0] || event.location}</span>
+                </div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate">
+                  Dago Creative Hub
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Kategori</span>
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <Tag className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="truncate">{event.category}</span>
+                </div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate">
+                  Kegiatan Publik
+                </span>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Tiket Masuk</span>
+                <div className="flex items-center space-x-1.5 text-xs font-black text-[#3B7A57] dark:text-[#52B788]">
+                  <Ticket className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{event.isPaid ? formatCurrencyIDR(event.price) : "GRATIS"}</span>
+                </div>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate">
+                  {event.isPaid ? "Per Tiket Peserta" : "RSVP Terbuka"}
+                </span>
+              </div>
+            </div>
+
+            {/* About Event Card */}
+            <Card className="p-6 sm:p-7 bg-white dark:bg-[#1E293B] border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-4 pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center space-x-2">
+                <Sparkles className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                <span>Tentang Acara Ini</span>
               </h2>
-              <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+              <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line space-y-4">
                 {event.description}
               </div>
             </Card>
 
-            <Card className="p-6 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
-              <h2 className="text-base font-bold text-slate-900 dark:text-white mb-3 pb-2 border-b border-slate-100 dark:border-slate-800">
-                Panduan Menghadiri Acara
+            {/* Guidelines Card */}
+            <Card className="p-6 sm:p-7 bg-white dark:bg-[#1E293B] border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-4 pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center space-x-2">
+                <ShieldCheck className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                <span>Panduan & Fasilitas Acara</span>
               </h2>
-              <ul className="text-xs text-slate-600 dark:text-slate-400 space-y-2.5">
+              <ul className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-3">
                 {event.guidelines && event.guidelines.length > 0 ? (
                   event.guidelines.map((guide, idx) => (
-                    <li key={idx} className="flex items-start space-x-2">
+                    <li key={idx} className="flex items-start space-x-2.5">
                       <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
                       <span>{guide}</span>
                     </li>
                   ))
                 ) : (
                   <>
-                    <li className="flex items-start space-x-2">
+                    <li className="flex items-start space-x-2.5">
                       <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
-                      <span>Harap hadir 15 menit sebelum acara dimulai untuk registrasi ulang di venue.</span>
+                      <span>Harap hadir 15 menit sebelum acara dimulai untuk registrasi ulang tiket QR di venue.</span>
                     </li>
-                    <li className="flex items-start space-x-2">
+                    <li className="flex items-start space-x-2.5">
                       <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
-                      <span>Koneksi Wi-Fi publik berkecepatan tinggi tersedia gratis untuk seluruh peserta acara.</span>
+                      <span>Koneksi Wi-Fi publik berkecepatan tinggi gratis untuk seluruh peserta acara di area hub.</span>
                     </li>
-                    <li className="flex items-start space-x-2">
+                    <li className="flex items-start space-x-2.5">
                       <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
-                      <span>Tersedia aneka menu makanan, kopi, dan minuman pendamping di sekitar lokasi acara.</span>
+                      <span>Tersedia aneka pilihan kopi spesialti dan menu makanan dari tenant F&B di lokasi.</span>
                     </li>
                   </>
                 )}
               </ul>
             </Card>
+
+            {/* Organizer Profile Card */}
+            <Card className="p-6 bg-white dark:bg-[#1E293B] border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center space-x-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center font-black text-lg border border-emerald-200 dark:border-emerald-800">
+                  {event.organizerName.charAt(0)}
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Penyelenggara Resmi</span>
+                  <h4 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white">{event.organizerName}</h4>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Komunitas Terverifikasi Dago Hub</span>
+                </div>
+              </div>
+
+              <Link href="/events">
+                <Button variant="outline" size="sm" className="text-xs font-bold rounded-xl border-slate-200 dark:border-slate-700">
+                  Lihat Acara Lainnya
+                </Button>
+              </Link>
+            </Card>
           </div>
 
-          {/* Right Column: Key Details & CTA Action */}
-          <div className="space-y-6">
-            <Card className="p-6 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm space-y-5">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Rincian Pelaksanaan
-              </h3>
-
-              {/* Price Row */}
-              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 block mb-1">
-                  Biaya Masuk / Tiket:
+          {/* Right Column: Sticky Eventbrite-Style Ticket Box (Col 4) */}
+          <div className="lg:col-span-4 lg:sticky lg:top-20 space-y-4 self-start lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto pr-1 pb-4 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-slate-300 dark:[&::-webkit-scrollbar-thumb]:bg-slate-700">
+            <Card className="p-5 sm:p-6 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-md space-y-4">
+              <div className="pb-3 border-b border-slate-100 dark:border-slate-800 space-y-1">
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
+                  Tiket Masuk
                 </span>
-                <span className="text-xl font-black text-[#3B7A57] dark:text-[#52B788]">
-                  {event.isPaid ? formatCurrencyIDR(event.price) : "GRATIS / FREE ENTRY"}
-                </span>
+                <div className="flex items-baseline space-x-2">
+                  <span className="text-2xl sm:text-3xl font-black text-[#3B7A57] dark:text-[#52B788]">
+                    {event.isPaid ? formatCurrencyIDR(event.price) : "GRATIS"}
+                  </span>
+                  {event.isPaid && <span className="text-xs text-slate-400 font-medium">/ orang</span>}
+                </div>
               </div>
 
               {/* Public Ticket Availability Progress Bar */}
               {event.availability ? (
-                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 space-y-2">
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-1.5">
                       <Ticket className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                        Ketersediaan Tiket
+                        Ketersediaan Kuota
                       </span>
                     </div>
                     {event.availability.isSoldOut ? (
@@ -390,7 +521,7 @@ export default function EventDetailPage() {
                       </span>
                     ) : (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50">
-                        Tiket Tersedia
+                        Tersedia
                       </span>
                     )}
                   </div>
@@ -436,55 +567,45 @@ export default function EventDetailPage() {
                       )}
                     </span>
                     <span className="italic text-[9.5px]">
-                      {event.availability.isConfirmed ? "Kapasitas terverifikasi" : "Estimasi venue"}
+                      {event.availability.isConfirmed ? "Kapasitas Resmi" : "Estimasi Venue"}
                     </span>
                   </div>
                 </div>
               ) : null}
 
-              {/* Schedule Row */}
-              <div className="flex items-start space-x-3 text-xs">
-                <Calendar className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200 block">Jadwal Acara</span>
-                  <span className="text-slate-500 dark:text-slate-400 text-[11px] leading-snug">
-                    {formatDateRange(event.startDate, event.endDate)}
-                  </span>
+              {/* Schedule Info */}
+              <div className="space-y-2.5 text-xs pt-0.5">
+                <div className="flex items-start space-x-3">
+                  <Calendar className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 block">Jadwal Acara</span>
+                    <span className="text-slate-500 dark:text-slate-400 text-[11px] leading-snug">
+                      {formatDateRange(event.startDate, event.endDate)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 block">Lokasi Acara</span>
+                    <span className="text-slate-500 dark:text-slate-400 text-[11px] leading-snug">
+                      {event.location}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              {/* Location Row */}
-              <div className="flex items-start space-x-3 text-xs">
-                <MapPin className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200 block">Lokasi & Ruangan</span>
-                  <span className="text-slate-500 dark:text-slate-400 text-[11px] leading-snug">
-                    {event.location}
-                  </span>
-                </div>
-              </div>
-
-              {/* Organizer Row */}
-              <div className="flex items-start space-x-3 text-xs">
-                <User className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200 block">Komunitas Penyelenggara</span>
-                  <span className="text-slate-500 dark:text-slate-400 text-[11px]">
-                    {event.organizerName}
-                  </span>
-                </div>
-              </div>
-
-              {/* Interactive Booking & Registration Action */}
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+              {/* Primary Action Button */}
+              <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-2">
                 {isPast ? (
-                  <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-center text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 text-center text-xs text-slate-500 dark:text-slate-400 font-medium">
                     Acara ini telah selesai dilaksanakan.
                   </div>
                 ) : event.availability?.isSoldOut ? (
                   <Button
                     disabled
-                    className="w-full bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs py-3 rounded-xl cursor-not-allowed flex items-center justify-center space-x-2"
+                    className="w-full bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-xs py-3.5 rounded-2xl cursor-not-allowed flex items-center justify-center space-x-2"
                   >
                     <Ticket className="w-4 h-4" />
                     <span>Tiket Habis Terjual (Sold Out)</span>
@@ -496,10 +617,10 @@ export default function EventDetailPage() {
                         setBookingError(null);
                         setIsBookingModalOpen(true);
                       }}
-                      className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-3 rounded-xl shadow-md shadow-[#3B7A57]/20 flex items-center justify-center space-x-2 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer touch-manipulation"
+                      className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-sm py-3.5 rounded-2xl shadow-lg shadow-[#3B7A57]/25 flex items-center justify-center space-x-2 transition-all hover:scale-[1.01] active:scale-[0.98] cursor-pointer touch-manipulation"
                     >
                       <Ticket className="w-4 h-4" />
-                      <span>{event.isPaid ? "Daftar & Pesan Tiket Sekarang" : "Daftar Tiket Gratis (RSVP)"}</span>
+                      <span>{event.isPaid ? "Pesan Tiket Sekarang" : "Daftar Tiket Gratis (RSVP)"}</span>
                     </Button>
 
                     {hasValidExternalUrl && (
@@ -507,38 +628,73 @@ export default function EventDetailPage() {
                         href={event.externalRegistrationUrl!}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block text-center text-[11px] text-slate-500 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors py-1 flex items-center justify-center space-x-1"
+                        className="block text-center text-[11px] text-slate-500 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors py-1 flex items-center justify-center space-x-1 font-medium"
                       >
-                        <span>Atau via link eksternal penyelenggara</span>
+                        <span>Pendaftaran eksternal penyelenggara</span>
                         <ExternalLink className="w-3 h-3 ml-0.5" />
                       </a>
                     )}
                   </>
                 )}
               </div>
+
+              {/* Trust Signals */}
+              <div className="pt-2 text-[10.5px] text-slate-500 dark:text-slate-400 space-y-1.5 border-t border-slate-100 dark:border-slate-800/60">
+                <div className="flex items-center space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                  <span>Konfirmasi instan & penerbitan e-tiket otomatis</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                  <span>QR Code check-in resmi Dago Creative Hub</span>
+                </div>
+              </div>
             </Card>
 
-            {/* Host your event CTA */}
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-slate-100 dark:from-[#1E293B] dark:to-[#161F31] border border-slate-200 dark:border-slate-800 text-center space-y-3">
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
-                Punya Komunitas atau Acara Sendiri?
+            {/* Host an Event Card */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-slate-100 dark:from-[#1E293B] dark:to-[#161F31] border border-slate-200 dark:border-slate-800 text-center space-y-2">
+              <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                Ingin Mengadakan Event Komunitas?
               </span>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                Publikasikan agenda acaramu dan jangkau audiens komunitas di kawasan Singaraja dan sekitarnya.
+                Jangkau audiens di Singaraja & manfaatkan fasilitas amphitheater, meeting room, dan lab Dago Hub.
               </p>
-              <Link href="/events/submit" className="block">
+              <Link href="/events/submit" className="block pt-0.5">
                 <Button
                   variant="outline"
                   size="sm"
                   className="w-full text-xs font-bold text-[#3B7A57] dark:text-[#52B788] border-emerald-300 dark:border-emerald-700/60 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl"
                 >
-                  Pasang Event Komunitas
+                  Ajukan Event Komunitas
                 </Button>
               </Link>
             </div>
           </div>
         </div>
       </main>
+
+      {/* Mobile Sticky Bottom CTA Bar (Eventbrite-style for mobile screens) */}
+      {!isPast && !event.availability?.isSoldOut && (
+        <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-3.5 px-4 flex items-center justify-between shadow-xl">
+          <div>
+            <span className="text-[10px] text-slate-400 font-bold uppercase block leading-none">Harga</span>
+            <span className="text-base font-black text-[#3B7A57] dark:text-[#52B788]">
+              {event.isPaid ? formatCurrencyIDR(event.price) : "GRATIS"}
+            </span>
+          </div>
+
+          <Button
+            onClick={() => {
+              setBookingError(null);
+              setIsBookingModalOpen(true);
+            }}
+            className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md cursor-pointer"
+          >
+            <Ticket className="w-3.5 h-3.5 mr-1.5" />
+            <span>{event.isPaid ? "Pesan Tiket" : "Daftar RSVP"}</span>
+          </Button>
+        </div>
+      )}
 
       {/* ===================================================================== */}
       {/* 1. MODAL REGISTRASI TIKET GUEST */}
@@ -844,6 +1000,19 @@ export default function EventDetailPage() {
                 </div>
               )}
 
+              {issuedTicket.paymentStatus === "PENDING" && issuedTicket.dokuPaymentUrl && (
+                <a
+                  href={issuedTicket.dokuPaymentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center space-x-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Bayar Sekarang via DOKU Checkout</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+
               {/* Action Buttons */}
               <div className="flex items-center space-x-3 pt-2">
                 <Button
@@ -862,6 +1031,16 @@ export default function EventDetailPage() {
                 >
                   Selesai
                 </Button>
+              </div>
+
+              <div className="text-center pt-1 border-t border-slate-100 dark:border-slate-800">
+                <Link
+                  href="/customer?tab=PROFILE"
+                  className="inline-flex items-center space-x-1 text-xs font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline"
+                >
+                  <Ticket className="w-3.5 h-3.5 mr-1" />
+                  <span>Lihat Seluruh Tiket di Portal Saya &rarr;</span>
+                </Link>
               </div>
             </div>
           </div>

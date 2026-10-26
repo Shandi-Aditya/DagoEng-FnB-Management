@@ -12,24 +12,28 @@ export {
   INITIAL_ORGANIZERS,
 };
 
-const DATA_FILE = path.join(process.cwd(), "data", "organizers.json");
+import { getDataFilePath } from "@/lib/data-storage";
+
+const getDataFile = () => getDataFilePath("organizers.json");
+
 
 let cachedOrganizers: CommunityOrganizerProfile[] | null = null;
 
 export function loadOrganizersFromDisk(): CommunityOrganizerProfile[] {
-  if (!fs.existsSync(DATA_FILE)) {
-    const dir = path.dirname(DATA_FILE);
+  const dataFile = getDataFile();
+  if (!fs.existsSync(dataFile)) {
+    const dir = path.dirname(dataFile);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
-    fs.writeFileSync(DATA_FILE, JSON.stringify(INITIAL_ORGANIZERS, null, 2), "utf-8");
+    fs.writeFileSync(dataFile, JSON.stringify(INITIAL_ORGANIZERS, null, 2), "utf-8");
     cachedOrganizers = [...INITIAL_ORGANIZERS];
     return cachedOrganizers;
   }
 
   let raw: string;
   try {
-    raw = fs.readFileSync(DATA_FILE, "utf-8");
+    raw = fs.readFileSync(dataFile, "utf-8");
   } catch (readErr) {
     console.error("Failed to read organizers file from disk:", readErr);
     throw new Error("ORGANIZER_DATA_UNAVAILABLE: Berkas data penyelenggara tidak dapat diakses.");
@@ -54,7 +58,8 @@ export function loadOrganizersFromDisk(): CommunityOrganizerProfile[] {
 export function saveOrganizersToDisk(organizers: CommunityOrganizerProfile[]): void {
   try {
     cachedOrganizers = organizers;
-    const dir = path.dirname(DATA_FILE);
+    const dataFile = getDataFile();
+    const dir = path.dirname(dataFile);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -62,9 +67,9 @@ export function saveOrganizersToDisk(organizers: CommunityOrganizerProfile[]): v
     const tmpFile = path.join(dir, `.organizers.json.tmp.${process.pid}.${Date.now()}.${nonce}`);
     fs.writeFileSync(tmpFile, JSON.stringify(organizers, null, 2), "utf-8");
     try {
-      fs.renameSync(tmpFile, DATA_FILE);
+      fs.renameSync(tmpFile, dataFile);
     } catch {
-      fs.writeFileSync(DATA_FILE, JSON.stringify(organizers, null, 2), "utf-8");
+      fs.writeFileSync(dataFile, JSON.stringify(organizers, null, 2), "utf-8");
       try {
         fs.unlinkSync(tmpFile);
       } catch {}

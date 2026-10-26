@@ -19,7 +19,7 @@ import { CommunityEvent, EventSubmissionPayload } from "../src/types/event";
 import { AuthenticatedUser } from "../src/types/auth";
 import { NextRequest } from "next/server";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.DATA_DIR_OVERRIDE || path.join(process.cwd(), "data");
 const EVENTS_FILE = path.join(DATA_DIR, "events.json");
 
 describe("Community Events Module — Unit & Integration Tests", () => {

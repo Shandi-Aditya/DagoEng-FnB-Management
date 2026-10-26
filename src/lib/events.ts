@@ -27,9 +27,12 @@ export {
   type EventTicketAvailability,
 };
 
-const DATA_FILE = path.join(process.cwd(), "data", "events.json");
-const BOOKINGS_DATA_FILE = path.join(process.cwd(), "data", "event_bookings.json");
-const EVENT_SETTINGS_FILE = path.join(process.cwd(), "data", "event_settings.json");
+import { getDataFilePath } from "@/lib/data-storage";
+
+const getEventsFile = () => getDataFilePath("events.json");
+const getBookingsFile = () => getDataFilePath("event_bookings.json");
+const getEventSettingsFile = () => getDataFilePath("event_settings.json");
+
 
 
 
@@ -37,14 +40,15 @@ let cachedPolicy: EventRevenueSharingPolicy | null = null;
 
 export function getEventRevenuePolicy(): EventRevenueSharingPolicy {
   try {
-    if (!fs.existsSync(EVENT_SETTINGS_FILE)) {
-      const dir = path.dirname(EVENT_SETTINGS_FILE);
+    const settingsFile = getEventSettingsFile();
+    if (!fs.existsSync(settingsFile)) {
+      const dir = path.dirname(settingsFile);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(EVENT_SETTINGS_FILE, JSON.stringify(DEFAULT_EVENT_POLICY, null, 2), "utf-8");
+      fs.writeFileSync(settingsFile, JSON.stringify(DEFAULT_EVENT_POLICY, null, 2), "utf-8");
       cachedPolicy = { ...DEFAULT_EVENT_POLICY };
       return cachedPolicy;
     }
-    const raw = fs.readFileSync(EVENT_SETTINGS_FILE, "utf-8");
+    const raw = fs.readFileSync(settingsFile, "utf-8");
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed.defaultPlatformFeePercent === "number") {
       const policy: EventRevenueSharingPolicy = {
@@ -104,9 +108,10 @@ export function updateEventRevenuePolicy(
 
   try {
     cachedPolicy = updated;
-    const dir = path.dirname(EVENT_SETTINGS_FILE);
+    const settingsFile = getEventSettingsFile();
+    const dir = path.dirname(settingsFile);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(EVENT_SETTINGS_FILE, JSON.stringify(updated, null, 2), "utf-8");
+    fs.writeFileSync(settingsFile, JSON.stringify(updated, null, 2), "utf-8");
   } catch (err) {
     console.error("Failed to write event revenue policy to disk", err);
   }
@@ -115,7 +120,7 @@ export function updateEventRevenuePolicy(
 }
 
 // Default verified community events for Dago Creative Hub
-const INITIAL_COMMUNITY_EVENTS: CommunityEvent[] = [
+export const INITIAL_COMMUNITY_EVENTS: CommunityEvent[] = [
   {
     id: "evt-latte-art-2026",
     title: "Dago Barista Guild: Latte Art Throwdown & Sensory Workshop",
@@ -224,16 +229,17 @@ let writeQueue = Promise.resolve();
 
 function loadEventsFromDisk(): CommunityEvent[] {
   try {
-    if (!fs.existsSync(DATA_FILE)) {
-      const dir = path.dirname(DATA_FILE);
+    const eventsFile = getEventsFile();
+    if (!fs.existsSync(eventsFile)) {
+      const dir = path.dirname(eventsFile);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(DATA_FILE, JSON.stringify(INITIAL_COMMUNITY_EVENTS, null, 2), "utf-8");
+      fs.writeFileSync(eventsFile, JSON.stringify(INITIAL_COMMUNITY_EVENTS, null, 2), "utf-8");
       cachedEvents = [...INITIAL_COMMUNITY_EVENTS];
       return cachedEvents;
     }
-    const raw = fs.readFileSync(DATA_FILE, "utf-8");
+    const raw = fs.readFileSync(eventsFile, "utf-8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       cachedEvents = parsed;
@@ -258,7 +264,8 @@ function loadEventsFromDisk(): CommunityEvent[] {
 function saveEventsToDisk(events: CommunityEvent[]): void {
   try {
     cachedEvents = events;
-    const dir = path.dirname(DATA_FILE);
+    const eventsFile = getEventsFile();
+    const dir = path.dirname(eventsFile);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -268,9 +275,9 @@ function saveEventsToDisk(events: CommunityEvent[]): void {
     const tmpFile = path.join(dir, `.events.json.tmp.${process.pid}.${Date.now()}.${nonce}`);
     fs.writeFileSync(tmpFile, JSON.stringify(events, null, 2), "utf-8");
     try {
-      fs.renameSync(tmpFile, DATA_FILE);
+      fs.renameSync(tmpFile, eventsFile);
     } catch {
-      fs.writeFileSync(DATA_FILE, JSON.stringify(events, null, 2), "utf-8");
+      fs.writeFileSync(eventsFile, JSON.stringify(events, null, 2), "utf-8");
       try { fs.unlinkSync(tmpFile); } catch {}
     }
   } catch (err) {
@@ -317,7 +324,17 @@ export function sanitizeHtmlText(text: string): string {
  */
 export function isSafePublicUrl(urlString: string): { safe: boolean; reason?: string } {
   try {
-    const url = new URL(urlString.trim());
+    const trimmed = urlString.trim();
+
+    // Allow safe local uploaded assets (e.g., /images/events/..., /uploads/...)
+    if (trimmed.startsWith("/images/") || trimmed.startsWith("/uploads/")) {
+      if (trimmed.includes("..")) {
+        return { safe: false, reason: "Path gambar tidak boleh mengandung path traversal." };
+      }
+      return { safe: true };
+    }
+
+    const url = new URL(trimmed);
 
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       return { safe: false, reason: "Protokol URL harus menggunakan HTTP atau HTTPS." };
@@ -848,7 +865,7 @@ export async function setEventCommissionOverride(
 // EVENT TICKET ORDERS & ATTENDEE MANAGEMENT
 // =============================================================================
 
-const INITIAL_BOOKINGS: EventTicketOrder[] = [
+export const INITIAL_BOOKINGS: EventTicketOrder[] = [
   {
     id: "tkt-latte-001",
     ticketCode: "DAGO-EVT-77491",
@@ -957,18 +974,19 @@ function withBookingLock<T>(fn: () => Promise<T>): Promise<T> {
   return next;
 }
 
-function loadBookingsFromDisk(): EventTicketOrder[] {
+export function loadBookingsFromDisk(): EventTicketOrder[] {
   try {
-    if (!fs.existsSync(BOOKINGS_DATA_FILE)) {
-      const dir = path.dirname(BOOKINGS_DATA_FILE);
+    const bookingsFile = getBookingsFile();
+    if (!fs.existsSync(bookingsFile)) {
+      const dir = path.dirname(bookingsFile);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(BOOKINGS_DATA_FILE, JSON.stringify(INITIAL_BOOKINGS, null, 2), "utf-8");
+      fs.writeFileSync(bookingsFile, JSON.stringify(INITIAL_BOOKINGS, null, 2), "utf-8");
       cachedBookings = [...INITIAL_BOOKINGS];
       return cachedBookings;
     }
-    const raw = fs.readFileSync(BOOKINGS_DATA_FILE, "utf-8");
+    const raw = fs.readFileSync(bookingsFile, "utf-8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       cachedBookings = parsed;
@@ -985,10 +1003,11 @@ function loadBookingsFromDisk(): EventTicketOrder[] {
   }
 }
 
-function saveBookingsToDisk(bookings: EventTicketOrder[]): void {
+export function saveBookingsToDisk(bookings: EventTicketOrder[]): void {
   try {
     cachedBookings = bookings;
-    const dir = path.dirname(BOOKINGS_DATA_FILE);
+    const bookingsFile = getBookingsFile();
+    const dir = path.dirname(bookingsFile);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
@@ -996,9 +1015,9 @@ function saveBookingsToDisk(bookings: EventTicketOrder[]): void {
     const tmpFile = path.join(dir, `.event_bookings.json.tmp.${process.pid}.${Date.now()}.${nonce}`);
     fs.writeFileSync(tmpFile, JSON.stringify(bookings, null, 2), "utf-8");
     try {
-      fs.renameSync(tmpFile, BOOKINGS_DATA_FILE);
+      fs.renameSync(tmpFile, bookingsFile);
     } catch {
-      fs.writeFileSync(BOOKINGS_DATA_FILE, JSON.stringify(bookings, null, 2), "utf-8");
+      fs.writeFileSync(bookingsFile, JSON.stringify(bookings, null, 2), "utf-8");
       try { fs.unlinkSync(tmpFile); } catch {}
     }
   } catch (err) {

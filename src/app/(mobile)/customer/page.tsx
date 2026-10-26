@@ -30,7 +30,7 @@ import { MasterProduct } from "@/types/product";
 import { OrderRecord } from "@/types/order";
 import { LoyaltyTier } from "@/types/loyalty";
 import { CoworkingSpaceItem, CoworkingMembershipPlan } from "@/types/coworking";
-import { PublicCommunityEvent } from "@/types/event";
+import { PublicCommunityEvent, EventTicketOrder } from "@/types/event";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { isTenantActive, getTenantStatus, getAllFnbTenants, getTenantName } from "@/lib/tenant";
 import {
@@ -71,6 +71,11 @@ import {
   Crown,
   LogOut,
   Printer,
+  Ticket,
+  Copy,
+  ExternalLink,
+  Lock,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -262,6 +267,7 @@ function CustomerPortalContent() {
 
   // Community Events State for Portal HOME Tab
   const [communityEvents, setCommunityEvents] = useState<PublicCommunityEvent[]>([]);
+  const [allCommunityEvents, setAllCommunityEvents] = useState<PublicCommunityEvent[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [eventsError, setEventsError] = useState<string | null>(null);
 
@@ -272,6 +278,7 @@ function CustomerPortalContent() {
       const res = await fetch("/api/events");
       const json = await res.json();
       if (res.ok && json.success && Array.isArray(json.data)) {
+        setAllCommunityEvents(json.data as PublicCommunityEvent[]);
         const now = Date.now();
         const activeUpcomingEvents = (json.data as PublicCommunityEvent[])
           .filter((evt) => {
@@ -298,9 +305,196 @@ function CustomerPortalContent() {
     }
   };
 
+  // Customer Event Tickets & Organizer Profile Status
+  const [myEventTickets, setMyEventTickets] = useState<EventTicketOrder[]>([]);
+  const [isLoadingMyTickets, setIsLoadingMyTickets] = useState(false);
+  const [isOrganizerAccount, setIsOrganizerAccount] = useState<boolean>(false);
+  const [organizerProfileName, setOrganizerProfileName] = useState<string>("");
+  const [ticketFilter, setTicketFilter] = useState<"ALL" | "UPCOMING" | "PAID" | "PENDING" | "PAST">("ALL");
+  const [ticketSearchQuery, setTicketSearchQuery] = useState("");
+  const [copiedTicketCode, setCopiedTicketCode] = useState<string | null>(null);
+  const [ordersSubFilter, setOrdersSubFilter] = useState<"ALL" | "EVENTS" | "COWORKING" | "FNB">("ALL");
+
+  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
+  const [onboardingForm, setOnboardingForm] = useState({
+    organizationName: "",
+    category: "Komunitas Kreatif",
+    notes: "",
+  });
+  const [isOnboardingSubmitting, setIsOnboardingSubmitting] = useState(false);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const [viewingTicketModal, setViewingTicketModal] = useState<EventTicketOrder | null>(null);
+
+  const handleCopyTicketCode = (code: string) => {
+    if (typeof window !== "undefined") {
+      navigator.clipboard.writeText(code);
+      setCopiedTicketCode(code);
+      setTimeout(() => setCopiedTicketCode(null), 2000);
+    }
+  };
+
+  const parseTicketDate = (isoStr: string) => {
+    try {
+      const d = new Date(isoStr);
+      const month = d.toLocaleDateString("id-ID", { month: "short" }).toUpperCase();
+      const day = d.getDate().toString();
+      const weekday = d.toLocaleDateString("id-ID", { weekday: "short" });
+      const fullDate = d.toLocaleDateString("id-ID", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+      const time = d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB";
+      return { month, day, weekday, fullDate, time };
+    } catch {
+      return { month: "EVT", day: "--", weekday: "", fullDate: isoStr, time: "" };
+    }
+  };
+
+  const ticketCounts = useMemo(() => {
+    const now = Date.now();
+    const upcoming = myEventTickets.filter((t) => {
+      const isUp = t.eventDate ? new Date(t.eventDate).getTime() >= now : true;
+      return isUp && t.paymentStatus !== "CANCELLED" && t.checkInStatus !== "CHECKED_IN";
+    }).length;
+    const pending = myEventTickets.filter((t) => t.paymentStatus === "PENDING").length;
+    const paid = myEventTickets.filter((t) => t.paymentStatus === "PAID").length;
+    const past = myEventTickets.filter((t) => {
+      const isPast = t.eventDate ? new Date(t.eventDate).getTime() < now : false;
+      return isPast || t.checkInStatus === "CHECKED_IN" || t.paymentStatus === "CANCELLED";
+    }).length;
+    return { all: myEventTickets.length, upcoming, pending, paid, past };
+  }, [myEventTickets]);
+
+  const filteredMyTickets = useMemo(() => {
+    const now = Date.now();
+    return myEventTickets.filter((ticket) => {
+      // 1. Search filter
+      if (ticketSearchQuery.trim()) {
+        const q = ticketSearchQuery.toLowerCase().trim();
+        const matchTitle = (ticket.eventTitle || "").toLowerCase().includes(q);
+        const matchCode = (ticket.ticketCode || "").toLowerCase().includes(q);
+        const matchLocation = (ticket.eventLocation || "").toLowerCase().includes(q);
+        if (!matchTitle && !matchCode && !matchLocation) return false;
+      }
+
+      // 2. Status filter
+      if (ticketFilter === "UPCOMING") {
+        const isUpcoming = ticket.eventDate ? new Date(ticket.eventDate).getTime() >= now : true;
+        return isUpcoming && ticket.paymentStatus !== "CANCELLED" && ticket.checkInStatus !== "CHECKED_IN";
+      }
+      if (ticketFilter === "PAID") {
+        return ticket.paymentStatus === "PAID";
+      }
+      if (ticketFilter === "PENDING") {
+        return ticket.paymentStatus === "PENDING";
+      }
+      if (ticketFilter === "PAST") {
+        const isPast = ticket.eventDate ? new Date(ticket.eventDate).getTime() < now : false;
+        return isPast || ticket.checkInStatus === "CHECKED_IN" || ticket.paymentStatus === "CANCELLED";
+      }
+
+      return true;
+    });
+  }, [myEventTickets, ticketFilter, ticketSearchQuery]);
+
+  const fetchMyTicketsAndOrganizerStatus = async () => {
+    try {
+      setIsLoadingMyTickets(true);
+      const targetEmail = user?.email || (typeof window !== "undefined" ? localStorage.getItem("dago_organizer_email") : null);
+      const emailParam = targetEmail ? `?email=${encodeURIComponent(targetEmail)}` : "";
+
+      // 1. Fetch tickets from server
+      const res = await fetch(`/api/events/bookings/my${emailParam}`);
+      const json = await res.json();
+      let serverTickets: EventTicketOrder[] = [];
+      if (res.ok && json.success && Array.isArray(json.data)) {
+        serverTickets = json.data;
+      }
+
+      // Merge with local storage fallback
+      let localTickets: EventTicketOrder[] = [];
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("dago_my_event_tickets");
+          if (stored) localTickets = JSON.parse(stored);
+        } catch {}
+      }
+
+      const mergedMap = new Map<string, EventTicketOrder>();
+      for (const t of localTickets) mergedMap.set(t.id, t);
+      for (const t of serverTickets) mergedMap.set(t.id, t);
+      setMyEventTickets(Array.from(mergedMap.values()));
+
+      // 2. Check organizer status
+      const portalRes = await fetch(`/api/events/portal${emailParam}`);
+      const portalJson = await portalRes.json();
+      if (portalRes.ok && portalJson.success) {
+        setIsOrganizerAccount(true);
+        setOrganizerProfileName(portalJson.data?.summary?.organizerName || "Penyelenggara Terverifikasi");
+      } else {
+        setIsOrganizerAccount(false);
+      }
+    } catch (err) {
+      console.error("Failed to fetch customer tickets/organizer status", err);
+    } finally {
+      setIsLoadingMyTickets(false);
+    }
+  };
+
   useEffect(() => {
     fetchPortalEvents();
-  }, []);
+    fetchMyTicketsAndOrganizerStatus();
+  }, [user?.email]);
+
+  useEffect(() => {
+    if (activeTab === "PROFILE" || activeTab === "ORDERS") {
+      fetchMyTicketsAndOrganizerStatus();
+    }
+  }, [activeTab]);
+
+  const handleSelfServiceOnboard = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onboardingForm.organizationName.trim()) {
+      setOnboardingError("Nama komunitas/organisasi wajib diisi.");
+      return;
+    }
+
+    try {
+      setIsOnboardingSubmitting(true);
+      setOnboardingError(null);
+      const res = await fetch("/api/events/auth/onboarding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organizationName: onboardingForm.organizationName.trim(),
+          category: onboardingForm.category,
+          contactPerson: user?.name || "Penyelenggara",
+          phone: user?.phone || "+62 812-0000-0000",
+          email: user?.email,
+          notes: onboardingForm.notes,
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setOnboardingError(json.error || "Gagal mengaktifkan profil penyelenggara.");
+        return;
+      }
+
+      setIsOnboardingModalOpen(false);
+      showToast("Selamat! Profil penyelenggara Anda aktif. Membuka dashboard organizer...");
+      if (typeof window !== "undefined" && user?.email) {
+        localStorage.setItem("dago_organizer_email", user.email);
+      }
+      router.push("/events/portal");
+    } catch (err: any) {
+      setOnboardingError(err.message || "Terjadi kesalahan jaringan.");
+    } finally {
+      setIsOnboardingSubmitting(false);
+    }
+  };
 
   const formatPortalEventDate = (isoStr: string) => {
     try {
@@ -3539,14 +3733,230 @@ function CustomerPortalContent() {
                 {/* Header Title */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-xl font-black text-slate-900">Pelacak Pesanan & Booking Saya</h2>
-                    <p className="text-xs text-slate-500">
-                      Pantau progres pesanan kuliner F&B dan status reservasi ruang kerja Anda.
+                    <h2 className="text-xl font-black text-slate-900 dark:text-white">Pelacak Pesanan & Booking Saya</h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Pantau progres pesanan kuliner F&B, reservasi ruang kerja, dan tiket event komunitas Anda.
                     </p>
                   </div>
                 </div>
 
+                {/* Sub-Filter Tabs for Orders & Bookings */}
+                <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
+                  {[
+                    { key: "ALL", label: "Semua", count: activeOrders.length + customerBookings.length + myEventTickets.length },
+                    { key: "EVENTS", label: "Tiket Event", count: myEventTickets.length, icon: <Ticket className="w-3.5 h-3.5 text-[#3B7A57]" /> },
+                    { key: "COWORKING", label: "Ruang Kerja", count: customerBookings.length, icon: <Laptop className="w-3.5 h-3.5 text-blue-600" /> },
+                    { key: "FNB", label: "Kuliner F&B", count: activeOrders.length, icon: <UtensilsCrossed className="w-3.5 h-3.5 text-brand-orange" /> },
+                  ].map((sub) => (
+                    <button
+                      key={sub.key}
+                      onClick={() => setOrdersSubFilter(sub.key as any)}
+                      className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                        ordersSubFilter === sub.key
+                          ? "bg-[#3B7A57] text-white shadow-xs"
+                          : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-300"
+                      }`}
+                    >
+                      {sub.icon}
+                      <span>{sub.label}</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                        ordersSubFilter === sub.key
+                          ? "bg-white/25 text-white"
+                          : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                      }`}>
+                        {sub.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Community Event Tickets Section */}
+                {(ordersSubFilter === "ALL" || ordersSubFilter === "EVENTS") && (
+                  <div className="space-y-3.5">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
+                        <Ticket className="w-3.5 h-3.5 text-[#3B7A57]" />
+                        <span>Tiket Event Komunitas ({myEventTickets.length})</span>
+                      </h3>
+                      <Link href="/events">
+                        <Button variant="ghost" size="sm" className="h-7 text-[11px] font-bold text-[#3B7A57] dark:text-[#52B788] hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl">
+                          Jelajahi Event &rarr;
+                        </Button>
+                      </Link>
+                    </div>
+
+                    {myEventTickets.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {myEventTickets.map((ticket) => {
+                          const matchingEvent = allCommunityEvents.find((e) => e.id === ticket.eventId);
+                          const dateInfo = parseTicketDate(ticket.eventDate);
+                          const isPending = ticket.paymentStatus === "PENDING";
+                          const isCancelled = ticket.paymentStatus === "CANCELLED";
+                          const isCheckedIn = ticket.checkInStatus === "CHECKED_IN";
+                          const isPartiallyCheckedIn = ticket.checkInStatus === "PARTIALLY_CHECKED_IN";
+
+                          return (
+                            <Card
+                              key={ticket.id}
+                              className={`p-5 rounded-3xl border transition-all flex flex-col justify-between space-y-4 ${
+                                isCancelled
+                                  ? "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 opacity-70"
+                                  : "bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 shadow-xs hover:border-[#3B7A57]/60"
+                              }`}
+                            >
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <Badge
+                                      className={`text-[10px] font-bold ${
+                                        ticket.paymentStatus === "PAID"
+                                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200"
+                                          : isPending
+                                          ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 animate-pulse"
+                                          : "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200"
+                                      }`}
+                                    >
+                                      {ticket.paymentStatus === "PAID"
+                                        ? "LUNAS & TERKONFIRMASI"
+                                        : isPending
+                                        ? "MENUNGGU PEMBAYARAN"
+                                        : "DIBATALKAN"}
+                                    </Badge>
+
+                                    {ticket.paymentStatus === "PAID" && (
+                                      <Badge
+                                        className={`text-[9px] font-bold ${
+                                          isCheckedIn
+                                            ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                            : isPartiallyCheckedIn
+                                            ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300"
+                                            : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                        }`}
+                                      >
+                                        {isCheckedIn
+                                          ? "Selesai Check-in"
+                                          : isPartiallyCheckedIn
+                                          ? `Check-in ${ticket.checkedInQty || 1}/${ticket.ticketCount}`
+                                          : "Siap Check-in"}
+                                      </Badge>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center space-x-1 shrink-0">
+                                    <span className="font-mono text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                                      {ticket.ticketCode}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleCopyTicketCode(ticket.ticketCode)}
+                                      className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                                      title="Salin Kode Tiket"
+                                    >
+                                      {copiedTicketCode === ticket.ticketCode ? (
+                                        <Check className="w-3 h-3 text-emerald-600" />
+                                      ) : (
+                                        <Copy className="w-3 h-3" />
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-start space-x-3">
+                                  {matchingEvent?.posterUrl ? (
+                                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-slate-900 shrink-0 border border-slate-100 dark:border-slate-800">
+                                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                                      <img
+                                        src={matchingEvent.posterUrl}
+                                        alt={ticket.eventTitle}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="w-14 h-14 rounded-2xl bg-[#3B7A57]/10 dark:bg-[#3B7A57]/20 border border-[#3B7A57]/30 flex flex-col items-center justify-center text-center shrink-0">
+                                      <span className="text-[9px] font-black uppercase text-[#3B7A57] dark:text-[#52B788]">
+                                        {dateInfo.month}
+                                      </span>
+                                      <span className="text-base font-black text-slate-900 dark:text-white leading-none">
+                                        {dateInfo.day}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  <div className="min-w-0 flex-1 space-y-0.5">
+                                    <h4 className="font-black text-sm sm:text-base text-slate-900 dark:text-white leading-snug line-clamp-2">
+                                      {ticket.eventTitle}
+                                    </h4>
+                                    {matchingEvent?.organizerName && (
+                                      <p className="text-[11px] text-[#3B7A57] dark:text-[#52B788] font-bold truncate">
+                                        Oleh {matchingEvent.organizerName}
+                                      </p>
+                                    )}
+                                    <div className="flex items-center space-x-1 text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
+                                      <Calendar className="w-3 h-3 shrink-0 text-slate-400" />
+                                      <span className="truncate">{dateInfo.fullDate} • {dateInfo.time}</span>
+                                    </div>
+                                    <div className="flex items-center space-x-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                      <MapPin className="w-3 h-3 shrink-0 text-slate-400" />
+                                      <span className="truncate">{ticket.eventLocation}</span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {isPending && (
+                                  <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-200/90 dark:border-amber-800/60 flex items-center justify-between gap-2">
+                                    <span className="text-[11px] font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1">
+                                      <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                                      <span>Bayar {formatCurrencyIDR(ticket.totalPrice)}</span>
+                                    </span>
+                                    {ticket.dokuPaymentUrl && (
+                                      <a
+                                        href={ticket.dokuPaymentUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center space-x-1 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs"
+                                      >
+                                        <CreditCard className="w-3 h-3" />
+                                        <span>Bayar DOKU</span>
+                                        <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
+                                      </a>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                                <span className="text-xs font-black text-slate-900 dark:text-white">
+                                  {ticket.ticketCount} Tiket {ticket.totalPrice > 0 ? `• ${formatCurrencyIDR(ticket.totalPrice)}` : "• Gratis"}
+                                </span>
+
+                                <div className="flex items-center space-x-1.5">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => setViewingTicketModal(ticket)}
+                                    className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-8 px-3 rounded-xl shadow-xs flex items-center space-x-1 cursor-pointer"
+                                  >
+                                    <QrCode className="w-3.5 h-3.5" />
+                                    <span>{isPending ? "Detail & Status" : "Buka E-Ticket"}</span>
+                                  </Button>
+                                </div>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+                        Belum ada tiket event komunitas aktif. Temukan workshop, seminar, dan meetup seru di{" "}
+                        <Link href="/events" className="font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline">
+                          Katalog Event Dago Creative Hub
+                        </Link>.
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Co-working Bookings Section */}
+                {(ordersSubFilter === "ALL" || ordersSubFilter === "COWORKING") && (
                 <div className="space-y-3.5">
                   <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
                     <Laptop className="w-3.5 h-3.5 text-blue-600" />
@@ -3666,10 +4076,13 @@ function CustomerPortalContent() {
                     </div>
                   )}
                 </div>
+                )}
 
                 {/* F&B Orders Section */}
-                <div className="space-y-3.5 pt-4 border-t border-slate-200">
-                  <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
+                {(ordersSubFilter === "ALL" || ordersSubFilter === "FNB") && (
+                  <div className="space-y-6">
+                    <div className="space-y-3.5 pt-4 border-t border-slate-200">
+                      <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
                     <Clock className="w-3.5 h-3.5 text-brand-orange" />
                     <span>Pesanan Kuliner F&B Aktif ({activeOrders.length})</span>
                   </h3>
@@ -4031,6 +4444,8 @@ function CustomerPortalContent() {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
 
               </div>
             )}
@@ -4402,6 +4817,9 @@ function CustomerPortalContent() {
             {/* ---------------------------------------------------- */}
             {/* TAB F: PROFILE (Profil, Data Member & QR Card) */}
             {/* ---------------------------------------------------- */}
+            {/* ---------------------------------------------------- */}
+            {/* TAB F: PROFILE (Profil Terpadu, Event Tickets & Organizer) */}
+            {/* ---------------------------------------------------- */}
             {activeTab === "PROFILE" && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
 
@@ -4416,6 +4834,7 @@ function CustomerPortalContent() {
                     <div>
                       <h3 className="font-black text-lg text-slate-900">{currentMember?.name}</h3>
                       <p className="text-xs text-slate-400">{currentMember?.phone}</p>
+                      <p className="text-[11px] font-mono text-slate-500 mt-0.5">{user?.email || "customer@dagoeng.com"}</p>
                     </div>
 
                     <Badge className="bg-slate-900 text-white text-xs px-3 py-1 font-bold rounded-xl">
@@ -4437,8 +4856,8 @@ function CustomerPortalContent() {
                   {/* Profile Information & Stats */}
                   <Card className="md:col-span-2 border-slate-200/90 bg-white shadow-xs p-6 space-y-6 rounded-3xl">
                     <div>
-                      <h3 className="font-black text-lg text-slate-900">Informasi Akun Member</h3>
-                      <p className="text-xs text-slate-500">Detail keanggotaan dan statistik aktivitas di Dago Creative Hub.</p>
+                      <h3 className="font-black text-lg text-slate-900">Informasi Akun Terpadu DagoEng</h3>
+                      <p className="text-xs text-slate-500">Satu identitas untuk F&B, Co-Working Space, dan Event Komunitas.</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 text-xs">
@@ -4467,9 +4886,10 @@ function CustomerPortalContent() {
                       </div>
 
                       <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1">
-                        <span className="text-[10px] text-slate-400 uppercase font-bold">Tanggal Bergabung</span>
-                        <span className="text-xs font-bold text-slate-800 block">
-                          {currentMember?.joinedDate || "12 Jan 2026"}
+                        <span className="text-[10px] text-slate-400 uppercase font-bold">Status Akun</span>
+                        <span className="text-xs font-bold text-emerald-600 flex items-center space-x-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Terverifikasi Aktif</span>
                         </span>
                       </div>
                     </div>
@@ -4484,21 +4904,695 @@ function CustomerPortalContent() {
                           showToast("Anda telah keluar dari sesi member.");
                           router.push("/");
                         }}
-                        className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl border-rose-200 flex items-center space-x-1.5"
+                        className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl border-rose-200 flex items-center space-x-1.5 cursor-pointer"
                       >
                         <LogOut className="w-3.5 h-3.5" />
                         <span>Keluar Sesi & Ke Beranda</span>
                       </Button>
 
-                      <Link href="/">
-                        <Button variant="ghost" size="sm" className="text-xs font-bold text-brand-orange hover:bg-orange-50 rounded-xl">
-                          Halaman Utama &rarr;
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleTabChange("ORDERS")}
+                          className="text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+                        >
+                          Riwayat Pesanan F&B/Coworking &rarr;
                         </Button>
-                      </Link>
+                      </div>
                     </div>
                   </Card>
 
                 </div>
+
+                {/* Section: Status Penyelenggara Event Komunitas (Organizer Integration) */}
+                <Card className="border-slate-200/90 bg-gradient-to-br from-white to-slate-50 shadow-xs p-6 rounded-3xl">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start space-x-3.5">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-xl ${
+                        isOrganizerAccount ? "bg-[#3B7A57]/15 text-[#3B7A57]" : "bg-emerald-100 text-emerald-700"
+                      }`}>
+                        <Calendar className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h4 className="font-bold text-base text-slate-900">
+                            {isOrganizerAccount
+                              ? `Penyelenggara Event: ${organizerProfileName}`
+                              : "Ingin Mengadakan Acara Sendiri di Dago Hub?"}
+                          </h4>
+                          {isOrganizerAccount && (
+                            <Badge className="bg-[#3B7A57] text-white text-[10px] font-bold">
+                              Organizer Aktif
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 max-w-xl mt-1 leading-relaxed">
+                          {isOrganizerAccount
+                            ? "Akun Anda terhubung dengan Portal Penyelenggara Dago Creative Hub. Kelola draft, penjualan tiket, meja check-in, dan hak bagi hasil dari dashboard mandiri."
+                            : "Aktifkan profil penyelenggara event komunitas menggunakan akun DagoEng yang sama tanpa registrasi akun kedua. Buat draft acara dan publikasikan agenda komunitasmu!"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex-shrink-0">
+                      {isOrganizerAccount ? (
+                        <Link href="/events/portal">
+                          <Button className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-10 px-5 rounded-xl shadow-md shadow-[#3B7A57]/20 transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5 cursor-pointer">
+                            <span>Masuk Dashboard Organizer</span>
+                            <ArrowRight className="w-4 h-4 ml-1" />
+                          </Button>
+                        </Link>
+                      ) : (
+                        <Button
+                          onClick={() => {
+                            setOnboardingForm({
+                              organizationName: user?.name ? `Komunitas ${user.name}` : "Komunitas Kreatif",
+                              category: "Komunitas Kreatif",
+                              notes: "",
+                            });
+                            setIsOnboardingModalOpen(true);
+                          }}
+                          className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-10 px-5 rounded-xl shadow-md shadow-[#3B7A57]/20 transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5 cursor-pointer"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                          <span>Aktifkan Profil Organizer</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Section: Tiket Event Komunitas Saya */}
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-black text-lg text-slate-900 dark:text-white flex items-center space-x-2">
+                        <Ticket className="w-5 h-5 text-[#3B7A57]" />
+                        <span>Tiket & E-Pass Event Saya</span>
+                      </h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Tiket digital resmi untuk akses masuk acara komunitas di DAGO Creative Hub.
+                      </p>
+                    </div>
+
+                    <Link href="/events">
+                      <Button variant="outline" size="sm" className="text-xs font-bold text-[#3B7A57] dark:text-[#52B788] border-[#3B7A57]/30 hover:bg-[#3B7A57]/10 rounded-xl">
+                        Jelajahi Event Lainnya &rarr;
+                      </Button>
+                    </Link>
+                  </div>
+
+                  {/* Search and Status Filters */}
+                  {myEventTickets.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <Input
+                          type="text"
+                          placeholder="Cari tiket berdasarkan nama event, kode booking, atau lokasi..."
+                          value={ticketSearchQuery}
+                          onChange={(e) => setTicketSearchQuery(e.target.value)}
+                          className="pl-10 text-xs h-10 rounded-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                        />
+                        {ticketSearchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setTicketSearchQuery("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 scrollbar-none">
+                        {[
+                          { key: "ALL", label: "Semua", count: ticketCounts.all },
+                          { key: "UPCOMING", label: "Mendatang", count: ticketCounts.upcoming },
+                          { key: "PAID", label: "Lunas & Aktif", count: ticketCounts.paid },
+                          { key: "PENDING", label: "Menunggu Bayar", count: ticketCounts.pending },
+                          { key: "PAST", label: "Riwayat / Terpakai", count: ticketCounts.past },
+                        ].map((f) => (
+                          <button
+                            key={f.key}
+                            onClick={() => setTicketFilter(f.key as any)}
+                            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                              ticketFilter === f.key
+                                ? "bg-[#3B7A57] text-white shadow-xs"
+                                : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-300"
+                            }`}
+                          >
+                            <span>{f.label}</span>
+                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                              ticketFilter === f.key ? "bg-white/25 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                            }`}>
+                              {f.count}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {isLoadingMyTickets ? (
+                    <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
+                      <div className="w-6 h-6 border-2 border-[#3B7A57] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <span className="text-xs text-slate-400">Memuat tiket Anda...</span>
+                    </div>
+                  ) : myEventTickets.length === 0 ? (
+                    <Card className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 space-y-3">
+                      <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center mx-auto">
+                        <Ticket className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">Belum Ada Tiket Event</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                        Anda belum mendaftar ke event komunitas manapun. Temukan berbagai workshop kreatif, meetup, dan talkshow seru!
+                      </p>
+                      <Link href="/events">
+                        <Button className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl mt-1">
+                          Cari & Pesan Tiket Event
+                        </Button>
+                      </Link>
+                    </Card>
+                  ) : filteredMyTickets.length === 0 ? (
+                    <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-2">
+                      <p className="text-xs text-slate-500">
+                        Tidak ada tiket yang cocok dengan filter atau kata kunci &ldquo;{ticketSearchQuery}&rdquo;.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setTicketFilter("ALL");
+                          setTicketSearchQuery("");
+                        }}
+                        className="text-xs rounded-xl"
+                      >
+                        Reset Filter
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {filteredMyTickets.map((ticket) => {
+                        const matchingEvent = allCommunityEvents.find((e) => e.id === ticket.eventId);
+                        const dateInfo = parseTicketDate(ticket.eventDate);
+                        const isPending = ticket.paymentStatus === "PENDING";
+                        const isCancelled = ticket.paymentStatus === "CANCELLED";
+                        const isCheckedIn = ticket.checkInStatus === "CHECKED_IN";
+                        const isPartiallyCheckedIn = ticket.checkInStatus === "PARTIALLY_CHECKED_IN";
+
+                        return (
+                          <Card
+                            key={ticket.id}
+                            className={`p-5 rounded-3xl border transition-all flex flex-col justify-between space-y-4 ${
+                              isCancelled
+                                ? "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 opacity-70"
+                                : "bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 shadow-xs hover:border-[#3B7A57]/60"
+                            }`}
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <Badge
+                                    className={`text-[10px] font-bold ${
+                                      ticket.paymentStatus === "PAID"
+                                        ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200"
+                                        : isPending
+                                        ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 animate-pulse"
+                                        : "bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200"
+                                    }`}
+                                  >
+                                    {ticket.paymentStatus === "PAID"
+                                      ? "LUNAS & TERKONFIRMASI"
+                                      : isPending
+                                      ? "MENUNGGU PEMBAYARAN"
+                                      : "DIBATALKAN"}
+                                  </Badge>
+
+                                  {ticket.paymentStatus === "PAID" && (
+                                    <Badge
+                                      className={`text-[9px] font-bold ${
+                                        isCheckedIn
+                                          ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                                          : isPartiallyCheckedIn
+                                          ? "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/60 dark:text-indigo-300"
+                                          : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                      }`}
+                                    >
+                                      {isCheckedIn
+                                        ? "Selesai Check-in"
+                                        : isPartiallyCheckedIn
+                                        ? `Check-in ${ticket.checkedInQty || 1}/${ticket.ticketCount}`
+                                        : "Siap Check-in"}
+                                    </Badge>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center space-x-1 shrink-0">
+                                  <span className="font-mono text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                                    {ticket.ticketCode}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopyTicketCode(ticket.ticketCode)}
+                                    className="p-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                                    title="Salin Kode Tiket"
+                                  >
+                                    {copiedTicketCode === ticket.ticketCode ? (
+                                      <Check className="w-3 h-3 text-emerald-600" />
+                                    ) : (
+                                      <Copy className="w-3 h-3" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="flex items-start space-x-3">
+                                {matchingEvent?.posterUrl ? (
+                                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl overflow-hidden bg-slate-900 shrink-0 border border-slate-100 dark:border-slate-800">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={matchingEvent.posterUrl}
+                                      alt={ticket.eventTitle}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="w-14 h-14 rounded-2xl bg-[#3B7A57]/10 dark:bg-[#3B7A57]/20 border border-[#3B7A57]/30 flex flex-col items-center justify-center text-center shrink-0">
+                                    <span className="text-[9px] font-black uppercase text-[#3B7A57] dark:text-[#52B788]">
+                                      {dateInfo.month}
+                                    </span>
+                                    <span className="text-base font-black text-slate-900 dark:text-white leading-none">
+                                      {dateInfo.day}
+                                    </span>
+                                  </div>
+                                )}
+
+                                <div className="min-w-0 flex-1 space-y-0.5">
+                                  <h4 className="font-black text-sm sm:text-base text-slate-900 dark:text-white leading-snug line-clamp-2">
+                                    {ticket.eventTitle}
+                                  </h4>
+                                  {matchingEvent?.organizerName && (
+                                    <p className="text-[11px] text-[#3B7A57] dark:text-[#52B788] font-bold truncate">
+                                      Oleh {matchingEvent.organizerName}
+                                    </p>
+                                  )}
+                                  <div className="flex items-center space-x-1 text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
+                                    <Calendar className="w-3 h-3 shrink-0 text-slate-400" />
+                                    <span className="truncate">{dateInfo.fullDate} • {dateInfo.time}</span>
+                                  </div>
+                                  <div className="flex items-center space-x-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                    <MapPin className="w-3 h-3 shrink-0 text-slate-400" />
+                                    <span className="truncate">{ticket.eventLocation}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {isPending && (
+                                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-200/90 dark:border-amber-800/60 flex items-center justify-between gap-2">
+                                  <span className="text-[11px] font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                                    <span>Bayar {formatCurrencyIDR(ticket.totalPrice)}</span>
+                                  </span>
+                                  {ticket.dokuPaymentUrl && (
+                                    <a
+                                      href={ticket.dokuPaymentUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center space-x-1 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs"
+                                    >
+                                      <CreditCard className="w-3 h-3" />
+                                      <span>Bayar DOKU</span>
+                                      <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                              <span className="text-xs font-black text-slate-900 dark:text-white">
+                                {ticket.ticketCount} Tiket {ticket.totalPrice > 0 ? `• ${formatCurrencyIDR(ticket.totalPrice)}` : "• Gratis"}
+                              </span>
+
+                              <div className="flex items-center space-x-1.5">
+                                <Button
+                                  size="sm"
+                                  onClick={() => setViewingTicketModal(ticket)}
+                                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-8 px-3 rounded-xl shadow-xs flex items-center space-x-1 cursor-pointer"
+                                >
+                                  <QrCode className="w-3.5 h-3.5" />
+                                  <span>{isPending ? "Detail & Status" : "Buka E-Ticket"}</span>
+                                </Button>
+                              </div>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* MODAL: SELF-SERVICE ORGANIZER ONBOARDING */}
+                {isOnboardingModalOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+                      <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-8 h-8 rounded-xl bg-[#3B7A57]/15 text-[#3B7A57] flex items-center justify-center">
+                            <Sparkles className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-bold text-slate-900 dark:text-white">Aktivasi Profil Penyelenggara</h3>
+                            <p className="text-[11px] text-slate-500">Mulai buat dan publikasikan event komunitasmu</p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsOnboardingModalOpen(false)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      <form onSubmit={handleSelfServiceOnboard} className="p-5 space-y-4">
+                        {onboardingError && (
+                          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center space-x-2">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span>{onboardingError}</span>
+                          </div>
+                        )}
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            Nama Komunitas / Penyelenggara <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            value={onboardingForm.organizationName}
+                            onChange={(e) => setOnboardingForm({ ...onboardingForm, organizationName: e.target.value })}
+                            placeholder="Contoh: Bandung Dev / Komunitas Barista"
+                            className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            Kategori Komunitas
+                          </label>
+                          <select
+                            value={onboardingForm.category}
+                            onChange={(e) => setOnboardingForm({ ...onboardingForm, category: e.target.value })}
+                            className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
+                          >
+                            <option value="Komunitas Kreatif">Kreatif & Seni</option>
+                            <option value="Teknologi & Bisnis">Teknologi & Startup</option>
+                            <option value="Kuliner & Kopi">Kuliner & Kopi</option>
+                            <option value="Workshop & Edukasi">Edukasi & Workshop</option>
+                            <option value="Komunitas Umum">Komunitas Umum</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            Catatan atau Deskripsi Singkat
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={onboardingForm.notes}
+                            onChange={(e) => setOnboardingForm({ ...onboardingForm, notes: e.target.value })}
+                            placeholder="Ceritakan fokus kegiatan komunitasmu..."
+                            className="w-full px-3.5 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
+                          />
+                        </div>
+
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 rounded-xl text-[11px] text-emerald-800 dark:text-emerald-300">
+                          Profil Anda langsung aktif seketika menggunakan email akun yang sama (<strong>{user?.email || "customer@dagoeng.com"}</strong>). Anda tidak perlu mendaftar ulang.
+                        </div>
+
+                        <Button
+                          type="submit"
+                          disabled={isOnboardingSubmitting}
+                          className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-10 rounded-xl"
+                        >
+                          {isOnboardingSubmitting ? "Mengaktifkan..." : "Aktifkan & Buka Dashboard Organizer"}
+                        </Button>
+                      </form>
+                    </div>
+                  </div>
+                )}
+
+                {/* MODAL: VIEW E-TICKET DIGITAL PASS & QR CODE */}
+                {viewingTicketModal && (() => {
+                  const matchingEvent = allCommunityEvents.find((e) => e.id === viewingTicketModal.eventId);
+                  const dateInfo = parseTicketDate(viewingTicketModal.eventDate);
+                  const isPaid = viewingTicketModal.paymentStatus === "PAID";
+                  const isPending = viewingTicketModal.paymentStatus === "PENDING";
+                  const isCancelled = viewingTicketModal.paymentStatus === "CANCELLED";
+                  const isCheckedIn = viewingTicketModal.checkInStatus === "CHECKED_IN";
+                  const isPartiallyCheckedIn = viewingTicketModal.checkInStatus === "PARTIALLY_CHECKED_IN";
+
+                  return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 my-6">
+                        {/* Top Tear-off Header */}
+                        <div className="bg-gradient-to-r from-[#3B7A57] to-[#2E6044] p-5 text-white flex items-center justify-between">
+                          <div className="flex items-center space-x-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
+                              <Ticket className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                              <span className="text-[10px] uppercase font-black tracking-widest text-emerald-200 block">
+                                E-Tiket Komunitas Resmi
+                              </span>
+                              <h3 className="text-sm font-black">DAGO Creative Hub</h3>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center space-x-2">
+                            <Badge className={`border-0 text-[10px] font-black tracking-wide ${
+                              isPaid
+                                ? "bg-emerald-400 text-slate-950"
+                                : isPending
+                                ? "bg-amber-400 text-slate-950 animate-pulse"
+                                : "bg-rose-400 text-white"
+                            }`}>
+                              {isPaid
+                                ? "TERKONFIRMASI (LUNAS)"
+                                : isPending
+                                ? "MENUNGGU PEMBAYARAN"
+                                : "DIBATALKAN"}
+                            </Badge>
+
+                            <button
+                              type="button"
+                              onClick={() => setViewingTicketModal(null)}
+                              className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                            >
+                              <X className="w-5 h-5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-6 space-y-5">
+                          {/* Booking Code with Copy */}
+                          <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-200 dark:border-slate-800">
+                            <span className="text-[11px] text-slate-400 font-medium">Kode Booking Registrasi:</span>
+                            <div className="flex items-center justify-center space-x-2">
+                              <span className="text-2xl font-mono font-black text-slate-900 dark:text-white tracking-wider">
+                                {viewingTicketModal.ticketCode}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyTicketCode(viewingTicketModal.ticketCode)}
+                                className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                                title="Salin Kode Tiket"
+                              >
+                                {copiedTicketCode === viewingTicketModal.ticketCode ? (
+                                  <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                                    <Check className="w-3.5 h-3.5" /> Tersalin!
+                                  </span>
+                                ) : (
+                                  <Copy className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* QR Code Presentation with Verification Enforcement */}
+                          <div className="space-y-2">
+                            {isPaid ? (
+                              isCheckedIn ? (
+                                <div className="p-5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
+                                  <div className="relative">
+                                    <QrCode className="w-32 h-32 text-slate-400 opacity-30" />
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
+                                        <Check className="w-7 h-7 stroke-[3]" />
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <Badge className="bg-slate-800 text-white dark:bg-slate-700 text-xs font-bold">
+                                    SELESAI CHECK-IN (SUDAH DIGUNAKAN)
+                                  </Badge>
+                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs">
+                                    Seluruh {viewingTicketModal.ticketCount} tiket dalam pemesanan ini telah diverifikasi hadir oleh panitia di venue.
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="p-5 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
+                                  <div className="p-3 bg-white rounded-xl shadow-xs border border-slate-100">
+                                    <QrCode className="w-36 h-36 text-slate-950" />
+                                  </div>
+                                  {isPartiallyCheckedIn && (
+                                    <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[11px] font-bold">
+                                      Check-in Sebagian: {viewingTicketModal.checkedInQty || 1} dari {viewingTicketModal.ticketCount} Tiket
+                                    </Badge>
+                                  )}
+                                  <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-semibold leading-tight pt-1">
+                                    Tunjukkan QR code ini kepada panitia acara di venue saat registrasi ulang.
+                                  </p>
+                                </div>
+                              )
+                            ) : isPending ? (
+                              <div className="p-5 bg-amber-50/70 dark:bg-amber-950/30 rounded-2xl border border-amber-200/80 dark:border-amber-800/60 flex flex-col items-center justify-center text-center space-y-3">
+                                <div className="relative p-3 bg-white/70 dark:bg-slate-900/70 rounded-xl border border-amber-200/60 flex items-center justify-center">
+                                  <QrCode className="w-32 h-32 text-amber-500 opacity-20" />
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center space-y-1">
+                                    <Lock className="w-9 h-9 text-amber-600 dark:text-amber-400" />
+                                    <span className="text-[10px] font-black uppercase text-amber-800 dark:text-amber-200 tracking-wider">
+                                      QR Terkunci
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <h5 className="font-bold text-xs text-amber-900 dark:text-amber-200">
+                                    Menunggu Verifikasi Pembayaran
+                                  </h5>
+                                  <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 max-w-xs leading-relaxed">
+                                    Kode QR check-in resmi akan aktif otomatis setelah pembayaran lunas diverifikasi oleh sistem.
+                                  </p>
+                                </div>
+
+                                {viewingTicketModal.dokuPaymentUrl && (
+                                  <a
+                                    href={viewingTicketModal.dokuPaymentUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full flex items-center justify-center space-x-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                  >
+                                    <CreditCard className="w-4 h-4" />
+                                    <span>Bayar Sekarang via DOKU Checkout</span>
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                  </a>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="p-4 bg-rose-50 dark:bg-rose-950/40 rounded-2xl border border-rose-200 dark:border-rose-800 text-center space-y-1">
+                                <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
+                                <h5 className="font-bold text-xs text-rose-900 dark:text-rose-200">Tiket Dibatalkan / Kedaluwarsa</h5>
+                                <p className="text-[11px] text-rose-700 dark:text-rose-300">
+                                  Pemesanan tiket ini tidak lagi aktif dan tidak dapat digunakan untuk registrasi.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Event & Ticket Details Table */}
+                          <div className="space-y-2.5 text-xs pt-1">
+                            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-1.5">
+                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                                Acara & Penyelenggara
+                              </span>
+                              <p className="font-black text-sm text-slate-900 dark:text-white leading-snug">
+                                {viewingTicketModal.eventTitle}
+                              </p>
+                              {matchingEvent?.organizerName && (
+                                <p className="text-[11px] text-[#3B7A57] dark:text-[#52B788] font-bold">
+                                  Penyelenggara: {matchingEvent.organizerName}
+                                </p>
+                              )}
+                              <div className="flex items-center space-x-1.5 text-slate-600 dark:text-slate-300 pt-1">
+                                <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span>{dateInfo.fullDate} • {dateInfo.time}</span>
+                              </div>
+                              <div className="flex items-center space-x-1.5 text-slate-600 dark:text-slate-300">
+                                <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span className="truncate">{viewingTicketModal.eventLocation}</span>
+                              </div>
+                            </div>
+
+                            {/* Attendee Details */}
+                            <div className="grid grid-cols-2 gap-2 text-[11px]">
+                              <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-0.5">
+                                <span className="text-[10px] text-slate-400 font-semibold block">Nama Pemesan:</span>
+                                <span className="font-bold text-slate-800 dark:text-slate-200 block truncate">
+                                  {viewingTicketModal.guestName}
+                                </span>
+                                <span className="text-slate-500 dark:text-slate-400 text-[10px] block truncate">
+                                  {viewingTicketModal.guestEmail}
+                                </span>
+                              </div>
+
+                              <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-0.5">
+                                <span className="text-[10px] text-slate-400 font-semibold block">Jumlah & Biaya:</span>
+                                <span className="font-bold text-[#3B7A57] dark:text-[#52B788] block">
+                                  {viewingTicketModal.ticketCount} Tiket
+                                </span>
+                                <span className="font-black text-slate-900 dark:text-white text-xs block">
+                                  {viewingTicketModal.totalPrice > 0
+                                    ? formatCurrencyIDR(viewingTicketModal.totalPrice)
+                                    : "GRATIS"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Modal Action Buttons */}
+                          <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                            <div className="flex items-center space-x-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => window.print()}
+                                className="flex-1 text-xs font-bold border-slate-200 dark:border-slate-700 rounded-xl h-10"
+                              >
+                                <Printer className="w-3.5 h-3.5 mr-1.5" />
+                                <span>Cetak Tiket</span>
+                              </Button>
+
+                              <Link
+                                href={`/events/${viewingTicketModal.eventId}`}
+                                className="flex-1"
+                              >
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 text-[#3B7A57] dark:text-[#52B788] rounded-xl h-10"
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                                  <span>Info Acara</span>
+                                </Button>
+                              </Link>
+                            </div>
+
+                            <Button
+                              onClick={() => setViewingTicketModal(null)}
+                              className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs h-10 rounded-xl"
+                            >
+                              Tutup E-Ticket
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
               </div>
             )}

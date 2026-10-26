@@ -37,3 +37,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# backups and test storage
+.backups/
+.test-storage/
+data/.backups/
+data/.test-storage/

@@ -7,6 +7,7 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.ts", "tests/**/*.test.ts"],
     fileParallelism: false,
+    setupFiles: ["tests/setup-test-storage.ts"],
   },
   resolve: {
     alias: {

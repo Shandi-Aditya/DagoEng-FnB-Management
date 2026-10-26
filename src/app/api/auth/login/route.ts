@@ -7,6 +7,7 @@ import {
   verifyOrganizerCredentials,
   createOrganizerSession,
 } from "@/lib/organizer-activation";
+import { verifyUnifiedUserPassword } from "@/lib/unified-account";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest) {
         path: "/",
         maxAge: 604800,
         sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
       });
 
       return res;
@@ -178,6 +180,7 @@ export async function POST(req: NextRequest) {
             httpOnly: true,
             maxAge: 7 * 24 * 60 * 60,
             sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
           });
 
           // Clear persona cookie so server strictly relies on the verified session
@@ -217,7 +220,57 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 3. Email is completely unknown - STRICT REJECTION (NO FALLBACK TO DAGO_OWNER!)
+    // 3. Check Unified Customer / User Account
+    const unifiedAuth = await verifyUnifiedUserPassword(normalizedEmail, password);
+    if (unifiedAuth.success && unifiedAuth.user) {
+      const uUser = unifiedAuth.user;
+      const orgProfile = uUser.organizerProfileId ? getAllOrganizers().find(o => o.id === uUser.organizerProfileId) : null;
+
+      const session = await createOrganizerSession(
+        normalizedEmail,
+        req.headers.get("user-agent") || undefined,
+        req.headers.get("x-forwarded-for") || undefined
+      );
+
+      const redirectUrl = orgProfile ? "/events/portal" : "/customer";
+
+      const res = NextResponse.json({
+        success: true,
+        redirectUrl,
+        user: {
+          id: uUser.id,
+          name: uUser.name,
+          email: uUser.email,
+          phone: uUser.phone,
+          role: uUser.role,
+          organizerProfileId: uUser.organizerProfileId,
+          redirectTo: redirectUrl,
+        },
+      });
+
+      res.cookies.set({
+        name: SESSION_COOKIE_NAME,
+        value: session.rawToken,
+        path: "/",
+        httpOnly: true,
+        maxAge: 7 * 24 * 60 * 60,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+
+      res.cookies.delete("dagoeng_active_persona");
+
+      return res;
+    }
+
+    if (unifiedAuth.error && unifiedAuth.error.includes("Password yang Anda masukkan salah")) {
+      return NextResponse.json(
+        { success: false, error: unifiedAuth.error },
+        { status: 401 }
+      );
+    }
+
+    // 4. Email is completely unknown - STRICT REJECTION (NO FALLBACK TO DAGO_OWNER!)
     return NextResponse.json(
       {
         success: false,

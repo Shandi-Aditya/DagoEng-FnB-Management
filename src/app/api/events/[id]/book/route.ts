@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createEventBooking } from "@/lib/events";
+import { createEventBooking, loadBookingsFromDisk, saveBookingsToDisk } from "@/lib/events";
+import { createDokuCheckoutSession } from "@/lib/doku";
 import { EventBookingPayload } from "@/types/event";
 
 export const dynamic = "force-dynamic";
@@ -7,7 +8,8 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/events/[id]/book
  * Public endpoint to book tickets for an event.
- * Enforces rate limiting, server-side price calculation, and input sanitization.
+ * Enforces rate limiting, server-side price calculation, input sanitization,
+ * and initiates DOKU Checkout session for paid events.
  */
 export async function POST(
   req: NextRequest,
@@ -27,13 +29,45 @@ export async function POST(
       eventId: id,
     };
 
-    const booking = await createEventBooking(payload, clientIp);
+    let booking = await createEventBooking(payload, clientIp);
+
+    // If booking requires payment, initiate DOKU Checkout session
+    let dokuPaymentUrl: string | null = null;
+    if (booking.totalPrice > 0) {
+      try {
+        const dokuSession = await createDokuCheckoutSession(booking);
+        dokuPaymentUrl = dokuSession.paymentUrl;
+
+        // Persist DOKU invoice number and payment URL
+        const allBookings = loadBookingsFromDisk();
+        const idx = allBookings.findIndex((b) => b.id === booking.id);
+        if (idx !== -1) {
+          allBookings[idx] = {
+            ...allBookings[idx],
+            paymentMethod: "DOKU_CHECKOUT",
+            dokuInvoiceNumber: dokuSession.invoiceNumber,
+            dokuPaymentUrl: dokuSession.paymentUrl,
+            updatedAt: new Date().toISOString(),
+          };
+          saveBookingsToDisk(allBookings);
+          booking = allBookings[idx];
+        }
+      } catch (dokuErr: any) {
+        console.error("DOKU Checkout initialization error:", dokuErr);
+      }
+    }
 
     return NextResponse.json(
       {
         success: true,
-        message: "Pemesanan tiket berhasil diterbitkan!",
-        data: booking,
+        message:
+          booking.totalPrice > 0
+            ? "Pemesanan berhasil dibuat. Silakan selesaikan pembayaran melalui DOKU Checkout."
+            : "Pemesanan tiket berhasil diterbitkan!",
+        data: {
+          ...booking,
+          paymentUrl: dokuPaymentUrl,
+        },
       },
       { status: 201 }
     );

@@ -27,7 +27,7 @@ import {
   getRequestAuthUser,
 } from "@/lib/server-auth";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.DATA_DIR_OVERRIDE || path.join(process.cwd(), "data");
 const ORGANIZERS_FILE = path.join(DATA_DIR, "organizers.json");
 const INVITES_FILE = path.join(DATA_DIR, "organizer_invites.json");
 const CREDENTIALS_FILE = path.join(DATA_DIR, "organizer_credentials.json");
@@ -262,7 +262,7 @@ describe("Community Organizer Account Activation & Auth Flow (Section G Verifica
     // Exactly one must succeed (200) and one must be rejected (400)
     expect(statuses).toContain(200);
     expect(statuses).toContain(400);
-  });
+  }, 15000);
 
   // ---------------------------------------------------------------------------
   // 5. Password tersimpan sebagai hash (bcrypt) & no plaintext

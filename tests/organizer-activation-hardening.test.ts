@@ -27,7 +27,7 @@ import {
   getServerAuthSession,
 } from "../src/lib/server-auth";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.DATA_DIR_OVERRIDE || path.join(process.cwd(), "data");
 const ORGANIZERS_FILE = path.join(DATA_DIR, "organizers.json");
 const INVITES_FILE = path.join(DATA_DIR, "organizer_invites.json");
 const CREDENTIALS_FILE = path.join(DATA_DIR, "organizer_credentials.json");

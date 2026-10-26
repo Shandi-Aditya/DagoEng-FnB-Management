@@ -398,6 +398,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch (e) {
+      console.error("Logout network call error:", e);
+    }
     setUser(null);
     localStorage.removeItem("dagoeng_active_persona");
     localStorage.removeItem("dagoeng_custom_customer");

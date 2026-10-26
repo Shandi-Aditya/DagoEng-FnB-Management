@@ -95,7 +95,7 @@ export interface EventSubmissionPayload {
   honeypot?: string; // Anti-spam trap
 }
 
-export type TicketPaymentMethod = "FREE" | "QRIS" | "CASH" | "TRANSFER";
+export type TicketPaymentMethod = "FREE" | "QRIS" | "CASH" | "TRANSFER" | "DOKU_CHECKOUT";
 export type TicketPaymentStatus = "PAID" | "PENDING" | "CANCELLED";
 export type AttendeeCheckInStatus = "REGISTERED" | "PARTIALLY_CHECKED_IN" | "CHECKED_IN";
 
@@ -132,6 +132,9 @@ export interface EventTicketOrder {
   paymentStatus: TicketPaymentStatus;
   checkInStatus: AttendeeCheckInStatus;
   checkInTime?: string | null;
+  dokuInvoiceNumber?: string | null;
+  dokuPaymentUrl?: string | null;
+  paidAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }

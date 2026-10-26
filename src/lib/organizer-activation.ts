@@ -31,9 +31,12 @@ export interface OrganizerCredentialRecord {
   updatedAt: string;
 }
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const INVITES_FILE = path.join(DATA_DIR, "organizer_invites.json");
-const CREDENTIALS_FILE = path.join(DATA_DIR, "organizer_credentials.json");
+import { getDataDirectory, getDataFilePath } from "@/lib/data-storage";
+
+const getDataDir = () => getDataDirectory();
+const getInvitesFile = () => getDataFilePath("organizer_invites.json");
+const getCredentialsFile = () => getDataFilePath("organizer_credentials.json");
+
 
 // Concurrency Mutex Lock
 let lockPromise = Promise.resolve();
@@ -91,10 +94,11 @@ function hashToken(rawToken: string): string {
 
 function loadInvitesFromDisk(): OrganizerActivationTokenRecord[] {
   try {
-    if (!fs.existsSync(INVITES_FILE)) {
+    const invitesFile = getInvitesFile();
+    if (!fs.existsSync(invitesFile)) {
       return [];
     }
-    const raw = fs.readFileSync(INVITES_FILE, "utf-8");
+    const raw = fs.readFileSync(invitesFile, "utf-8");
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
@@ -130,27 +134,29 @@ function saveInvitesToDisk(invites: OrganizerActivationTokenRecord[]): void {
   if (mockInviteWriteFailure) {
     throw mockInviteWriteFailure;
   }
-  const dir = path.dirname(INVITES_FILE);
+  const invitesFile = getInvitesFile();
+  const dir = path.dirname(invitesFile);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const nonce = Math.random().toString(36).slice(2, 8);
   const tmpFile = path.join(dir, `.organizer_invites.tmp.${process.pid}.${Date.now()}.${nonce}`);
   fs.writeFileSync(tmpFile, JSON.stringify(invites, null, 2), "utf-8");
   try {
-    fs.renameSync(tmpFile, INVITES_FILE);
+    fs.renameSync(tmpFile, invitesFile);
   } catch {
-    fs.writeFileSync(INVITES_FILE, JSON.stringify(invites, null, 2), "utf-8");
+    fs.writeFileSync(invitesFile, JSON.stringify(invites, null, 2), "utf-8");
     try {
       fs.unlinkSync(tmpFile);
     } catch {}
   }
 }
 
-function loadCredentialsFromDisk(): OrganizerCredentialRecord[] {
+export function loadCredentialsFromDisk(): OrganizerCredentialRecord[] {
   try {
-    if (!fs.existsSync(CREDENTIALS_FILE)) {
+    const credsFile = getCredentialsFile();
+    if (!fs.existsSync(credsFile)) {
       return [];
     }
-    const raw = fs.readFileSync(CREDENTIALS_FILE, "utf-8");
+    const raw = fs.readFileSync(credsFile, "utf-8");
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
@@ -159,19 +165,20 @@ function loadCredentialsFromDisk(): OrganizerCredentialRecord[] {
   }
 }
 
-function saveCredentialsToDisk(credentials: OrganizerCredentialRecord[]): void {
+export function saveCredentialsToDisk(credentials: OrganizerCredentialRecord[]): void {
   if (mockCredWriteFailure) {
     throw mockCredWriteFailure;
   }
-  const dir = path.dirname(CREDENTIALS_FILE);
+  const credsFile = getCredentialsFile();
+  const dir = path.dirname(credsFile);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const nonce = Math.random().toString(36).slice(2, 8);
   const tmpFile = path.join(dir, `.organizer_credentials.tmp.${process.pid}.${Date.now()}.${nonce}`);
   fs.writeFileSync(tmpFile, JSON.stringify(credentials, null, 2), "utf-8");
   try {
-    fs.renameSync(tmpFile, CREDENTIALS_FILE);
+    fs.renameSync(tmpFile, credsFile);
   } catch {
-    fs.writeFileSync(CREDENTIALS_FILE, JSON.stringify(credentials, null, 2), "utf-8");
+    fs.writeFileSync(credsFile, JSON.stringify(credentials, null, 2), "utf-8");
     try {
       fs.unlinkSync(tmpFile);
     } catch {}

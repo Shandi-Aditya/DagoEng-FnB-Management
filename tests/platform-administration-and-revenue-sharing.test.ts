@@ -22,7 +22,7 @@ import { assertOrganizerAuth, assertEventAdmin } from "@/lib/server-auth";
 import { NextRequest } from "next/server";
 import { getTenantRevenueSplit, setTenantRevenueSplit } from "@/lib/settlement";
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.DATA_DIR_OVERRIDE || path.join(process.cwd(), "data");
 const ORGANIZERS_FILE = path.join(DATA_DIR, "organizers.json");
 const EVENT_SETTINGS_FILE = path.join(DATA_DIR, "event_settings.json");
 const EVENTS_FILE = path.join(DATA_DIR, "events.json");

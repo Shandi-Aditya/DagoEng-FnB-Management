@@ -95,28 +95,85 @@ function LoginContent() {
     if (!custPhone.trim()) return;
 
     setIsLoading(true);
+    setStaffError(null);
 
-    // Get existing member or create new (deduplicated)
-    const member = getOrCreateMember({
-      name: custName.trim() || "Pelanggan Member",
-      phone: custPhone.trim(),
-      email: custEmail.trim() || undefined,
-      initialPoints: customerSubMode === "REGISTER" ? 50 : 0,
-    });
+    try {
+      if (customerSubMode === "REGISTER") {
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: custName.trim() || "Pelanggan Member",
+            email: custEmail.trim() || `${custPhone.replace(/[^0-9]/g, "")}@customer.dagoeng.com`,
+            phone: custPhone.trim(),
+            password: password || "Password123!",
+          }),
+        });
 
-    // Log in customer session
-    await loginCustomer({
-      name: member.name,
-      phone: member.phone,
-      email: member.email,
-    });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          setStaffError(data.error || "Pendaftaran gagal. Periksa kembali data Anda.");
+          setIsLoading(false);
+          return;
+        }
 
-    setIsLoading(false);
+        // Get loyalty member
+        const member = getOrCreateMember({
+          name: data.user.name,
+          phone: data.user.phone,
+          email: data.user.email,
+          initialPoints: 50,
+        });
 
-    if (returnTo) {
-      router.push(returnTo);
-    } else {
-      router.push("/customer");
+        await loginCustomer({
+          name: member.name,
+          phone: member.phone,
+          email: member.email,
+        });
+      } else {
+        // Customer Login via Unified Auth
+        const targetEmail = custEmail.trim() || "customer@gmail.com";
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: targetEmail,
+            password: password || "Password123!",
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          setStaffError(data.error || "Gagal masuk. Periksa kembali email dan password Anda.");
+          setIsLoading(false);
+          return;
+        }
+
+        const member = getOrCreateMember({
+          name: data.user?.name || custName.trim() || "Pelanggan Member",
+          phone: data.user?.phone || custPhone.trim(),
+          email: data.user?.email || targetEmail,
+          initialPoints: 0,
+        });
+
+        await loginCustomer({
+          name: member.name,
+          phone: member.phone,
+          email: member.email,
+        });
+      }
+
+      setIsLoading(false);
+
+      if (returnTo) {
+        router.push(returnTo);
+      } else {
+        router.push("/customer");
+      }
+    } catch (err: any) {
+      console.error("Customer auth error:", err);
+      setStaffError("Terjadi kendala jaringan saat memproses autentikasi.");
+      setIsLoading(false);
     }
   };
 
