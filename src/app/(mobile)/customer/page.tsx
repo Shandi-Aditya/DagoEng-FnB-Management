@@ -4833,7 +4833,66 @@ function CustomerPortalContent() {
             {/* ---------------------------------------------------- */}
             {/* TAB F: PROFILE (Profil Terpadu, Event Tickets & Organizer) */}
             {/* ---------------------------------------------------- */}
-            {activeTab === "PROFILE" && (
+            {activeTab === "PROFILE" && !isCustomerLoggedIn && (
+              <div className="max-w-xl mx-auto py-8 px-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <Card className="p-8 border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl rounded-3xl text-center space-y-6">
+                  <div className="w-16 h-16 rounded-3xl bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center mx-auto shadow-xs">
+                    <Lock className="w-8 h-8" />
+                  </div>
+
+                  <div className="space-y-2 max-w-sm mx-auto">
+                    <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                      Autentikasi Akun Diperlukan
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Halaman Profil Member dan Tiket Akun hanya dapat diakses oleh pengguna yang telah masuk ke Akun DagoEng terdaftar.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-left space-y-2">
+                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                      Memesan Tiket sebagai Guest?
+                    </span>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                      Jika Anda melakukan pemesanan tanpa akun, tiket Anda tersimpan secara privat dan dapat diakses kapan saja tanpa perlu login melalui Pusat Pemulihan Tiket.
+                    </p>
+                  </div>
+
+                  <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+                    <Link
+                      href={`/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&mode=customer`}
+                      className="w-full sm:w-auto"
+                    >
+                      <Button className="w-full sm:w-auto bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-10 px-5 rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
+                        <LogIn className="w-3.5 h-3.5 mr-1.5" />
+                        <span>Masuk ke Akun DagoEng</span>
+                      </Button>
+                    </Link>
+
+                    <Link href="/events/tickets/recovery" className="w-full sm:w-auto">
+                      <Button
+                        variant="outline"
+                        className="w-full sm:w-auto border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs h-10 px-4 rounded-xl"
+                      >
+                        <Search className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788]" />
+                        <span>Cari Tiket Pesanan Guest</span>
+                      </Button>
+                    </Link>
+                  </div>
+
+                  <div className="pt-2">
+                    <Link
+                      href="/events"
+                      className="text-xs font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline inline-flex items-center space-x-1"
+                    >
+                      <span>Kembali ke Event Marketplace</span>
+                    </Link>
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {activeTab === "PROFILE" && isCustomerLoggedIn && (
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

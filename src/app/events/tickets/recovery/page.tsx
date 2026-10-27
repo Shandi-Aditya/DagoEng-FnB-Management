@@ -105,7 +105,7 @@ export default function TicketRecoveryPage() {
             className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788]"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Marketplace Event</span>
+            <span>Kembali ke Daftar Event</span>
           </Link>
           <ThemeToggle variant="pill" />
         </div>
@@ -262,10 +262,10 @@ export default function TicketRecoveryPage() {
         <div className="text-center p-4 rounded-2xl bg-slate-100 dark:bg-slate-800/50 text-xs text-slate-600 dark:text-slate-400 space-y-1">
           <p>Sudah memiliki akun DagoEng?</p>
           <Link
-            href="/login?returnTo=/customer?tab=PROFILE&mode=CUSTOMER"
+            href={`/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&from=events&mode=customer`}
             className="font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline inline-flex items-center"
           >
-            <span>Masuk ke Akun Anda untuk Melihat Seluruh Tiket</span>
+            <span>Masuk ke Akun DagoEng</span>
             <ExternalLink className="w-3 h-3 ml-1" />
           </Link>
         </div>

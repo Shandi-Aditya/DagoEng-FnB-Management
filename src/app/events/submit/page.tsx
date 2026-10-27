@@ -336,7 +336,7 @@ export default function SubmitEventPage() {
               className="inline-flex items-center text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors group"
             >
               <ArrowLeft className="w-4 h-4 mr-1.5 transition-transform group-hover:-translate-x-1" />
-              <span>Kembali ke Event</span>
+              <span>Kembali ke Daftar Event</span>
             </Link>
             <span className="text-slate-300 dark:text-slate-700">|</span>
             <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
@@ -401,7 +401,7 @@ export default function SubmitEventPage() {
               </Link>
               <Link href="/events">
                 <Button variant="outline" className="w-full sm:w-auto text-xs font-semibold rounded-xl border-slate-200 dark:border-slate-700">
-                  Lihat Katalog Event
+                  Kembali ke Daftar Event
                 </Button>
               </Link>
             </div>

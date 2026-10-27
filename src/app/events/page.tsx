@@ -173,7 +173,7 @@ export default function EventsListingPage() {
           <div className="flex items-center space-x-2 sm:space-x-3">
             <ThemeToggle variant="pill" />
 
-            <Link href={user ? "/customer?tab=PROFILE" : "/login?returnTo=/customer?tab=PROFILE&mode=CUSTOMER"}>
+            <Link href={user ? "/customer?tab=PROFILE" : `/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&from=events&mode=customer`}>
               <Button
                 variant="outline"
                 size="sm"

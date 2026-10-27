@@ -310,12 +310,12 @@ export default function PrivateTicketViewPage() {
                 variant="outline"
                 className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 rounded-xl"
               >
-                Bantu Cari Tiket Saya
+                Cari Tiket Pesanan Guest
               </Button>
             </Link>
             <Link href="/events">
               <Button className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl shadow-xs">
-                Kembali ke Marketplace Event
+                Kembali ke Daftar Event
               </Button>
             </Link>
           </div>
@@ -339,7 +339,7 @@ export default function PrivateTicketViewPage() {
           className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          <span>Halaman Acara</span>
+          <span>Kembali ke Detail Event</span>
         </Link>
 
         <div className="flex items-center space-x-2">
@@ -882,7 +882,7 @@ export default function PrivateTicketViewPage() {
 
               <Link href="/events" className="flex-1">
                 <Button className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl py-2.5 cursor-pointer shadow-xs">
-                  <span>Jelajahi Acara Lainnya</span>
+                  <span>Kembali ke Daftar Event</span>
                 </Button>
               </Link>
             </div>

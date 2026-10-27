@@ -19,6 +19,8 @@ import {
   Building2,
   Zap,
   AlertCircle,
+  Ticket,
+  Search,
 } from "lucide-react";
 
 /**
@@ -45,8 +47,16 @@ function LoginContent() {
   const { login, loginCustomer } = useAuth();
   const { getOrCreateMember } = useLoyalty();
 
+  const fromParam = searchParams.get("from");
   const returnTo = sanitizeReturnTo(searchParams.get("returnTo"));
   const initialMode = searchParams.get("mode");
+
+  const isFromEvents = fromParam === "events" || returnTo?.startsWith("/events");
+
+  // Determine back navigation link explicitly based on source context.
+  // NEVER send the visitor to returnTo (which may be a protected destination) on cancel/back!
+  const backHref = isFromEvents ? "/events" : "/";
+  const backLabel = isFromEvents ? "Kembali ke Event Marketplace" : "Kembali ke Beranda";
 
   const [activeMode, setActiveMode] = useState<"STAFF" | "CUSTOMER">("STAFF");
   const [customerSubMode, setCustomerSubMode] = useState<"LOGIN" | "REGISTER">("LOGIN");
@@ -65,11 +75,11 @@ function LoginContent() {
     if (initialMode === "register") {
       setActiveMode("CUSTOMER");
       setCustomerSubMode("REGISTER");
-    } else if (initialMode === "customer") {
+    } else if (initialMode === "customer" || isFromEvents) {
       setActiveMode("CUSTOMER");
       setCustomerSubMode("LOGIN");
     }
-  }, [initialMode]);
+  }, [initialMode, isFromEvents]);
 
   const handleStaffLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -249,17 +259,17 @@ function LoginContent() {
         {/* Top Back Navigation Bar & Theme Toggle */}
         <div className="flex items-center justify-between px-1">
           <Link
-            href={returnTo || "/"}
+            href={backHref}
             className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white backdrop-blur-md shadow-xs transition-all duration-200 hover:scale-105 active:scale-95"
           >
             <ArrowLeft className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
-            <span>{returnTo ? "Kembali ke Portal / Fitur" : "Kembali ke Beranda"}</span>
+            <span>{backLabel}</span>
           </Link>
 
           <div className="flex items-center space-x-2">
             {returnTo && (
               <span className="text-[10px] bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] font-bold px-2.5 py-1 rounded-full border border-[#3B7A57]/20 dark:border-[#52B788]/30">
-                Konteks Terjaga
+                Tujuan Login Aktif
               </span>
             )}
             <ThemeToggle variant="pill" />
@@ -289,6 +299,42 @@ function LoginContent() {
             </p>
           </div>
         </div>
+
+        {/* Event Ticket Assistance Card - Context-Aware Alternative for Guest Visitors */}
+        {isFromEvents && (
+          <div className="p-4 bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/30 rounded-3xl space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="flex items-start space-x-3">
+              <div className="p-2 rounded-xl bg-[#3B7A57] dark:bg-[#52B788] text-white dark:text-slate-900 shrink-0 mt-0.5 shadow-xs">
+                <Ticket className="w-4 h-4" />
+              </div>
+              <div className="space-y-1 flex-1">
+                <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                  Akses Tiket Event Marketplace
+                </h4>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Login ke Akun DagoEng diperlukan untuk melihat tiket yang terhubung resmi dengan akun Anda. Jika Anda memesan tiket sebagai <strong>Guest</strong> tanpa akun, Anda tidak perlu login.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-emerald-500/20">
+              <Link
+                href="/events/tickets/recovery"
+                className="inline-flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-800 dark:text-slate-200 transition-colors shadow-2xs"
+              >
+                <Search className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                <span>Cari Tiket Pesanan Guest</span>
+              </Link>
+              <Link
+                href="/events"
+                className="inline-flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 hover:bg-[#3B7A57]/20 text-[11px] font-bold text-[#3B7A57] dark:text-[#52B788] transition-colors"
+              >
+                <span>Jelajahi Event</span>
+                <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Primary Role Mode Switcher (Staf & Manajemen vs Pelanggan / Member) */}
         <div className="grid grid-cols-2 p-1.5 bg-slate-200/70 dark:bg-white/5 backdrop-blur-md border border-slate-300/80 dark:border-white/10 rounded-2xl text-xs font-bold shadow-inner transition-colors">

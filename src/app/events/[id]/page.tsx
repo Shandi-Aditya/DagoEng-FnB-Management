@@ -271,11 +271,11 @@ export default function EventDetailPage() {
             className="inline-flex items-center text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors group"
           >
             <ArrowLeft className="w-4 h-4 mr-1.5 transition-transform group-hover:-translate-x-1" />
-            <span>Katalog Event</span>
+            <span>Kembali ke Daftar Event</span>
           </Link>
 
           <div className="flex items-center space-x-2 sm:space-x-2.5">
-            <Link href={user ? "/customer?tab=PROFILE" : "/login?returnTo=/customer?tab=PROFILE&mode=CUSTOMER"}>
+            <Link href={user ? "/customer?tab=PROFILE" : `/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&from=events&mode=customer`}>
               <Button
                 variant="outline"
                 size="sm"
@@ -831,7 +831,7 @@ export default function EventDetailPage() {
                   disabled={isSubmittingBooking}
                   className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md cursor-pointer"
                 >
-                  {isSubmittingBooking ? "Memproses..." : event.isPaid ? "Lanjut Pembayaran" : "Dapatkan Tiket"}
+                  {isSubmittingBooking ? "Memproses..." : event.isPaid ? "Lanjut ke Pembayaran" : "Dapatkan Tiket"}
                 </Button>
               </div>
             </form>
@@ -945,7 +945,7 @@ export default function EventDetailPage() {
                 className="w-full border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs py-2.5 rounded-xl cursor-pointer flex items-center justify-center space-x-1.5"
               >
                 <Ticket className="w-3.5 h-3.5 text-[#3B7A57]" />
-                <span>Lihat Ringkasan Tiket (Modal)</span>
+                <span>Lihat Tiket Pesanan</span>
               </Button>
               <button
                 type="button"
@@ -1105,24 +1105,24 @@ export default function EventDetailPage() {
                     className="w-full inline-flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 text-[#3B7A57] dark:text-[#52B788] text-xs font-bold transition-colors"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Buka Halaman E-Tiket Privat (Tanpa Login)</span>
+                    <span>Lihat Tiket Pesanan</span>
                   </Link>
                 </div>
               )}
 
               <div className="flex items-center justify-between text-[11px] pt-2 border-t border-slate-100 dark:border-slate-800">
                 <Link
-                  href={user ? "/customer?tab=PROFILE" : "/login?returnTo=/customer?tab=PROFILE&mode=CUSTOMER"}
+                  href={user ? "/customer?tab=PROFILE" : `/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&from=events&mode=customer`}
                   className="inline-flex items-center space-x-1 font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline"
                 >
                   <Ticket className="w-3.5 h-3.5 mr-1" />
-                  <span>{user ? "Portal Tiket Saya" : "Masuk ke Akun"}</span>
+                  <span>{user ? "Tiket Saya" : "Masuk ke Akun DagoEng"}</span>
                 </Link>
                 <Link
                   href="/events/tickets/recovery"
                   className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:underline"
                 >
-                  Lupa Tautan Tiket?
+                  Cari Tiket Pesanan Guest
                 </Link>
               </div>
             </div>
