@@ -36,6 +36,9 @@ import {
   Compass,
   BarChart3,
   SlidersHorizontal,
+  Lock,
+  LogIn,
+  Camera,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +47,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { CommunityEvent, EventTicketOrder, OrganizerPortalData, AttendeeCheckInStatus } from "@/types/event";
 import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { useAuth } from "@/contexts/AuthContext";
+import { OrganizerQRScannerModal } from "./OrganizerQRScannerModal";
 
 type OrganizerNavView = "EVENTS" | "ATTENDEES" | "FINANCE" | "HOME";
 type EventViewMode = "LIST" | "CALENDAR";
@@ -66,10 +70,11 @@ export default function CommunityOrganizerPortalPage() {
   const [eventSubTab, setEventSubTab] = useState<"EVENTS" | "COLLECTIONS">("EVENTS");
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
 
-  // Attendees Filtering
+  // Attendees Filtering & QR Scanner
   const [selectedEventId, setSelectedEventId] = useState<string>("ALL");
   const [attendeeSearch, setAttendeeSearch] = useState("");
   const [isUpdatingCheckIn, setIsUpdatingCheckIn] = useState<string | null>(null);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   // Revision Modal State
   const [revisionEvent, setRevisionEvent] = useState<CommunityEvent | null>(null);
@@ -77,6 +82,16 @@ export default function CommunityOrganizerPortalPage() {
   const [revisionDesc, setRevisionDesc] = useState("");
   const [revisionLocation, setRevisionLocation] = useState("");
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
+
+  // Auto-dismiss success notification
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
 
   // Synchronize on mount or user changes
   useEffect(() => {
@@ -538,9 +553,71 @@ export default function CommunityOrganizerPortalPage() {
             </div>
           )}
 
-          {/* Hub Admin Supervisor Switcher (Only visible to Platform Admins) */}
-          {portalData?.isAdmin && (
-            <Card className="p-4 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl">
+          {/* Unauthenticated / Unauthorized Organizer State Card */}
+          {!portalData && !isLoading && (
+            <Card className="p-8 sm:p-12 text-center rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-xl space-y-6 max-w-2xl mx-auto my-8 animate-in fade-in">
+              <div className="w-16 h-16 rounded-2xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] mx-auto flex items-center justify-center">
+                <Lock className="w-8 h-8" />
+              </div>
+
+              <div className="space-y-2">
+                <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Akses Workspace Terproteksi</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                  Masuk ke Organizer Workspace
+                </h2>
+                <p className="text-sm text-slate-600 dark:text-slate-400 max-w-lg mx-auto leading-relaxed">
+                  Untuk mengelola event komunitas, memantau penjualan tiket, dan melakukan check-in peserta pada hari pelaksanaan, silakan masuk menggunakan akun penyelenggara atau akun terpadu DagoEng Anda.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                <Link href="/login?returnTo=/events/portal" className="w-full sm:w-auto">
+                  <Button
+                    size="lg"
+                    className="w-full sm:w-auto bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-sm h-11 px-6 rounded-2xl shadow-md transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    <span>Masuk ke Akun Penyelenggara</span>
+                  </Button>
+                </Link>
+
+                <Link href="/events/organizer-apply" className="w-full sm:w-auto">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="w-full sm:w-auto border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-sm h-11 px-6 rounded-2xl cursor-pointer"
+                  >
+                    <span>Daftar Akses Komunitas</span>
+                  </Button>
+                </Link>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 text-xs text-slate-400">
+                <span>Ingin melihat jadwal event publik? </span>
+                <Link href="/events" className="text-[#3B7A57] dark:text-[#52B788] font-bold hover:underline">
+                  Buka Marketplace DagoEng
+                </Link>
+              </div>
+            </Card>
+          )}
+
+          {/* Loading Skeleton */}
+          {isLoading && !portalData && (
+            <div className="space-y-4 py-8">
+              <div className="h-8 bg-slate-200 dark:bg-slate-800 rounded-xl w-48 animate-pulse" />
+              <div className="h-32 bg-slate-200 dark:bg-slate-800 rounded-2xl animate-pulse" />
+              <div className="h-64 bg-slate-200 dark:bg-slate-800 rounded-2xl animate-pulse" />
+            </div>
+          )}
+
+          {portalData && (
+            <>
+              {/* Hub Admin Supervisor Switcher (Only visible to Platform Admins) */}
+              {portalData.isAdmin && (
+                <Card className="p-4 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center space-x-2">
                   <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
@@ -1130,15 +1207,27 @@ export default function CommunityOrganizerPortalPage() {
                   </p>
                 </div>
 
-                <Button
-                  size="sm"
-                  onClick={handleExportCSV}
-                  disabled={filteredAttendees.length === 0}
-                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-3.5 rounded-xl cursor-pointer shadow-xs"
-                >
-                  <Download className="w-3.5 h-3.5 mr-1.5" />
-                  <span>Ekspor CSV</span>
-                </Button>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    size="sm"
+                    onClick={() => setIsScannerOpen(true)}
+                    className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-3.5 rounded-xl cursor-pointer shadow-xs"
+                  >
+                    <Camera className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Scan QR Tiket</span>
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleExportCSV}
+                    disabled={filteredAttendees.length === 0}
+                    className="text-xs font-bold px-3.5 rounded-xl border-slate-200 dark:border-slate-700 cursor-pointer shadow-xs"
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Ekspor CSV</span>
+                  </Button>
+                </div>
               </div>
 
               {/* Filtering & Search Row */}
@@ -1436,6 +1525,8 @@ export default function CommunityOrganizerPortalPage() {
               </div>
             </div>
           )}
+            </>
+          )}
         </main>
       </div>
 
@@ -1531,6 +1622,32 @@ export default function CommunityOrganizerPortalPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* QR Code Staff Camera Scanner Modal */}
+      {portalData && (
+        <OrganizerQRScannerModal
+          isOpen={isScannerOpen}
+          onClose={() => setIsScannerOpen(false)}
+          organizerEmail={activeEmail}
+          selectedEventId={selectedEventId}
+          events={portalData.events}
+          bookings={portalData.bookings}
+          onCheckInSuccess={(updatedBooking, message) => {
+            setPortalData((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    bookings: prev.bookings.map((b) =>
+                      b.id === updatedBooking.id ? updatedBooking : b
+                    ),
+                  }
+                : null
+            );
+            setSuccessMessage(message);
+            setTimeout(() => setSuccessMessage(null), 4000);
+          }}
+        />
       )}
     </div>
   );

@@ -37,6 +37,7 @@ import { PublicCommunityEvent, EventTicketOrder } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
+import { QRCodeSVG } from "qrcode.react";
 
 export default function EventDetailPage() {
   const params = useParams();
@@ -274,7 +275,7 @@ export default function EventDetailPage() {
           </Link>
 
           <div className="flex items-center space-x-2 sm:space-x-2.5">
-            <Link href="/customer?tab=PROFILE">
+            <Link href={user ? "/customer?tab=PROFILE" : "/login?returnTo=/customer?tab=PROFILE&mode=CUSTOMER"}>
               <Button
                 variant="outline"
                 size="sm"
@@ -871,26 +872,80 @@ export default function EventDetailPage() {
               </span>
             </div>
 
-            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/50 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 text-left leading-relaxed space-y-1.5">
+            {/* Rekening Tujuan Transfer Bank Manual */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl text-left space-y-2">
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                Rekening Tujuan Transfer Manual:
+              </span>
+              <div className="space-y-1.5 text-xs">
+                <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 block text-[11px]">BCA • 1420993821</span>
+                    <span className="text-[10px] text-slate-400">a.n. PT DAGO CREATIVE HUB</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        navigator.clipboard.writeText("1420993821");
+                        alert("Nomor rekening BCA berhasil disalin!");
+                      }
+                    }}
+                    className="h-6 px-2 text-[10px] font-bold text-[#3B7A57] cursor-pointer"
+                  >
+                    Salin Rekening
+                  </Button>
+                </div>
+                <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 block text-[11px]">Mandiri • 1300098234120</span>
+                    <span className="text-[10px] text-slate-400">a.n. PT DAGO CREATIVE HUB</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        navigator.clipboard.writeText("1300098234120");
+                        alert("Nomor rekening Mandiri berhasil disalin!");
+                      }
+                    }}
+                    className="h-6 px-2 text-[10px] font-bold text-[#3B7A57] cursor-pointer"
+                  >
+                    Salin Rekening
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/50 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 text-left leading-relaxed space-y-1">
               <div className="flex items-center space-x-1.5 font-bold text-amber-900 dark:text-amber-100">
                 <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                <span>Status Pemesanan: Menunggu Verifikasi</span>
+                <span>Instruksi Pembayaran & Verifikasi:</span>
               </div>
               <p>
-                Pemesanan tiket Anda telah tersimpan di sistem. Selesaikan pembayaran nominal tepat melalui transfer bank atau kasir operasional DAGO Creative Hub.
-              </p>
-              <p className="text-[10px] text-amber-700 dark:text-amber-300 font-medium">
-                Tiket akan diverifikasi dan disahkan oleh panitia/administrator sebelum acara berlangsung.
+                Transfer sesuai nominal tepat, lalu buka halaman E-Tiket Anda untuk mengunggah foto bukti transfer. Panitia akan memvalidasi bukti Anda.
               </p>
             </div>
 
             <div className="space-y-2 pt-1">
+              {pendingTicket.guestToken && (
+                <Link
+                  href={`/events/tickets/${pendingTicket.guestToken}`}
+                  className="w-full inline-flex items-center justify-center space-x-2 py-3 px-3 rounded-xl bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold transition-all shadow-md hover:scale-[1.01]"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Buka E-Tiket & Unggah Bukti Transfer &rarr;</span>
+                </Link>
+              )}
               <Button
+                variant="outline"
                 onClick={handleProceedToTicketView}
-                className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md cursor-pointer flex items-center justify-center space-x-1.5"
+                className="w-full border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs py-2.5 rounded-xl cursor-pointer flex items-center justify-center space-x-1.5"
               >
-                <Ticket className="w-3.5 h-3.5" />
-                <span>Lihat E-Tiket (Menunggu Verifikasi)</span>
+                <Ticket className="w-3.5 h-3.5 text-[#3B7A57]" />
+                <span>Lihat Ringkasan Tiket (Modal)</span>
               </Button>
               <button
                 type="button"
@@ -976,13 +1031,19 @@ export default function EventDetailPage() {
 
               {/* QR Code Bar with Status Enforcement */}
               {issuedTicket.paymentStatus === "PAID" ? (
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-slate-900 rounded-xl p-1 text-white flex items-center justify-center shrink-0">
-                    <QrCode className="w-9 h-9" />
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 flex flex-col items-center justify-center space-y-3 text-center">
+                  <div className="p-3 bg-white rounded-xl shadow-xs border border-emerald-100 dark:border-emerald-900 flex items-center justify-center">
+                    <QRCodeSVG
+                      value={JSON.stringify({ ticketCode: issuedTicket.ticketCode, eventId: issuedTicket.eventId })}
+                      size={160}
+                      level="M"
+                      includeMargin
+                    />
                   </div>
-                  <div className="text-[11px] text-emerald-900 dark:text-emerald-200 leading-snug">
-                    <span className="font-bold block text-emerald-800 dark:text-emerald-300">QR Check-in Aktif</span>
-                    Tunjukkan e-tiket atau kode booking ini kepada panitia acara di venue saat registrasi ulang.
+                  <div className="text-[11px] text-emerald-900 dark:text-emerald-200 leading-snug space-y-1">
+                    <span className="font-bold block text-emerald-800 dark:text-emerald-300 text-xs">QR Check-in Aktif & Valid</span>
+                    <p>Tunjukkan QR Code ini kepada panitia acara di venue saat registrasi ulang.</p>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">Kode Booking Fallback: <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{issuedTicket.ticketCode}</span></p>
                   </div>
                 </div>
               ) : (
@@ -1002,7 +1063,11 @@ export default function EventDetailPage() {
 
               {issuedTicket.paymentStatus === "PENDING" && issuedTicket.dokuPaymentUrl && (
                 <a
-                  href={issuedTicket.dokuPaymentUrl}
+                  href={
+                    issuedTicket.dokuPaymentUrl.includes("api-sandbox.doku.com/checkout-link-v2/")
+                      ? `/checkout-link-v2/${issuedTicket.dokuPaymentUrl.split("checkout-link-v2/")[1]}`
+                      : issuedTicket.dokuPaymentUrl
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-full flex items-center justify-center space-x-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
@@ -1033,13 +1098,31 @@ export default function EventDetailPage() {
                 </Button>
               </div>
 
-              <div className="text-center pt-1 border-t border-slate-100 dark:border-slate-800">
+              {issuedTicket.guestToken && (
+                <div className="pt-1">
+                  <Link
+                    href={`/events/tickets/${issuedTicket.guestToken}`}
+                    className="w-full inline-flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 text-[#3B7A57] dark:text-[#52B788] text-xs font-bold transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Buka Halaman E-Tiket Privat (Tanpa Login)</span>
+                  </Link>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-[11px] pt-2 border-t border-slate-100 dark:border-slate-800">
                 <Link
-                  href="/customer?tab=PROFILE"
-                  className="inline-flex items-center space-x-1 text-xs font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline"
+                  href={user ? "/customer?tab=PROFILE" : "/login?returnTo=/customer?tab=PROFILE&mode=CUSTOMER"}
+                  className="inline-flex items-center space-x-1 font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline"
                 >
                   <Ticket className="w-3.5 h-3.5 mr-1" />
-                  <span>Lihat Seluruh Tiket di Portal Saya &rarr;</span>
+                  <span>{user ? "Portal Tiket Saya" : "Masuk ke Akun"}</span>
+                </Link>
+                <Link
+                  href="/events/tickets/recovery"
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:underline"
+                >
+                  Lupa Tautan Tiket?
                 </Link>
               </div>
             </div>

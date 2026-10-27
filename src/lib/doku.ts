@@ -138,6 +138,18 @@ export interface DokuCheckoutResponse {
   expiredDate?: string;
 }
 
+export class DokuCheckoutError extends Error {
+  public readonly isDefiniteFailure: boolean;
+  public readonly statusCode?: number;
+
+  constructor(message: string, isDefiniteFailure: boolean, statusCode?: number) {
+    super(message);
+    this.name = "DokuCheckoutError";
+    this.isDefiniteFailure = isDefiniteFailure;
+    this.statusCode = statusCode;
+  }
+}
+
 /**
  * Initiates a DOKU Hosted Checkout session for an event ticket order.
  * Follows DOKU Checkout backend API standards.
@@ -208,7 +220,7 @@ export async function createDokuCheckoutSession(
   if (isSimulationMode) {
     // In test or simulation environment without live DOKU network
     const simulatedToken = crypto.randomBytes(16).toString("hex");
-    const simulatedPaymentUrl = `${config.apiUrl}/checkout-link-v2/${simulatedToken}`;
+    const simulatedPaymentUrl = `/checkout-link-v2/${simulatedToken}?invoice=${encodeURIComponent(invoiceNumber)}`;
     return {
       paymentUrl: simulatedPaymentUrl,
       invoiceNumber,
@@ -219,17 +231,26 @@ export async function createDokuCheckoutSession(
   }
 
   const endpoint = `${config.apiUrl}${requestTarget}`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Client-Id": config.clientId,
-      "Request-Id": requestId,
-      "Request-Timestamp": requestTimestamp,
-      Signature: signature,
-    },
-    body: JSON.stringify(payload),
-  });
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Client-Id": config.clientId,
+        "Request-Id": requestId,
+        "Request-Timestamp": requestTimestamp,
+        Signature: signature,
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (netErr: any) {
+    // Network level failure: connection dropped or timeout with unknown outcome
+    throw new DokuCheckoutError(
+      `Kendala jaringan saat menghubungi gateway pembayaran: ${netErr.message || "Timeout"}`,
+      false
+    );
+  }
 
   const responseData = await response.json().catch(() => null);
 
@@ -238,7 +259,13 @@ export async function createDokuCheckoutSession(
       responseData?.error_messages?.join(", ") ||
       responseData?.message?.join(", ") ||
       `DOKU Checkout HTTP ${response.status}`;
-    throw new Error(`Gagal menginisiasi pembayaran DOKU: ${errorMsg}`);
+    // HTTP 4xx means DOKU rejected the request before transaction creation (preflight failure)
+    const isDefinitePreflightFailure = response.status >= 400 && response.status < 500;
+    throw new DokuCheckoutError(
+      `Gagal menginisiasi pembayaran DOKU: ${errorMsg}`,
+      isDefinitePreflightFailure,
+      response.status
+    );
   }
 
   return {

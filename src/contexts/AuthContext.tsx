@@ -278,6 +278,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Default Active Modules in Organization: F&B + Co-working (Commercial is INACTIVE by default)
   const [activeOrgModules, setActiveOrgModules] = useState<BusinessModuleCode[]>(["CORE", "FNB", "CO_WORKING"]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
   useEffect(() => {
     const isLoggedOut = localStorage.getItem("dagoeng_is_logged_out") === "true";
@@ -398,16 +399,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    setIsLoggingOut(true);
+
     try {
       await fetch("/api/auth/logout", { method: "POST" });
     } catch (e) {
       console.error("Logout network call error:", e);
     }
+
+    // Play smooth animated logout transition for 1 second
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
     setUser(null);
     localStorage.removeItem("dagoeng_active_persona");
     localStorage.removeItem("dagoeng_custom_customer");
     localStorage.setItem("dagoeng_is_logged_out", "true");
     syncPersonaCookie(null);
+    setIsLoggingOut(false);
   };
 
   const switchPersona = async (personaKey: PersonaKey) => {
@@ -435,7 +443,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+      {isLoggingOut && <LogoutOverlay />}
     </AuthContext.Provider>
+  );
+}
+
+function LogoutOverlay() {
+  const [progress, setProgress] = useState(10);
+
+  useEffect(() => {
+    const t = setTimeout(() => setProgress(100), 50);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/35 backdrop-blur-[2px] animate-in fade-in duration-200 select-none">
+      <div className="relative w-full max-w-[270px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 rounded-3xl p-5 text-center shadow-2xl shadow-slate-950/20 animate-in zoom-in-95 duration-200">
+        {/* Animated Farewell Icon */}
+        <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-gradient-to-tr from-[#3B7A57] to-[#52B788] text-white flex items-center justify-center shadow-md shadow-emerald-900/20">
+          <span className="text-xl select-none animate-bounce">👋</span>
+        </div>
+
+        {/* Clean Farewell Texts without user name */}
+        <h4 className="text-sm font-extrabold text-slate-900 dark:text-white mb-1">
+          Sampai Jumpa!
+        </h4>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug mb-3.5">
+          Sesi Anda telah berhasil diakhiri dengan aman.
+        </p>
+
+        {/* Minimal Progress Bar */}
+        <div className="space-y-1.5">
+          <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1 overflow-hidden">
+            <div
+              className="bg-gradient-to-r from-[#3B7A57] to-[#52B788] h-full rounded-full transition-all duration-900 ease-out"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <span className="text-[9px] text-slate-400 font-medium block">
+            Mengalihkan...
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 

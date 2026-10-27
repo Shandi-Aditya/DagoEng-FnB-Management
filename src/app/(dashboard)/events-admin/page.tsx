@@ -84,6 +84,7 @@ export default function AdminEventsPage() {
   const [isAttendeesModalOpen, setIsAttendeesModalOpen] = useState(false);
   const [attendeeSearchQuery, setAttendeeSearchQuery] = useState("");
   const [isUpdatingCheckIn, setIsUpdatingCheckIn] = useState<string | null>(null);
+  const [selectedProofBooking, setSelectedProofBooking] = useState<EventTicketOrder | null>(null);
 
   // Modals state
   const [selectedEvent, setSelectedEvent] = useState<CommunityEvent | null>(null);
@@ -99,6 +100,16 @@ export default function AdminEventsPage() {
   // Edit form state
   const [editFormData, setEditFormData] = useState<Partial<CommunityEvent>>({});
   const [editGuidelinesText, setEditGuidelinesText] = useState("");
+
+  // Auto-dismiss actionSuccessMessage after 4 seconds
+  useEffect(() => {
+    if (actionSuccessMessage) {
+      const timer = setTimeout(() => {
+        setActionSuccessMessage(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [actionSuccessMessage]);
 
   useEffect(() => {
     if (isAuthorized) {
@@ -580,16 +591,21 @@ export default function AdminEventsPage() {
 
       {/* Action Notices */}
       {actionSuccessMessage && (
-        <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-            <span>{actionSuccessMessage}</span>
+        <div className="relative overflow-hidden p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Check className="w-3.5 h-3.5 stroke-[3]" />
+            </div>
+            <div>
+              <span className="font-bold block">{actionSuccessMessage}</span>
+              <span className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80">Pemberitahuan otomatis tertutup dalam beberapa detik</span>
+            </div>
           </div>
           <button
             onClick={() => setActionSuccessMessage(null)}
-            className="text-xs font-bold underline ml-4"
+            className="text-xs font-bold text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 px-2 py-1 rounded-lg ml-4 transition-colors cursor-pointer"
           >
-            Tutup
+            ✕ Tutup
           </button>
         </div>
       )}
@@ -1506,15 +1522,28 @@ export default function AdminEventsPage() {
                             {b.ticketCount}
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap">
-                            {b.paymentStatus === "PAID" ? (
-                              <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-[10px]">
-                                LUNAS
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 text-[10px]">
-                                {b.paymentStatus}
-                              </Badge>
-                            )}
+                            <div className="flex items-center space-x-1.5">
+                              {b.paymentStatus === "PAID" ? (
+                                <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-[10px]">
+                                  LUNAS
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 text-[10px]">
+                                  {b.paymentStatus}
+                                </Badge>
+                              )}
+                              {b.paymentProofUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedProofBooking(b)}
+                                  className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-[10px] font-bold hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors cursor-pointer"
+                                  title="Lihat Bukti Transfer"
+                                >
+                                  <Eye className="w-2.5 h-2.5" />
+                                  <span>Bukti</span>
+                                </button>
+                              )}
+                            </div>
                           </td>
                           <td className="py-2.5 px-3 text-center whitespace-nowrap">
                             {b.checkInStatus === "CHECKED_IN" ? (
@@ -1536,15 +1565,29 @@ export default function AdminEventsPage() {
                           </td>
                           <td className="py-2.5 px-3 text-right whitespace-nowrap">
                             {b.paymentStatus === "PENDING" && (
-                              <Button
-                                size="sm"
-                                disabled={isUpdatingCheckIn === b.id}
-                                onClick={() => handleVerifyPayment(b)}
-                                className="h-7 px-2 text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg mr-1.5 shadow-xs"
-                                title="Verifikasi Pembayaran Lunas"
-                              >
-                                Verifikasi Lunas
-                              </Button>
+                              <div className="inline-flex items-center space-x-1 mr-1.5">
+                                {b.paymentProofUrl && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setSelectedProofBooking(b)}
+                                    className="h-7 px-2 text-[10px] font-bold border-sky-300 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950/40 rounded-lg cursor-pointer"
+                                    title="Periksa Foto Bukti Transfer"
+                                  >
+                                    <Eye className="w-3 h-3 mr-1" />
+                                    <span>Bukti</span>
+                                  </Button>
+                                )}
+                                <Button
+                                  size="sm"
+                                  disabled={isUpdatingCheckIn === b.id}
+                                  onClick={() => handleVerifyPayment(b)}
+                                  className="h-7 px-2 text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-xs cursor-pointer"
+                                  title="Verifikasi Pembayaran Lunas"
+                                >
+                                  Verifikasi Lunas
+                                </Button>
+                              </div>
                             )}
                             <Button
                               size="sm"
@@ -1602,6 +1645,86 @@ export default function AdminEventsPage() {
           </div>
         );
       })()}
+
+      {/* Modal Preview Bukti Transfer Pembayaran */}
+      {selectedProofBooking && selectedProofBooking.paymentProofUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Verifikasi Bukti Transfer</span>
+                <h4 className="text-sm font-black text-slate-900 dark:text-white">
+                  {selectedProofBooking.ticketCode} • {selectedProofBooking.guestName}
+                </h4>
+              </div>
+              <button
+                onClick={() => setSelectedProofBooking(null)}
+                className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 px-2 py-1 rounded-lg cursor-pointer"
+              >
+                ✕ Tutup
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-950 flex items-center justify-center max-h-[60vh] overflow-auto">
+              <img
+                src={selectedProofBooking.paymentProofUrl}
+                alt="Bukti Transfer"
+                className="max-h-[55vh] w-auto object-contain rounded-lg shadow-lg"
+              />
+            </div>
+
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Total Tagihan:</span>
+                  <span className="font-bold text-[#3B7A57] dark:text-[#52B788] text-sm">
+                    {formatCurrencyIDR(selectedProofBooking.totalPrice)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 text-[10px] block">Waktu Unggah:</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px]">
+                    {selectedProofBooking.paymentProofUploadedAt ? new Date(selectedProofBooking.paymentProofUploadedAt).toLocaleString("id-ID") : "Baru saja"}
+                  </span>
+                </div>
+              </div>
+
+              {selectedProofBooking.paymentProofNote && (
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs">
+                  <span className="text-[10px] text-slate-400 block font-semibold">Catatan dari Pemesan:</span>
+                  <p className="text-slate-700 dark:text-slate-300 font-medium">
+                    &quot;{selectedProofBooking.paymentProofNote}&quot;
+                  </p>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-end space-x-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSelectedProofBooking(null)}
+                  className="text-xs h-8 px-3 font-semibold rounded-xl cursor-pointer"
+                >
+                  Tutup
+                </Button>
+                {selectedProofBooking.paymentStatus === "PENDING" && (
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      await handleVerifyPayment(selectedProofBooking);
+                      setSelectedProofBooking(null);
+                    }}
+                    className="text-xs h-8 px-4 font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-xs cursor-pointer flex items-center space-x-1.5"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Konfirmasi & Verifikasi Lunas</span>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -33,9 +33,10 @@ export async function GET(req: NextRequest) {
     const rawBookings = await getEventBookings(eventId);
 
     const safeBookings = rawBookings.map((b) => {
-      if (canViewUnmasked) return b;
+      const { guestToken: _token, ...rest } = b;
+      if (canViewUnmasked) return rest;
       return {
-        ...b,
+        ...rest,
         guestEmail: maskEmail(b.guestEmail),
         guestPhone: maskPhoneNumber(b.guestPhone),
       };

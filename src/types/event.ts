@@ -135,6 +135,10 @@ export interface EventTicketOrder {
   dokuInvoiceNumber?: string | null;
   dokuPaymentUrl?: string | null;
   paidAt?: string | null;
+  paymentProofUrl?: string | null;
+  paymentProofUploadedAt?: string | null;
+  paymentProofNote?: string | null;
+  guestToken?: string; // High-entropy random token for secure guest access
   createdAt: string;
   updatedAt: string;
 }

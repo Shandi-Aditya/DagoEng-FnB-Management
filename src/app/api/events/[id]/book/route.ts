@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createEventBooking, loadBookingsFromDisk, saveBookingsToDisk } from "@/lib/events";
-import { createDokuCheckoutSession } from "@/lib/doku";
+import { createDokuCheckoutSession, DokuCheckoutError } from "@/lib/doku";
 import { EventBookingPayload } from "@/types/event";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +54,41 @@ export async function POST(
         }
       } catch (dokuErr: any) {
         console.error("DOKU Checkout initialization error:", dokuErr);
+
+        const isDefinite =
+          dokuErr instanceof DokuCheckoutError ? dokuErr.isDefiniteFailure : false;
+
+        if (isDefinite) {
+          // Definite pre-transaction failure: roll back booking to CANCELLED to immediately release held quota
+          const allBookings = loadBookingsFromDisk();
+          const idx = allBookings.findIndex((b) => b.id === booking.id);
+          if (idx !== -1) {
+            allBookings[idx] = {
+              ...allBookings[idx],
+              paymentStatus: "CANCELLED",
+              updatedAt: new Date().toISOString(),
+            };
+            saveBookingsToDisk(allBookings);
+          }
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Gagal menginisiasi pembayaran: ${dokuErr.message}. Kuota tiket telah dilepaskan secara aman.`,
+            },
+            { status: 502 }
+          );
+        }
+
+        // Indeterminate timeout / gateway 5xx: preserve PENDING status so webhook or retry is not blocked
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Koneksi ke gateway pembayaran mengalami batas waktu. Pesanan Anda tersimpan dengan status PENDING. Silakan hubungi layanan pelanggan atau tunggu beberapa saat.",
+            bookingId: booking.id,
+          },
+          { status: 504 }
+        );
       }
     }
 

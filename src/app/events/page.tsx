@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { PublicCommunityEvent, EventCategory } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 const CATEGORY_TABS: { key: string; label: string }[] = [
   { key: "ALL", label: "Semua Kategori" },
@@ -39,6 +40,7 @@ const CATEGORY_TABS: { key: string; label: string }[] = [
 ];
 
 export default function EventsListingPage() {
+  const { user } = useAuth();
   const [events, setEvents] = useState<PublicCommunityEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("ALL");
@@ -171,7 +173,7 @@ export default function EventsListingPage() {
           <div className="flex items-center space-x-2 sm:space-x-3">
             <ThemeToggle variant="pill" />
 
-            <Link href="/customer?tab=PROFILE">
+            <Link href={user ? "/customer?tab=PROFILE" : "/login?returnTo=/customer?tab=PROFILE&mode=CUSTOMER"}>
               <Button
                 variant="outline"
                 size="sm"

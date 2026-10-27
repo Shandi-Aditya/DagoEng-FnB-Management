@@ -32,6 +32,7 @@ import { LoyaltyTier } from "@/types/loyalty";
 import { CoworkingSpaceItem, CoworkingMembershipPlan } from "@/types/coworking";
 import { PublicCommunityEvent, EventTicketOrder } from "@/types/event";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
+import { QRCodeSVG } from "qrcode.react";
 import { isTenantActive, getTenantStatus, getAllFnbTenants, getTenantName } from "@/lib/tenant";
 import {
   Home,
@@ -405,14 +406,6 @@ function CustomerPortalContent() {
       const targetEmail = user?.email || (typeof window !== "undefined" ? localStorage.getItem("dago_organizer_email") : null);
       const emailParam = targetEmail ? `?email=${encodeURIComponent(targetEmail)}` : "";
 
-      // 1. Fetch tickets from server
-      const res = await fetch(`/api/events/bookings/my${emailParam}`);
-      const json = await res.json();
-      let serverTickets: EventTicketOrder[] = [];
-      if (res.ok && json.success && Array.isArray(json.data)) {
-        serverTickets = json.data;
-      }
-
       // Merge with local storage fallback
       let localTickets: EventTicketOrder[] = [];
       if (typeof window !== "undefined") {
@@ -420,6 +413,26 @@ function CustomerPortalContent() {
           const stored = localStorage.getItem("dago_my_event_tickets");
           if (stored) localTickets = JSON.parse(stored);
         } catch {}
+      }
+
+      // 1. Fetch tickets from server: use authenticated session or guest tokens
+      let queryParam = "";
+      if (user?.email) {
+        queryParam = `?email=${encodeURIComponent(user.email)}`;
+      } else {
+        const guestTokens = localTickets.map((t) => t.guestToken).filter(Boolean);
+        if (guestTokens.length > 0) {
+          queryParam = `?tokens=${encodeURIComponent(guestTokens.join(","))}`;
+        }
+      }
+
+      let serverTickets: EventTicketOrder[] = [];
+      if (queryParam || user?.email) {
+        const res = await fetch(`/api/events/bookings/my${queryParam}`);
+        const json = await res.json();
+        if (res.ok && json.success && Array.isArray(json.data)) {
+          serverTickets = json.data;
+        }
       }
 
       const mergedMap = new Map<string, EventTicketOrder>();
@@ -5445,8 +5458,16 @@ function CustomerPortalContent() {
                                 </div>
                               ) : (
                                 <div className="p-5 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
-                                  <div className="p-3 bg-white rounded-xl shadow-xs border border-slate-100">
-                                    <QrCode className="w-36 h-36 text-slate-950" />
+                                  <div className="p-3 bg-white rounded-xl shadow-xs border border-slate-100 flex items-center justify-center">
+                                    <QRCodeSVG
+                                      value={JSON.stringify({
+                                        ticketCode: viewingTicketModal.ticketCode,
+                                        eventId: viewingTicketModal.eventId,
+                                      })}
+                                      size={150}
+                                      level="M"
+                                      includeMargin
+                                    />
                                   </div>
                                   {isPartiallyCheckedIn && (
                                     <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[11px] font-bold">
@@ -5481,7 +5502,11 @@ function CustomerPortalContent() {
 
                                 {viewingTicketModal.dokuPaymentUrl && (
                                   <a
-                                    href={viewingTicketModal.dokuPaymentUrl}
+                                    href={
+                                      viewingTicketModal.dokuPaymentUrl.includes("api-sandbox.doku.com/checkout-link-v2/")
+                                        ? `/checkout-link-v2/${viewingTicketModal.dokuPaymentUrl.split("checkout-link-v2/")[1]}`
+                                        : viewingTicketModal.dokuPaymentUrl
+                                    }
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="w-full flex items-center justify-center space-x-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"

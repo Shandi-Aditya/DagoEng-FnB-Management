@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, bookingId, checkInStatus, incrementQty, targetQty, reset } = body;
+    const { email, bookingId, ticketCode, checkInStatus, incrementQty, targetQty, reset } = body;
+    const identifier = (bookingId || ticketCode || "").trim();
 
     const auth = await assertOrganizerAuth(req, email);
     if (!auth.authorized || !auth.email) {
@@ -27,11 +28,11 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    if (!bookingId || !checkInStatus) {
+    if (!identifier || !checkInStatus) {
       return NextResponse.json(
         {
           success: false,
-          error: "ID pemesanan dan status check-in wajib disertakan.",
+          error: "ID pemesanan atau kode tiket dan status check-in wajib disertakan.",
         },
         { status: 400 }
       );
@@ -53,7 +54,7 @@ export async function PATCH(req: NextRequest) {
 
     const updated = await organizerCheckInAttendee(
       auth.email,
-      bookingId,
+      identifier,
       checkInStatus as AttendeeCheckInStatus,
       { incrementQty, targetQty, reset }
     );

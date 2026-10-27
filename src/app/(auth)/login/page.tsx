@@ -21,13 +21,31 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+/**
+ * Strictly sanitizes returnTo parameter to prevent open-redirect vulnerabilities.
+ * Only allows relative application paths beginning with "/" (and not "//", "/\", or absolute URLs with protocols).
+ */
+function sanitizeReturnTo(url: string | null | undefined): string | null {
+  if (!url || typeof url !== "string") return null;
+  const trimmed = url.trim();
+  if (
+    trimmed.startsWith("/") &&
+    !trimmed.startsWith("//") &&
+    !trimmed.startsWith("/\\") &&
+    !trimmed.includes(":")
+  ) {
+    return trimmed;
+  }
+  return null;
+}
+
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, loginCustomer } = useAuth();
   const { getOrCreateMember } = useLoyalty();
 
-  const returnTo = searchParams.get("returnTo");
+  const returnTo = sanitizeReturnTo(searchParams.get("returnTo"));
   const initialMode = searchParams.get("mode");
 
   const [activeMode, setActiveMode] = useState<"STAFF" | "CUSTOMER">("STAFF");

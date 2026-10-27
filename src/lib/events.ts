@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import {
   CommunityEvent,
   EventCategory,
@@ -458,6 +459,7 @@ export function getEventTicketAvailability(eventId: string): EventTicketAvailabi
 
   const capacityRes = resolveVenueCapacity(event);
   const totalCapacity = capacityRes.capacity;
+  expirePendingBookings();
   const allBookings = loadBookingsFromDisk();
   const activeBookings = allBookings.filter(
     (b) => b.eventId === eventId && b.paymentStatus !== "CANCELLED"
@@ -1026,9 +1028,48 @@ export function saveBookingsToDisk(bookings: EventTicketOrder[]): void {
 }
 
 /**
+ * Default booking payment expiration window: 60 minutes, matching DOKU payment_due_date.
+ */
+export const BOOKING_PAYMENT_EXPIRY_MS = 60 * 60 * 1000;
+
+/**
+ * Checks and cancels expired unpaid bookings older than the payment window.
+ * Releases ticket quota immediately. Idempotent and safe to run concurrently.
+ */
+export function expirePendingBookings(maxAgeMs = BOOKING_PAYMENT_EXPIRY_MS): number {
+  const allBookings = loadBookingsFromDisk();
+  const now = Date.now();
+  let modified = false;
+  let count = 0;
+
+  for (let i = 0; i < allBookings.length; i++) {
+    const b = allBookings[i];
+    if (b.paymentStatus === "PENDING" && b.totalPrice > 0) {
+      const createdMs = new Date(b.createdAt).getTime();
+      if (!isNaN(createdMs) && now - createdMs > maxAgeMs) {
+        allBookings[i] = {
+          ...b,
+          paymentStatus: "CANCELLED",
+          updatedAt: new Date().toISOString(),
+        };
+        modified = true;
+        count++;
+      }
+    }
+  }
+
+  if (modified) {
+    saveBookingsToDisk(allBookings);
+  }
+
+  return count;
+}
+
+/**
  * Get all event bookings with optional eventId filter.
  */
 export async function getEventBookings(eventId?: string): Promise<EventTicketOrder[]> {
+  expirePendingBookings();
   const all = loadBookingsFromDisk();
   const filtered = eventId ? all.filter((b) => b.eventId === eventId) : all;
   return [...filtered].sort(
@@ -1128,6 +1169,7 @@ export async function createEventBooking(
       throw new Error(`Validasi gagal: ${validation.errors.join(", ")}`);
     }
 
+    expirePendingBookings();
     const allBookings = loadBookingsFromDisk();
     const activeBookings = allBookings.filter(
       (b) => b.eventId === event.id && b.paymentStatus !== "CANCELLED"
@@ -1177,15 +1219,17 @@ export async function createEventBooking(
     // - PAID tickets MUST start as PENDING until confirmed/verified by organizer or admin.
     const isFree = totalPrice === 0;
     const paymentStatus: TicketPaymentStatus = isFree ? "PAID" : "PENDING";
-    const paymentMethod: TicketPaymentMethod = isFree ? "FREE" : payload.paymentMethod || "QRIS";
+    const paymentMethod: TicketPaymentMethod = isFree ? "FREE" : payload.paymentMethod || "TRANSFER";
 
     // Generate unique human-readable ticket code e.g. DAGO-EVT-92812
     const randomSuffix = Math.floor(10000 + Math.random() * 90000);
     const ticketCode = `DAGO-EVT-${randomSuffix}`;
+    const guestToken = crypto.randomBytes(24).toString("hex");
 
     const newBooking: EventTicketOrder = {
       id: `tkt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       ticketCode,
+      guestToken,
       eventId: event.id,
       eventTitle: event.title,
       eventDate: event.startDate,
@@ -1241,9 +1285,12 @@ export async function updateBookingCheckIn(
   try {
     await currentLock;
     const allBookings = loadBookingsFromDisk();
-    const index = allBookings.findIndex((b) => b.id === bookingId);
+    const normalizedIdentifier = (bookingId || "").trim().toUpperCase();
+    const index = allBookings.findIndex(
+      (b) => b.id === bookingId || (b.ticketCode && b.ticketCode.trim().toUpperCase() === normalizedIdentifier)
+    );
     if (index === -1) {
-      throw new Error(`Pemesanan tiket dengan ID ${bookingId} tidak ditemukan.`);
+      throw new Error(`Pemesanan tiket dengan ID atau kode ${bookingId} tidak ditemukan.`);
     }
 
     const existing = allBookings[index];
@@ -1377,6 +1424,70 @@ export async function updateBookingPaymentStatus(
   const updated: EventTicketOrder = {
     ...existing,
     paymentStatus: status,
+    paidAt: status === "PAID" ? existing.paidAt || new Date().toISOString() : existing.paidAt,
+    updatedAt: new Date().toISOString(),
+  };
+
+  allBookings[index] = updated;
+  saveBookingsToDisk(allBookings);
+
+  return updated;
+}
+
+/**
+ * Daftar Rekening Bank Resmi untuk Pembayaran Tiket Event via Transfer Manual.
+ */
+export const MANUAL_TRANSFER_BANK_ACCOUNTS = [
+  {
+    bankName: "BCA (Bank Central Asia)",
+    accountNumber: "1420993821",
+    accountHolder: "PT DAGO CREATIVE HUB",
+    branch: "KCU Dago Bandung",
+    badge: "Utama / Rekomendasi",
+  },
+  {
+    bankName: "Bank Mandiri",
+    accountNumber: "1300098234120",
+    accountHolder: "PT DAGO CREATIVE HUB",
+    branch: "KC Bandung Surapati",
+    badge: "Bebas Biaya Admin",
+  },
+  {
+    bankName: "Bank BRI",
+    accountNumber: "034101000928301",
+    accountHolder: "PT DAGO CREATIVE HUB",
+    branch: "KC Dago Bandung",
+    badge: "Jaringan Luas",
+  },
+];
+
+/**
+ * Updates booking with proof of payment (bukti transfer) uploaded by customer or admin.
+ */
+export async function updateBookingPaymentProof(
+  identifier: { bookingId?: string; guestToken?: string },
+  proofData: { paymentProofUrl: string; paymentProofNote?: string }
+): Promise<EventTicketOrder> {
+  const allBookings = loadBookingsFromDisk();
+  const index = allBookings.findIndex((b) =>
+    identifier.bookingId
+      ? b.id === identifier.bookingId
+      : identifier.guestToken
+      ? b.guestToken === identifier.guestToken
+      : false
+  );
+
+  if (index === -1) {
+    throw new Error("Pemesanan tiket tidak ditemukan.");
+  }
+
+  const existing = allBookings[index];
+  const updated: EventTicketOrder = {
+    ...existing,
+    paymentProofUrl: proofData.paymentProofUrl,
+    paymentProofNote: proofData.paymentProofNote || existing.paymentProofNote,
+    paymentProofUploadedAt: new Date().toISOString(),
+    paymentMethod: "TRANSFER",
     updatedAt: new Date().toISOString(),
   };
 
@@ -1499,10 +1610,13 @@ export async function organizerCheckInAttendee(
   options?: CheckInOptions
 ): Promise<EventTicketOrder> {
   const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
+  const normalizedIdentifier = (bookingId || "").trim().toUpperCase();
   const allBookings = loadBookingsFromDisk();
-  const booking = allBookings.find((b) => b.id === bookingId);
+  const booking = allBookings.find(
+    (b) => b.id === bookingId || (b.ticketCode && b.ticketCode.trim().toUpperCase() === normalizedIdentifier)
+  );
   if (!booking) {
-    throw new Error(`Pemesanan tiket dengan ID ${bookingId} tidak ditemukan.`);
+    throw new Error(`Pemesanan tiket dengan ID atau kode ${bookingId} tidak ditemukan.`);
   }
 
   const allEvents = loadEventsFromDisk();

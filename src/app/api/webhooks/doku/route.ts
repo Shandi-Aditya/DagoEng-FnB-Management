@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
 
     // Process transaction status
     if (transactionStatus === "SUCCESS") {
+      const wasCancelled = booking.paymentStatus === "CANCELLED";
       const now = new Date().toISOString();
       const updatedBooking: EventTicketOrder = {
         ...booking,
@@ -115,8 +116,33 @@ export async function POST(req: NextRequest) {
       allBookings[bookingIndex] = updatedBooking;
       saveBookingsToDisk(allBookings);
 
+      if (wasCancelled) {
+        console.warn(
+          `[DOKU Webhook] Rekonsiliasi: Pesanan ${booking.ticketCode} (invoice ${invoiceNumber}) sebelumnya berstatus CANCELLED karena batas waktu, berhasil direkonsiliasi menjadi PAID.`
+        );
+      } else {
+        console.info(
+          `[DOKU Webhook] Pembayaran diverifikasi: Invoice ${invoiceNumber}, Tiket ${booking.ticketCode} resmi diterbitkan.`
+        );
+      }
+    } else if (transactionStatus === "FAILED" || transactionStatus === "EXPIRED") {
+      if (booking.paymentStatus === "CANCELLED") {
+        return NextResponse.json(
+          { message: "SUCCESS", status: "ALREADY_PROCESSED" },
+          { status: 200 }
+        );
+      }
+
+      const now = new Date().toISOString();
+      allBookings[bookingIndex] = {
+        ...booking,
+        paymentStatus: "CANCELLED",
+        updatedAt: now,
+      };
+      saveBookingsToDisk(allBookings);
+
       console.info(
-        `[DOKU Webhook] Pembayaran diverifikasi: Invoice ${invoiceNumber}, Tiket ${booking.ticketCode} resmi diterbitkan.`
+        `[DOKU Webhook] Status pembayaran ${transactionStatus} diterima untuk invoice ${invoiceNumber}. Kuota tiket ${booking.ticketCode} resmi dibebaskan.`
       );
     } else {
       console.info(

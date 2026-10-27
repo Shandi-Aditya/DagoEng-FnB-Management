@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { updateBookingCheckIn, updateBookingPaymentStatus, getBookingById } from "@/lib/events";
+import {
+  updateBookingCheckIn,
+  updateBookingPaymentStatus,
+  getBookingById,
+  updateBookingPaymentProof,
+} from "@/lib/events";
 import { assertEventAdmin } from "@/lib/server-auth";
 import { AttendeeCheckInStatus, TicketPaymentStatus } from "@/types/event";
 
@@ -32,9 +37,16 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { checkInStatus, paymentStatus, incrementQty, targetQty, reset } = body;
+    const { checkInStatus, paymentStatus, paymentProofUrl, paymentProofNote, incrementQty, targetQty, reset } = body;
 
     let updated = existing;
+
+    if (paymentProofUrl) {
+      updated = await updateBookingPaymentProof(
+        { bookingId: id },
+        { paymentProofUrl, paymentProofNote }
+      );
+    }
 
     if (checkInStatus) {
       if (

@@ -29,12 +29,15 @@ export async function GET(req: NextRequest) {
 
     const portalData = await getOrganizerPortalData(auth.email);
 
-    // Apply PII privacy masking to attendees
-    const sanitizedBookings = portalData.bookings.map((b) => ({
-      ...b,
-      guestEmail: maskEmail(b.guestEmail),
-      guestPhone: maskPhoneNumber(b.guestPhone),
-    }));
+    // Apply PII privacy masking to attendees and strip secret guestToken
+    const sanitizedBookings = portalData.bookings.map((b) => {
+      const { guestToken: _token, ...rest } = b;
+      return {
+        ...rest,
+        guestEmail: maskEmail(b.guestEmail),
+        guestPhone: maskPhoneNumber(b.guestPhone),
+      };
+    });
 
     // Multi-Tenant Isolation: Determine strictly which communities this user is authorized to manage
     const allOrganizers = loadOrganizersFromDisk();
