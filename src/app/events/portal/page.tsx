@@ -44,10 +44,17 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { CommunityEvent, EventTicketOrder, OrganizerPortalData, AttendeeCheckInStatus } from "@/types/event";
+import { CommunityEvent, EventTicketOrder, OrganizerPortalData, AttendeeCheckInStatus, PayoutRecord } from "@/types/event";
 import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { useAuth } from "@/contexts/AuthContext";
 import { OrganizerQRScannerModal } from "./OrganizerQRScannerModal";
+import { EventSearchInput } from "@/components/events/EventSearchInput";
+import {
+  EventDateRangeFilter,
+  DateRange,
+  isEventInWitaPeriod,
+  isTimestampInWitaPeriod,
+} from "@/components/events/EventDateRangeFilter";
 
 type OrganizerNavView = "EVENTS" | "ATTENDEES" | "FINANCE" | "HOME";
 type EventViewMode = "LIST" | "CALENDAR";
@@ -73,6 +80,7 @@ export default function CommunityOrganizerPortalPage() {
   // Attendees Filtering & QR Scanner
   const [selectedEventId, setSelectedEventId] = useState<string>("ALL");
   const [attendeeSearch, setAttendeeSearch] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [isUpdatingCheckIn, setIsUpdatingCheckIn] = useState<string | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
@@ -81,7 +89,26 @@ export default function CommunityOrganizerPortalPage() {
   const [revisionTitle, setRevisionTitle] = useState("");
   const [revisionDesc, setRevisionDesc] = useState("");
   const [revisionLocation, setRevisionLocation] = useState("");
+  const [revisionCapacity, setRevisionCapacity] = useState<number>(50);
+  const [revisionGuidelines, setRevisionGuidelines] = useState("");
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
+
+  // Revenue split negotiation modal in portal
+  const [negotiatingEvent, setNegotiatingEvent] = useState<CommunityEvent | null>(null);
+  const [splitOrgPercent, setSplitOrgPercent] = useState<number>(80);
+  const [splitPlatPercent, setSplitPlatPercent] = useState<number>(20);
+  const [splitReason, setSplitReason] = useState("");
+  const [isSubmittingSplit, setIsSubmittingSplit] = useState(false);
+
+  // Payout request modal in portal
+  const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
+  const [payoutTargetEventId, setPayoutTargetEventId] = useState<string>("");
+  const [payoutAmount, setPayoutAmount] = useState<number>(0);
+  const [payoutBankName, setPayoutBankName] = useState("BCA");
+  const [payoutAccountNumber, setPayoutAccountNumber] = useState("");
+  const [payoutAccountHolder, setPayoutAccountHolder] = useState("");
+  const [payoutNotes, setPayoutNotes] = useState("");
+  const [isSubmittingPayout, setIsSubmittingPayout] = useState(false);
 
   // Auto-dismiss success notification
   useEffect(() => {
@@ -95,7 +122,12 @@ export default function CommunityOrganizerPortalPage() {
 
   // Synchronize on mount or user changes
   useEffect(() => {
-    const targetEmail = user?.email || localStorage.getItem("dago_organizer_email");
+    const isAdminUser =
+      user?.role?.slug === "OWNER" ||
+      user?.role?.slug === "SUPER_ADMIN" ||
+      user?.role?.slug === "MANAGER";
+    const savedEmail = typeof window !== "undefined" ? localStorage.getItem("dago_organizer_email") : null;
+    const targetEmail = isAdminUser && !savedEmail ? "ALL_ADMIN" : (savedEmail || user?.email);
     loadPortalData(targetEmail || undefined);
   }, [user?.email, user?.role?.slug]);
 
@@ -104,7 +136,7 @@ export default function CommunityOrganizerPortalPage() {
       setIsLoading(true);
       setErrorMessage(null);
 
-      const queryParam = email && email.includes("@") ? `?email=${encodeURIComponent(email)}` : "";
+      const queryParam = email ? `?email=${encodeURIComponent(email)}` : "";
       const res = await fetch(`/api/events/portal${queryParam}`);
       const json = await res.json();
 
@@ -226,6 +258,8 @@ export default function CommunityOrganizerPortalPage() {
     setRevisionTitle(evt.title);
     setRevisionDesc(evt.description);
     setRevisionLocation(evt.location);
+    setRevisionCapacity(evt.maxCapacity || 50);
+    setRevisionGuidelines(Array.isArray(evt.guidelines) ? evt.guidelines.join("\n") : (evt.guidelines || ""));
   };
 
   const handleSaveRevision = async (e: React.FormEvent) => {
@@ -246,6 +280,8 @@ export default function CommunityOrganizerPortalPage() {
             title: revisionTitle,
             description: revisionDesc,
             location: revisionLocation,
+            maxCapacity: Number(revisionCapacity),
+            guidelines: revisionGuidelines,
           },
         }),
       });
@@ -266,7 +302,154 @@ export default function CommunityOrganizerPortalPage() {
     }
   };
 
-  // Filtered Events based on search query and status filter
+  const handleProposeSplitOrganizer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!negotiatingEvent) return;
+    if (splitOrgPercent + splitPlatPercent !== 100) {
+      setErrorMessage("Total persentase bagi hasil harus tepat 100%.");
+      return;
+    }
+    try {
+      setIsSubmittingSplit(true);
+      const res = await fetch(`/api/events/${negotiatingEvent.id}/revenue-share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          proposedBy: "ORGANIZER",
+          organizerPercent: splitOrgPercent,
+          platformPercent: splitPlatPercent,
+          reason: splitReason,
+          email: activeEmail,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal mengajukan usulan bagi hasil.");
+      }
+      setSuccessMessage("Usulan bagi hasil berhasil diajukan dan akan ditinjau kurator Dago.");
+      setNegotiatingEvent(null);
+      setSplitReason("");
+      await loadPortalData(activeEmail);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Terjadi kesalahan.");
+    } finally {
+      setIsSubmittingSplit(false);
+    }
+  };
+
+  const handleRespondSplitOrganizer = async (event: CommunityEvent, decision: "ACCEPT" | "REJECT") => {
+    try {
+      setIsSubmittingSplit(true);
+      const res = await fetch(`/api/events/${event.id}/revenue-share`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decision,
+          respondingParty: "ORGANIZER",
+          email: activeEmail,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal merespons usulan bagi hasil.");
+      }
+      setSuccessMessage(data.message || "Respons bagi hasil berhasil disimpan.");
+      await loadPortalData(activeEmail);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Terjadi kesalahan.");
+    } finally {
+      setIsSubmittingSplit(false);
+    }
+  };
+
+  const handleSubmitPayoutRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payoutTargetEventId || payoutAmount <= 0) {
+      setErrorMessage("Pilih event dan masukkan nominal pencairan yang valid.");
+      return;
+    }
+    try {
+      setIsSubmittingPayout(true);
+      const res = await fetch(`/api/events/${payoutTargetEventId}/payout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Number(payoutAmount),
+          bankDetails: {
+            bankName: payoutBankName,
+            accountNumber: payoutAccountNumber,
+            accountHolder: payoutAccountHolder,
+          },
+          notes: payoutNotes,
+          email: activeEmail,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal mengajukan pencairan dana.");
+      }
+      setSuccessMessage("Pengajuan pencairan saldo berhasil dikirim. DAGO Finance akan memverifikasi dan mentransfer manual.");
+      setIsPayoutModalOpen(false);
+      setPayoutAmount(0);
+      setPayoutNotes("");
+      await loadPortalData(activeEmail);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Terjadi kesalahan.");
+    } finally {
+      setIsSubmittingPayout(false);
+    }
+  };
+
+  // Effective Summary computed from active dateRange filter
+  const effectiveSummary = useMemo(() => {
+    if (!portalData) return null;
+    if (!dateRange) return portalData.summary;
+
+    const filteredBookings = portalData.bookings.filter((b) =>
+      isTimestampInWitaPeriod(b.createdAt, dateRange)
+    );
+    const paidBookings = filteredBookings.filter((b) => b.paymentStatus === "PAID");
+    const totalTicketsSold = paidBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+    const totalAttendees = paidBookings.length;
+    const grossRevenue = filteredBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+    const eligibleRevenue = paidBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+    const platformFeeAmount = paidBookings.reduce((sum, b) => sum + (b.platformFeeAmount || 0), 0);
+    const organizerPayoutAmount = paidBookings.reduce((sum, b) => sum + (b.organizerRevenueAmount || 0), 0);
+
+    const periodEvents = portalData.events.filter((e) => isEventInWitaPeriod(e, dateRange));
+
+    let requestedPayoutAmount = 0;
+    let paidPayoutAmount = 0;
+    periodEvents.forEach((e) => {
+      e.payoutHistory?.forEach((p) => {
+        if (p.status === "REQUESTED" || p.status === "PROCESSING") requestedPayoutAmount += p.amount;
+        else if (p.status === "PAID") paidPayoutAmount += p.amount;
+      });
+    });
+
+    const availablePayoutAmount = Math.max(0, organizerPayoutAmount - paidPayoutAmount - requestedPayoutAmount);
+
+    return {
+      ...portalData.summary,
+      totalEvents: periodEvents.length,
+      approvedEvents: periodEvents.filter((e) => e.status === "APPROVED").length,
+      pendingEvents: periodEvents.filter((e) => e.status === "PENDING").length,
+      revisionEvents: periodEvents.filter((e) => e.status === "REVISION_REQUESTED").length,
+      totalAttendees,
+      totalTicketsSold,
+      grossRevenue,
+      eligibleRevenue,
+      platformFeeAmount,
+      organizerPayoutAmount,
+      availablePayoutAmount,
+      requestedPayoutAmount,
+      paidPayoutAmount,
+    };
+  }, [portalData, dateRange]);
+
+  const summary = effectiveSummary || portalData?.summary;
+
+  // Filtered Events based on search query, status filter, and WITA date range
   const filteredEvents = useMemo(() => {
     if (!portalData) return [];
     return portalData.events.filter((evt) => {
@@ -284,11 +467,13 @@ export default function CommunityOrganizerPortalPage() {
         (eventFilterStatus === "REVISION_REQUESTED" && evt.status === "REVISION_REQUESTED") ||
         (eventFilterStatus === "REJECTED" && (evt.status === "REJECTED" || evt.status === "ARCHIVED"));
 
-      return matchSearch && matchStatus;
-    });
-  }, [portalData, eventSearchQuery, eventFilterStatus]);
+      const matchDate = isEventInWitaPeriod(evt, dateRange);
 
-  // Filtered Attendees for active tab
+      return matchSearch && matchStatus && matchDate;
+    });
+  }, [portalData, eventSearchQuery, eventFilterStatus, dateRange]);
+
+  // Filtered Attendees for active tab with event, keyword, and date filters
   const filteredAttendees = useMemo(() => {
     if (!portalData) return [];
     return portalData.bookings.filter((b) => {
@@ -299,9 +484,24 @@ export default function CommunityOrganizerPortalPage() {
         b.ticketCode.toLowerCase().includes(q) ||
         b.guestName.toLowerCase().includes(q) ||
         (b.institution || "").toLowerCase().includes(q);
-      return matchesEvent && matchesSearch;
+      const matchesDate = isTimestampInWitaPeriod(b.createdAt, dateRange);
+      return matchesEvent && matchesSearch && matchesDate;
     });
-  }, [portalData, selectedEventId, attendeeSearch]);
+  }, [portalData, selectedEventId, attendeeSearch, dateRange]);
+
+  // Combined payouts across all events
+  const allPayouts = useMemo(() => {
+    if (!portalData) return [];
+    const list: (PayoutRecord & { eventTitle: string })[] = [];
+    portalData.events.forEach((evt) => {
+      if (evt.payoutHistory && Array.isArray(evt.payoutHistory)) {
+        evt.payoutHistory.forEach((p) => {
+          list.push({ ...p, eventTitle: evt.title });
+        });
+      }
+    });
+    return list.sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
+  }, [portalData]);
 
   const handleExportCSV = () => {
     if (!portalData || filteredAttendees.length === 0) return;
@@ -642,12 +842,23 @@ export default function CommunityOrganizerPortalPage() {
               {portalData.accessibleCommunities && portalData.accessibleCommunities.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5 pt-3 mt-3 border-t border-amber-200/60 dark:border-amber-800/60">
                   <span className="text-[10px] font-bold text-amber-800 dark:text-amber-300 uppercase">Pilih Komunitas:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectCommunity({ id: "all_admin", name: "Semua Komunitas", email: "ALL_ADMIN" })}
+                    className={`text-[10px] px-2.5 py-1 rounded-md border font-bold cursor-pointer transition-colors ${
+                      activeEmail.toLowerCase() === "all_admin"
+                        ? "bg-amber-600 text-white border-amber-600 shadow-xs"
+                        : "bg-white dark:bg-slate-900 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                    }`}
+                  >
+                    🌐 Semua Komunitas Platform
+                  </button>
                   {portalData.accessibleCommunities.map((c) => (
                     <button
                       key={c.email}
                       type="button"
                       onClick={() => handleSelectCommunity(c)}
-                      className={`text-[10px] px-2 py-0.5 rounded-md border font-medium ${
+                      className={`text-[10px] px-2 py-0.5 rounded-md border font-medium cursor-pointer ${
                         activeEmail === c.email
                           ? "bg-amber-600 text-white border-amber-600"
                           : "bg-white dark:bg-slate-900 border-amber-200 dark:border-amber-800 text-slate-700 dark:text-slate-300"
@@ -700,6 +911,15 @@ export default function CommunityOrganizerPortalPage() {
                       </Button>
                     </Link>
                   </div>
+                </div>
+
+                {/* Date Range Filter for Events */}
+                <div className="bg-slate-50/70 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                  <EventDateRangeFilter
+                    onApplyFilter={(range) => setDateRange(range)}
+                    initialRange={dateRange}
+                    label="Filter Periode Pelaksanaan"
+                  />
                 </div>
 
                 {/* Sub-tabs: Events vs Collections */}
@@ -936,6 +1156,20 @@ export default function CommunityOrganizerPortalPage() {
                                       <Badge variant="outline" className="text-[10px] font-semibold border-slate-200 dark:border-slate-700 text-slate-500">
                                         {evt.category}
                                       </Badge>
+                                      {evt.proposedRevenueSplit?.status === "PENDING" && (
+                                        <span
+                                          onClick={() => {
+                                            setNegotiatingEvent(evt);
+                                            setSplitOrgPercent(evt.proposedRevenueSplit?.organizerPercent ?? evt.organizerFeePercent ?? 80);
+                                            setSplitPlatPercent(evt.proposedRevenueSplit?.platformPercent ?? evt.customPlatformFeePercent ?? 20);
+                                            setSplitReason("");
+                                          }}
+                                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse cursor-pointer"
+                                          title="Klik untuk membuka negosiasi bagi hasil"
+                                        >
+                                          💬 Usulan Bagi Hasil: {evt.proposedRevenueSplit.organizerPercent}% / {evt.proposedRevenueSplit.platformPercent}% ({evt.proposedRevenueSplit.proposedBy === "ORGANIZER" ? "Terkirim" : "Dari Dago - Butuh Respon"})
+                                        </span>
+                                      )}
                                     </div>
 
                                     <h3 className="font-extrabold text-base text-slate-900 dark:text-white line-clamp-1 hover:text-[#3B7A57] transition-colors">
@@ -1009,6 +1243,22 @@ export default function CommunityOrganizerPortalPage() {
                                         <span>Revisi</span>
                                       </Button>
                                     )}
+
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        setNegotiatingEvent(evt);
+                                        setSplitOrgPercent(evt.proposedRevenueSplit?.organizerPercent ?? evt.organizerFeePercent ?? 80);
+                                        setSplitPlatPercent(evt.proposedRevenueSplit?.platformPercent ?? evt.customPlatformFeePercent ?? 20);
+                                        setSplitReason("");
+                                      }}
+                                      className="text-xs h-8 px-2.5 rounded-lg border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-semibold hover:bg-emerald-50 dark:hover:bg-emerald-950/40 cursor-pointer"
+                                      title="Lihat rincian kesepakatan dan negosiasi bagi hasil"
+                                    >
+                                      <DollarSign className="w-3.5 h-3.5 mr-1" />
+                                      <span>Bagi Hasil ({evt.organizerFeePercent ?? 80}%)</span>
+                                    </Button>
 
                                     <Button
                                       size="sm"
@@ -1230,37 +1480,42 @@ export default function CommunityOrganizerPortalPage() {
                 </div>
               </div>
 
-              {/* Filtering & Search Row */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
-                {/* Event Selector */}
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs font-semibold text-slate-500">Filter Event:</span>
-                  <select
-                    value={selectedEventId}
-                    onChange={(e) => setSelectedEventId(e.target.value)}
-                    aria-label="Pilih filter event"
-                    className="text-xs font-bold py-1.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none cursor-pointer"
-                  >
-                    <option value="ALL">Semua Event ({portalData?.bookings.length || 0} Tiket)</option>
-                    {portalData?.events.map((evt) => (
-                      <option key={evt.id} value={evt.id}>
-                        {evt.title}
-                      </option>
-                    ))}
-                  </select>
+              {/* Filtering & Search Row with EventSearchInput and DateRangeFilter */}
+              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                  {/* Event Search Input */}
+                  <div className="flex items-center space-x-2 w-full sm:w-80">
+                    <span className="text-xs font-semibold text-slate-500 shrink-0">Pilih Event:</span>
+                    <EventSearchInput
+                      events={portalData?.events || []}
+                      selectedEventId={selectedEventId}
+                      onSelectEvent={(id) => setSelectedEventId(id)}
+                      className="w-full"
+                      placeholder="Cari nama event..."
+                      allowAllOption={true}
+                      allOptionLabel="Semua Event"
+                    />
+                  </div>
+
+                  {/* Attendee search bar */}
+                  <div className="relative w-full sm:w-72">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={attendeeSearch}
+                      onChange={(e) => setAttendeeSearch(e.target.value)}
+                      placeholder="Cari kode tiket, nama, instansi..."
+                      className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    />
+                  </div>
                 </div>
 
-                {/* Attendee search bar */}
-                <div className="relative w-full sm:w-72">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={attendeeSearch}
-                    onChange={(e) => setAttendeeSearch(e.target.value)}
-                    placeholder="Cari kode tiket, nama, instansi..."
-                    className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
-                  />
-                </div>
+                {/* Date Filter on Attendees */}
+                <EventDateRangeFilter
+                  onApplyFilter={(range) => setDateRange(range)}
+                  initialRange={dateRange}
+                  label="Filter Periode Pembelian Tiket"
+                />
               </div>
 
               {/* Attendees Table */}
@@ -1416,53 +1671,219 @@ export default function CommunityOrganizerPortalPage() {
           )}
 
           {/* =========================================================================
-              VIEW 3: FINANCE & PAYOUT (Bagi Hasil 80% Penyelenggara)
+              VIEW 3: FINANCE & PAYOUT (Bagi Hasil & Pencairan Dana Transparan)
              ========================================================================= */}
           {activeNav === "FINANCE" && (
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-                    Payout & Hak Bagi Hasil
+                    Keuangan & Pencairan Saldo (Payout)
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    Transparansi pembagian revenue tiket: 80% untuk Komunitas Penyelenggara & 20% untuk Dago Hub.
+                    Transparansi pembagian revenue tiket, saldo tersedia, dan riwayat pencairan dana ke rekening komunitas.
                   </p>
+                </div>
+                <div>
+                  <Button
+                    onClick={() => {
+                      if (!portalData || portalData.events.length === 0) {
+                        setErrorMessage("Belum ada event untuk diajukan pencairan.");
+                        return;
+                      }
+                      const firstWithBalance = portalData.events.find((e) => {
+                        const paidBookings = (portalData.bookings || []).filter(
+                          (b) => b.eventId === e.id && b.paymentStatus === "PAID"
+                        );
+                        const earnings = paidBookings.reduce(
+                          (sum, b) => sum + (b.organizerRevenueAmount || 0),
+                          0
+                        );
+                        let committed = 0;
+                        (e.payoutHistory || []).forEach((p) => {
+                          if (p.status === "REQUESTED" || p.status === "PROCESSING" || p.status === "PAID") {
+                            committed += p.amount;
+                          }
+                        });
+                        return earnings - committed > 0;
+                      });
+                      const targetId = firstWithBalance ? firstWithBalance.id : portalData.events[0].id;
+                      setPayoutTargetEventId(targetId);
+                      setIsPayoutModalOpen(true);
+                    }}
+                    className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <DollarSign className="w-4 h-4" />
+                    <span>Ajukan Pencairan Saldo</span>
+                  </Button>
+                </div>
+
+                {/* Date Filter on Finance Tab */}
+                <div className="bg-slate-50/70 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                  <EventDateRangeFilter
+                    onApplyFilter={(range) => setDateRange(range)}
+                    initialRange={dateRange}
+                    label="Filter Periode Finansial"
+                  />
                 </div>
               </div>
 
-              {/* Revenue Big Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* 6 Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <Card className="p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl space-y-2 shadow-xs">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Omset Penjualan</span>
-                  <div className="text-3xl font-black text-slate-900 dark:text-white">
-                    Rp {(portalData?.summary.grossRevenue || 0).toLocaleString("id-ID")}
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Omset Kotor (Gross Sales)</span>
+                  <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+                    Rp {(summary?.grossRevenue || 0).toLocaleString("id-ID")}
                   </div>
-                  <p className="text-[11px] text-slate-400">Dari {portalData?.summary.totalTicketsSold || 0} tiket lunas</p>
-                </Card>
-
-                <Card className="p-5 bg-white dark:bg-[#0F172A] border border-emerald-200 dark:border-emerald-900/50 rounded-3xl space-y-2 shadow-xs">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                    Hak Payout Penyelenggara (80%)
-                  </span>
-                  <div className="text-3xl font-black text-[#3B7A57] dark:text-[#52B788]">
-                    Rp {(portalData?.summary.organizerPayoutAmount || 0).toLocaleString("id-ID")}
-                  </div>
-                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                    Ditransfer berkala pasca-event selesai
-                  </p>
+                  <p className="text-[11px] text-slate-400">Akumulasi seluruh pemesanan tiket diterbitkan</p>
                 </Card>
 
                 <Card className="p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl space-y-2 shadow-xs">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Bagi Hasil Dago Hub (20%)
+                    Pendapatan Memenuhi Syarat (Eligible)
                   </span>
-                  <div className="text-3xl font-black text-slate-700 dark:text-slate-300">
-                    Rp {(portalData?.summary.platformFeeAmount || 0).toLocaleString("id-ID")}
+                  <div className="text-2xl sm:text-3xl font-black text-slate-700 dark:text-slate-300">
+                    Rp {((summary?.eligibleRevenue !== undefined ? summary.eligibleRevenue : summary?.grossRevenue) || 0).toLocaleString("id-ID")}
                   </div>
-                  <p className="text-[11px] text-slate-400">Pemeliharaan venue & sistem tiket</p>
+                  <p className="text-[11px] text-slate-400">Hanya tiket lunas terverifikasi (PAID)</p>
+                </Card>
+
+                <Card className="p-5 bg-white dark:bg-[#0F172A] border border-emerald-200 dark:border-emerald-900/50 rounded-3xl space-y-2 shadow-xs">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                    Hak Pendapatan Penyelenggara
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black text-[#3B7A57] dark:text-[#52B788]">
+                    Rp {(summary?.organizerPayoutAmount || 0).toLocaleString("id-ID")}
+                  </div>
+                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                    Akumulasi bagi hasil resmi per event
+                  </p>
+                </Card>
+
+                <Card className="p-5 bg-white dark:bg-[#0F172A] border border-teal-200 dark:border-teal-900/50 rounded-3xl space-y-2 shadow-xs">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-teal-600 dark:text-teal-400">
+                    Saldo Tersedia Dicairkan
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black text-teal-700 dark:text-teal-300">
+                    Rp {(summary?.availablePayoutAmount ?? Math.max(0, (summary?.organizerPayoutAmount || 0) - ((summary?.paidPayoutAmount || 0) + (summary?.requestedPayoutAmount || 0)))).toLocaleString("id-ID")}
+                  </div>
+                  <p className="text-[11px] text-slate-400">Siap diajukan transfer ke rekening bank</p>
+                </Card>
+
+                <Card className="p-5 bg-white dark:bg-[#0F172A] border border-amber-200 dark:border-amber-900/50 rounded-3xl space-y-2 shadow-xs">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                    Sedang Diproses / Tertahan
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black text-amber-700 dark:text-amber-300">
+                    Rp {(summary?.requestedPayoutAmount || 0).toLocaleString("id-ID")}
+                  </div>
+                  <p className="text-[11px] text-slate-400">Pengajuan pencairan dalam antrean verifikasi</p>
+                </Card>
+
+                <Card className="p-5 bg-white dark:bg-[#0F172A] border border-sky-200 dark:border-sky-900/50 rounded-3xl space-y-2 shadow-xs">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400">
+                    Telah Ditransfer (Paid)
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black text-sky-700 dark:text-sky-300">
+                    Rp {(summary?.paidPayoutAmount || 0).toLocaleString("id-ID")}
+                  </div>
+                  <p className="text-[11px] text-slate-400">Dana yang telah sukses masuk rekening</p>
                 </Card>
               </div>
+
+              {/* Transparency Notice Alert */}
+              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-300 flex items-start space-x-3">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 text-amber-600 mt-0.5" />
+                <div className="space-y-1">
+                  <span className="font-bold">Informasi Kebijakan Pencairan Dana (Manual Payout Verification)</span>
+                  <p className="text-[11px] text-amber-800/90 dark:text-amber-300/80 leading-relaxed">
+                    DAGO Creative Hub saat ini menggunakan mekanisme transfer bank manual demi keamanan dan kepatuhan finansial. Pengajuan pencairan saldo akan diverifikasi oleh tim Finance Dago dalam 1-2 hari kerja. Bukti nomor referensi transfer bank akan dicatat secara transparan pada riwayat pencairan di bawah ini.
+                  </p>
+                </div>
+              </div>
+
+              {/* Payout History Table */}
+              <Card className="p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl space-y-4 shadow-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Riwayat Pengajuan Pencairan Dana (Payout)
+                  </h3>
+                  <span className="text-xs text-slate-400 font-semibold">
+                    {allPayouts.length} Riwayat Transaksi
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800">
+                  {allPayouts.length === 0 ? (
+                    <div className="p-10 text-center text-xs text-slate-400">
+                      Belum ada riwayat pengajuan pencairan dana. Klik tombol "Ajukan Pencairan Saldo" untuk menarik hak pendapatan komunitas.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 dark:bg-slate-900/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <tr>
+                          <th className="py-3 px-3">Waktu Pengajuan</th>
+                          <th className="py-3 px-3">Event Terkait</th>
+                          <th className="py-3 px-3">Nominal (Rp)</th>
+                          <th className="py-3 px-3">Rekening Tujuan</th>
+                          <th className="py-3 px-3 text-center">Status Pencairan</th>
+                          <th className="py-3 px-3">No. Referensi / Catatan</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                        {allPayouts.map((p) => (
+                          <tr key={p.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-900/40 transition-colors">
+                            <td className="py-3 px-3 text-slate-600 dark:text-slate-400">
+                              {new Date(p.requestedAt).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}
+                            </td>
+                            <td className="py-3 px-3 font-semibold text-slate-900 dark:text-white max-w-[180px] truncate">
+                              {p.eventTitle}
+                            </td>
+                            <td className="py-3 px-3 font-bold text-[#3B7A57] dark:text-[#52B788]">
+                              Rp {p.amount.toLocaleString("id-ID")}
+                            </td>
+                            <td className="py-3 px-3">
+                              <div className="font-bold text-slate-800 dark:text-slate-200">{p.bankName} - {p.accountNumber}</div>
+                              <div className="text-[11px] text-slate-400">a.n. {p.accountHolder}</div>
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              {p.status === "PAID" && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                  ✓ Sudah Ditransfer
+                                </span>
+                              )}
+                              {p.status === "PROCESSING" && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300">
+                                  ⏳ Sedang Diproses
+                                </span>
+                              )}
+                              {p.status === "REQUESTED" && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                  ● Menunggu Verifikasi
+                                </span>
+                              )}
+                              {p.status === "REJECTED" && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                                  ✕ Ditolak
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-[11px] text-slate-500 max-w-[200px] truncate">
+                              {p.referenceNo ? (
+                                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">Ref: {p.referenceNo}</span>
+                              ) : p.rejectionReason ? (
+                                <span className="text-rose-600">Alasan: {p.rejectionReason}</span>
+                              ) : (
+                                p.notes || "-"
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </Card>
             </div>
           )}
 
@@ -1590,13 +2011,40 @@ export default function CommunityOrganizerPortalPage() {
 
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Kapasitas Peserta (Orang)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  required
+                  value={revisionCapacity}
+                  onChange={(e) => setRevisionCapacity(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Deskripsi Lengkap
                 </label>
                 <textarea
                   required
-                  rows={4}
+                  rows={3}
                   value={revisionDesc}
                   onChange={(e) => setRevisionDesc(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] resize-y"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Panduan Acara / Catatan Tambahan (Opsional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={revisionGuidelines}
+                  onChange={(e) => setRevisionGuidelines(e.target.value)}
+                  placeholder="Aturan pakaian, hal yang perlu dibawa peserta, dsb..."
                   className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] resize-y"
                 />
               </div>
@@ -1617,6 +2065,370 @@ export default function CommunityOrganizerPortalPage() {
                 >
                   {isSubmittingRevision ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
                   <span>Kirim Revisi ke Kurator</span>
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          4. REVENUE SPLIT NEGOTIATION MODAL (ORGANIZER VIEW)
+         ========================================================================= */}
+      {negotiatingEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-xl bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+                  Kesepakatan & Negosiasi Bagi Hasil
+                </span>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  {negotiatingEvent.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNegotiatingEvent(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Active Split Status Box */}
+            <div className="p-4 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                  Kesepakatan Aktif Saat Ini
+                </span>
+                <div className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
+                  Komunitas {negotiatingEvent.organizerFeePercent ?? 80}% / Dago Hub {negotiatingEvent.customPlatformFeePercent ?? 20}%
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Berlaku untuk seluruh transaksi tiket event ini hingga ada kesepakatan baru.
+                </p>
+              </div>
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center text-[#3B7A57] dark:text-[#52B788] flex-shrink-0">
+                <DollarSign className="w-5 h-5" />
+              </div>
+            </div>
+
+            {/* Pending Proposal Notification Banner */}
+            {negotiatingEvent.proposedRevenueSplit?.status === "PENDING" && (
+              <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center space-x-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                    <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                      Usulan Negosiasi Bagi Hasil Menunggu Keputusan
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-800 dark:text-amber-300">
+                    PENDING
+                  </Badge>
+                </div>
+
+                <div className="text-xs text-amber-900 dark:text-amber-200 space-y-1 bg-white/70 dark:bg-slate-900/60 p-3 rounded-xl border border-amber-200/60 dark:border-amber-900/60">
+                  <div className="flex justify-between font-semibold">
+                    <span>Diusulkan oleh:</span>
+                    <span>
+                      {negotiatingEvent.proposedRevenueSplit.proposedBy === "ORGANIZER"
+                        ? "Penyelenggara (Anda)"
+                        : "Admin Dago Hub"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between font-bold text-slate-900 dark:text-white text-sm pt-0.5">
+                    <span>Persentase Usulan:</span>
+                    <span>
+                      Penyelenggara {negotiatingEvent.proposedRevenueSplit.organizerPercent}% / Dago {negotiatingEvent.proposedRevenueSplit.platformPercent}%
+                    </span>
+                  </div>
+                  {negotiatingEvent.proposedRevenueSplit.reason && (
+                    <div className="pt-1 text-[11px] text-slate-600 dark:text-slate-400">
+                      <span className="font-semibold">Alasan: </span>
+                      {negotiatingEvent.proposedRevenueSplit.reason}
+                    </div>
+                  )}
+                </div>
+
+                {/* If proposed by Admin/Dago, Organizer can Accept or Reject */}
+                {negotiatingEvent.proposedRevenueSplit.proposedBy !== "ORGANIZER" ? (
+                  <div className="flex items-center space-x-2 pt-1">
+                    <Button
+                      size="sm"
+                      disabled={isSubmittingSplit}
+                      onClick={() => handleRespondSplitOrganizer(negotiatingEvent, "ACCEPT")}
+                      className="text-xs bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer"
+                    >
+                      {isSubmittingSplit ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : <Check className="w-3.5 h-3.5 mr-1" />}
+                      <span>Setujui Kesepakatan Ini</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSubmittingSplit}
+                      onClick={() => handleRespondSplitOrganizer(negotiatingEvent, "REJECT")}
+                      className="text-xs border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5 mr-1" />
+                      <span>Tolak Usulan</span>
+                    </Button>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-amber-700 dark:text-amber-400 italic">
+                    Usulan Anda sedang ditinjau kurator Dago Hub. Anda akan menerima notifikasi jika disetujui atau diajukan penawaran tandingan.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Propose Split Form */}
+            <form onSubmit={handleProposeSplitOrganizer} className="space-y-3.5 text-xs pt-1 border-t border-slate-100 dark:border-slate-800">
+              <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                Ajukan Penyesuaian Bagi Hasil Baru
+              </span>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
+                    Hak Komunitas (%)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    required
+                    value={splitOrgPercent}
+                    onChange={(e) => {
+                      const val = Math.min(100, Math.max(0, Number(e.target.value)));
+                      setSplitOrgPercent(val);
+                      setSplitPlatPercent(100 - val);
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
+                    Bagi Hasil Dago Hub (%)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    required
+                    value={splitPlatPercent}
+                    onChange={(e) => {
+                      const val = Math.min(100, Math.max(0, Number(e.target.value)));
+                      setSplitPlatPercent(val);
+                      setSplitOrgPercent(100 - val);
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 font-semibold mb-1">
+                  Alasan Penyesuaian / Skema Khusus
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={splitReason}
+                  onChange={(e) => setSplitReason(e.target.value)}
+                  placeholder="Misal: Event kolaborasi amal, sponsor mandiri komunitas, atau kebutuhan perlengkapan audio khusus..."
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] resize-y"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-1">
+                <Button
+                  type="submit"
+                  disabled={isSubmittingSplit}
+                  className="text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl cursor-pointer"
+                >
+                  {isSubmittingSplit ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+                  <span>Kirim Usulan Bagi Hasil</span>
+                </Button>
+              </div>
+            </form>
+
+            {/* Split Agreement History Table */}
+            {negotiatingEvent.revenueSplitHistory && negotiatingEvent.revenueSplitHistory.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                  Riwayat Kesepakatan Bagi Hasil
+                </span>
+                <div className="overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 font-bold uppercase">
+                      <tr>
+                        <th className="py-2 px-2.5">Tanggal Efektif</th>
+                        <th className="py-2 px-2.5">Kesepakatan (Org / Dago)</th>
+                        <th className="py-2 px-2.5">Pihak Pengaju</th>
+                        <th className="py-2 px-2.5">Disetujui Oleh</th>
+                        <th className="py-2 px-2.5">Alasan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {negotiatingEvent.revenueSplitHistory.map((h) => (
+                        <tr key={h.id} className="hover:bg-slate-50/50">
+                          <td className="py-2 px-2.5 text-slate-500">
+                            {new Date(h.effectiveDate).toLocaleDateString("id-ID")}
+                          </td>
+                          <td className="py-2 px-2.5 font-bold text-[#3B7A57] dark:text-[#52B788]">
+                            {h.agreedOrganizerPercent ?? h.newOrganizerPercent}% / {h.agreedPlatformPercent ?? h.newPlatformPercent}%
+                          </td>
+                          <td className="py-2 px-2.5 text-slate-600 dark:text-slate-400">
+                            {h.proposedBy === "ORGANIZER" ? "Penyelenggara" : "Admin Dago"}
+                          </td>
+                          <td className="py-2 px-2.5 text-slate-600 dark:text-slate-400">
+                            {h.approvedBy || "Admin Dago"}
+                          </td>
+                          <td className="py-2 px-2.5 text-slate-500 max-w-[150px] truncate">
+                            {h.reason || "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          5. PAYOUT REQUEST MODAL (ORGANIZER VIEW)
+         ========================================================================= */}
+      {isPayoutModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-lg bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+                  Pencairan Saldo Pendapatan
+                </span>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Form Pengajuan Payout Komunitas
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPayoutModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitPayoutRequest} className="space-y-3.5 text-xs">
+              {/* Event Selector */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Pilih Event Sumber Saldo
+                </label>
+                <EventSearchInput
+                  events={portalData?.events || []}
+                  selectedEventId={payoutTargetEventId}
+                  onSelectEvent={(id) => setPayoutTargetEventId(id)}
+                  placeholder="Cari nama event sumber saldo..."
+                  allowAllOption={false}
+                />
+              </div>
+
+              {/* Amount */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Nominal Pencairan (Rp)
+                </label>
+                <input
+                  type="number"
+                  min={10000}
+                  required
+                  value={payoutAmount || ""}
+                  onChange={(e) => setPayoutAmount(Number(e.target.value))}
+                  placeholder="Misal: 500000"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                />
+              </div>
+
+              {/* Bank Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Nama Bank
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={payoutBankName}
+                    onChange={(e) => setPayoutBankName(e.target.value)}
+                    placeholder="BCA, Mandiri, BRI..."
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    No. Rekening
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={payoutAccountNumber}
+                    onChange={(e) => setPayoutAccountNumber(e.target.value)}
+                    placeholder="1234567890"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Nama Pemilik
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={payoutAccountHolder}
+                    onChange={(e) => setPayoutAccountHolder(e.target.value)}
+                    placeholder="Sesuai buku tabungan"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Catatan untuk Tim Keuangan Dago (Opsional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={payoutNotes}
+                  onChange={(e) => setPayoutNotes(e.target.value)}
+                  placeholder="Catatan transfer atau konfirmasi khusus..."
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] resize-y"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end space-x-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsPayoutModalOpen(false)}
+                  className="text-xs border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer"
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSubmittingPayout}
+                  className="text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl cursor-pointer"
+                >
+                  {isSubmittingPayout ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+                  <span>Ajukan Pencairan Dana</span>
                 </Button>
               </div>
             </form>

@@ -145,10 +145,32 @@ export async function POST(
         );
       }
 
+      // 1. File size validation (max 5MB default)
+      const maxMb = 5;
+      const maxBytes = maxMb * 1024 * 1024;
+      if (file.size > maxBytes) {
+        return NextResponse.json(
+          { success: false, error: `Ukuran file bukti pembayaran melebihi batas maksimal ${maxMb}MB.` },
+          { status: 400 }
+        );
+      }
+
+      // 2. Allowed extension and MIME validation (prevent arbitrary file upload)
+      const allowedExts = [".jpg", ".jpeg", ".png", ".webp", ".pdf"];
+      const rawExt = path.extname(file.name || "").toLowerCase();
+      const ext = allowedExts.includes(rawExt) ? rawExt : ".jpg";
+
+      const allowedMimes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+      if (file.type && !allowedMimes.includes(file.type.toLowerCase())) {
+        return NextResponse.json(
+          { success: false, error: "Format file tidak didukung. Harap unggah file JPG, PNG, WEBP, atau PDF." },
+          { status: 400 }
+        );
+      }
+
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
 
-      const ext = path.extname(file.name) || ".jpg";
       const filename = `proof-${booking.ticketCode.toLowerCase()}-${Date.now()}${ext}`;
       const uploadDir = path.join(process.cwd(), "public/images/events/proofs");
 

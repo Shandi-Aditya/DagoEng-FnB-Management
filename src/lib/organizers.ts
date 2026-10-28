@@ -94,13 +94,86 @@ export function getOrganizerById(id: string): CommunityOrganizerProfile | null {
   return all.find((o) => o.id === id) || null;
 }
 
+export function ensureOrganizerActive(payload: {
+  email: string;
+  name?: string;
+  category?: string;
+  contactPerson?: string;
+  phone?: string;
+  notes?: string;
+}): CommunityOrganizerProfile {
+  const normalizedEmail = (payload.email || "").trim().toLowerCase();
+  const all = getAllOrganizers();
+  const existing = all.find((o) => o.email.toLowerCase() === normalizedEmail);
+
+  if (existing) {
+    if (existing.status !== "ACTIVE") {
+      existing.status = "ACTIVE";
+      existing.updatedAt = new Date().toISOString();
+      saveOrganizersToDisk(all);
+    }
+    return existing;
+  }
+
+  const now = new Date().toISOString();
+  const newOrg: CommunityOrganizerProfile = {
+    id: `org-comm-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+    name: payload.name?.trim() || "Komunitas Kreatif",
+    category: payload.category?.trim() || "Komunitas",
+    contactPerson: payload.contactPerson?.trim() || payload.name?.trim() || "PIC Komunitas",
+    phone: payload.phone?.trim() || "+62 812-0000-0000",
+    email: normalizedEmail,
+    status: "ACTIVE",
+    serviceModule: "CO_WORKING",
+    scopeLevel: "TENANT",
+    roleName: "Penyelenggara Event",
+    notes: payload.notes || "Penyelenggara terdaftar resmi DAGO Creative Hub",
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  all.unshift(newOrg);
+  saveOrganizersToDisk(all);
+  return newOrg;
+}
+
 export function isOrganizerActive(email: string): boolean {
   try {
-    const org = getOrganizerByEmail(email);
-    if (!org) {
-      return false;
+    const normalized = (email || "").trim().toLowerCase();
+    const org = getOrganizerByEmail(normalized);
+    if (org) {
+      return org.status === "ACTIVE";
     }
-    return org.status === "ACTIVE";
+
+    // Auto-healing fallback: If organizer has submitted or approved events in events.json, activate automatically
+    try {
+      const eventsFile = getDataFilePath("events.json");
+      if (fs.existsSync(eventsFile)) {
+        const raw = fs.readFileSync(eventsFile, "utf-8");
+        const events = JSON.parse(raw);
+        if (Array.isArray(events)) {
+          const matchedEvt = events.find(
+            (e: any) =>
+              (e.organizerEmail || "").toLowerCase() === normalized &&
+              e.status === "APPROVED"
+          );
+          if (matchedEvt) {
+            ensureOrganizerActive({
+              email: normalized,
+              name: matchedEvt.organizerName,
+              category: matchedEvt.category,
+              phone: matchedEvt.organizerPhone,
+              notes: `Penyelenggara aktif otomatis dari event: ${matchedEvt.title}`,
+            });
+            return true;
+          }
+        }
+      }
+    } catch {
+      // Safe fallback
+    }
+
+    return false;
   } catch (err) {
     console.error("isOrganizerActive: Failed to check organizer status due to data error", err);
     return false;

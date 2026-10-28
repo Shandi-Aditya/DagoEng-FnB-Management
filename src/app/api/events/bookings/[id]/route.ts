@@ -4,29 +4,24 @@ import {
   updateBookingPaymentStatus,
   getBookingById,
   updateBookingPaymentProof,
+  adminApproveBookingPayment,
+  adminRejectBookingPayment,
 } from "@/lib/events";
-import { assertEventAdmin } from "@/lib/server-auth";
+import { assertEventAdmin, assertCheckInAuth } from "@/lib/server-auth";
 import { AttendeeCheckInStatus, TicketPaymentStatus } from "@/types/event";
 
 export const dynamic = "force-dynamic";
 
 /**
  * PATCH /api/events/bookings/[id]
- * Admin endpoint to update ticket check-in status or payment status.
+ * Endpoint to update ticket check-in status (Field Officer, Organizer, or Admin)
+ * or payment status (strictly Admin).
  */
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const auth = await assertEventAdmin(req);
-    if (!auth.authorized) {
-      return NextResponse.json(
-        { success: false, error: auth.error },
-        { status: 403 }
-      );
-    }
-
     const { id } = params;
     const existing = await getBookingById(id);
     if (!existing) {
@@ -37,18 +32,97 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const { checkInStatus, paymentStatus, paymentProofUrl, paymentProofNote, incrementQty, targetQty, reset } = body;
+    const {
+      action,
+      checkInStatus,
+      paymentStatus,
+      paymentProofUrl,
+      paymentProofNote,
+      verificationNote,
+      rejectionReason,
+      cancelBooking,
+      incrementQty,
+      targetQty,
+      reset,
+    } = body;
 
+    // Strict role and permission validation on server:
+    // - Payment status modification is strictly restricted to authorized Hub Admins.
+    // - Check-in operations allow Field Check-in Officers (WAITER, CASHIER), Hub Management, and assigned Organizer.
     let updated = existing;
 
-    if (paymentProofUrl) {
-      updated = await updateBookingPaymentProof(
-        { bookingId: id },
-        { paymentProofUrl, paymentProofNote }
-      );
+    if (action === "APPROVE_PAYMENT") {
+      const adminAuth = await assertEventAdmin(req);
+      if (!adminAuth.authorized) {
+        return NextResponse.json(
+          { success: false, error: adminAuth.error },
+          { status: 403 }
+        );
+      }
+      updated = await adminApproveBookingPayment(id, verificationNote, adminAuth.name || "Admin Dago");
+      return NextResponse.json({
+        success: true,
+        message: "Pembayaran tiket berhasil diverifikasi dan disetujui (PAID). Tiket dan QR code kini aktif.",
+        data: updated,
+      });
     }
 
-    if (checkInStatus) {
+    if (action === "REJECT_PAYMENT") {
+      const adminAuth = await assertEventAdmin(req);
+      if (!adminAuth.authorized) {
+        return NextResponse.json(
+          { success: false, error: adminAuth.error },
+          { status: 403 }
+        );
+      }
+      if (!rejectionReason || !rejectionReason.trim()) {
+        return NextResponse.json(
+          { success: false, error: "Alasan penolakan pembayaran wajib diisi." },
+          { status: 400 }
+        );
+      }
+      updated = await adminRejectBookingPayment(
+        id,
+        rejectionReason,
+        { cancelBooking: Boolean(cancelBooking) },
+        adminAuth.name || "Admin Dago"
+      );
+      return NextResponse.json({
+        success: true,
+        message: cancelBooking
+          ? "Bukti pembayaran ditolak dan pemesanan tiket telah dibatalkan."
+          : "Bukti pembayaran ditolak. Peserta dapat mengunggah bukti perbaikan sebelum batas waktu berakhir.",
+        data: updated,
+      });
+    }
+
+    if (paymentStatus) {
+      const adminAuth = await assertEventAdmin(req);
+      if (!adminAuth.authorized) {
+        return NextResponse.json(
+          { success: false, error: adminAuth.error },
+          { status: 403 }
+        );
+      }
+      if (paymentStatus !== "PAID" && paymentStatus !== "CANCELLED" && paymentStatus !== "PENDING" && paymentStatus !== "FAILED") {
+        return NextResponse.json(
+          { success: false, error: "Status pembayaran tiket tidak valid." },
+          { status: 400 }
+        );
+      }
+      updated = await updateBookingPaymentStatus(id, paymentStatus as TicketPaymentStatus, {
+        rejectionReason,
+        verificationNote,
+        actorName: adminAuth.name || "Admin Dago",
+      });
+    } else if (checkInStatus) {
+      const checkInAuth = await assertCheckInAuth(req, existing.eventId);
+      if (!checkInAuth.authorized) {
+        return NextResponse.json(
+          { success: false, error: checkInAuth.error },
+          { status: 403 }
+        );
+      }
       if (
         checkInStatus !== "CHECKED_IN" &&
         checkInStatus !== "PARTIALLY_CHECKED_IN" &&
@@ -70,14 +144,11 @@ export async function PATCH(
       });
     }
 
-    if (paymentStatus) {
-      if (paymentStatus !== "PAID" && paymentStatus !== "CANCELLED" && paymentStatus !== "PENDING") {
-        return NextResponse.json(
-          { success: false, error: "Status pembayaran tiket tidak valid." },
-          { status: 400 }
-        );
-      }
-      updated = await updateBookingPaymentStatus(id, paymentStatus as TicketPaymentStatus);
+    if (paymentProofUrl) {
+      updated = await updateBookingPaymentProof(
+        { bookingId: id },
+        { paymentProofUrl, paymentProofNote }
+      );
     }
 
     return NextResponse.json({

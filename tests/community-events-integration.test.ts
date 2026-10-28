@@ -59,6 +59,7 @@ describe("Community Events Integrated Module (DAGO Creative Hub)", () => {
       endDate: new Date(Date.now() + 52 * 3600 * 1000).toISOString(),
       location: "Main Hall Dago Hub",
       maxCapacity: 150,
+      maxTicketsPerBooking: 10,
       isPaid: true,
       price: 50000,
       posterUrl: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085",

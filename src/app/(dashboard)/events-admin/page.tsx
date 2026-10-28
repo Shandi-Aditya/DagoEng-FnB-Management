@@ -33,6 +33,13 @@ import {
   Check,
   X,
   RotateCcw,
+  Building2,
+  Settings,
+  Trash2,
+  Plus,
+  AlertCircle,
+  ArrowUpRight,
+  CreditCard,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +47,11 @@ import { Badge } from "@/components/ui/badge";
 import { CommunityEvent, EventCategory, EventStatus, EventTicketOrder, EventOperationalStats } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV } from "@/lib/export-utils";
+import {
+  EventDateRangeFilter,
+  DateRange,
+  isEventInWitaPeriod,
+} from "@/components/events/EventDateRangeFilter";
 
 const STATUS_TABS: { key: string; label: string; status?: EventStatus }[] = [
   { key: "ALL", label: "Semua Pengajuan" },
@@ -76,6 +88,7 @@ export default function AdminEventsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedStatusTab, setSelectedStatusTab] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
   const [actionErrorMessage, setActionErrorMessage] = useState<string | null>(null);
 
@@ -101,6 +114,234 @@ export default function AdminEventsPage() {
   const [editFormData, setEditFormData] = useState<Partial<CommunityEvent>>({});
   const [editGuidelinesText, setEditGuidelinesText] = useState("");
 
+  // Revenue split negotiation state in admin modal
+  const [isProposingSplit, setIsProposingSplit] = useState(false);
+  const [splitOrgPercent, setSplitOrgPercent] = useState<number>(80);
+  const [splitPlatPercent, setSplitPlatPercent] = useState<number>(20);
+  const [splitReason, setSplitReason] = useState("");
+  const [isSubmittingSplit, setIsSubmittingSplit] = useState(false);
+
+  // Payout action state in admin modal
+  const [payoutPromptModalOpen, setPayoutPromptModalOpen] = useState(false);
+  const [activePayoutTarget, setActivePayoutTarget] = useState<{ id: string; status: "PROCESSING" | "PAID" | "REJECTED" } | null>(null);
+  const [payoutInputText, setPayoutInputText] = useState("");
+  const [isProcessingPayout, setIsProcessingPayout] = useState(false);
+
+  // Section Navigation: Moderation vs Payments Verification vs Bank/Business Settings
+  const [adminSection, setAdminSection] = useState<"MODERATION" | "PAYMENTS" | "SETTINGS">("MODERATION");
+
+  // Payment Verification state
+  const [paymentFilterStatus, setPaymentFilterStatus] = useState<"ALL" | "PENDING_PROOF" | "PAID" | "REJECTED">("PENDING_PROOF");
+  const [rejectPaymentTarget, setRejectPaymentTarget] = useState<EventTicketOrder | null>(null);
+  const [rejectPaymentReason, setRejectPaymentReason] = useState("");
+  const [rejectPaymentCancelBooking, setRejectPaymentCancelBooking] = useState(false);
+  const [isProcessingPaymentAction, setIsProcessingPaymentAction] = useState(false);
+
+  // Bank & Business Settings State
+  const [businessPolicy, setBusinessPolicy] = useState<any>(null);
+  const [bankAccountsList, setBankAccountsList] = useState<any[]>([]);
+  const [bankChangeHistory, setBankChangeHistory] = useState<any[]>([]);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [isAddBankModalOpen, setIsAddBankModalOpen] = useState(false);
+  const [newBankForm, setNewBankForm] = useState({
+    label: "",
+    bankName: "BCA",
+    accountNumber: "",
+    accountHolder: "",
+    branch: "",
+    badge: "Utama",
+    isDefault: false,
+  });
+
+  const loadBusinessSettings = async () => {
+    try {
+      const [settingsRes, banksRes] = await Promise.all([
+        fetch("/api/events/admin/settings"),
+        fetch("/api/events/admin/settings/banks"),
+      ]);
+      const settingsData = await settingsRes.json();
+      if (settingsData.success) {
+        setBusinessPolicy(settingsData.data);
+      }
+      const banksData = await banksRes.json();
+      if (banksData.success) {
+        setBankAccountsList(banksData.data.bankAccounts || []);
+        setBankChangeHistory(banksData.data.bankHistory || []);
+      }
+    } catch (e) {
+      console.error("Error loading event settings:", e);
+    }
+  };
+
+  const handleApprovePayment = async (booking: EventTicketOrder) => {
+    try {
+      setIsProcessingPaymentAction(true);
+      const res = await fetch(`/api/events/bookings/${booking.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "APPROVE_PAYMENT" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menyetujui pembayaran.");
+      }
+      setActionSuccessMessage(`Pembayaran tiket ${booking.ticketCode} (${booking.guestName}) berhasil disetujui! E-Tiket & QR Code kini aktif.`);
+      await loadAdminEvents();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menyetujui pembayaran.");
+    } finally {
+      setIsProcessingPaymentAction(false);
+    }
+  };
+
+  const handleConfirmRejectPayment = async () => {
+    if (!rejectPaymentTarget || !rejectPaymentReason.trim()) {
+      setActionErrorMessage("Alasan penolakan pembayaran wajib diisi.");
+      return;
+    }
+    try {
+      setIsProcessingPaymentAction(true);
+      const res = await fetch(`/api/events/bookings/${rejectPaymentTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "REJECT_PAYMENT",
+          rejectionReason: rejectPaymentReason.trim(),
+          cancelBooking: rejectPaymentCancelBooking,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menolak bukti pembayaran.");
+      }
+      setActionSuccessMessage(`Bukti pembayaran untuk tiket ${rejectPaymentTarget.ticketCode} berhasil ditolak.`);
+      setRejectPaymentTarget(null);
+      setRejectPaymentReason("");
+      setRejectPaymentCancelBooking(false);
+      await loadAdminEvents();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menolak bukti pembayaran.");
+    } finally {
+      setIsProcessingPaymentAction(false);
+    }
+  };
+
+  const handleSaveBusinessSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!businessPolicy) return;
+    try {
+      setIsSavingSettings(true);
+      const res = await fetch("/api/events/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          defaultPlatformFeePercent: businessPolicy.defaultPlatformFeePercent,
+          maxTicketsPerBooking: businessPolicy.maxTicketsPerBooking,
+          activePaymentMethod: businessPolicy.activePaymentMethod,
+          bookingPaymentExpiryMinutes: businessPolicy.bookingPaymentExpiryMinutes,
+          allowOrganizerBankAccounts: businessPolicy.allowOrganizerBankAccounts,
+          allowEventBankOverride: businessPolicy.allowEventBankOverride,
+          paymentInstructions: businessPolicy.paymentInstructions,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menyimpan pengaturan.");
+      }
+      setActionSuccessMessage("Pengaturan kebijakan bisnis & pembayaran event berhasil disimpan!");
+      setBusinessPolicy(data.data);
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menyimpan pengaturan.");
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleCreateBank = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSavingSettings(true);
+      const res = await fetch("/api/events/admin/settings/banks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newBankForm),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menambahkan rekening bank.");
+      }
+      setActionSuccessMessage(`Rekening ${data.data.bankName} berhasil ditambahkan.`);
+      setIsAddBankModalOpen(false);
+      setNewBankForm({
+        label: "",
+        bankName: "BCA",
+        accountNumber: "",
+        accountHolder: "",
+        branch: "",
+        badge: "Utama",
+        isDefault: false,
+      });
+      await loadBusinessSettings();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menambahkan rekening.");
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleSetDefaultBank = async (bankId: string) => {
+    try {
+      const res = await fetch("/api/events/admin/settings/banks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: bankId, action: "SET_DEFAULT" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menetapkan rekening default.");
+      }
+      setActionSuccessMessage("Rekening default platform berhasil diperbarui!");
+      await loadBusinessSettings();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menetapkan rekening default.");
+    }
+  };
+
+  const handleToggleBankActive = async (bankId: string, currentActive: boolean) => {
+    try {
+      const res = await fetch("/api/events/admin/settings/banks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: bankId, isActive: !currentActive }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal memperbarui status rekening.");
+      }
+      setActionSuccessMessage(`Status rekening berhasil ${!currentActive ? "diaktifkan" : "dinonaktifkan"}.`);
+      await loadBusinessSettings();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal memperbarui status rekening.");
+    }
+  };
+
+  const handleDeleteBank = async (bankId: string) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus rekening bank ini?")) return;
+    try {
+      const res = await fetch(`/api/events/admin/settings/banks?id=${bankId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menghapus rekening.");
+      }
+      setActionSuccessMessage("Rekening bank berhasil dihapus.");
+      await loadBusinessSettings();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menghapus rekening.");
+    }
+  };
+
   // Auto-dismiss actionSuccessMessage after 4 seconds
   useEffect(() => {
     if (actionSuccessMessage) {
@@ -114,6 +355,7 @@ export default function AdminEventsPage() {
   useEffect(() => {
     if (isAuthorized) {
       loadAdminEvents();
+      loadBusinessSettings();
     }
   }, [isAuthorized]);
 
@@ -281,6 +523,102 @@ export default function AdminEventsPage() {
     setActionSuccessMessage("Data rekap event dan peserta berhasil diekspor ke file CSV!");
   };
 
+  const handleProposeSplit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEvent) return;
+    if (splitOrgPercent + splitPlatPercent !== 100) {
+      setActionErrorMessage("Total persentase bagi hasil harus tepat 100%.");
+      return;
+    }
+    try {
+      setIsSubmittingSplit(true);
+      const res = await fetch(`/api/events/${selectedEvent.id}/revenue-share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          proposedBy: "DAGO_ADMIN",
+          organizerPercent: splitOrgPercent,
+          platformPercent: splitPlatPercent,
+          reason: splitReason,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal mengajukan usulan bagi hasil.");
+      }
+      setActionSuccessMessage("Usulan bagi hasil berhasil dikirim ke penyelenggara.");
+      setSelectedEvent(data.data);
+      setIsProposingSplit(false);
+      await loadAdminEvents();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Terjadi kesalahan.");
+    } finally {
+      setIsSubmittingSplit(false);
+    }
+  };
+
+  const handleRespondSplit = async (decision: "ACCEPT" | "REJECT") => {
+    if (!selectedEvent) return;
+    try {
+      setIsSubmittingSplit(true);
+      const res = await fetch(`/api/events/${selectedEvent.id}/revenue-share`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decision,
+          respondingParty: "DAGO_ADMIN",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal memproses respons bagi hasil.");
+      }
+      setActionSuccessMessage(data.message || "Respons bagi hasil berhasil diproses.");
+      setSelectedEvent(data.data);
+      await loadAdminEvents();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Terjadi kesalahan.");
+    } finally {
+      setIsSubmittingSplit(false);
+    }
+  };
+
+  const handleUpdatePayoutStatus = async (
+    payoutId: string,
+    newStatus: "PROCESSING" | "PAID" | "REJECTED",
+    referenceNo?: string,
+    rejectionReason?: string
+  ) => {
+    if (!selectedEvent) return;
+    try {
+      setIsProcessingPayout(true);
+      const res = await fetch(`/api/events/${selectedEvent.id}/payout`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          payoutId,
+          newStatus,
+          referenceNo,
+          rejectionReason,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal memperbarui status payout.");
+      }
+      setActionSuccessMessage(data.message || "Status payout berhasil diperbarui.");
+      setSelectedEvent(data.data.event);
+      setPayoutPromptModalOpen(false);
+      setActivePayoutTarget(null);
+      setPayoutInputText("");
+      await loadAdminEvents();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Terjadi kesalahan.");
+    } finally {
+      setIsProcessingPayout(false);
+    }
+  };
+
   const handleUpdateStatus = async (
     eventId: string,
     newStatus: EventStatus,
@@ -413,10 +751,11 @@ export default function AdminEventsPage() {
         e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         e.organizerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         e.location.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchDate = isEventInWitaPeriod(e, dateRange);
 
-      return matchStatus && matchSearch;
+      return matchStatus && matchSearch && matchDate;
     });
-  }, [events, selectedStatusTab, searchQuery]);
+  }, [events, selectedStatusTab, searchQuery, dateRange]);
 
   if (!isAuthorized) {
     return (
@@ -532,6 +871,60 @@ export default function AdminEventsPage() {
         </div>
       </div>
 
+      {/* Main Admin Section Tabs */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <button
+          onClick={() => setAdminSection("MODERATION")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+            adminSection === "MODERATION"
+              ? "bg-[#3B7A57] text-white shadow-sm"
+              : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          <span>Moderasi Event</span>
+          {pendingCount > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500 text-white font-extrabold">
+              {pendingCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setAdminSection("PAYMENTS")}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+            adminSection === "PAYMENTS"
+              ? "bg-[#3B7A57] text-white shadow-sm"
+              : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
+          }`}
+        >
+          <CreditCard className="w-4 h-4" />
+          <span>Verifikasi Pembayaran Manual</span>
+          {allBookings.filter((b) => b.totalPrice > 0 && b.paymentStatus === "PENDING" && Boolean(b.paymentProofUrl)).length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-extrabold animate-pulse">
+              {allBookings.filter((b) => b.totalPrice > 0 && b.paymentStatus === "PENDING" && Boolean(b.paymentProofUrl)).length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => {
+            setAdminSection("SETTINGS");
+            loadBusinessSettings();
+          }}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
+            adminSection === "SETTINGS"
+              ? "bg-[#3B7A57] text-white shadow-sm"
+              : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          <span>Pengaturan Rekening & Bisnis</span>
+        </button>
+      </div>
+
+      {adminSection === "MODERATION" && (
+        <>
       {/* 4 Kartu Ringkasan Operasional Sederhana */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
@@ -633,6 +1026,15 @@ export default function AdminEventsPage() {
           </div>
         </div>
       )}
+
+      {/* Date Range Filter for Event Execution */}
+      <div className="pb-2">
+        <EventDateRangeFilter
+          onApplyFilter={(range) => setDateRange(range)}
+          initialRange={dateRange}
+          label="Filter Rentang Tanggal Pelaksanaan Event (WITA)"
+        />
+      </div>
 
       {/* Filter Tabs & Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pb-2">
@@ -926,6 +1328,565 @@ export default function AdminEventsPage() {
           </div>
         )}
       </Card>
+      </>
+      )}
+
+      {/* ===================================================================== */}
+      {/* SECTION B: VERIFIKASI PEMBAYARAN MANUAL */}
+      {/* ===================================================================== */}
+      {adminSection === "PAYMENTS" && (
+        <div className="space-y-5">
+          {/* Top KPI Cards for Payments */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+              <span className="text-[11px] font-semibold text-slate-500 block pb-1">Total Pesanan Berbayar</span>
+              <div className="text-xl font-black text-slate-900 dark:text-white">
+                {allBookings.filter((b) => b.totalPrice > 0).length} <span className="text-xs font-normal text-slate-400">Pesanan</span>
+              </div>
+              <span className="text-[10px] text-slate-400">Seluruh modul marketplace</span>
+            </Card>
+
+            <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-amber-200 dark:border-amber-900/50 shadow-2xs">
+              <span className="text-[11px] font-semibold text-amber-600 block pb-1">Menunggu Verifikasi</span>
+              <div className="text-xl font-black text-amber-600 dark:text-amber-400">
+                {allBookings.filter((b) => b.totalPrice > 0 && b.paymentStatus === "PENDING" && Boolean(b.paymentProofUrl)).length}{" "}
+                <span className="text-xs font-normal text-slate-400">Bukti</span>
+              </div>
+              <span className="text-[10px] text-amber-700/80 dark:text-amber-300/80 font-medium">Perlu tindakan review</span>
+            </Card>
+
+            <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-emerald-200 dark:border-emerald-900/50 shadow-2xs">
+              <span className="text-[11px] font-semibold text-emerald-600 block pb-1">Lunas Terverifikasi</span>
+              <div className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                {allBookings.filter((b) => b.paymentStatus === "PAID" && b.totalPrice > 0).length}{" "}
+                <span className="text-xs font-normal text-slate-400">Transaksi</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788]">
+                {formatCurrencyIDR(allBookings.filter((b) => b.paymentStatus === "PAID" && b.totalPrice > 0).reduce((s, b) => s + b.totalPrice, 0))}
+              </span>
+            </Card>
+
+            <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-rose-200 dark:border-rose-900/50 shadow-2xs">
+              <span className="text-[11px] font-semibold text-rose-600 block pb-1">Bukti Ditolak / Revisi</span>
+              <div className="text-xl font-black text-rose-600 dark:text-rose-400">
+                {allBookings.filter((b) => Boolean(b.paymentRejectionReason)).length}{" "}
+                <span className="text-xs font-normal text-slate-400">Pesanan</span>
+              </div>
+              <span className="text-[10px] text-slate-400">Menunggu perbaikan transfer</span>
+            </Card>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0">
+              {[
+                { key: "PENDING_PROOF", label: "Menunggu Verifikasi" },
+                { key: "ALL", label: "Semua Transaksi" },
+                { key: "PAID", label: "Lunas (Approved)" },
+                { key: "REJECTED", label: "Ditolak / Revisi" },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setPaymentFilterStatus(tab.key as any)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                    paymentFilterStatus === tab.key
+                      ? "bg-[#3B7A57] text-white shadow-xs"
+                      : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Table of Manual Payment Bookings */}
+          <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs bg-white dark:bg-[#1E293B]">
+            {(() => {
+              const paymentBookings = allBookings.filter((b) => {
+                if (b.totalPrice <= 0) return false;
+                if (paymentFilterStatus === "PENDING_PROOF") {
+                  return b.paymentStatus === "PENDING" && Boolean(b.paymentProofUrl);
+                }
+                if (paymentFilterStatus === "PAID") {
+                  return b.paymentStatus === "PAID";
+                }
+                if (paymentFilterStatus === "REJECTED") {
+                  return Boolean(b.paymentRejectionReason);
+                }
+                return true;
+              });
+
+              if (paymentBookings.length === 0) {
+                return (
+                  <div className="p-10 text-center space-y-2">
+                    <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+                    <span className="font-bold text-sm text-slate-700 dark:text-slate-300 block">
+                      Tidak Ada Antrean Verifikasi Pembayaran
+                    </span>
+                    <span className="text-xs text-slate-400 max-w-sm block mx-auto">
+                      Semua transaksi tiket transfer manual telah terverifikasi atau tidak ada data yang cocok dengan filter aktif.
+                    </span>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 text-slate-500 font-semibold">
+                        <th className="py-3 px-3.5">Kode & Waktu</th>
+                        <th className="py-3 px-3.5">Event</th>
+                        <th className="py-3 px-3.5">Peserta & Kontak</th>
+                        <th className="py-3 px-3.5">Total Tagihan</th>
+                        <th className="py-3 px-3.5">Rekening Tujuan</th>
+                        <th className="py-3 px-3.5">Bukti Transfer</th>
+                        <th className="py-3 px-3.5">Status</th>
+                        <th className="py-3 px-3.5 text-right">Aksi Verifikasi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                      {paymentBookings.map((b) => (
+                        <tr key={b.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
+                          <td className="py-3 px-3.5 whitespace-nowrap">
+                            <span className="font-mono font-bold text-slate-900 dark:text-white block">
+                              {b.ticketCode}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block">
+                              {new Date(b.createdAt).toLocaleDateString("id-ID", {
+                                day: "numeric",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3.5 max-w-[200px]">
+                            <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate" title={b.eventTitle}>
+                              {b.eventTitle}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3.5">
+                            <span className="font-bold text-slate-900 dark:text-white block">
+                              {b.guestName}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block">{b.guestPhone}</span>
+                          </td>
+                          <td className="py-3 px-3.5 whitespace-nowrap">
+                            <span className="font-black text-[#3B7A57] dark:text-[#52B788] block text-sm">
+                              {formatCurrencyIDR(b.totalPrice)}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block">{b.ticketCount} Tiket</span>
+                          </td>
+                          <td className="py-3 px-3.5 whitespace-nowrap">
+                            {b.destinationBankSnapshot ? (
+                              <div>
+                                <span className="font-bold text-slate-800 dark:text-slate-200 block">
+                                  {b.destinationBankSnapshot.bankName}
+                                </span>
+                                <span className="font-mono text-[10px] text-slate-500 block">
+                                  {b.destinationBankSnapshot.accountNumber}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 italic">Rekening Default Platform</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3.5 whitespace-nowrap">
+                            {b.paymentProofUrl ? (
+                              <div className="flex items-center space-x-2">
+                                <div
+                                  onClick={() => setSelectedProofBooking(b)}
+                                  className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                                  title="Klik untuk melihat bukti transfer ukuran penuh"
+                                >
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={b.paymentProofUrl}
+                                    alt="Bukti Transfer"
+                                    className="w-full h-full object-cover"
+                                  />
+                                </div>
+                                <div>
+                                  <button
+                                    onClick={() => setSelectedProofBooking(b)}
+                                    className="text-[10.5px] font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline block cursor-pointer"
+                                  >
+                                    Periksa Bukti
+                                  </button>
+                                  <span className="text-[9.5px] text-slate-400 block">
+                                    {b.paymentProofUploadedAt ? new Date(b.paymentProofUploadedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "Terkirim"}
+                                  </span>
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 italic">Belum Diunggah</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3.5 whitespace-nowrap">
+                            {b.paymentStatus === "PAID" ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold">
+                                Lunas (PAID)
+                              </Badge>
+                            ) : b.paymentRejectionReason ? (
+                              <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-bold">
+                                Bukti Ditolak
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-[10px] font-bold">
+                                Menunggu Review
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                            {b.paymentStatus === "PENDING" ? (
+                              <div className="inline-flex items-center space-x-1.5">
+                                <Button
+                                  size="sm"
+                                  disabled={isProcessingPaymentAction}
+                                  onClick={() => handleApprovePayment(b)}
+                                  className="h-7 px-2.5 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[10.5px] font-bold rounded-lg cursor-pointer"
+                                >
+                                  <Check className="w-3 h-3 mr-1" />
+                                  <span>Setujui</span>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={isProcessingPaymentAction}
+                                  onClick={() => {
+                                    setRejectPaymentTarget(b);
+                                    setRejectPaymentReason("");
+                                    setRejectPaymentCancelBooking(false);
+                                  }}
+                                  className="h-7 px-2 text-[10.5px] font-bold text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg cursor-pointer"
+                                >
+                                  <X className="w-3 h-3 mr-1" />
+                                  <span>Tolak</span>
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                                Selesai
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </Card>
+        </div>
+      )}
+
+      {/* ===================================================================== */}
+      {/* SECTION C: PENGATURAN REKENING & BISNIS */}
+      {/* ===================================================================== */}
+      {adminSection === "SETTINGS" && (
+        <div className="space-y-6">
+          {/* Card 1: Pengaturan Kebijakan Bisnis Platform */}
+          <Card className="p-6 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Settings className="w-5 h-5 text-[#3B7A57]" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Kebijakan Transaksi & Pembayaran Event
+                  </h3>
+                  <span className="text-[11px] text-slate-400">
+                    Konfigurasi ini berlaku seketika untuk pemesanan tiket baru tanpa perlu deployment ulang kode.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {businessPolicy && (
+              <form onSubmit={handleSaveBusinessSettings} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Metode Pembayaran Aktif
+                    </label>
+                    <select
+                      value={businessPolicy.activePaymentMethod || "MANUAL_TRANSFER"}
+                      onChange={(e) =>
+                        setBusinessPolicy({ ...businessPolicy, activePaymentMethod: e.target.value })
+                      }
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                    >
+                      <option value="MANUAL_TRANSFER">Transfer Bank Manual (Aktif Resmi)</option>
+                      <option value="DOKU_CHECKOUT">DOKU Checkout Gateway</option>
+                    </select>
+                    <span className="text-[10px] text-slate-400 block">
+                      Transfer Bank Manual mengarahkan checkout ke rekening resmi dan menu verifikasi bukti transfer.
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Batas Maksimal Pembelian Tiket per Transaksi (Platform Default)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={businessPolicy.maxTicketsPerBooking || 5}
+                      onChange={(e) =>
+                        setBusinessPolicy({
+                          ...businessPolicy,
+                          maxTicketsPerBooking: parseInt(e.target.value, 10) || 5,
+                        })
+                      }
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                    />
+                    <span className="text-[10px] text-slate-400 block">
+                      Default platform adalah 5 tiket. Event tertentu dapat menentukan batas tersendiri jika diatur.
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Batas Waktu Pembayaran (Menit)
+                    </label>
+                    <input
+                      type="number"
+                      min={10}
+                      max={1440}
+                      value={businessPolicy.bookingPaymentExpiryMinutes || 60}
+                      onChange={(e) =>
+                        setBusinessPolicy({
+                          ...businessPolicy,
+                          bookingPaymentExpiryMinutes: parseInt(e.target.value, 10) || 60,
+                        })
+                      }
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                    />
+                    <span className="text-[10px] text-slate-400 block">
+                      Durasi penahanan kuota tiket sebelum booking PENDING kedaluwarsa otomatis (default: 60 menit).
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Komisi Platform Default (%)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={businessPolicy.defaultPlatformFeePercent ?? 20}
+                      onChange={(e) =>
+                        setBusinessPolicy({
+                          ...businessPolicy,
+                          defaultPlatformFeePercent: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                    />
+                    <span className="text-[10px] text-slate-400 block">
+                      Bagian platform (20%), bagian penyelenggara (80%).
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Instruksi Pembayaran Transfer Bank Resmi
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={businessPolicy.paymentInstructions || ""}
+                    onChange={(e) =>
+                      setBusinessPolicy({ ...businessPolicy, paymentInstructions: e.target.value })
+                    }
+                    placeholder="Contoh: Silakan transfer tepat sesuai nominal yang tertera..."
+                    className="w-full p-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                  />
+                </div>
+
+                <div className="pt-2 flex justify-end">
+                  <Button
+                    type="submit"
+                    disabled={isSavingSettings}
+                    className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer"
+                  >
+                    {isSavingSettings ? "Menyimpan..." : "Simpan Pengaturan Bisnis"}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </Card>
+
+          {/* Card 2: Manajemen Rekening Bank Resmi */}
+          <Card className="p-6 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Building2 className="w-5 h-5 text-[#3B7A57]" />
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Rekening Bank Resmi Platform
+                  </h3>
+                  <span className="text-[11px] text-slate-400">
+                    Daftar rekening tujuan pembayaran yang dapat dipilih atau digunakan untuk transaksi baru.
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                size="sm"
+                onClick={() => setIsAddBankModalOpen(true)}
+                className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Tambah Rekening</span>
+              </Button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 text-slate-500 font-semibold">
+                    <th className="py-2.5 px-3">Label</th>
+                    <th className="py-2.5 px-3">Bank & Nomor Rekening</th>
+                    <th className="py-2.5 px-3">Atas Nama</th>
+                    <th className="py-2.5 px-3">Cabang</th>
+                    <th className="py-2.5 px-3">Default Platform</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {bankAccountsList.map((acc) => (
+                    <tr key={acc.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {acc.label}
+                        </span>
+                        {acc.badge && (
+                          <span className="ml-1.5 px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 text-[9px] font-bold border border-emerald-200 dark:border-emerald-800">
+                            {acc.badge}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span className="font-bold text-slate-900 dark:text-white block">
+                          {acc.bankName}
+                        </span>
+                        <span className="font-mono text-slate-600 dark:text-slate-400 block text-[11px]">
+                          {acc.accountNumber}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap text-slate-700 dark:text-slate-300">
+                        {acc.accountHolder}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-400 text-[11px]">
+                        {acc.branch || "-"}
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        {acc.isDefault ? (
+                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 text-[10px] font-bold">
+                            Default Platform
+                          </Badge>
+                        ) : (
+                          <button
+                            onClick={() => handleSetDefaultBank(acc.id)}
+                            disabled={!acc.isActive}
+                            className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline cursor-pointer disabled:opacity-40"
+                          >
+                            Jadikan Default
+                          </button>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <button
+                          onClick={() => handleToggleBankActive(acc.id, acc.isActive)}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
+                            acc.isActive
+                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                          }`}
+                        >
+                          {acc.isActive ? "Aktif" : "Nonaktif"}
+                        </button>
+                      </td>
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={acc.isDefault}
+                          onClick={() => handleDeleteBank(acc.id)}
+                          className="h-7 px-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg cursor-pointer disabled:opacity-30"
+                          title={acc.isDefault ? "Rekening default tidak dapat dihapus" : "Hapus rekening"}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          {/* Card 3: Riwayat Perubahan Rekening Bank (Audit Log) */}
+          <Card className="p-6 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
+            <div className="flex items-center space-x-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+              <Clock className="w-4 h-4 text-slate-400" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Riwayat Perubahan Rekening (Audit Trail)
+              </h3>
+            </div>
+
+            {bankChangeHistory.length === 0 ? (
+              <span className="text-xs text-slate-400 italic block py-2">
+                Belum ada riwayat modifikasi rekening yang tercatat.
+              </span>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 text-[11px]">
+                      <th className="py-2 px-3">Waktu</th>
+                      <th className="py-2 px-3">Aktor</th>
+                      <th className="py-2 px-3">Tindakan</th>
+                      <th className="py-2 px-3">Rincian Perubahan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-[11px]">
+                    {bankChangeHistory.slice(0, 10).map((h) => (
+                      <tr key={h.id}>
+                        <td className="py-2 px-3 whitespace-nowrap text-slate-400">
+                          {new Date(h.changedAt).toLocaleString("id-ID", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </td>
+                        <td className="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">
+                          {h.changedBy}
+                        </td>
+                        <td className="py-2 px-3">
+                          <span className="px-1.5 py-0.2 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-[9px] font-bold">
+                            {h.action}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-slate-600 dark:text-slate-400 max-w-md truncate">
+                          {h.details}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
 
       {/* DETAIL MODAL */}
       {isDetailModalOpen && selectedEvent && (
@@ -1025,6 +1986,305 @@ export default function AdminEventsPage() {
               <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs">
                 <span className="font-bold block">Alasan Penolakan:</span>
                 {selectedEvent.rejectionReason}
+              </div>
+            )}
+
+            {/* Kebutuhan Kolaborasi Venue & Promosi */}
+            {(selectedEvent.collaborationFacilities || selectedEvent.collaborationPromotion || selectedEvent.collaborationNotes) && (
+              <div className="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs space-y-2">
+                <span className="font-bold text-amber-900 dark:text-amber-200 block">
+                  Kebutuhan Kolaborasi & Dukungan Venue:
+                </span>
+                {selectedEvent.collaborationFacilities && (
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Fasilitas Venue Diminta:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {(Array.isArray(selectedEvent.collaborationFacilities)
+                        ? selectedEvent.collaborationFacilities
+                        : [selectedEvent.collaborationFacilities]
+                      ).map((f: any, idx: number) => (
+                        <span key={idx} className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-[10px] font-medium text-amber-800 dark:text-amber-200">
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedEvent.collaborationPromotion && (
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Dukungan Promosi Diminta:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {(Array.isArray(selectedEvent.collaborationPromotion)
+                        ? selectedEvent.collaborationPromotion
+                        : [selectedEvent.collaborationPromotion]
+                      ).map((p: any, idx: number) => (
+                        <span key={idx} className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-[10px] font-medium text-amber-800 dark:text-amber-200">
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {selectedEvent.collaborationNotes && (
+                  <div className="pt-1 text-[11px] text-amber-900 dark:text-amber-100">
+                    <span className="font-semibold">Catatan Kolaborasi: </span>
+                    <span>{selectedEvent.collaborationNotes}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Bagian Pengelolaan & Negosiasi Bagi Hasil */}
+            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                    Skema Bagi Hasil (Revenue Split)
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Kesepakatan Aktif: <strong className="text-[#3B7A57] dark:text-[#52B788]">{selectedEvent.organizerFeePercent ?? 80}% Komunitas</strong> : <strong className="text-slate-700 dark:text-slate-300">{selectedEvent.customPlatformFeePercent ?? 20}% Dago</strong>
+                  </span>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setIsProposingSplit(!isProposingSplit)}
+                  className="text-[11px] h-7 px-2.5 rounded-lg border-slate-200 dark:border-slate-700 font-semibold cursor-pointer"
+                >
+                  {isProposingSplit ? "Tutup Form" : "Ajukan / Tawar"}
+                </Button>
+              </div>
+
+              {/* Usulan Bagi Hasil Pending jika ada */}
+              {selectedEvent.proposedRevenueSplit && selectedEvent.proposedRevenueSplit.status === "PENDING" && (
+                <div className="p-3 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sky-900 dark:text-sky-200">
+                      Usulan dari {selectedEvent.proposedRevenueSplit.proposedBy === "ORGANIZER" ? "Penyelenggara Komunitas" : "Admin Dago"}
+                    </span>
+                    <Badge className="bg-sky-600 text-white text-[10px]">
+                      {selectedEvent.proposedRevenueSplit.organizerPercent}% Komunitas : {selectedEvent.proposedRevenueSplit.platformPercent}% Dago
+                    </Badge>
+                  </div>
+                  {selectedEvent.proposedRevenueSplit.reason && (
+                    <p className="text-[11px] text-sky-800 dark:text-sky-300 italic">
+                      &quot;{selectedEvent.proposedRevenueSplit.reason}&quot;
+                    </p>
+                  )}
+                  {selectedEvent.proposedRevenueSplit.proposedBy === "ORGANIZER" && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        disabled={isSubmittingSplit}
+                        onClick={() => handleRespondSplit("ACCEPT")}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] h-7 px-2.5 rounded-lg font-bold"
+                      >
+                        Setujui Kesepakatan
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isSubmittingSplit}
+                        onClick={() => handleRespondSplit("REJECT")}
+                        className="text-rose-600 border-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[11px] h-7 px-2.5 rounded-lg font-semibold"
+                      >
+                        Tolak Usulan
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setSplitOrgPercent(selectedEvent.proposedRevenueSplit?.organizerPercent ?? 80);
+                          setSplitPlatPercent(selectedEvent.proposedRevenueSplit?.platformPercent ?? 20);
+                          setIsProposingSplit(true);
+                        }}
+                        className="text-sky-600 border-sky-300 hover:bg-sky-50 text-[11px] h-7 px-2.5 rounded-lg font-semibold"
+                      >
+                        Tawar Tandingan
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Form Input Usulan Bagi Hasil */}
+              {isProposingSplit && (
+                <form onSubmit={handleProposeSplit} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Bagian Penyelenggara (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={splitOrgPercent}
+                        onChange={(e) => {
+                          const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                          setSplitOrgPercent(val);
+                          setSplitPlatPercent(100 - val);
+                        }}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-900 border font-bold text-[#3B7A57]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Bagian Dago Hub (%)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={splitPlatPercent}
+                        onChange={(e) => {
+                          const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                          setSplitPlatPercent(val);
+                          setSplitOrgPercent(100 - val);
+                        }}
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-900 border font-bold text-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Alasan / Keterangan Penawaran
+                    </label>
+                    <input
+                      type="text"
+                      value={splitReason}
+                      onChange={(e) => setSplitReason(e.target.value)}
+                      placeholder="Contoh: Kesepakatan kolaborasi workshop perdana"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-900 border text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsProposingSplit(false)}
+                      className="text-[11px] h-7"
+                    >
+                      Batal
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={isSubmittingSplit}
+                      className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] h-7 font-bold"
+                    >
+                      Kirim Penawaran
+                    </Button>
+                  </div>
+                </form>
+              )}
+
+              {/* Riwayat Kesepakatan Bagi Hasil */}
+              {selectedEvent.revenueSplitHistory && selectedEvent.revenueSplitHistory.length > 0 && (
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                    Riwayat Kesepakatan
+                  </span>
+                  <div className="space-y-1 max-h-24 overflow-y-auto">
+                    {selectedEvent.revenueSplitHistory.map((h, i) => (
+                      <div key={h.id || i} className="text-[10px] flex items-center justify-between text-slate-500 py-0.5">
+                        <span>{new Date(h.effectiveDate || h.agreedAt || "").toLocaleDateString("id-ID")}: {h.agreedOrganizerPercent ?? h.newOrganizerPercent}% Komunitas : {h.agreedPlatformPercent ?? h.newPlatformPercent}% Dago</span>
+                        <span className="text-slate-400">({h.agreedBy || h.approvedBy || "Admin"})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Bagian Payout / Pencairan Saldo Penyelenggara */}
+            {selectedEvent.payoutHistory && selectedEvent.payoutHistory.length > 0 && (
+              <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                    Pengajuan Pencairan Saldo (Payout)
+                  </span>
+                  <Badge variant="outline" className="text-[10px] font-bold">
+                    {selectedEvent.payoutHistory.length} Pengajuan
+                  </Badge>
+                </div>
+
+                <div className="space-y-2">
+                  {selectedEvent.payoutHistory.map((p) => (
+                    <div key={p.id} className="p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <strong className="text-slate-900 dark:text-white font-bold">{formatCurrencyIDR(p.amount)}</strong>
+                          <Badge
+                            className={`text-[9px] font-bold ${
+                              p.status === "PAID"
+                                ? "bg-emerald-600 text-white"
+                                : p.status === "PROCESSING"
+                                ? "bg-sky-600 text-white"
+                                : p.status === "REQUESTED"
+                                ? "bg-amber-600 text-white"
+                                : "bg-rose-600 text-white"
+                            }`}
+                          >
+                            {p.status}
+                          </Badge>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {p.bankName} • {p.accountNumber} a/n {p.accountHolder}
+                        </div>
+                        {p.referenceNo && (
+                          <div className="text-[10px] text-emerald-600 font-mono">
+                            Ref: {p.referenceNo}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Admin Payout Actions */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {p.status === "REQUESTED" && (
+                          <Button
+                            size="sm"
+                            disabled={isProcessingPayout}
+                            onClick={() => handleUpdatePayoutStatus(p.id, "PROCESSING")}
+                            className="bg-sky-600 hover:bg-sky-700 text-white text-[10px] h-6 px-2 rounded-lg font-bold"
+                          >
+                            Tandai Diproses
+                          </Button>
+                        )}
+                        {(p.status === "REQUESTED" || p.status === "PROCESSING") && (
+                          <>
+                            <Button
+                              size="sm"
+                              disabled={isProcessingPayout}
+                              onClick={() => {
+                                setActivePayoutTarget({ id: p.id, status: "PAID" });
+                                setPayoutInputText("");
+                                setPayoutPromptModalOpen(true);
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] h-6 px-2 rounded-lg font-bold"
+                            >
+                              Konfirmasi Transfer
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isProcessingPayout}
+                              onClick={() => {
+                                setActivePayoutTarget({ id: p.id, status: "REJECTED" });
+                                setPayoutInputText("");
+                                setPayoutPromptModalOpen(true);
+                              }}
+                              className="text-rose-600 border-rose-300 text-[10px] h-6 px-2 rounded-lg font-bold"
+                            >
+                              Tolak
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -1722,6 +2982,290 @@ export default function AdminEventsPage() {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Prompt Status Payout (PAID atau REJECTED) */}
+      {payoutPromptModalOpen && activePayoutTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4">
+            <h4 className="text-base font-bold text-slate-900 dark:text-white">
+              {activePayoutTarget.status === "PAID"
+                ? "Konfirmasi Pencairan Selesai Ditransfer"
+                : "Tolak Pengajuan Pencairan Saldo"}
+            </h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {activePayoutTarget.status === "PAID"
+                ? "Masukkan nomor referensi transfer bank manual (dari mutasi/resi m-Banking DAGO Finance) sebagai bukti payout kepada penyelenggara."
+                : "Tuliskan alasan penolakan pencairan saldo untuk catatan penyelenggara."}
+            </p>
+
+            <input
+              type="text"
+              value={payoutInputText}
+              onChange={(e) => setPayoutInputText(e.target.value)}
+              placeholder={
+                activePayoutTarget.status === "PAID"
+                  ? "Contoh: BCA-TRF-20261028-98412"
+                  : "Contoh: Nomor rekening bank tidak sesuai dengan nama penyelenggara"
+              }
+              className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+            />
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPayoutPromptModalOpen(false);
+                  setActivePayoutTarget(null);
+                }}
+                className="text-xs cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button
+                size="sm"
+                disabled={isProcessingPayout || !payoutInputText.trim()}
+                onClick={() =>
+                  handleUpdatePayoutStatus(
+                    activePayoutTarget.id,
+                    activePayoutTarget.status,
+                    activePayoutTarget.status === "PAID" ? payoutInputText : undefined,
+                    activePayoutTarget.status === "REJECTED" ? payoutInputText : undefined
+                  )
+                }
+                className={`text-xs font-bold text-white cursor-pointer ${
+                  activePayoutTarget.status === "PAID"
+                    ? "bg-emerald-600 hover:bg-emerald-700"
+                    : "bg-rose-600 hover:bg-rose-700"
+                }`}
+              >
+                {activePayoutTarget.status === "PAID" ? "Simpan & Tandai Lunas" : "Tolak Pengajuan"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TOLAK BUKTI PEMBAYARAN */}
+      {rejectPaymentTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4">
+            <div className="flex items-start justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                  Tolak Bukti Pembayaran
+                </h4>
+                <span className="text-xs text-slate-400">
+                  Kode: {rejectPaymentTarget.ticketCode} • {rejectPaymentTarget.guestName}
+                </span>
+              </div>
+              <button
+                onClick={() => setRejectPaymentTarget(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <label className="font-semibold text-slate-700 dark:text-slate-300 block">
+                Alasan Penolakan <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                rows={3}
+                required
+                value={rejectPaymentReason}
+                onChange={(e) => setRejectPaymentReason(e.target.value)}
+                placeholder="Contoh: Foto bukti transfer blur / nominal tidak sesuai / nomor rekening tujuan salah..."
+                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs focus:ring-2 focus:ring-rose-500"
+              />
+              <span className="text-[10.5px] text-slate-400 block">
+                Alasan ini akan ditampilkan langsung kepada peserta pada halaman e-tiket mereka.
+              </span>
+            </div>
+
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
+              <label className="flex items-center space-x-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={rejectPaymentCancelBooking}
+                  onChange={(e) => setRejectPaymentCancelBooking(e.target.checked)}
+                  className="rounded text-rose-600 focus:ring-rose-500"
+                />
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  Batalkan pemesanan sekaligus (Lepaskan kuota tiket)
+                </span>
+              </label>
+              <p className="text-[10px] text-slate-400 pl-5">
+                Jika tidak dicentang, tiket tetap berstatus PENDING sehingga peserta masih dapat mengunggah bukti perbaikan sebelum batas waktu habis.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRejectPaymentTarget(null)}
+                className="text-xs cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button
+                size="sm"
+                disabled={isProcessingPaymentAction || !rejectPaymentReason.trim()}
+                onClick={handleConfirmRejectPayment}
+                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer"
+              >
+                {isProcessingPaymentAction ? "Memproses..." : "Konfirmasi Penolakan"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TAMBAH REKENING BANK */}
+      {isAddBankModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4">
+            <div className="flex items-start justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                  Tambah Rekening Bank Resmi
+                </h4>
+                <span className="text-xs text-slate-400">
+                  Rekening baru dapat segera digunakan untuk transaksi tiket event tanpa deployment ulang.
+                </span>
+              </div>
+              <button
+                onClick={() => setIsAddBankModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateBank} className="space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-300">
+                  Label Rekening <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newBankForm.label}
+                  onChange={(e) => setNewBankForm({ ...newBankForm, label: e.target.value })}
+                  placeholder="Contoh: Rekening Operasional / Utama Platform"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">
+                    Nama Bank <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newBankForm.bankName}
+                    onChange={(e) => setNewBankForm({ ...newBankForm, bankName: e.target.value })}
+                    placeholder="Contoh: BCA / Mandiri / BRI"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">
+                    Nomor Rekening <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newBankForm.accountNumber}
+                    onChange={(e) => setNewBankForm({ ...newBankForm, accountNumber: e.target.value })}
+                    placeholder="Contoh: 1420993821"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="font-semibold text-slate-700 dark:text-slate-300">
+                  Nama Pemilik Rekening (a.n.) <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newBankForm.accountHolder}
+                  onChange={(e) => setNewBankForm({ ...newBankForm, accountHolder: e.target.value })}
+                  placeholder="Contoh: PT DAGO CREATIVE HUB"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">
+                    Cabang (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newBankForm.branch}
+                    onChange={(e) => setNewBankForm({ ...newBankForm, branch: e.target.value })}
+                    placeholder="Contoh: KCU Dago Bandung"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">
+                    Badge / Tag (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newBankForm.badge}
+                    onChange={(e) => setNewBankForm({ ...newBankForm, badge: e.target.value })}
+                    placeholder="Contoh: Utama / Bebas Biaya"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-1">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newBankForm.isDefault}
+                    onChange={(e) => setNewBankForm({ ...newBankForm, isDefault: e.target.checked })}
+                    className="rounded text-[#3B7A57] focus:ring-[#3B7A57]"
+                  />
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">
+                    Jadikan rekening default utama platform
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsAddBankModalOpen(false)}
+                  className="text-xs cursor-pointer"
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isSavingSettings}
+                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold cursor-pointer"
+                >
+                  {isSavingSettings ? "Menyimpan..." : "Simpan Rekening"}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

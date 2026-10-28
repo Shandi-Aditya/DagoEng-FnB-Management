@@ -100,18 +100,6 @@ export default function DashboardPage() {
 
   const businessBreakdown = [
     {
-      module: "FNB",
-      name: "Food & Beverage (F&B)",
-      revenue: fnbRevenue,
-      share: fnbShare,
-      tenants: "Kopi Senja, Dapur Mama, Manis Bakery, Warung Bu Narti",
-      status: "AKTIF",
-      icon: <Coffee className="w-4 h-4 text-primary" />,
-      color: "border-primary",
-      progressColor: "bg-primary",
-      progressWidth: fnbRevenue > 0 ? "w-full" : "w-0",
-    },
-    {
       module: "CO_WORKING",
       name: "Dago Co-working Space",
       revenue: cwkRevenue,
@@ -122,6 +110,18 @@ export default function DashboardPage() {
       color: "border-sky-500",
       progressColor: "bg-sky-500",
       progressWidth: cwkRevenue > 0 ? "w-full" : "w-0",
+    },
+    {
+      module: "FNB",
+      name: "Food & Beverage (F&B)",
+      revenue: fnbRevenue,
+      share: fnbShare,
+      tenants: "Kopi Senja, Dapur Mama, Manis Bakery, Warung Bu Narti",
+      status: "AKTIF",
+      icon: <Coffee className="w-4 h-4 text-primary" />,
+      color: "border-primary",
+      progressColor: "bg-primary",
+      progressWidth: fnbRevenue > 0 ? "w-full" : "w-0",
     },
     {
       module: "COMMUNITY_EVENTS",

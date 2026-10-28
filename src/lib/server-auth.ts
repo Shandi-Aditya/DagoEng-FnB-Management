@@ -1,8 +1,10 @@
+import fs from "fs";
 import { NextRequest } from "next/server";
 import { RoleSlug, ScopeLevel } from "@/types/auth";
 import { db } from "./db";
 import { hashSessionToken, SESSION_COOKIE_NAME } from "./session";
-import { isOrganizerActive, getOrganizerById } from "./organizers";
+import { isOrganizerActive, getOrganizerById, getOrganizerByEmail } from "./organizers";
+import { getDataFilePath } from "@/lib/data-storage";
 import {
   getOrganizerSession,
   withDbTimeout,
@@ -353,9 +355,47 @@ export async function assertOrganizerAuth(
 
   // Check if organizer account has been deactivated by Platform Admin
   if (!isOrganizerActive(sessionEmail)) {
+    const existingOrg = getOrganizerByEmail(sessionEmail);
+    if (existingOrg && existingOrg.status === "INACTIVE") {
+      return {
+        authorized: false,
+        error: `FORBIDDEN: Akun penyelenggara [${sessionEmail}] saat ini dinonaktifkan oleh Administrator Platform. Silakan hubungi manajemen DAGO Creative Hub.`,
+        email: sessionEmail,
+        isAdmin: false,
+        userId: auth.userId,
+      };
+    }
+
+    // Allow user who submitted a proposal to monitor their proposal review in the portal
+    let hasSubmittedProposal = false;
+    try {
+      const eventsFile = getDataFilePath("events.json");
+      if (fs.existsSync(eventsFile)) {
+        const raw = fs.readFileSync(eventsFile, "utf-8");
+        const events = JSON.parse(raw);
+        if (Array.isArray(events)) {
+          hasSubmittedProposal = events.some(
+            (e: any) =>
+              (e.organizerEmail || "").toLowerCase() === sessionEmail &&
+              (e.status === "PENDING" || e.status === "REVISION_REQUESTED")
+          );
+        }
+      }
+    } catch {}
+
+    if (hasSubmittedProposal) {
+      return {
+        authorized: true,
+        email: sessionEmail,
+        isAdmin: false,
+        userId: auth.userId,
+        name: auth.name,
+      };
+    }
+
     return {
       authorized: false,
-      error: `FORBIDDEN: Akun penyelenggara [${sessionEmail}] saat ini dinonaktifkan oleh Administrator Platform. Silakan hubungi manajemen DAGO Creative Hub.`,
+      error: `FORBIDDEN: Akun [${sessionEmail}] belum terdaftar sebagai penyelenggara aktif. Silakan ajukan event proposal terlebih dahulu.`,
       email: sessionEmail,
       isAdmin: false,
       userId: auth.userId,
@@ -419,6 +459,91 @@ export async function assertEventAdmin(req: NextRequest): Promise<{
     scopeLevel: userScope,
     userId: auth.userId || undefined,
     name: auth.name,
+  };
+}
+
+/**
+ * Validates check-in authorization for field officers, staff, organizers, and hub management.
+ * Security enforcement:
+ * 1. Hub Management (SUPER_ADMIN, Hub OWNER, Hub MANAGER) has full event oversight.
+ * 2. Field Staff / Petugas Check-in (WAITER, CASHIER) can validate attendees at the venue.
+ * 3. Community Organizers can validate attendees on events they own (matching event.organizerEmail).
+ * 4. Other roles (unauthenticated, unrelated guests, tenant stall owners) are rejected with HTTP 403.
+ */
+export async function assertCheckInAuth(
+  req: NextRequest,
+  eventId?: string
+): Promise<{
+  authorized: boolean;
+  error?: string;
+  role?: RoleSlug;
+  email?: string;
+  userId?: string;
+  name?: string;
+  isFieldOfficer?: boolean;
+}> {
+  const auth = await getRequestAuthUser(req);
+
+  if (!auth.isAuthenticated || !auth.userId) {
+    return {
+      authorized: false,
+      error: "UNAUTHORIZED: Autentikasi sesi server diperlukan untuk melakukan check-in peserta.",
+    };
+  }
+
+  // 1. Hub Management Oversight
+  const isHubAdmin =
+    (auth.role === "SUPER_ADMIN" && auth.scopeLevel === "PLATFORM") ||
+    ((auth.role === "OWNER" || auth.role === "MANAGER") && auth.scopeLevel === "ORGANIZATION");
+  if (isHubAdmin) {
+    return {
+      authorized: true,
+      role: auth.role || undefined,
+      email: auth.email || undefined,
+      userId: auth.userId,
+      name: auth.name,
+    };
+  }
+
+  // 2. Field Staff / Petugas Check-in (WAITER, CASHIER)
+  const isFieldStaff = auth.role === "CASHIER" || auth.role === "WAITER";
+  if (isFieldStaff) {
+    return {
+      authorized: true,
+      role: auth.role || undefined,
+      email: auth.email || undefined,
+      userId: auth.userId,
+      name: auth.name,
+      isFieldOfficer: true,
+    };
+  }
+
+  // 3. Event Organizer matching event
+  if (eventId && auth.email) {
+    try {
+      const eventsFile = getDataFilePath("events.json");
+      if (fs.existsSync(eventsFile)) {
+        const raw = fs.readFileSync(eventsFile, "utf-8");
+        const events = JSON.parse(raw);
+        if (Array.isArray(events)) {
+          const event = events.find((e: any) => e.id === eventId);
+          if (event && (event.organizerEmail || "").toLowerCase() === auth.email.toLowerCase()) {
+            return {
+              authorized: true,
+              role: auth.role || undefined,
+              email: auth.email,
+              userId: auth.userId,
+              name: auth.name,
+            };
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return {
+    authorized: false,
+    error: `FORBIDDEN: Akun [${auth.email || auth.role}] tidak memiliki penugasan atau izin check-in pada event ini.`,
   };
 }
 

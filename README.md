@@ -6,15 +6,16 @@
 
 ---
 
-## 📌 Product Overview
+## 📌 Product Overview & Prioritas Modul Sistem
 
-**DagoEng F&B Management** adalah platform all-in-one enterprise terpadu yang dirancang untuk mengelola seluruh ekosistem bisnis:
-1. **F&B Transaksi & Kitchen**: POS Kasir multi-payment, Kitchen Display System (KDS) SLA, Table Floor Plan.
-2. **Smart Inventory**: BOM Recipe automatic stock deduction, Minimum Stock Alerts & AI Procurement Assistant.
-3. **Co-working & Event Space**: Reservasi Hot Desk/Dedicated Nomad Desk & VIP Meeting Room hourly booking.
-4. **Commercial Retail Space**: Manajemen tenant gerai/kios, kontrak sewa berkala, billing & invoice otomatis.
-5. **Customer CRM & Loyalty**: Tier membership (Bronze, Silver, Gold, Platinum), poin transaksi & voucher diskon.
-6. **Executive Dashboard & Export Suite**: Analisis laba rugi, perbandingan performa outlet, serta cetak laporan resmi (**PDF, Excel .xlsx, CSV**).
+**DagoEng F&B Management** adalah platform all-in-one enterprise terpadu yang dirancang untuk mengelola seluruh ekosistem bisnis dengan hierarki prioritas sistem sebagai berikut:
+
+### 🏆 Prioritas Arsitektur & Modul Sistem:
+1. **Prioritas 1 — Co-Working Space**: Reservasi Hot Desk/Dedicated Nomad Desk, VIP Meeting Room hourly booking, pass harian/bulanan, dan integrasi voucher Wi-Fi Mikrotik.
+2. **Prioritas 2 — F&B Culinary & POS**: POS Kasir multi-payment, Kitchen Display System (KDS) SLA, Table Floor Plan, BOM Recipe stock deduction, dan AI inventory procurement.
+3. **Prioritas 3 — Event Marketplace & Community**: Pengajuan proposal event, kurasi kurator, pemesanan tiket, live attendee check-in, dan negosiasi bagi hasil transparan.
+
+Modul pendukung lainnya meliputi **Commercial Retail Space**, **Customer CRM & Loyalty**, serta **Executive Dashboard & Export Suite** (PDF, Excel .xlsx, CSV).
 
 ---
 

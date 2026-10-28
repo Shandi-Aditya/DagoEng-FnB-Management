@@ -15,20 +15,44 @@ import {
   TicketPaymentMethod,
   EventRevenueSharingPolicy,
   DEFAULT_EVENT_POLICY,
+  EventBankAccount,
+  EventBankAccountSnapshot,
+  EventBankAccountHistoryEntry,
+  EventBankAccountType,
+  EventBankAccountApprovalStatus,
+  DEFAULT_EVENT_BANK_ACCOUNTS,
   OrganizerPortalSummary,
   OrganizerPortalData,
   EventTicketAvailability,
+  RevenueSplitParty,
+  RevenueSplitNegotiationStatus,
+  ProposedRevenueSplit,
+  RevenueSplitAgreementHistory,
+  OrganizerPayoutStatus,
+  PayoutRecord,
 } from "@/types/event";
 
 export {
   type EventRevenueSharingPolicy,
   DEFAULT_EVENT_POLICY,
+  type EventBankAccount,
+  type EventBankAccountSnapshot,
+  type EventBankAccountHistoryEntry,
+  type EventBankAccountType,
+  DEFAULT_EVENT_BANK_ACCOUNTS,
   type OrganizerPortalSummary,
   type OrganizerPortalData,
   type EventTicketAvailability,
+  type RevenueSplitParty,
+  type RevenueSplitNegotiationStatus,
+  type ProposedRevenueSplit,
+  type RevenueSplitAgreementHistory,
+  type OrganizerPayoutStatus,
+  type PayoutRecord,
 };
 
 import { getDataFilePath } from "@/lib/data-storage";
+import { ensureOrganizerActive } from "@/lib/organizers";
 
 const getEventsFile = () => getDataFilePath("events.json");
 const getBookingsFile = () => getDataFilePath("event_bookings.json");
@@ -37,7 +61,28 @@ const getEventSettingsFile = () => getDataFilePath("event_settings.json");
 
 
 
+let eventOperationQueue: Promise<any> = Promise.resolve();
+
+function withEventLock<T>(fn: () => Promise<T> | T): Promise<T> {
+  const run = () => fn();
+  const next = eventOperationQueue.then(run, run);
+  eventOperationQueue = next.catch(() => {});
+  return next;
+}
+
 let cachedPolicy: EventRevenueSharingPolicy | null = null;
+
+export function saveEventSettingsToDisk(policy: EventRevenueSharingPolicy): void {
+  try {
+    cachedPolicy = policy;
+    const settingsFile = getEventSettingsFile();
+    const dir = path.dirname(settingsFile);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(settingsFile, JSON.stringify(policy, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Failed to write event settings to disk", err);
+  }
+}
 
 export function getEventRevenuePolicy(): EventRevenueSharingPolicy {
   try {
@@ -56,6 +101,19 @@ export function getEventRevenuePolicy(): EventRevenueSharingPolicy {
         ...DEFAULT_EVENT_POLICY,
         ...parsed,
         defaultOrganizerSharePercent: 100 - parsed.defaultPlatformFeePercent,
+        maxTicketsPerBooking:
+          typeof parsed.maxTicketsPerBooking === "number" && parsed.maxTicketsPerBooking > 0
+            ? parsed.maxTicketsPerBooking
+            : DEFAULT_EVENT_POLICY.maxTicketsPerBooking || 5,
+        activePaymentMethod: parsed.activePaymentMethod || DEFAULT_EVENT_POLICY.activePaymentMethod || "MANUAL_TRANSFER",
+        bankAccounts:
+          Array.isArray(parsed.bankAccounts) && parsed.bankAccounts.length > 0
+            ? parsed.bankAccounts
+            : DEFAULT_EVENT_BANK_ACCOUNTS,
+        bankHistory:
+          Array.isArray(parsed.bankHistory)
+            ? parsed.bankHistory
+            : DEFAULT_EVENT_POLICY.bankHistory || [],
       };
       cachedPolicy = policy;
       return policy;
@@ -70,54 +128,419 @@ export function getEventRevenuePolicy(): EventRevenueSharingPolicy {
   }
 }
 
+export const getEventBusinessSettings = getEventRevenuePolicy;
+
 export function updateEventRevenuePolicy(
   updates: {
-    defaultPlatformFeePercent: number;
+    defaultPlatformFeePercent?: number;
     policyNotes?: string;
     effectiveDate?: string;
+    maxTicketsPerBooking?: number;
+    activePaymentMethod?: "MANUAL_TRANSFER" | "DOKU_CHECKOUT";
+    bookingPaymentExpiryMinutes?: number;
+    allowOrganizerBankAccounts?: boolean;
+    allowEventBankOverride?: boolean;
+    paymentInstructions?: string;
+    allowedProofFormats?: string[];
+    maxProofFileSizeMb?: number;
+    bankAccounts?: EventBankAccount[];
+    bankHistory?: EventBankAccountHistoryEntry[];
   },
   actorName = "Admin Dago"
 ): EventRevenueSharingPolicy {
-  const fee = Number(updates.defaultPlatformFeePercent);
+  const current = getEventRevenuePolicy();
+  const fee =
+    updates.defaultPlatformFeePercent !== undefined
+      ? Number(updates.defaultPlatformFeePercent)
+      : current.defaultPlatformFeePercent;
+
   if (isNaN(fee) || fee < 0 || fee > 100) {
     throw new Error("Persentase komisi platform harus berupa angka valid antara 0% hingga 100%.");
   }
 
-  const current = getEventRevenuePolicy();
   const prevFee = current.defaultPlatformFeePercent;
   const now = new Date().toISOString();
 
-  const newHistoryEntry = {
-    id: `hist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    changedAt: now,
-    changedBy: actorName,
-    previousPlatformFeePercent: prevFee,
-    newPlatformFeePercent: fee,
-    reason: updates.policyNotes || `Penyesuaian komisi platform menjadi ${fee}% oleh ${actorName}`,
-  };
+  let historyEntry = null;
+  if (fee !== prevFee) {
+    historyEntry = {
+      id: `hist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      changedAt: now,
+      changedBy: actorName,
+      previousPlatformFeePercent: prevFee,
+      newPlatformFeePercent: fee,
+      reason: updates.policyNotes || `Penyesuaian komisi platform menjadi ${fee}% oleh ${actorName}`,
+    };
+  }
 
   const updated: EventRevenueSharingPolicy = {
     ...current,
     defaultPlatformFeePercent: fee,
     defaultOrganizerSharePercent: 100 - fee,
+    maxTicketsPerBooking:
+      typeof updates.maxTicketsPerBooking === "number" && updates.maxTicketsPerBooking > 0
+        ? updates.maxTicketsPerBooking
+        : current.maxTicketsPerBooking || 5,
+    activePaymentMethod: updates.activePaymentMethod || current.activePaymentMethod || "MANUAL_TRANSFER",
+    bookingPaymentExpiryMinutes:
+      typeof updates.bookingPaymentExpiryMinutes === "number" && updates.bookingPaymentExpiryMinutes > 0
+        ? updates.bookingPaymentExpiryMinutes
+        : current.bookingPaymentExpiryMinutes || 60,
+    allowOrganizerBankAccounts:
+      updates.allowOrganizerBankAccounts !== undefined
+        ? Boolean(updates.allowOrganizerBankAccounts)
+        : current.allowOrganizerBankAccounts,
+    allowEventBankOverride:
+      updates.allowEventBankOverride !== undefined
+        ? Boolean(updates.allowEventBankOverride)
+        : current.allowEventBankOverride,
+    paymentInstructions:
+      updates.paymentInstructions !== undefined
+        ? updates.paymentInstructions
+        : current.paymentInstructions,
+    allowedProofFormats:
+      Array.isArray(updates.allowedProofFormats)
+        ? updates.allowedProofFormats
+        : current.allowedProofFormats,
+    maxProofFileSizeMb:
+      typeof updates.maxProofFileSizeMb === "number" && updates.maxProofFileSizeMb > 0
+        ? updates.maxProofFileSizeMb
+        : current.maxProofFileSizeMb,
+    bankAccounts: Array.isArray(updates.bankAccounts) ? updates.bankAccounts : current.bankAccounts,
+    bankHistory: Array.isArray(updates.bankHistory) ? updates.bankHistory : current.bankHistory,
     effectiveDate: updates.effectiveDate || now,
     policyNotes: updates.policyNotes || current.policyNotes,
     updatedAt: now,
     updatedBy: actorName,
-    history: [newHistoryEntry, ...(current.history || [])],
+    history: historyEntry ? [historyEntry, ...(current.history || [])] : (current.history || []),
   };
 
-  try {
-    cachedPolicy = updated;
-    const settingsFile = getEventSettingsFile();
-    const dir = path.dirname(settingsFile);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(settingsFile, JSON.stringify(updated, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Failed to write event revenue policy to disk", err);
+  saveEventSettingsToDisk(updated);
+  return updated;
+}
+
+export const updateEventBusinessSettings = updateEventRevenuePolicy;
+
+export function calculateEventRevenueSplit(totalPrice: number, platformFeePercent: number = 20) {
+  const feePct = Math.max(0, Math.min(100, Number(platformFeePercent) || 0));
+  const platformFeeAmount = Math.round((totalPrice * feePct) / 100);
+  const organizerShareAmount = totalPrice - platformFeeAmount;
+  return {
+    grossRevenue: totalPrice,
+    platformFeePercent: feePct,
+    platformFeeAmount,
+    organizerSharePercent: 100 - feePct,
+    organizerShareAmount,
+  };
+}
+
+/**
+ * Returns the maximum ticket purchase limit per transaction.
+ * Priorities:
+ * 1. Ticket category limit (if defined)
+ * 2. Event-specific limit (event.maxTicketsPerBooking)
+ * 3. Platform default limit (policy.maxTicketsPerBooking, default 5)
+ */
+export function getMaxTicketsPerBooking(event?: CommunityEvent | null): number {
+  if (event && typeof event.maxTicketsPerBooking === "number" && event.maxTicketsPerBooking > 0) {
+    return Math.floor(event.maxTicketsPerBooking);
+  }
+  const policy = getEventRevenuePolicy();
+  if (typeof policy.maxTicketsPerBooking === "number" && policy.maxTicketsPerBooking > 0) {
+    return Math.floor(policy.maxTicketsPerBooking);
+  }
+  return 5;
+}
+
+/**
+ * Resolves destination bank account based on strict priority policies:
+ * Priority 1: Event-specific override account (if allowed & active)
+ * Priority 2: Platform default active account
+ * Priority 3: Any active platform account
+ * Priority 4: Approved active organizer account (if allowed)
+ * Returns null if no valid active account is available.
+ */
+export function resolveDestinationBankAccount(event?: CommunityEvent | null): EventBankAccountSnapshot | null {
+  const policy = getEventRevenuePolicy();
+  const bankAccounts = Array.isArray(policy.bankAccounts) ? policy.bankAccounts : DEFAULT_EVENT_BANK_ACCOUNTS;
+
+  // Priority 1: Event-specific override account
+  if (event?.destinationBankId) {
+    const overrideAccount = bankAccounts.find((b) => b.id === event.destinationBankId && b.isActive);
+    if (overrideAccount) {
+      const isPlatformOverrideAllowed =
+        overrideAccount.accountType === "PLATFORM" && policy.allowEventBankOverride !== false;
+      const isOrganizerApprovedAllowed =
+        overrideAccount.accountType === "ORGANIZER" &&
+        overrideAccount.approvalStatus === "APPROVED" &&
+        policy.allowOrganizerBankAccounts === true;
+
+      if (isPlatformOverrideAllowed || isOrganizerApprovedAllowed) {
+        return {
+          bankId: overrideAccount.id,
+          label: overrideAccount.label,
+          bankName: overrideAccount.bankName,
+          accountNumber: overrideAccount.accountNumber,
+          accountHolder: overrideAccount.accountHolder,
+          branch: overrideAccount.branch,
+          accountType: overrideAccount.accountType,
+        };
+      }
+    }
   }
 
+  // Priority 2: Platform default active account
+  const defaultPlatformAccount = bankAccounts.find(
+    (b) => b.isDefault && b.isActive && b.accountType === "PLATFORM"
+  );
+  if (defaultPlatformAccount) {
+    return {
+      bankId: defaultPlatformAccount.id,
+      label: defaultPlatformAccount.label,
+      bankName: defaultPlatformAccount.bankName,
+      accountNumber: defaultPlatformAccount.accountNumber,
+      accountHolder: defaultPlatformAccount.accountHolder,
+      branch: defaultPlatformAccount.branch,
+      accountType: defaultPlatformAccount.accountType,
+    };
+  }
+
+  // Priority 3: Any active platform account
+  const anyActivePlatform = bankAccounts.find((b) => b.isActive && b.accountType === "PLATFORM");
+  if (anyActivePlatform) {
+    return {
+      bankId: anyActivePlatform.id,
+      label: anyActivePlatform.label,
+      bankName: anyActivePlatform.bankName,
+      accountNumber: anyActivePlatform.accountNumber,
+      accountHolder: anyActivePlatform.accountHolder,
+      branch: anyActivePlatform.branch,
+      accountType: anyActivePlatform.accountType,
+    };
+  }
+
+  // Priority 4: Approved active organizer account
+  if (policy.allowOrganizerBankAccounts && event?.organizerEmail) {
+    const orgEmail = event.organizerEmail.trim().toLowerCase();
+    const organizerAccount = bankAccounts.find(
+      (b) =>
+        b.isActive &&
+        b.accountType === "ORGANIZER" &&
+        b.approvalStatus === "APPROVED" &&
+        (b.organizerEmail || "").trim().toLowerCase() === orgEmail
+    );
+    if (organizerAccount) {
+      return {
+        bankId: organizerAccount.id,
+        label: organizerAccount.label,
+        bankName: organizerAccount.bankName,
+        accountNumber: organizerAccount.accountNumber,
+        accountHolder: organizerAccount.accountHolder,
+        branch: organizerAccount.branch,
+        accountType: organizerAccount.accountType,
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Bank Accounts Management Functions
+ */
+export function getEventBankAccounts(): EventBankAccount[] {
+  const policy = getEventRevenuePolicy();
+  return Array.isArray(policy.bankAccounts) ? policy.bankAccounts : DEFAULT_EVENT_BANK_ACCOUNTS;
+}
+
+export function createEventBankAccount(
+  data: {
+    label: string;
+    bankName: string;
+    accountNumber: string;
+    accountHolder: string;
+    branch?: string;
+    badge?: string;
+    isDefault?: boolean;
+    accountType?: EventBankAccountType;
+    eventId?: string | null;
+    organizerEmail?: string | null;
+    approvalStatus?: EventBankAccountApprovalStatus;
+  },
+  actorName = "Admin Dago"
+): EventBankAccount {
+  if (!data.label || !data.bankName || !data.accountNumber || !data.accountHolder) {
+    throw new Error("Label rekening, nama bank, nomor rekening, dan nama pemilik rekening wajib diisi.");
+  }
+
+  const policy = getEventRevenuePolicy();
+  const currentAccounts = Array.isArray(policy.bankAccounts) ? [...policy.bankAccounts] : [...DEFAULT_EVENT_BANK_ACCOUNTS];
+
+  const cleanNumber = data.accountNumber.replace(/[^0-9]/g, "");
+  if (cleanNumber.length < 5) {
+    throw new Error("Nomor rekening bank harus terdiri dari minimal 5 digit angka.");
+  }
+
+  const isDuplicate = currentAccounts.some(
+    (b) =>
+      b.bankName.toLowerCase() === data.bankName.trim().toLowerCase() &&
+      b.accountNumber.replace(/[^0-9]/g, "") === cleanNumber
+  );
+  if (isDuplicate) {
+    throw new Error(`Rekening ${data.bankName} dengan nomor ${cleanNumber} sudah terdaftar.`);
+  }
+
+  const now = new Date().toISOString();
+  const shouldBeDefault = Boolean(data.isDefault) || currentAccounts.length === 0;
+
+  if (shouldBeDefault && (data.accountType || "PLATFORM") === "PLATFORM") {
+    currentAccounts.forEach((b) => {
+      if (b.accountType === "PLATFORM") b.isDefault = false;
+    });
+  }
+
+  const newAccount: EventBankAccount = {
+    id: `bank-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    label: data.label.trim(),
+    bankName: data.bankName.trim(),
+    accountNumber: cleanNumber,
+    accountHolder: data.accountHolder.trim(),
+    branch: data.branch ? data.branch.trim() : undefined,
+    badge: data.badge ? data.badge.trim() : undefined,
+    isDefault: shouldBeDefault,
+    isActive: true,
+    accountType: data.accountType || "PLATFORM",
+    eventId: data.eventId || null,
+    organizerEmail: data.organizerEmail ? data.organizerEmail.trim().toLowerCase() : null,
+    approvalStatus: data.approvalStatus || (data.accountType === "ORGANIZER" ? "PENDING" : undefined),
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  currentAccounts.push(newAccount);
+
+  const historyEntry: EventBankAccountHistoryEntry = {
+    id: `bhist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    changedAt: now,
+    changedBy: actorName,
+    action: "CREATE",
+    bankId: newAccount.id,
+    details: `Menambahkan rekening baru: ${newAccount.bankName} - ${newAccount.accountNumber} a.n. ${newAccount.accountHolder} (${newAccount.label})`,
+  };
+
+  policy.bankAccounts = currentAccounts;
+  policy.bankHistory = [historyEntry, ...(policy.bankHistory || [])];
+  saveEventSettingsToDisk(policy);
+
+  return newAccount;
+}
+
+export function updateEventBankAccount(
+  bankId: string,
+  updates: Partial<EventBankAccount>,
+  actorName = "Admin Dago"
+): EventBankAccount {
+  const policy = getEventRevenuePolicy();
+  const currentAccounts = Array.isArray(policy.bankAccounts) ? [...policy.bankAccounts] : [...DEFAULT_EVENT_BANK_ACCOUNTS];
+  const index = currentAccounts.findIndex((b) => b.id === bankId);
+  if (index === -1) {
+    throw new Error(`Rekening dengan ID ${bankId} tidak ditemukan.`);
+  }
+
+  const existing = currentAccounts[index];
+  const now = new Date().toISOString();
+
+  if (updates.isDefault && !existing.isDefault) {
+    currentAccounts.forEach((b) => {
+      if (b.accountType === existing.accountType) b.isDefault = false;
+    });
+  }
+
+  const updated: EventBankAccount = {
+    ...existing,
+    ...updates,
+    id: existing.id,
+    updatedAt: now,
+  };
+
+  currentAccounts[index] = updated;
+
+  const historyEntry: EventBankAccountHistoryEntry = {
+    id: `bhist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    changedAt: now,
+    changedBy: actorName,
+    action: updates.isDefault ? "SET_DEFAULT" : updates.isActive !== undefined ? "TOGGLE_ACTIVE" : "UPDATE",
+    bankId,
+    details: `Pembaruan rekening ${updated.bankName} - ${updated.accountNumber}: ${JSON.stringify(updates)}`,
+  };
+
+  policy.bankAccounts = currentAccounts;
+  policy.bankHistory = [historyEntry, ...(policy.bankHistory || [])];
+  saveEventSettingsToDisk(policy);
+
   return updated;
+}
+
+export function setDefaultEventBankAccount(bankId: string, actorName = "Admin Dago"): EventBankAccount {
+  const policy = getEventRevenuePolicy();
+  const currentAccounts = Array.isArray(policy.bankAccounts) ? [...policy.bankAccounts] : [...DEFAULT_EVENT_BANK_ACCOUNTS];
+  const target = currentAccounts.find((b) => b.id === bankId);
+  if (!target) {
+    throw new Error(`Rekening dengan ID ${bankId} tidak ditemukan.`);
+  }
+  if (!target.isActive) {
+    throw new Error("Rekening yang dinonaktifkan tidak dapat dijadikan rekening default platform.");
+  }
+
+  const now = new Date().toISOString();
+  currentAccounts.forEach((b) => {
+    b.isDefault = b.id === bankId;
+    b.updatedAt = now;
+  });
+
+  const historyEntry: EventBankAccountHistoryEntry = {
+    id: `bhist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    changedAt: now,
+    changedBy: actorName,
+    action: "SET_DEFAULT",
+    bankId,
+    details: `Menetapkan rekening ${target.bankName} - ${target.accountNumber} a.n. ${target.accountHolder} sebagai default platform.`,
+  };
+
+  policy.bankAccounts = currentAccounts;
+  policy.bankHistory = [historyEntry, ...(policy.bankHistory || [])];
+  saveEventSettingsToDisk(policy);
+
+  return target;
+}
+
+export function deleteEventBankAccount(bankId: string, actorName = "Admin Dago"): boolean {
+  const policy = getEventRevenuePolicy();
+  const currentAccounts = Array.isArray(policy.bankAccounts) ? [...policy.bankAccounts] : [...DEFAULT_EVENT_BANK_ACCOUNTS];
+  const target = currentAccounts.find((b) => b.id === bankId);
+  if (!target) {
+    throw new Error(`Rekening dengan ID ${bankId} tidak ditemukan.`);
+  }
+  if (target.isDefault) {
+    throw new Error("Rekening default platform tidak dapat dihapus. Silakan tetapkan rekening default lain terlebih dahulu.");
+  }
+
+  const now = new Date().toISOString();
+  policy.bankAccounts = currentAccounts.filter((b) => b.id !== bankId);
+
+  const historyEntry: EventBankAccountHistoryEntry = {
+    id: `bhist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    changedAt: now,
+    changedBy: actorName,
+    action: "DELETE",
+    bankId,
+    details: `Menghapus rekening ${target.bankName} - ${target.accountNumber} (${target.label}) dari sistem.`,
+  };
+
+  policy.bankHistory = [historyEntry, ...(policy.bankHistory || [])];
+  saveEventSettingsToDisk(policy);
+
+  return true;
 }
 
 // Default verified community events for Dago Creative Hub
@@ -414,6 +837,10 @@ export {
  * Strips private organizer email, phone, and admin audit notes.
  */
 export function toPublicEvent(event: CommunityEvent): PublicCommunityEvent {
+  const policy = getEventRevenuePolicy();
+  const maxLimit = getMaxTicketsPerBooking(event);
+  const destBank = resolveDestinationBankAccount(event);
+
   return {
     id: event.id,
     title: event.title,
@@ -431,6 +858,10 @@ export function toPublicEvent(event: CommunityEvent): PublicCommunityEvent {
     status: "APPROVED",
     guidelines: event.guidelines || null,
     createdAt: event.createdAt,
+    maxTicketsPerBooking: maxLimit,
+    destinationBank: destBank,
+    paymentInstructions: policy.paymentInstructions,
+    activePaymentMethod: policy.activePaymentMethod,
   };
 }
 
@@ -462,7 +893,7 @@ export function getEventTicketAvailability(eventId: string): EventTicketAvailabi
   expirePendingBookings();
   const allBookings = loadBookingsFromDisk();
   const activeBookings = allBookings.filter(
-    (b) => b.eventId === eventId && b.paymentStatus !== "CANCELLED"
+    (b) => b.eventId === eventId && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
   );
 
   const ticketsReserved = activeBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
@@ -694,6 +1125,14 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
     );
   }
 
+  const orgPct =
+    typeof payload.proposedOrganizerPercent === "number" &&
+    payload.proposedOrganizerPercent >= 0 &&
+    payload.proposedOrganizerPercent <= 100
+      ? Number(payload.proposedOrganizerPercent)
+      : 80;
+  const pltPct = 100 - orgPct;
+
   const newEvent: CommunityEvent = {
     id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     title: sanitizeHtmlText(payload.title),
@@ -708,6 +1147,11 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
       payload.maxCapacity > 0
         ? payload.maxCapacity
         : undefined,
+    maxTicketsPerBooking:
+      typeof payload.maxTicketsPerBooking === "number" && payload.maxTicketsPerBooking > 0
+        ? Math.floor(payload.maxTicketsPerBooking)
+        : undefined,
+    destinationBankId: payload.destinationBankId || null,
     isPaid: Boolean(payload.isPaid),
     price: payload.isPaid ? Number(payload.price || 0) : 0,
     posterUrl: payload.posterUrl.trim(),
@@ -717,6 +1161,39 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
     organizerPhone: payload.organizerPhone.trim(),
     guidelines: parseGuidelinesInput(payload.guidelines),
     status: "PENDING", // Always PENDING on submission
+
+    // Collaboration requirements
+    collaborationFacilities: Array.isArray(payload.collaborationFacilities)
+      ? payload.collaborationFacilities.map((f) => sanitizeHtmlText(String(f)))
+      : typeof payload.collaborationFacilities === "string"
+      ? payload.collaborationFacilities.split(",").map((f) => sanitizeHtmlText(f.trim())).filter(Boolean)
+      : null,
+    collaborationPromotion: Array.isArray(payload.collaborationPromotion)
+      ? payload.collaborationPromotion.map((p) => sanitizeHtmlText(String(p)))
+      : typeof payload.collaborationPromotion === "string"
+      ? sanitizeHtmlText(payload.collaborationPromotion)
+      : null,
+    collaborationNotes: payload.collaborationNotes ? sanitizeHtmlText(payload.collaborationNotes) : null,
+
+    // Revenue sharing proposal
+    organizerFeePercent: orgPct,
+    customPlatformFeePercent: pltPct,
+    proposedRevenueSplit:
+      payload.proposedOrganizerPercent !== undefined
+        ? {
+            organizerPercent: orgPct,
+            platformPercent: pltPct,
+            proposedBy: "ORGANIZER",
+            reason: sanitizeHtmlText(payload.revenueSplitReason || "Usulan bagi hasil awal saat pengajuan event"),
+            status: "PENDING",
+            proposedAt: new Date().toISOString(),
+            counterProposal: null,
+          }
+        : null,
+    revenueSplitHistory: [],
+    payoutStatus: "UNQUALIFIED",
+    payoutHistory: [],
+
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -755,6 +1232,42 @@ export async function updateEventStatus(
     revisionNotes: options?.revisionNotes !== undefined ? options.revisionNotes : existing.revisionNotes,
     updatedAt: new Date().toISOString(),
   };
+
+  // If approved, ensure organizer profile is registered and active
+  if (status === "APPROVED") {
+    ensureOrganizerActive({
+      email: existing.organizerEmail,
+      name: existing.organizerName,
+      category: existing.category,
+      phone: existing.organizerPhone,
+      notes: `Penyelenggara aktif resmi dari event disetujui: ${existing.title}`,
+    });
+
+    // If there was a pending proposal by organizer, approve it into revenueSplitHistory
+    if (existing.proposedRevenueSplit && existing.proposedRevenueSplit.status === "PENDING") {
+      const split = existing.proposedRevenueSplit;
+      updated.organizerFeePercent = split.organizerPercent;
+      updated.customPlatformFeePercent = split.platformPercent;
+      updated.proposedRevenueSplit = {
+        ...split,
+        status: "ACCEPTED",
+      };
+      const hist = existing.revenueSplitHistory || [];
+      hist.push({
+        id: `rev-split-${Date.now()}`,
+        previousOrganizerPercent: 80,
+        previousPlatformPercent: 20,
+        newOrganizerPercent: split.organizerPercent,
+        newPlatformPercent: split.platformPercent,
+        proposedBy: split.proposedBy,
+        reason: split.reason || "Disepakati bersama saat persetujuan event",
+        approvedBy: "Platform Curator Admin",
+        approvedAt: new Date().toISOString(),
+        effectiveDate: new Date().toISOString(),
+      });
+      updated.revenueSplitHistory = hist;
+    }
+  }
 
   all[index] = updated;
   saveEventsToDisk(all);
@@ -1033,10 +1546,29 @@ export function saveBookingsToDisk(bookings: EventTicketOrder[]): void {
 export const BOOKING_PAYMENT_EXPIRY_MS = 60 * 60 * 1000;
 
 /**
- * Checks and cancels expired unpaid bookings older than the payment window.
- * Releases ticket quota immediately. Idempotent and safe to run concurrently.
+ * Returns the configurable payment expiration window in milliseconds.
+ * Centralizes duration across booking and expiration workflows.
  */
-export function expirePendingBookings(maxAgeMs = BOOKING_PAYMENT_EXPIRY_MS): number {
+export function getBookingPaymentExpiryMs(): number {
+  try {
+    const policy = getEventRevenuePolicy();
+    if (typeof policy.bookingPaymentExpiryMinutes === "number" && policy.bookingPaymentExpiryMinutes > 0) {
+      return policy.bookingPaymentExpiryMinutes * 60 * 1000;
+    }
+  } catch {}
+  return BOOKING_PAYMENT_EXPIRY_MS;
+}
+
+/**
+ * Checks and cancels/expires unpaid bookings older than the payment window.
+ * Releases ticket quota immediately. Idempotent and safe to run concurrently.
+ * Strictly guarantees that PAID tickets NEVER expire.
+ */
+export function expirePendingBookings(
+  maxAgeMs?: number,
+  targetStatus: TicketPaymentStatus = "EXPIRED"
+): number {
+  const expiryWindow = typeof maxAgeMs === "number" && maxAgeMs > 0 ? maxAgeMs : getBookingPaymentExpiryMs();
   const allBookings = loadBookingsFromDisk();
   const now = Date.now();
   let modified = false;
@@ -1044,12 +1576,16 @@ export function expirePendingBookings(maxAgeMs = BOOKING_PAYMENT_EXPIRY_MS): num
 
   for (let i = 0; i < allBookings.length; i++) {
     const b = allBookings[i];
+    // Strict invariant: PAID tickets MUST NEVER expire! Only unpaid PENDING bookings can expire.
     if (b.paymentStatus === "PENDING" && b.totalPrice > 0) {
       const createdMs = new Date(b.createdAt).getTime();
-      if (!isNaN(createdMs) && now - createdMs > maxAgeMs) {
+      const expiresAtMs = b.expiresAt ? new Date(b.expiresAt).getTime() : NaN;
+      const isExpiredByTimestamp = !isNaN(expiresAtMs) && now > expiresAtMs;
+      const isExpiredByWindow = !isNaN(createdMs) && now - createdMs > expiryWindow;
+      if (isExpiredByTimestamp || isExpiredByWindow) {
         allBookings[i] = {
           ...b,
-          paymentStatus: "CANCELLED",
+          paymentStatus: targetStatus,
           updatedAt: new Date().toISOString(),
         };
         modified = true;
@@ -1128,13 +1664,15 @@ export function validateEventBooking(
   }
 
   // Ticket count
+  const maxAllowed = getMaxTicketsPerBooking(event);
   if (
     typeof payload.ticketCount !== "number" ||
     isNaN(payload.ticketCount) ||
+    !Number.isInteger(payload.ticketCount) ||
     payload.ticketCount < 1 ||
-    payload.ticketCount > 10
+    payload.ticketCount > maxAllowed
   ) {
-    errors.push("Jumlah pemesanan tiket harus antara 1 sampai 10 tiket per transaksi.");
+    errors.push(`Jumlah pemesanan tiket harus antara 1 sampai ${maxAllowed} tiket per transaksi.`);
   }
 
   return {
@@ -1172,7 +1710,7 @@ export async function createEventBooking(
     expirePendingBookings();
     const allBookings = loadBookingsFromDisk();
     const activeBookings = allBookings.filter(
-      (b) => b.eventId === event.id && b.paymentStatus !== "CANCELLED"
+      (b) => b.eventId === event.id && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
     );
 
     // 1. Quota & Venue Capacity Check
@@ -1201,7 +1739,7 @@ export async function createEventBooking(
       );
     }
 
-    const ticketCount = Math.max(1, Math.min(10, Math.floor(payload.ticketCount)));
+    const ticketCount = Math.floor(payload.ticketCount);
     const unitPrice = event.isPaid ? Number(event.price || 0) : 0;
     const totalPrice = unitPrice * ticketCount;
 
@@ -1219,7 +1757,21 @@ export async function createEventBooking(
     // - PAID tickets MUST start as PENDING until confirmed/verified by organizer or admin.
     const isFree = totalPrice === 0;
     const paymentStatus: TicketPaymentStatus = isFree ? "PAID" : "PENDING";
-    const paymentMethod: TicketPaymentMethod = isFree ? "FREE" : payload.paymentMethod || "TRANSFER";
+    const paymentMethod: TicketPaymentMethod = isFree
+      ? "FREE"
+      : payload.paymentMethod || (policy.activePaymentMethod === "MANUAL_TRANSFER" ? "MANUAL_TRANSFER" : "TRANSFER");
+
+    // Destination bank resolution & snapshot for paid bookings
+    let destinationBankSnapshot: EventBankAccountSnapshot | undefined = undefined;
+    if (!isFree) {
+      const resolvedBank = resolveDestinationBankAccount(event);
+      if (!resolvedBank) {
+        throw new Error(
+          "Metode pembayaran transfer bank belum dapat diproses karena tidak ada rekening pembayaran aktif yang tersedia pada sistem. Silakan hubungi admin platform."
+        );
+      }
+      destinationBankSnapshot = resolvedBank;
+    }
 
     // Generate unique human-readable ticket code e.g. DAGO-EVT-92812
     const randomSuffix = Math.floor(10000 + Math.random() * 90000);
@@ -1247,6 +1799,7 @@ export async function createEventBooking(
       paymentMethod,
       paymentStatus,
       checkInStatus: "REGISTERED",
+      destinationBankSnapshot,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -1312,7 +1865,7 @@ export async function updateBookingCheckIn(
       );
     }
 
-    // 2. Tolak check-in jika tiket berstatus CANCELLED
+    // 2. Tolak check-in jika tiket berstatus CANCELLED atau EXPIRED
     if (
       existing.paymentStatus === "CANCELLED" &&
       (status === "CHECKED_IN" ||
@@ -1320,6 +1873,14 @@ export async function updateBookingCheckIn(
         (options?.incrementQty ?? 0) > 0)
     ) {
       throw new Error("Tiket dengan status CANCELLED tidak dapat digunakan untuk check-in.");
+    }
+    if (
+      existing.paymentStatus === "EXPIRED" &&
+      (status === "CHECKED_IN" ||
+        status === "PARTIALLY_CHECKED_IN" ||
+        (options?.incrementQty ?? 0) > 0)
+    ) {
+      throw new Error("Tiket dengan status EXPIRED tidak dapat digunakan untuk check-in.");
     }
 
     // 3. Tolak check-in jika tiket berbayar belum diverifikasi lunas (status masih PENDING)
@@ -1399,11 +1960,18 @@ export async function updateBookingCheckIn(
 }
 
 /**
- * Updates ticket payment status (e.g. PAID or CANCELLED).
+/**
+ * Updates ticket payment status (e.g. PAID or CANCELLED) with optional audit details.
  */
 export async function updateBookingPaymentStatus(
   bookingId: string,
-  status: TicketPaymentStatus
+  status: TicketPaymentStatus,
+  options?: {
+    rejectionReason?: string | null;
+    actorName?: string;
+    verificationNote?: string | null;
+    reason?: string;
+  }
 ): Promise<EventTicketOrder> {
   const allBookings = loadBookingsFromDisk();
   const index = allBookings.findIndex((b) => b.id === bookingId);
@@ -1413,7 +1981,7 @@ export async function updateBookingPaymentStatus(
 
   const existing = allBookings[index];
 
-  // Two-Step Reversal Guard (Opsi A):
+  // Two-Step Reversal Guard:
   // Tolak pembatalan pembayaran jika tiket masih tercatat hadir (CHECKED_IN)
   if (status === "CANCELLED" && existing.checkInStatus === "CHECKED_IN") {
     throw new Error(
@@ -1421,11 +1989,16 @@ export async function updateBookingPaymentStatus(
     );
   }
 
+  const now = new Date().toISOString();
   const updated: EventTicketOrder = {
     ...existing,
     paymentStatus: status,
-    paidAt: status === "PAID" ? existing.paidAt || new Date().toISOString() : existing.paidAt,
-    updatedAt: new Date().toISOString(),
+    paidAt: status === "PAID" ? existing.paidAt || now : existing.paidAt,
+    paymentVerifiedAt: (status === "PAID" || options?.rejectionReason) ? now : existing.paymentVerifiedAt,
+    paymentVerifiedBy: options?.actorName || existing.paymentVerifiedBy,
+    paymentVerificationNote: options?.verificationNote !== undefined ? options.verificationNote : existing.paymentVerificationNote,
+    paymentRejectionReason: options?.rejectionReason !== undefined ? options.rejectionReason : (status === "PAID" ? null : existing.paymentRejectionReason),
+    updatedAt: now,
   };
 
   allBookings[index] = updated;
@@ -1463,17 +2036,36 @@ export const MANUAL_TRANSFER_BANK_ACCOUNTS = [
 
 /**
  * Updates booking with proof of payment (bukti transfer) uploaded by customer or admin.
+ * Rejects uploads for EXPIRED, CANCELLED, or already PAID bookings.
+ * Does NOT automatically mark booking as PAID.
  */
 export async function updateBookingPaymentProof(
-  identifier: { bookingId?: string; guestToken?: string },
-  proofData: { paymentProofUrl: string; paymentProofNote?: string }
+  identifier: string | { bookingId?: string; guestToken?: string },
+  proofData: string | { paymentProofUrl: string; paymentProofNote?: string }
 ): Promise<EventTicketOrder> {
+  const normalizedId =
+    typeof identifier === "string"
+      ? { bookingId: identifier, guestToken: identifier }
+      : identifier;
+  const normalizedProof =
+    typeof proofData === "string"
+      ? { paymentProofUrl: proofData }
+      : proofData;
+
+  if (
+    !normalizedProof.paymentProofUrl ||
+    typeof normalizedProof.paymentProofUrl !== "string" ||
+    !normalizedProof.paymentProofUrl.trim()
+  ) {
+    throw new Error("URL atau data bukti transfer tidak valid.");
+  }
+
   const allBookings = loadBookingsFromDisk();
   const index = allBookings.findIndex((b) =>
-    identifier.bookingId
-      ? b.id === identifier.bookingId
-      : identifier.guestToken
-      ? b.guestToken === identifier.guestToken
+    normalizedId.bookingId && b.id === normalizedId.bookingId
+      ? true
+      : normalizedId.guestToken && b.guestToken === normalizedId.guestToken
+      ? true
       : false
   );
 
@@ -1482,11 +2074,23 @@ export async function updateBookingPaymentProof(
   }
 
   const existing = allBookings[index];
+
+  if (existing.paymentStatus === "EXPIRED") {
+    throw new Error("Pemesanan tiket telah kedaluwarsa. Bukti transfer tidak dapat diunggah.");
+  }
+  if (existing.paymentStatus === "CANCELLED") {
+    throw new Error("Pemesanan tiket telah dibatalkan. Bukti transfer tidak dapat diunggah.");
+  }
+  if (existing.paymentStatus === "PAID") {
+    throw new Error("Pemesanan tiket telah lunas terverifikasi.");
+  }
+
   const updated: EventTicketOrder = {
     ...existing,
-    paymentProofUrl: proofData.paymentProofUrl,
-    paymentProofNote: proofData.paymentProofNote || existing.paymentProofNote,
+    paymentProofUrl: normalizedProof.paymentProofUrl,
+    paymentProofNote: normalizedProof.paymentProofNote || existing.paymentProofNote,
     paymentProofUploadedAt: new Date().toISOString(),
+    paymentRejectionReason: null, // Clear any previous rejection upon new upload
     paymentMethod: "TRANSFER",
     updatedAt: new Date().toISOString(),
   };
@@ -1495,6 +2099,64 @@ export async function updateBookingPaymentProof(
   saveBookingsToDisk(allBookings);
 
   return updated;
+}
+
+/**
+ * Approves a booking's payment (Admin or authorized verifier).
+ * Idempotent: If already PAID, returns existing booking without re-crediting or error.
+ */
+export async function adminApproveBookingPayment(
+  bookingId: string,
+  verificationNote?: string,
+  actorName = "Admin Dago"
+): Promise<EventTicketOrder> {
+  const booking = await getBookingById(bookingId);
+  if (!booking) {
+    throw new Error(`Pemesanan tiket dengan ID ${bookingId} tidak ditemukan.`);
+  }
+  if (booking.paymentStatus === "PAID") {
+    return booking; // Idempotent
+  }
+  if (booking.paymentStatus === "CANCELLED" || booking.paymentStatus === "EXPIRED") {
+    throw new Error(`Pemesanan tiket dengan status ${booking.paymentStatus} tidak dapat disetujui pembayarannya.`);
+  }
+
+  return updateBookingPaymentStatus(bookingId, "PAID", {
+    verificationNote,
+    actorName,
+    rejectionReason: null,
+  });
+}
+
+/**
+ * Rejects a booking's payment proof (Admin or authorized verifier).
+ * Mandatory rejectionReason.
+ * If cancelBooking is true, sets status to CANCELLED (releases quota).
+ * If cancelBooking is false, keeps status PENDING with rejection reason so attendee can re-upload proof within expiry.
+ */
+export async function adminRejectBookingPayment(
+  bookingId: string,
+  rejectionReason: string,
+  options?: { cancelBooking?: boolean },
+  actorName = "Admin Dago"
+): Promise<EventTicketOrder> {
+  if (!rejectionReason || !rejectionReason.trim()) {
+    throw new Error("Alasan penolakan bukti pembayaran wajib disertakan.");
+  }
+
+  const booking = await getBookingById(bookingId);
+  if (!booking) {
+    throw new Error(`Pemesanan tiket dengan ID ${bookingId} tidak ditemukan.`);
+  }
+  if (booking.paymentStatus === "PAID") {
+    throw new Error("Pemesanan tiket yang sudah lunas (PAID) tidak dapat ditolak pembayarannya secara langsung.");
+  }
+
+  const targetStatus: TicketPaymentStatus = options?.cancelBooking ? "CANCELLED" : "PENDING";
+  return updateBookingPaymentStatus(bookingId, targetStatus, {
+    rejectionReason: rejectionReason.trim(),
+    actorName,
+  });
 }
 
 /**
@@ -1534,17 +2196,20 @@ export async function getEventOperationalStats(): Promise<EventOperationalStats>
  * Returns only events and attendees belonging to the verified organizer.
  */
 export async function getOrganizerPortalData(
-  organizerEmail: string
+  organizerEmail: string,
+  isAdmin: boolean = false
 ): Promise<OrganizerPortalData> {
   const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
-  if (!normalizedEmail || !normalizedEmail.includes("@")) {
+  if (!isAdmin && (!normalizedEmail || !normalizedEmail.includes("@"))) {
     throw new Error("Alamat email penyelenggara tidak valid.");
   }
 
   const allEvents = loadEventsFromDisk();
-  const myEvents = allEvents.filter(
-    (e) => (e.organizerEmail || "").toLowerCase() === normalizedEmail
-  );
+  const myEvents = (isAdmin && normalizedEmail === "all_admin")
+    ? allEvents
+    : allEvents.filter(
+        (e) => (e.organizerEmail || "").toLowerCase() === normalizedEmail
+      );
 
   const eventIds = new Set(myEvents.map((e) => e.id));
   const allBookings = loadBookingsFromDisk();
@@ -1573,11 +2238,42 @@ export async function getOrganizerPortalData(
   const paidBookings = myBookings.filter((b) => b.paymentStatus === "PAID");
   const totalTicketsSold = paidBookings.reduce((sum, b) => sum + b.ticketCount, 0);
   const totalAttendees = paidBookings.length;
-  const grossRevenue = paidBookings.reduce((sum, b) => sum + b.totalPrice, 0);
+  // Gross revenue: total value of all ticket orders placed (including pending and cancelled)
+  const grossRevenue = myBookings.reduce((sum, b) => sum + b.totalPrice, 0);
+  // Eligible revenue: strictly verified PAID ticket bookings eligible for revenue share
+  const eligibleRevenue = paidBookings.reduce((sum, b) => sum + b.totalPrice, 0);
   const platformFeeAmount = paidBookings.reduce((sum, b) => sum + b.platformFeeAmount, 0);
   const organizerPayoutAmount = paidBookings.reduce((sum, b) => sum + b.organizerRevenueAmount, 0);
 
-  const organizerName = myEvents[0]?.organizerName || "Komunitas Kreatif";
+  let requestedPayoutAmount = 0;
+  let paidPayoutAmount = 0;
+
+  myEvents.forEach((e) => {
+    if (e.payoutHistory && Array.isArray(e.payoutHistory)) {
+      e.payoutHistory.forEach((p) => {
+        if (p.status === "REQUESTED" || p.status === "PROCESSING") {
+          requestedPayoutAmount += p.amount;
+        } else if (p.status === "PAID") {
+          paidPayoutAmount += p.amount;
+        }
+      });
+    }
+  });
+
+  const availablePayoutAmount = Math.max(0, organizerPayoutAmount - paidPayoutAmount - requestedPayoutAmount);
+  const payoutStatus: OrganizerPayoutStatus =
+    requestedPayoutAmount > 0
+      ? "REQUESTED"
+      : paidPayoutAmount > 0 && availablePayoutAmount === 0
+      ? "PAID"
+      : availablePayoutAmount > 0
+      ? "AVAILABLE"
+      : "UNELIGIBLE";
+
+  const organizerName =
+    (isAdmin && normalizedEmail === "all_admin")
+      ? "Platform DAGO & Seluruh Komunitas"
+      : myEvents[0]?.organizerName || "Komunitas Kreatif";
 
   return {
     summary: {
@@ -1590,8 +2286,13 @@ export async function getOrganizerPortalData(
       totalAttendees,
       totalTicketsSold,
       grossRevenue,
+      eligibleRevenue,
       platformFeeAmount,
       organizerPayoutAmount,
+      availablePayoutAmount,
+      requestedPayoutAmount,
+      paidPayoutAmount,
+      payoutStatus,
     },
     events: myEvents,
     bookings: myBookings,
@@ -1653,6 +2354,23 @@ export async function organizerResubmitEvent(
     throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk mengubah event milik komunitas lain.");
   }
 
+  let updatedProposedRevenueSplit = existing.proposedRevenueSplit;
+  if (
+    typeof updates.proposedOrganizerPercent === "number" &&
+    typeof updates.proposedPlatformPercent === "number" &&
+    updates.proposedOrganizerPercent + updates.proposedPlatformPercent === 100
+  ) {
+    updatedProposedRevenueSplit = {
+      id: `split-prop-${Date.now()}`,
+      proposedBy: "ORGANIZER",
+      organizerPercent: updates.proposedOrganizerPercent,
+      platformPercent: updates.proposedPlatformPercent,
+      reason: updates.revenueSplitReason || existing.proposedRevenueSplit?.reason || "Usulan saat revisi proposal",
+      status: "PENDING",
+      createdAt: new Date().toISOString(),
+    };
+  }
+
   const updated: CommunityEvent = {
     ...existing,
     title: updates.title ? sanitizeHtmlText(updates.title) : existing.title,
@@ -1667,6 +2385,10 @@ export async function organizerResubmitEvent(
     posterUrl: updates.posterUrl ? updates.posterUrl.trim() : existing.posterUrl,
     externalRegistrationUrl: updates.externalRegistrationUrl !== undefined ? updates.externalRegistrationUrl : existing.externalRegistrationUrl,
     guidelines: updates.guidelines ? parseGuidelinesInput(updates.guidelines) : existing.guidelines,
+    collaborationFacilities: updates.collaborationFacilities !== undefined ? updates.collaborationFacilities : existing.collaborationFacilities,
+    collaborationPromotion: updates.collaborationPromotion !== undefined ? updates.collaborationPromotion : existing.collaborationPromotion,
+    collaborationNotes: typeof updates.collaborationNotes === "string" ? sanitizeHtmlText(updates.collaborationNotes) : existing.collaborationNotes,
+    proposedRevenueSplit: updatedProposedRevenueSplit,
     status: "PENDING", // Back to review queue
     revisionNotes: null, // Cleared on resubmission
     updatedAt: new Date().toISOString(),
@@ -1676,4 +2398,343 @@ export async function organizerResubmitEvent(
   saveEventsToDisk(all);
 
   return updated;
+}
+
+/**
+ * Propose a revenue split percentage change for an event.
+ * Can be initiated by ORGANIZER or DAGO_ADMIN.
+ * Total percentage must be strictly 100%.
+ */
+export async function proposeEventRevenueSplit(
+  eventId: string,
+  proposedBy: RevenueSplitParty,
+  organizerPercent: number,
+  platformPercent: number,
+  reason: string,
+  actorEmail: string,
+  isAdmin: boolean = false
+): Promise<CommunityEvent> {
+  if (organizerPercent + platformPercent !== 100) {
+    throw new Error("Total persentase bagi hasil harus tepat 100%.");
+  }
+  if (organizerPercent < 0 || platformPercent < 0 || organizerPercent > 100 || platformPercent > 100) {
+    throw new Error("Persentase harus berada di antara 0% dan 100%.");
+  }
+
+  const all = loadEventsFromDisk();
+  const index = all.findIndex((e) => e.id === eventId);
+  if (index === -1) {
+    throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
+  }
+
+  const event = all[index];
+  const normalizedActorEmail = (actorEmail || "").trim().toLowerCase();
+  const normalizedOrganizerEmail = (event.organizerEmail || "").trim().toLowerCase();
+
+  const isDagoAdminParty = proposedBy === "DAGO_ADMIN" || (proposedBy as string) === "ADMIN";
+
+  if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
+    throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk mengusulkan bagi hasil event ini.");
+  }
+  if (isDagoAdminParty && !isAdmin) {
+    throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat mengusulkan bagi hasil atas nama Dago.");
+  }
+
+  const newProposal: ProposedRevenueSplit = {
+    id: `split-prop-${Date.now()}`,
+    proposedBy,
+    organizerPercent,
+    platformPercent,
+    reason: sanitizeHtmlText(reason || "Usulan penyesuaian bagi hasil"),
+    status: "PENDING",
+    createdAt: new Date().toISOString(),
+    proposedAt: new Date().toISOString(),
+  };
+
+  event.proposedRevenueSplit = newProposal;
+  event.updatedAt = new Date().toISOString();
+
+  all[index] = event;
+  saveEventsToDisk(all);
+
+  return event;
+}
+
+/**
+ * Respond to a pending revenue split proposal (ACCEPT, REJECT, or COUNTER).
+ * Only the opposite party or authorized Admin can respond.
+ */
+export async function respondToEventRevenueSplit(
+  eventId: string,
+  decision: "ACCEPT" | "REJECT" | "COUNTER",
+  respondingParty: RevenueSplitParty,
+  actorName: string,
+  counterOffer?: { organizerPercent: number; platformPercent: number; reason: string },
+  actorEmail?: string,
+  isAdmin: boolean = false
+): Promise<CommunityEvent> {
+  const all = loadEventsFromDisk();
+  const index = all.findIndex((e) => e.id === eventId);
+  if (index === -1) {
+    throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
+  }
+
+  const event = all[index];
+  const normalizedActorEmail = (actorEmail || "").trim().toLowerCase();
+  const normalizedOrganizerEmail = (event.organizerEmail || "").trim().toLowerCase();
+
+  const isDagoAdminParty = respondingParty === "DAGO_ADMIN" || (respondingParty as string) === "ADMIN";
+
+  if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
+    throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk merespons bagi hasil event ini.");
+  }
+  if (isDagoAdminParty && !isAdmin) {
+    throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat merespons kesepakatan atas nama Dago.");
+  }
+
+  const pendingProposal = event.proposedRevenueSplit;
+  if (!pendingProposal && decision !== "COUNTER") {
+    throw new Error("Tidak ada usulan bagi hasil yang sedang aktif untuk direspons.");
+  }
+
+  const now = new Date().toISOString();
+
+  if (decision === "ACCEPT" && pendingProposal) {
+    const isProposerSameParty =
+      (pendingProposal.proposedBy === "ORGANIZER" && respondingParty === "ORGANIZER") ||
+      ((pendingProposal.proposedBy === "DAGO_ADMIN" || (pendingProposal.proposedBy as string) === "ADMIN") && isDagoAdminParty);
+    if (isProposerSameParty) {
+      throw new Error("Pihak yang mengajukan usulan tidak dapat menyetujui usulannya sendiri. Menunggu tanggapan dari pihak lawan.");
+    }
+
+    const prevOrganizerPercent = event.organizerFeePercent ?? 80;
+    const prevPlatformPercent = event.customPlatformFeePercent ?? 20;
+
+    const historyEntry: RevenueSplitAgreementHistory = {
+      id: `rev-hist-${Date.now()}`,
+      previousOrganizerPercent: prevOrganizerPercent,
+      previousPlatformPercent: prevPlatformPercent,
+      newOrganizerPercent: pendingProposal.organizerPercent,
+      newPlatformPercent: pendingProposal.platformPercent,
+      agreedOrganizerPercent: pendingProposal.organizerPercent,
+      agreedPlatformPercent: pendingProposal.platformPercent,
+      proposedBy: pendingProposal.proposedBy,
+      reason: pendingProposal.reason || "Kesepakatan bagi hasil disetujui",
+      approvedBy: actorName || (isDagoAdminParty ? "Admin Dago" : event.organizerName),
+      approvedAt: now,
+      agreedBy: actorName || (isDagoAdminParty ? "Admin Dago" : event.organizerName),
+      agreedAt: now,
+      effectiveDate: now,
+      notes: pendingProposal.reason || `Disetujui oleh ${isDagoAdminParty ? "Admin Dago" : "Penyelenggara"}`,
+    };
+
+    event.revenueSplitHistory = [historyEntry, ...(event.revenueSplitHistory || [])];
+    event.organizerFeePercent = pendingProposal.organizerPercent;
+    event.customPlatformFeePercent = pendingProposal.platformPercent;
+    event.proposedRevenueSplit = null;
+    event.updatedAt = now;
+  } else if (decision === "REJECT") {
+    // Rejection keeps active agreement intact
+    if (pendingProposal) {
+      pendingProposal.status = "REJECTED";
+      event.proposedRevenueSplit = null;
+      event.updatedAt = now;
+    }
+  } else if (decision === "COUNTER") {
+    if (!counterOffer) {
+      throw new Error("Rincian penawaran tandingan wajib disertakan.");
+    }
+    if (counterOffer.organizerPercent + counterOffer.platformPercent !== 100) {
+      throw new Error("Total penawaran tandingan harus tepat 100%.");
+    }
+
+    event.proposedRevenueSplit = {
+      id: `split-counter-${Date.now()}`,
+      proposedBy: respondingParty,
+      organizerPercent: counterOffer.organizerPercent,
+      platformPercent: counterOffer.platformPercent,
+      reason: sanitizeHtmlText(counterOffer.reason || "Penawaran tandingan bagi hasil"),
+      status: "PENDING",
+      createdAt: now,
+      proposedAt: now,
+    };
+    event.updatedAt = now;
+  }
+
+  all[index] = event;
+  saveEventsToDisk(all);
+
+  return event;
+}
+
+/**
+ * Request a payout for an event.
+ * Calculates available balance and records payout request.
+ */
+export async function requestOrganizerPayout(
+  organizerEmail: string,
+  eventId: string,
+  amount: number,
+  bankDetails: { bankName: string; accountNumber: string; accountHolder: string },
+  notes?: string,
+  isAdmin: boolean = false
+): Promise<{ event: CommunityEvent; payout: PayoutRecord }> {
+  return withEventLock(async () => {
+    const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
+    const all = loadEventsFromDisk();
+    const index = all.findIndex((e) => e.id === eventId);
+    if (index === -1) {
+      throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
+    }
+
+    const event = all[index];
+    if (!isAdmin && (event.organizerEmail || "").toLowerCase() !== normalizedEmail) {
+      throw new Error("FORBIDDEN: Anda tidak memiliki akses ke event ini.");
+    }
+
+    // Double-payout prevention: Disallow new request if there is already a pending or processing request
+    const hasPendingPayout = event.payoutHistory?.some(
+      (p) => p.status === "REQUESTED" || p.status === "PROCESSING"
+    );
+    if (hasPendingPayout) {
+      throw new Error(
+        "Masih terdapat pengajuan pencairan dana yang sedang menunggu verifikasi atau diproses untuk event ini. Harap tunggu hingga proses selesai sebelum mengajukan pencairan baru."
+      );
+    }
+
+    // Calculate event available earnings strictly from verified PAID bookings
+    const allBookings = loadBookingsFromDisk();
+    const eventPaidBookings = allBookings.filter(
+      (b) => b.eventId === eventId && b.paymentStatus === "PAID"
+    );
+    const totalOrganizerEarnings = eventPaidBookings.reduce(
+      (sum, b) => sum + (b.organizerRevenueAmount || 0),
+      0
+    );
+
+    let committedPayouts = 0;
+    if (event.payoutHistory && Array.isArray(event.payoutHistory)) {
+      event.payoutHistory.forEach((p) => {
+        if (p.status === "REQUESTED" || p.status === "PROCESSING" || p.status === "PAID") {
+          committedPayouts += p.amount;
+        }
+      });
+    }
+
+    const availableAmount = Math.max(0, totalOrganizerEarnings - committedPayouts);
+
+    if (amount <= 0) {
+      throw new Error("Nominal pencairan harus lebih besar dari Rp 0.");
+    }
+    if (amount > availableAmount) {
+      throw new Error(
+        `Nominal pencairan (Rp ${amount.toLocaleString("id-ID")}) melebihi saldo yang tersedia untuk event ini (Rp ${availableAmount.toLocaleString("id-ID")}).`
+      );
+    }
+    if (!bankDetails.bankName || !bankDetails.accountNumber || !bankDetails.accountHolder) {
+      throw new Error("Informasi rekening bank penerima wajib diisi lengkap.");
+    }
+
+    const now = new Date().toISOString();
+    const newPayout: PayoutRecord = {
+      id: `pay-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      eventId,
+      amount,
+      status: "REQUESTED",
+      bankName: bankDetails.bankName.trim(),
+      accountNumber: bankDetails.accountNumber.trim(),
+      accountHolder: bankDetails.accountHolder.trim(),
+      requestedAt: now,
+      notes: notes ? sanitizeHtmlText(notes) : undefined,
+    };
+
+    event.payoutHistory = [newPayout, ...(event.payoutHistory || [])];
+    event.payoutStatus = "REQUESTED";
+    event.updatedAt = now;
+
+    all[index] = event;
+    saveEventsToDisk(all);
+
+    return { event, payout: newPayout };
+  });
+}
+
+/**
+ * Process a payout request (by Admin).
+ * Updates payout status (PROCESSING, PAID, or REJECTED) with reference number or reason.
+ */
+export async function processOrganizerPayout(
+  eventId: string,
+  payoutId: string,
+  newStatus: OrganizerPayoutStatus,
+  referenceNo?: string,
+  rejectionReason?: string,
+  actorName: string = "Admin Dago"
+): Promise<{ event: CommunityEvent; payout: PayoutRecord }> {
+  return withEventLock(async () => {
+    const all = loadEventsFromDisk();
+    const index = all.findIndex((e) => e.id === eventId);
+    if (index === -1) {
+      throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
+    }
+
+    const event = all[index];
+    if (!event.payoutHistory || !Array.isArray(event.payoutHistory)) {
+      throw new Error("Belum ada riwayat pencairan pada event ini.");
+    }
+
+    const pIndex = event.payoutHistory.findIndex((p) => p.id === payoutId);
+    if (pIndex === -1) {
+      throw new Error(`Pengajuan pencairan dengan ID ${payoutId} tidak ditemukan.`);
+    }
+
+    const payout = event.payoutHistory[pIndex];
+
+    // Status transition enforcement
+    if (payout.status === "PAID") {
+      throw new Error("Pengajuan pencairan ini telah selesai dibayarkan (PAID) dan tidak dapat diubah kembali.");
+    }
+    if (payout.status === "REJECTED") {
+      throw new Error("Pengajuan pencairan ini telah ditolak sebelumnya.");
+    }
+    if (newStatus === "PAID" && (!referenceNo || !referenceNo.trim())) {
+      throw new Error("Nomor referensi transfer bank wajib disertakan untuk konfirmasi status PAID.");
+    }
+    if (newStatus === "REJECTED" && (!rejectionReason || !rejectionReason.trim())) {
+      throw new Error("Alasan penolakan pencairan saldo wajib disertakan.");
+    }
+
+    const now = new Date().toISOString();
+    payout.status = newStatus;
+    payout.processedAt = now;
+    payout.processedBy = actorName;
+
+    if (newStatus === "PAID" && referenceNo) {
+      payout.referenceNo = referenceNo.trim();
+    }
+    if (newStatus === "REJECTED" && rejectionReason) {
+      payout.rejectionReason = sanitizeHtmlText(rejectionReason);
+    }
+
+    // Recalculate event overall payout status
+    const hasRequested = event.payoutHistory.some((p) => p.status === "REQUESTED");
+    const hasProcessing = event.payoutHistory.some((p) => p.status === "PROCESSING");
+    const hasPaid = event.payoutHistory.some((p) => p.status === "PAID");
+
+    if (hasProcessing) {
+      event.payoutStatus = "PROCESSING";
+    } else if (hasRequested) {
+      event.payoutStatus = "REQUESTED";
+    } else if (hasPaid) {
+      event.payoutStatus = "PAID";
+    } else {
+      event.payoutStatus = "AVAILABLE";
+    }
+
+    event.updatedAt = now;
+    all[index] = event;
+    saveEventsToDisk(all);
+
+    return { event, payout };
+  });
 }

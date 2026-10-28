@@ -788,33 +788,46 @@ export default function EventDetailPage() {
               </div>
 
               {/* Ticket Quantity Stepper */}
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-bold text-slate-900 dark:text-white block">Jumlah Tiket</span>
-                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {event.isPaid ? `${formatCurrencyIDR(event.price)} / tiket` : "Tiket Gratis"}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => setBookingForm({ ...bookingForm, ticketCount: Math.max(1, bookingForm.ticketCount - 1) })}
-                    className="w-8 h-8 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 flex items-center justify-center cursor-pointer"
-                  >
-                    -
-                  </button>
-                  <span className="w-8 text-center font-bold text-xs text-slate-900 dark:text-white">
-                    {bookingForm.ticketCount}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setBookingForm({ ...bookingForm, ticketCount: Math.min(5, bookingForm.ticketCount + 1) })}
-                    className="w-8 h-8 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 flex items-center justify-center cursor-pointer"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
+              {(() => {
+                const maxAllowedPerTx = event.maxTicketsPerBooking || 5;
+                const remainingTickets = event.availability?.ticketsRemaining ?? maxAllowedPerTx;
+                const effectiveMaxTickets = Math.min(maxAllowedPerTx, Math.max(1, remainingTickets));
+
+                return (
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 rounded-2xl flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white block">Jumlah Tiket</span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        {event.isPaid ? `${formatCurrencyIDR(event.price)} / tiket` : "Tiket Gratis"}{" "}
+                        <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                          (Maks. {maxAllowedPerTx} tiket{remainingTickets < maxAllowedPerTx ? `, sisa kuota ${remainingTickets}` : ""})
+                        </span>
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => setBookingForm({ ...bookingForm, ticketCount: Math.max(1, bookingForm.ticketCount - 1) })}
+                        disabled={bookingForm.ticketCount <= 1}
+                        className="w-8 h-8 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 disabled:opacity-40 flex items-center justify-center cursor-pointer"
+                      >
+                        -
+                      </button>
+                      <span className="w-8 text-center font-bold text-xs text-slate-900 dark:text-white">
+                        {bookingForm.ticketCount}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setBookingForm({ ...bookingForm, ticketCount: Math.min(effectiveMaxTickets, bookingForm.ticketCount + 1) })}
+                        disabled={bookingForm.ticketCount >= effectiveMaxTickets}
+                        className="w-8 h-8 rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 disabled:opacity-40 flex items-center justify-center cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Total Calculation */}
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
@@ -873,51 +886,45 @@ export default function EventDetailPage() {
             </div>
 
             {/* Rekening Tujuan Transfer Bank Manual */}
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl text-left space-y-2">
-              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
-                Rekening Tujuan Transfer Manual:
-              </span>
-              <div className="space-y-1.5 text-xs">
-                <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-slate-800 dark:text-slate-200 block text-[11px]">BCA • 1420993821</span>
-                    <span className="text-[10px] text-slate-400">a.n. PT DAGO CREATIVE HUB</span>
+            {(() => {
+              const bank = pendingTicket.destinationBankSnapshot || event.destinationBank;
+              if (bank) {
+                return (
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl text-left space-y-2">
+                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                      Rekening Resmi Tujuan Transfer:
+                    </span>
+                    <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
+                          {bank.bankName} • {bank.accountNumber}
+                        </span>
+                        <span className="text-[10.5px] text-slate-400 block">a.n. {bank.accountHolder}</span>
+                        {bank.branch && <span className="text-[9.5px] text-slate-400 block">{bank.branch}</span>}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (typeof window !== "undefined") {
+                            navigator.clipboard.writeText(bank.accountNumber);
+                            alert(`Nomor rekening ${bank.bankName} (${bank.accountNumber}) berhasil disalin!`);
+                          }
+                        }}
+                        className="h-7 px-2.5 text-[10.5px] font-bold text-[#3B7A57] border-[#3B7A57]/30 hover:bg-[#3B7A57]/10 cursor-pointer"
+                      >
+                        Salin Rekening
+                      </Button>
+                    </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      if (typeof window !== "undefined") {
-                        navigator.clipboard.writeText("1420993821");
-                        alert("Nomor rekening BCA berhasil disalin!");
-                      }
-                    }}
-                    className="h-6 px-2 text-[10px] font-bold text-[#3B7A57] cursor-pointer"
-                  >
-                    Salin Rekening
-                  </Button>
+                );
+              }
+              return (
+                <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-left text-xs text-rose-700 dark:text-rose-300">
+                  Belum ada rekening pembayaran aktif yang ditetapkan. Silakan hubungi admin platform.
                 </div>
-                <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-slate-800 dark:text-slate-200 block text-[11px]">Mandiri • 1300098234120</span>
-                    <span className="text-[10px] text-slate-400">a.n. PT DAGO CREATIVE HUB</span>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      if (typeof window !== "undefined") {
-                        navigator.clipboard.writeText("1300098234120");
-                        alert("Nomor rekening Mandiri berhasil disalin!");
-                      }
-                    }}
-                    className="h-6 px-2 text-[10px] font-bold text-[#3B7A57] cursor-pointer"
-                  >
-                    Salin Rekening
-                  </Button>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
             <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/50 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 text-left leading-relaxed space-y-1">
               <div className="flex items-center space-x-1.5 font-bold text-amber-900 dark:text-amber-100">

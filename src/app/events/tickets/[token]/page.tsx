@@ -61,7 +61,18 @@ interface TicketDetails {
   checkInTime?: string | null;
   dokuInvoiceNumber?: string | null;
   dokuPaymentUrl?: string | null;
-  paidAt?: string | null;
+  destinationBankSnapshot?: {
+    bankId: string;
+    label?: string;
+    bankName: string;
+    accountNumber: string;
+    accountHolder: string;
+    branch?: string;
+  } | null;
+  paymentRejectionReason?: string | null;
+  paymentVerificationNote?: string | null;
+  paymentVerifiedAt?: string | null;
+  paymentVerifiedBy?: string | null;
   createdAt: string;
   eventDetails?: {
     id: string;
@@ -537,41 +548,46 @@ export default function PrivateTicketViewPage() {
                   <div className="space-y-2 text-left">
                     <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
                       <Building2 className="w-3.5 h-3.5 text-[#3B7A57]" />
-                      <span>Pilihan Rekening Tujuan Transfer Resmi:</span>
+                      <span>{ticket.destinationBankSnapshot ? "Rekening Resmi Tujuan Transfer Pesanan Ini:" : "Pilihan Rekening Tujuan Transfer Resmi:"}</span>
                     </span>
 
                     <div className="space-y-2">
-                      {BANK_ACCOUNTS.map((bank) => (
+                      {ticket.destinationBankSnapshot ? (
                         <div
-                          key={bank.accountNumber}
-                          className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/90 dark:border-slate-700 flex items-center justify-between shadow-2xs hover:border-[#3B7A57]/60 transition-colors"
+                          key={ticket.destinationBankSnapshot.accountNumber}
+                          className="p-3.5 bg-white dark:bg-slate-800 rounded-xl border border-emerald-300/80 dark:border-emerald-700/80 flex items-center justify-between shadow-2xs hover:border-[#3B7A57] transition-colors"
                         >
                           <div className="space-y-0.5">
                             <div className="flex items-center space-x-2">
                               <span className="text-xs font-bold text-slate-900 dark:text-white">
-                                {bank.bankName}
+                                {ticket.destinationBankSnapshot.bankName}
                               </span>
                               <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                {bank.badge}
+                                {ticket.destinationBankSnapshot.label || "Rekening Resmi"}
                               </span>
                             </div>
                             <div className="flex items-center space-x-2">
                               <span className="font-mono font-bold text-sm text-[#3B7A57] dark:text-[#52B788]">
-                                {bank.accountNumber}
+                                {ticket.destinationBankSnapshot.accountNumber}
                               </span>
                               <span className="text-[10px] text-slate-400">
-                                a.n. {bank.accountHolder}
+                                a.n. {ticket.destinationBankSnapshot.accountHolder}
                               </span>
                             </div>
+                            {ticket.destinationBankSnapshot.branch && (
+                              <span className="text-[9.5px] text-slate-400 block">
+                                Cabang: {ticket.destinationBankSnapshot.branch}
+                              </span>
+                            )}
                           </div>
 
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => handleCopyAccount(bank.accountNumber)}
+                            onClick={() => handleCopyAccount(ticket.destinationBankSnapshot!.accountNumber)}
                             className="h-7 px-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-[#3B7A57] hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg cursor-pointer"
                           >
-                            {copiedAccount === bank.accountNumber ? (
+                            {copiedAccount === ticket.destinationBankSnapshot.accountNumber ? (
                               <>
                                 <Check className="w-3 h-3 mr-1 text-emerald-600" />
                                 <span className="text-emerald-600">Disalin</span>
@@ -584,9 +600,70 @@ export default function PrivateTicketViewPage() {
                             )}
                           </Button>
                         </div>
-                      ))}
+                      ) : (
+                        BANK_ACCOUNTS.map((bank) => (
+                          <div
+                            key={bank.accountNumber}
+                            className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/90 dark:border-slate-700 flex items-center justify-between shadow-2xs hover:border-[#3B7A57]/60 transition-colors"
+                          >
+                            <div className="space-y-0.5">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                  {bank.bankName}
+                                </span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                  {bank.badge}
+                                </span>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-mono font-bold text-sm text-[#3B7A57] dark:text-[#52B788]">
+                                  {bank.accountNumber}
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  a.n. {bank.accountHolder}
+                                </span>
+                              </div>
+                            </div>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleCopyAccount(bank.accountNumber)}
+                              className="h-7 px-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-[#3B7A57] hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg cursor-pointer"
+                            >
+                              {copiedAccount === bank.accountNumber ? (
+                                <>
+                                  <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                                  <span className="text-emerald-600">Disalin</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3 mr-1" />
+                                  <span>Salin</span>
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
+
+                  {/* Payment Rejection Alert Banner */}
+                  {ticket.paymentRejectionReason && (
+                    <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs space-y-1 text-left">
+                      <div className="flex items-center space-x-1.5 font-bold text-amber-800 dark:text-amber-300">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>Bukti Pembayaran Perlu Diperbaiki:</span>
+                      </div>
+                      <p className="text-[11px] leading-relaxed">
+                        {ticket.paymentRejectionReason}
+                      </p>
+                      <p className="text-[10px] text-amber-700/80 dark:text-amber-300/80 italic pt-0.5">
+                        Silakan unggah ulang foto bukti transfer baru yang jelas dan valid di bawah ini.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Upload Bukti Transfer Box */}
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-left">

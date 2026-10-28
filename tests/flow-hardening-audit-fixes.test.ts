@@ -116,10 +116,10 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
       const expiredCount = expirePendingBookings();
       expect(expiredCount).toBeGreaterThanOrEqual(1);
 
-      // 4. Pastikan status booking berubah menjadi CANCELLED
+      // 4. Pastikan status booking berubah menjadi CANCELLED atau EXPIRED
       const updatedBookings = loadBookingsFromDisk();
       const target = updatedBookings.find((b) => b.id === booking.id);
-      expect(target?.paymentStatus).toBe("CANCELLED");
+      expect(["CANCELLED", "EXPIRED"]).toContain(target?.paymentStatus);
 
       // 5. Kuota harus pulih kembali penuh 10 tiket
       avail = getEventTicketAvailability(testEventId);

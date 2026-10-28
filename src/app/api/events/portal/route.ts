@@ -27,7 +27,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const portalData = await getOrganizerPortalData(auth.email);
+    const targetEmail = (auth.isAdmin && requestedEmail) ? requestedEmail : auth.email;
+    const portalData = await getOrganizerPortalData(targetEmail, auth.isAdmin);
 
     // Apply PII privacy masking to attendees and strip secret guestToken
     const sanitizedBookings = portalData.bookings.map((b) => {

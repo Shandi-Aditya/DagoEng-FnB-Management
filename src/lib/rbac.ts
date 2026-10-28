@@ -91,7 +91,16 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
   },
 
-  // 2. F&B Domain Module
+  // 2. Modul Prioritas 1: Co-working Business Module
+  {
+    name: "Co-working Space",
+    href: "/coworking",
+    icon: "Laptop",
+    module: "CO_WORKING",
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+  },
+
+  // 3. Modul Prioritas 2: F&B Domain Module
   {
     name: "POS Kasir",
     href: "/pos",
@@ -142,16 +151,24 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
   },
 
-  // 3. Co-working Business Module
+  // 4. Modul Prioritas 3: Event Marketplace Module
   {
-    name: "Co-working Space",
-    href: "/coworking",
-    icon: "Laptop",
-    module: "CO_WORKING",
+    name: "Event Komunitas",
+    href: "/events-admin",
+    icon: "Calendar",
+    module: "CORE",
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+    minScope: "ORGANIZATION",
+  },
+  {
+    name: "Check-in Event",
+    href: "/events/checkin",
+    icon: "UserCheck",
+    module: "CORE",
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "WAITER", "CASHIER"],
   },
 
-  // 4. Reports, Staff & Governance
+  // 5. Governance, Reports & Master Data
   {
     name: "Laporan & Finance",
     href: "/reports",
@@ -165,14 +182,6 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     icon: "UserCheck",
     module: "CORE",
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
-  },
-  {
-    name: "Event Komunitas",
-    href: "/events-admin",
-    icon: "Calendar",
-    module: "CORE",
-    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
-    minScope: "ORGANIZATION",
   },
   {
     name: "Audit Trail & Log",
