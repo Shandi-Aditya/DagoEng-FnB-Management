@@ -92,6 +92,7 @@ export default function DokuCheckoutSimulatorPage() {
         body: JSON.stringify({
           invoiceNumber: transaction.dokuInvoiceNumber || `INV-${transaction.ticketCode}`,
           status,
+          token,
         }),
       });
 

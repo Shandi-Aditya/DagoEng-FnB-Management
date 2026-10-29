@@ -145,9 +145,37 @@ export async function PATCH(
     }
 
     if (paymentProofUrl) {
+      // Authorization check: must be either an authorized Hub Admin or the valid ticket holder
+      const adminAuth = await assertEventAdmin(req);
+      const token = body.guestToken || req.headers.get("x-guest-token");
+      const isTicketHolder = Boolean(token && existing.guestToken && token.trim() === existing.guestToken.trim());
+
+      if (!adminAuth.authorized && !isTicketHolder) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "FORBIDDEN: Anda tidak memiliki wewenang untuk memperbarui bukti pembayaran pemesanan ini.",
+          },
+          { status: 403 }
+        );
+      }
+
+      // Safe URL check (prevent SSRF, javascript: or path traversal)
+      const trimmedUrl = String(paymentProofUrl).trim();
+      const isSafe =
+        trimmedUrl.startsWith("https://") ||
+        trimmedUrl.startsWith("/api/events/proofs/") ||
+        trimmedUrl.startsWith("/images/events/proofs/");
+      if (!isSafe || trimmedUrl.includes("..") || trimmedUrl.includes("\0")) {
+        return NextResponse.json(
+          { success: false, error: "Format URL bukti pembayaran tidak valid atau tidak aman." },
+          { status: 400 }
+        );
+      }
+
       updated = await updateBookingPaymentProof(
         { bookingId: id },
-        { paymentProofUrl, paymentProofNote }
+        { paymentProofUrl: trimmedUrl, paymentProofNote }
       );
     }
 

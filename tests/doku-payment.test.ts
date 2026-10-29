@@ -9,6 +9,10 @@ import {
 import { POST as handleDokuWebhook } from "@/app/api/webhooks/doku/route";
 import { POST as handleBookEvent } from "@/app/api/events/[id]/book/route";
 import {
+  POST as handleSimulateWebhook,
+  GET as handleSimulateLookup,
+} from "@/app/api/webhooks/doku/simulate/route";
+import {
   loadBookingsFromDisk,
   saveBookingsToDisk,
   createEventSubmission,
@@ -378,6 +382,164 @@ describe("DOKU Payment Gateway Integration & Production Readiness", () => {
       expect(json.data.paymentStatus).toBe("PENDING");
       expect(json.data.dokuInvoiceNumber).toBeDefined();
       expect(json.data.dokuInvoiceNumber.startsWith("INV-DAGO-EVT-")).toBe(true);
+    });
+  });
+
+  describe("5. Payment Simulation Endpoint Security Guard (/api/webhooks/doku/simulate)", () => {
+    it("menolak POST dan GET simulasi jika di environment production tanpa flag simulasi aktif (HTTP 403)", async () => {
+      const prevEnv = process.env.NODE_ENV;
+      const prevSim = process.env.DOKU_SIMULATION_MODE;
+
+      try {
+        // @ts-ignore
+        process.env.NODE_ENV = "production";
+        process.env.DOKU_SIMULATION_MODE = "false";
+
+        // Test POST simulate
+        const postReq = new NextRequest("http://localhost:3000/api/webhooks/doku/simulate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            invoiceNumber: "INV-DAGO-EVT-99999",
+            status: "SUCCESS",
+          }),
+        });
+
+        const postRes = await handleSimulateWebhook(postReq);
+        expect(postRes.status).toBe(403);
+        const postJson = await postRes.json();
+        expect(postJson.success).toBe(false);
+        expect(postJson.error).toContain("production");
+
+        // Test GET simulate
+        const getReq = new NextRequest("http://localhost:3000/api/webhooks/doku/simulate?invoice=INV-99999", {
+          method: "GET",
+        });
+
+        const getRes = await handleSimulateLookup(getReq);
+        expect(getRes.status).toBe(403);
+        const getJson = await getRes.json();
+        expect(getJson.success).toBe(false);
+        expect(getJson.error).toContain("production");
+      } finally {
+        // @ts-ignore
+        process.env.NODE_ENV = prevEnv;
+        process.env.DOKU_SIMULATION_MODE = prevSim;
+      }
+    });
+
+    it("menolak POST simulasi jika token checkout privat tidak cocok atau tidak disertakan (HTTP 401)", async () => {
+      const allBookings = loadBookingsFromDisk();
+      const testToken = "token-secret-1234567890abcdef";
+      const sampleBooking: EventTicketOrder = {
+        id: `tkt-sim-token-${Date.now()}`,
+        ticketCode: `DAGO-EVT-${Math.floor(10000 + Math.random() * 90000)}`,
+        guestToken: "gt-sample-sim",
+        eventId: "evt-sim-token",
+        eventTitle: "Simulator Token Validation Event",
+        eventDate: "2026-11-28T10:00:00Z",
+        eventLocation: "Main Hall",
+        guestName: "Budi Santoso",
+        guestEmail: "budi.sim@example.com",
+        guestPhone: "081234567890",
+        ticketCount: 1,
+        unitPrice: 100000,
+        totalPrice: 100000,
+        platformFeePercent: 20,
+        platformFeeAmount: 20000,
+        organizerRevenueAmount: 80000,
+        paymentMethod: "DOKU_CHECKOUT",
+        paymentStatus: "PENDING",
+        checkInStatus: "REGISTERED",
+        dokuInvoiceNumber: `INV-SIM-${Date.now()}`,
+        dokuPaymentUrl: `/checkout-link-v2/${testToken}?invoice=INV-SIM`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      allBookings.unshift(sampleBooking);
+      saveBookingsToDisk(allBookings);
+
+      // Attempt simulation with wrong token
+      const wrongReq = new NextRequest("http://localhost:3000/api/webhooks/doku/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoiceNumber: sampleBooking.dokuInvoiceNumber,
+          status: "SUCCESS",
+          token: "wrong-token-forged",
+        }),
+      });
+
+      const wrongRes = await handleSimulateWebhook(wrongReq);
+      expect(wrongRes.status).toBe(401);
+      const wrongJson = await wrongRes.json();
+      expect(wrongJson.success).toBe(false);
+      expect(wrongJson.error).toMatch(/token.*tidak valid/i);
+
+      // Attempt simulation with correct token
+      const correctReq = new NextRequest("http://localhost:3000/api/webhooks/doku/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoiceNumber: sampleBooking.dokuInvoiceNumber,
+          status: "SUCCESS",
+          token: testToken,
+        }),
+      });
+
+      const correctRes = await handleSimulateWebhook(correctReq);
+      expect(correctRes.status).toBe(200);
+      const correctJson = await correctRes.json();
+      expect(correctJson.success).toBe(true);
+      expect(correctJson.data.paymentStatus).toBe("PAID");
+    });
+
+    it("menolak POST simulasi untuk pesanan yang sudah dibatalkan atau kedaluwarsa (HTTP 409)", async () => {
+      const allBookings = loadBookingsFromDisk();
+      const testToken = "token-secret-cancelled";
+      const cancelledBooking: EventTicketOrder = {
+        id: `tkt-sim-cancelled-${Date.now()}`,
+        ticketCode: `DAGO-EVT-${Math.floor(10000 + Math.random() * 90000)}`,
+        guestToken: "gt-sample-cancelled",
+        eventId: "evt-sim-cancelled",
+        eventTitle: "Simulator Cancelled Event",
+        eventDate: "2026-11-28T10:00:00Z",
+        eventLocation: "Main Hall",
+        guestName: "Doni",
+        guestEmail: "doni@example.com",
+        guestPhone: "081234567890",
+        ticketCount: 1,
+        unitPrice: 50000,
+        totalPrice: 50000,
+        platformFeePercent: 20,
+        platformFeeAmount: 10000,
+        organizerRevenueAmount: 40000,
+        paymentMethod: "DOKU_CHECKOUT",
+        paymentStatus: "CANCELLED",
+        checkInStatus: "REGISTERED",
+        dokuInvoiceNumber: `INV-CANCELLED-${Date.now()}`,
+        dokuPaymentUrl: `/checkout-link-v2/${testToken}?invoice=INV-CANCELLED`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      allBookings.unshift(cancelledBooking);
+      saveBookingsToDisk(allBookings);
+
+      const req = new NextRequest("http://localhost:3000/api/webhooks/doku/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoiceNumber: cancelledBooking.dokuInvoiceNumber,
+          status: "SUCCESS",
+          token: testToken,
+        }),
+      });
+
+      const res = await handleSimulateWebhook(req);
+      expect(res.status).toBe(409);
+      const json = await res.json();
+      expect(json.success).toBe(false);
+      expect(json.error).toMatch(/dibatalkan|kedaluwarsa/i);
     });
   });
 });

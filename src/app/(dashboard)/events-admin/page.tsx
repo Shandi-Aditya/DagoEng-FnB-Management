@@ -133,6 +133,15 @@ export default function AdminEventsPage() {
   // Payment Verification state
   const [paymentFilterStatus, setPaymentFilterStatus] = useState<"ALL" | "PENDING_PROOF" | "PAID" | "REJECTED">("PENDING_PROOF");
   const [rejectPaymentTarget, setRejectPaymentTarget] = useState<EventTicketOrder | null>(null);
+
+  const resolveSafeProofUrl = (url?: string | null): string => {
+    if (!url) return "";
+    if (url.startsWith("/images/events/proofs/")) {
+      const filename = url.split("/").pop();
+      return `/api/events/proofs/${filename}`;
+    }
+    return url;
+  };
   const [rejectPaymentReason, setRejectPaymentReason] = useState("");
   const [rejectPaymentCancelBooking, setRejectPaymentCancelBooking] = useState(false);
   const [isProcessingPaymentAction, setIsProcessingPaymentAction] = useState(false);
@@ -875,11 +884,10 @@ export default function AdminEventsPage() {
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
         <button
           onClick={() => setAdminSection("MODERATION")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
-            adminSection === "MODERATION"
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${adminSection === "MODERATION"
               ? "bg-[#3B7A57] text-white shadow-sm"
               : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
-          }`}
+            }`}
         >
           <Calendar className="w-4 h-4" />
           <span>Moderasi Event</span>
@@ -892,11 +900,10 @@ export default function AdminEventsPage() {
 
         <button
           onClick={() => setAdminSection("PAYMENTS")}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
-            adminSection === "PAYMENTS"
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${adminSection === "PAYMENTS"
               ? "bg-[#3B7A57] text-white shadow-sm"
               : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
-          }`}
+            }`}
         >
           <CreditCard className="w-4 h-4" />
           <span>Verifikasi Pembayaran Manual</span>
@@ -912,11 +919,10 @@ export default function AdminEventsPage() {
             setAdminSection("SETTINGS");
             loadBusinessSettings();
           }}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${
-            adminSection === "SETTINGS"
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2 cursor-pointer ${adminSection === "SETTINGS"
               ? "bg-[#3B7A57] text-white shadow-sm"
               : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
-          }`}
+            }`}
         >
           <Settings className="w-4 h-4" />
           <span>Pengaturan Rekening & Bisnis</span>
@@ -925,410 +931,408 @@ export default function AdminEventsPage() {
 
       {adminSection === "MODERATION" && (
         <>
-      {/* 4 Kartu Ringkasan Operasional Sederhana */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-          <div className="flex items-center justify-between pb-1">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Total Event Terdaftar</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
-              <Calendar className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-slate-900 dark:text-white">
-            {events.length} <span className="text-xs font-normal text-slate-400">Event</span>
-          </div>
-          <span className="text-[10px] text-slate-400">Seluruh agenda komunitas</span>
-        </Card>
+          {/* 4 Kartu Ringkasan Operasional Sederhana */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Total Event Terdaftar</span>
+                <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
+                  <Calendar className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <div className="text-xl font-black text-slate-900 dark:text-white">
+                {events.length} <span className="text-xs font-normal text-slate-400">Event</span>
+              </div>
+              <span className="text-[10px] text-slate-400">Seluruh agenda komunitas</span>
+            </Card>
 
-        <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-          <div className="flex items-center justify-between pb-1">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Event Aktif & Tayang</span>
-            <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-emerald-600 dark:text-emerald-400">
-            {events.filter((e) => e.status === "APPROVED").length} <span className="text-xs font-normal text-slate-400">Disetujui</span>
-          </div>
-          <span className="text-[10px] text-slate-400">Dapat diakses publik</span>
-        </Card>
+            <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Event Aktif & Tayang</span>
+                <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <div className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                {events.filter((e) => e.status === "APPROVED").length} <span className="text-xs font-normal text-slate-400">Disetujui</span>
+              </div>
+              <span className="text-[10px] text-slate-400">Dapat diakses publik</span>
+            </Card>
 
-        <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-          <div className="flex items-center justify-between pb-1">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Menunggu Moderasi</span>
-            <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center">
-              <Clock className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <div className="text-xl font-black text-amber-600 dark:text-amber-400">
-            {events.filter((e) => e.status === "PENDING" || e.status === "REVISION_REQUESTED").length} <span className="text-xs font-normal text-slate-400">Review</span>
-          </div>
-          <span className="text-[10px] text-slate-400">Perlu tindakan kurasi</span>
-        </Card>
+            <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Menunggu Moderasi</span>
+                <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center">
+                  <Clock className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <div className="text-xl font-black text-amber-600 dark:text-amber-400">
+                {events.filter((e) => e.status === "PENDING" || e.status === "REVISION_REQUESTED").length} <span className="text-xs font-normal text-slate-400">Review</span>
+              </div>
+              <span className="text-[10px] text-slate-400">Perlu tindakan kurasi</span>
+            </Card>
 
-        <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-          <div className="flex items-center justify-between pb-1">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Total Tiket & Peserta</span>
-            <div className="w-7 h-7 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 flex items-center justify-center">
-              <Ticket className="w-3.5 h-3.5" />
-            </div>
+            <Card className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+              <div className="flex items-center justify-between pb-1">
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Total Tiket & Peserta</span>
+                <div className="w-7 h-7 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 flex items-center justify-center">
+                  <Ticket className="w-3.5 h-3.5" />
+                </div>
+              </div>
+              <div className="text-xl font-black text-slate-900 dark:text-white">
+                {allBookings.filter((b) => b.paymentStatus === "PAID").length} <span className="text-xs font-normal text-slate-400">Peserta</span>
+              </div>
+              <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788]">
+                {formatCurrencyIDR(allBookings.filter((b) => b.paymentStatus === "PAID").reduce((sum, b) => sum + b.totalPrice, 0))}
+              </span>
+            </Card>
           </div>
-          <div className="text-xl font-black text-slate-900 dark:text-white">
-            {allBookings.filter((b) => b.paymentStatus === "PAID").length} <span className="text-xs font-normal text-slate-400">Peserta</span>
-          </div>
-          <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788]">
-            {formatCurrencyIDR(allBookings.filter((b) => b.paymentStatus === "PAID").reduce((sum, b) => sum + b.totalPrice, 0))}
-          </span>
-        </Card>
-      </div>
 
-      {/* Action Notices */}
-      {actionSuccessMessage && (
-        <div className="relative overflow-hidden p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <Check className="w-3.5 h-3.5 stroke-[3]" />
-            </div>
-            <div>
-              <span className="font-bold block">{actionSuccessMessage}</span>
-              <span className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80">Pemberitahuan otomatis tertutup dalam beberapa detik</span>
-            </div>
-          </div>
-          <button
-            onClick={() => setActionSuccessMessage(null)}
-            className="text-xs font-bold text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 px-2 py-1 rounded-lg ml-4 transition-colors cursor-pointer"
-          >
-            ✕ Tutup
-          </button>
-        </div>
-      )}
-
-      {actionErrorMessage && (
-        <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center space-x-2">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-            <span>{actionErrorMessage}</span>
-          </div>
-          <div className="flex items-center space-x-3">
-            {actionErrorMessage.includes("CUSTOMER") && (
-              <Link href="/events/portal">
-                <Button size="sm" className="h-7 text-[11px] bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-lg px-2.5">
-                  Buka Portal Penyelenggara
-                </Button>
-              </Link>
-            )}
-            <button
-              onClick={() => setActionErrorMessage(null)}
-              className="text-xs font-bold underline cursor-pointer"
-            >
-              Tutup
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Date Range Filter for Event Execution */}
-      <div className="pb-2">
-        <EventDateRangeFilter
-          onApplyFilter={(range) => setDateRange(range)}
-          initialRange={dateRange}
-          label="Filter Rentang Tanggal Pelaksanaan Event (WITA)"
-        />
-      </div>
-
-      {/* Filter Tabs & Search Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pb-2">
-        <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-          {STATUS_TABS.map((tab) => {
-            const active = selectedStatusTab === tab.key;
-            const count =
-              tab.status !== undefined
-                ? events.filter((e) => e.status === tab.status).length
-                : events.length;
-
-            return (
+          {/* Action Notices */}
+          {actionSuccessMessage && (
+            <div className="relative overflow-hidden p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                </div>
+                <div>
+                  <span className="font-bold block">{actionSuccessMessage}</span>
+                  <span className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80">Pemberitahuan otomatis tertutup dalam beberapa detik</span>
+                </div>
+              </div>
               <button
-                key={tab.key}
-                onClick={() => setSelectedStatusTab(tab.key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center space-x-1.5 ${
-                  active
-                    ? "bg-[#3B7A57] text-white shadow-sm"
-                    : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
-                }`}
+                onClick={() => setActionSuccessMessage(null)}
+                className="text-xs font-bold text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 px-2 py-1 rounded-lg ml-4 transition-colors cursor-pointer"
               >
-                <span>{tab.label}</span>
-                <span
-                  className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                    active
-                      ? "bg-white/20 text-white"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-500"
-                  }`}
-                >
-                  {count}
-                </span>
+                ✕ Tutup
               </button>
-            );
-          })}
-        </div>
+            </div>
+          )}
 
-        <div className="relative min-w-[240px]">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari nama event atau penyelenggara..."
-            className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
-          />
-        </div>
-      </div>
+          {actionErrorMessage && (
+            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <span>{actionErrorMessage}</span>
+              </div>
+              <div className="flex items-center space-x-3">
+                {actionErrorMessage.includes("CUSTOMER") && (
+                  <Link href="/events/portal">
+                    <Button size="sm" className="h-7 text-[11px] bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-lg px-2.5">
+                      Buka Portal Penyelenggara
+                    </Button>
+                  </Link>
+                )}
+                <button
+                  onClick={() => setActionErrorMessage(null)}
+                  className="text-xs font-bold underline cursor-pointer"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+          )}
 
-      {/* Table / List View of Events */}
-      <Card className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-        {isLoading ? (
-          <div className="p-8 text-center text-xs text-slate-400">
-            <div className="w-6 h-6 border-2 border-[#3B7A57] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-            Memuat pengajuan event...
+          {/* Date Range Filter for Event Execution */}
+          <div className="pb-2">
+            <EventDateRangeFilter
+              onApplyFilter={(range) => setDateRange(range)}
+              initialRange={dateRange}
+              label="Filter Rentang Tanggal Pelaksanaan Event (WITA)"
+            />
           </div>
-        ) : filteredEvents.length === 0 ? (
-          <div className="p-10 text-center text-xs text-slate-500 dark:text-slate-400">
-            Tidak ada pengajuan event pada status ini.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-slate-50/80 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
-                  <th className="py-3 px-4">Event & Poster</th>
-                  <th className="py-3 px-4">Kategori & Harga</th>
-                  <th className="py-3 px-4">Jadwal & Ruang</th>
-                  <th className="py-3 px-4">Penyelenggara</th>
-                  <th className="py-3 px-4">Peserta & Tiket</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4 text-right">Aksi Pengelolaan</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredEvents.map((evt) => {
-                  const evtBookings = allBookings.filter((b) => b.eventId === evt.id && b.paymentStatus === "PAID");
-                  const totalTickets = evtBookings.reduce((sum, b) => sum + b.ticketCount, 0);
-                  const totalRevenue = evtBookings.reduce((sum, b) => sum + b.totalPrice, 0);
 
-                  return (
-                    <tr
-                      key={evt.id}
-                      className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+          {/* Filter Tabs & Search Bar */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pb-2">
+            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
+              {STATUS_TABS.map((tab) => {
+                const active = selectedStatusTab === tab.key;
+                const count =
+                  tab.status !== undefined
+                    ? events.filter((e) => e.status === tab.status).length
+                    : events.length;
+
+                return (
+                  <button
+                    key={tab.key}
+                    onClick={() => setSelectedStatusTab(tab.key)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center space-x-1.5 ${active
+                        ? "bg-[#3B7A57] text-white shadow-sm"
+                        : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
+                      }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] ${active
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                        }`}
                     >
-                      {/* Event Title & Poster */}
-                      <td className="py-3.5 px-4 max-w-xs">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden flex-shrink-0 relative">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={evt.posterUrl}
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="min-w-0">
-                            <span className="font-bold text-slate-900 dark:text-white block truncate">
-                              {evt.title}
-                            </span>
-                            <span className="text-[10px] text-slate-500 dark:text-slate-300 font-mono block">
-                              ID: {evt.id}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
-                      {/* Category & Pricing */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="space-y-1">
-                          <Badge variant="outline" className="text-[10px] border-slate-300 dark:border-slate-700">
-                            {evt.category}
-                          </Badge>
-                          <span className="block font-bold text-slate-800 dark:text-slate-200">
-                            {evt.isPaid ? formatCurrencyIDR(evt.price) : "Gratis"}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Schedule & Venue */}
-                      <td className="py-3.5 px-4 text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center space-x-1.5 font-medium">
-                            <Calendar className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
-                            <span>{new Date(evt.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
-                          </div>
-                          <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-300 text-[11px]">
-                            <MapPin className="w-3 h-3" />
-                            <span className="truncate max-w-[150px]">{evt.location}</span>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Organizer details */}
-                      <td className="py-3.5 px-4 text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                        <div className="space-y-0.5">
-                          <span className="font-semibold block truncate max-w-[140px]">
-                            {evt.organizerName}
-                          </span>
-                          <div className="flex items-center space-x-2 text-[11px] text-slate-500 dark:text-slate-300">
-                            <a
-                              href={`https://wa.me/${evt.organizerPhone.replace(/[^0-9]/g, "")}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="hover:text-emerald-600"
-                              title="WhatsApp"
-                            >
-                              <Phone className="w-3 h-3 inline mr-0.5" />
-                              WA
-                            </a>
-                            <span>•</span>
-                            <a
-                              href={`mailto:${evt.organizerEmail}`}
-                              className="hover:text-emerald-600"
-                              title="Email"
-                            >
-                              <Mail className="w-3 h-3 inline mr-0.5" />
-                              Email
-                            </a>
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* Peserta & Tiket */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="space-y-0.5">
-                          <span className="font-bold text-slate-900 dark:text-white flex items-center space-x-1">
-                            <Users className="w-3 h-3 text-[#3B7A57]" />
-                            <span>{evtBookings.length} Peserta ({totalTickets} Tiket)</span>
-                          </span>
-                          <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono block">
-                            {evt.isPaid ? formatCurrencyIDR(totalRevenue) : "Event Gratis"}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Status Badge */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        {renderStatusBadge(evt.status)}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center space-x-1.5">
-                          {/* Kelola Peserta & Tiket */}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedEventForAttendees(evt);
-                              setAttendeeSearchQuery("");
-                              setIsAttendeesModalOpen(true);
-                            }}
-                            className="h-8 px-2.5 text-[11px] font-bold text-[#3B7A57] dark:text-[#52B788] border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg cursor-pointer"
-                            title="Kelola Data Peserta & Check-In Tiket"
-                          >
-                            <Ticket className="w-3.5 h-3.5 mr-1" />
-                            <span>Peserta</span>
-                          </Button>
-
-                          {/* View Details */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedEvent(evt);
-                              setIsDetailModalOpen(true);
-                            }}
-                            className="h-8 px-2 text-slate-600 dark:text-slate-400 hover:text-[#3B7A57]"
-                            title="Lihat Detail & Kontak"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </Button>
-
-                          {/* Edit details */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditModal(evt)}
-                            className="h-8 px-2 text-slate-600 dark:text-slate-400 hover:text-blue-600"
-                            title="Edit Rincian"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </Button>
-
-                          {/* Approve Quick Button */}
-                          {evt.status !== "APPROVED" && (
-                            <Button
-                              size="sm"
-                              onClick={() => handleUpdateStatus(evt.id, "APPROVED")}
-                              disabled={isProcessingAction}
-                              className="h-8 px-2.5 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] font-bold rounded-lg shadow-xs"
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                              Setujui
-                            </Button>
-                          )}
-
-                          {/* Request Revision */}
-                          {evt.status === "PENDING" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedEvent(evt);
-                                setModalNotes(evt.revisionNotes || "");
-                                setIsRevisionModalOpen(true);
-                              }}
-                              className="h-8 px-2.5 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-800 hover:bg-sky-50 text-[11px] font-semibold rounded-lg"
-                            >
-                              Revisi
-                            </Button>
-                          )}
-
-                          {/* Reject */}
-                          {evt.status === "PENDING" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedEvent(evt);
-                                setModalNotes(evt.rejectionReason || "");
-                                setIsRejectModalOpen(true);
-                              }}
-                              className="h-8 px-2 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-50 text-[11px] rounded-lg"
-                              title="Tolak Pengajuan"
-                            >
-                              <XCircle className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-
-                          {/* Archive (for approved/rejected) */}
-                          {evt.status === "APPROVED" && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleUpdateStatus(evt.id, "ARCHIVED")}
-                              disabled={isProcessingAction}
-                              className="h-8 px-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                              title="Arsipkan Event"
-                            >
-                              <Archive className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div className="relative min-w-[240px]">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari nama event atau penyelenggara..."
+                className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+              />
+            </div>
           </div>
-        )}
-      </Card>
-      </>
+
+          {/* Table / List View of Events */}
+          <Card className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+            {isLoading ? (
+              <div className="p-8 text-center text-xs text-slate-400">
+                <div className="w-6 h-6 border-2 border-[#3B7A57] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                Memuat pengajuan event...
+              </div>
+            ) : filteredEvents.length === 0 ? (
+              <div className="p-10 text-center text-xs text-slate-500 dark:text-slate-400">
+                Tidak ada pengajuan event pada status ini.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/80 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+                      <th className="py-3 px-4">Event & Poster</th>
+                      <th className="py-3 px-4">Kategori & Harga</th>
+                      <th className="py-3 px-4">Jadwal & Ruang</th>
+                      <th className="py-3 px-4">Penyelenggara</th>
+                      <th className="py-3 px-4">Peserta & Tiket</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Aksi Pengelolaan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredEvents.map((evt) => {
+                      const evtBookings = allBookings.filter((b) => b.eventId === evt.id && b.paymentStatus === "PAID");
+                      const totalTickets = evtBookings.reduce((sum, b) => sum + b.ticketCount, 0);
+                      const totalRevenue = evtBookings.reduce((sum, b) => sum + b.totalPrice, 0);
+
+                      return (
+                        <tr
+                          key={evt.id}
+                          className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                        >
+                          {/* Event Title & Poster */}
+                          <td className="py-3.5 px-4 max-w-xs">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden flex-shrink-0 relative">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                  src={evt.posterUrl}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-bold text-slate-900 dark:text-white block truncate">
+                                  {evt.title}
+                                </span>
+                                <span className="text-[10px] text-slate-500 dark:text-slate-300 font-mono block">
+                                  ID: {evt.id}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Category & Pricing */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="space-y-1">
+                              <Badge variant="outline" className="text-[10px] border-slate-300 dark:border-slate-700">
+                                {evt.category}
+                              </Badge>
+                              <span className="block font-bold text-slate-800 dark:text-slate-200">
+                                {evt.isPaid ? formatCurrencyIDR(evt.price) : "Gratis"}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Schedule & Venue */}
+                          <td className="py-3.5 px-4 text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center space-x-1.5 font-medium">
+                                <Calendar className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                                <span>{new Date(evt.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
+                              </div>
+                              <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-300 text-[11px]">
+                                <MapPin className="w-3 h-3" />
+                                <span className="truncate max-w-[150px]">{evt.location}</span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Organizer details */}
+                          <td className="py-3.5 px-4 text-slate-700 dark:text-slate-200 whitespace-nowrap">
+                            <div className="space-y-0.5">
+                              <span className="font-semibold block truncate max-w-[140px]">
+                                {evt.organizerName}
+                              </span>
+                              <div className="flex items-center space-x-2 text-[11px] text-slate-500 dark:text-slate-300">
+                                <a
+                                  href={`https://wa.me/${evt.organizerPhone.replace(/[^0-9]/g, "")}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hover:text-emerald-600"
+                                  title="WhatsApp"
+                                >
+                                  <Phone className="w-3 h-3 inline mr-0.5" />
+                                  WA
+                                </a>
+                                <span>•</span>
+                                <a
+                                  href={`mailto:${evt.organizerEmail}`}
+                                  className="hover:text-emerald-600"
+                                  title="Email"
+                                >
+                                  <Mail className="w-3 h-3 inline mr-0.5" />
+                                  Email
+                                </a>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Peserta & Tiket */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="space-y-0.5">
+                              <span className="font-bold text-slate-900 dark:text-white flex items-center space-x-1">
+                                <Users className="w-3 h-3 text-[#3B7A57]" />
+                                <span>{evtBookings.length} Peserta ({totalTickets} Tiket)</span>
+                              </span>
+                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono block">
+                                {evt.isPaid ? formatCurrencyIDR(totalRevenue) : "Event Gratis"}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Status Badge */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            {renderStatusBadge(evt.status)}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center space-x-1.5">
+                              {/* Kelola Peserta & Tiket */}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedEventForAttendees(evt);
+                                  setAttendeeSearchQuery("");
+                                  setIsAttendeesModalOpen(true);
+                                }}
+                                className="h-8 px-2.5 text-[11px] font-bold text-[#3B7A57] dark:text-[#52B788] border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg cursor-pointer"
+                                title="Kelola Data Peserta & Check-In Tiket"
+                              >
+                                <Ticket className="w-3.5 h-3.5 mr-1" />
+                                <span>Peserta</span>
+                              </Button>
+
+                              {/* View Details */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedEvent(evt);
+                                  setIsDetailModalOpen(true);
+                                }}
+                                className="h-8 px-2 text-slate-600 dark:text-slate-400 hover:text-[#3B7A57]"
+                                title="Lihat Detail & Kontak"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </Button>
+
+                              {/* Edit details */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEditModal(evt)}
+                                className="h-8 px-2 text-slate-600 dark:text-slate-400 hover:text-blue-600"
+                                title="Edit Rincian"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </Button>
+
+                              {/* Approve Quick Button */}
+                              {evt.status !== "APPROVED" && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleUpdateStatus(evt.id, "APPROVED")}
+                                  disabled={isProcessingAction}
+                                  className="h-8 px-2.5 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] font-bold rounded-lg shadow-xs"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                  Setujui
+                                </Button>
+                              )}
+
+                              {/* Request Revision */}
+                              {evt.status === "PENDING" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedEvent(evt);
+                                    setModalNotes(evt.revisionNotes || "");
+                                    setIsRevisionModalOpen(true);
+                                  }}
+                                  className="h-8 px-2.5 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-800 hover:bg-sky-50 text-[11px] font-semibold rounded-lg"
+                                >
+                                  Revisi
+                                </Button>
+                              )}
+
+                              {/* Reject */}
+                              {evt.status === "PENDING" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedEvent(evt);
+                                    setModalNotes(evt.rejectionReason || "");
+                                    setIsRejectModalOpen(true);
+                                  }}
+                                  className="h-8 px-2 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-50 text-[11px] rounded-lg"
+                                  title="Tolak Pengajuan"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+
+                              {/* Archive (for approved/rejected) */}
+                              {evt.status === "APPROVED" && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleUpdateStatus(evt.id, "ARCHIVED")}
+                                  disabled={isProcessingAction}
+                                  className="h-8 px-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                                  title="Arsipkan Event"
+                                >
+                                  <Archive className="w-3.5 h-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </>
       )}
 
       {/* ===================================================================== */}
@@ -1388,11 +1392,10 @@ export default function AdminEventsPage() {
                 <button
                   key={tab.key}
                   onClick={() => setPaymentFilterStatus(tab.key as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                    paymentFilterStatus === tab.key
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${paymentFilterStatus === tab.key
                       ? "bg-[#3B7A57] text-white shadow-xs"
                       : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
-                  }`}
+                    }`}
                 >
                   {tab.label}
                 </button>
@@ -1503,7 +1506,7 @@ export default function AdminEventsPage() {
                                 >
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
                                   <img
-                                    src={b.paymentProofUrl}
+                                    src={resolveSafeProofUrl(b.paymentProofUrl)}
                                     alt="Bukti Transfer"
                                     className="w-full h-full object-cover"
                                   />
@@ -1804,11 +1807,10 @@ export default function AdminEventsPage() {
                       <td className="py-2.5 px-3 whitespace-nowrap">
                         <button
                           onClick={() => handleToggleBankActive(acc.id, acc.isActive)}
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
-                            acc.isActive
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${acc.isActive
                               ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
                               : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                          }`}
+                            }`}
                         >
                           {acc.isActive ? "Aktif" : "Nonaktif"}
                         </button>
@@ -2217,15 +2219,14 @@ export default function AdminEventsPage() {
                         <div className="flex items-center space-x-2">
                           <strong className="text-slate-900 dark:text-white font-bold">{formatCurrencyIDR(p.amount)}</strong>
                           <Badge
-                            className={`text-[9px] font-bold ${
-                              p.status === "PAID"
+                            className={`text-[9px] font-bold ${p.status === "PAID"
                                 ? "bg-emerald-600 text-white"
                                 : p.status === "PROCESSING"
-                                ? "bg-sky-600 text-white"
-                                : p.status === "REQUESTED"
-                                ? "bg-amber-600 text-white"
-                                : "bg-rose-600 text-white"
-                            }`}
+                                  ? "bg-sky-600 text-white"
+                                  : p.status === "REQUESTED"
+                                    ? "bg-amber-600 text-white"
+                                    : "bg-rose-600 text-white"
+                              }`}
                           >
                             {p.status}
                           </Badge>
@@ -2853,13 +2854,12 @@ export default function AdminEventsPage() {
                               size="sm"
                               disabled={isUpdatingCheckIn === b.id || b.paymentStatus === "CANCELLED"}
                               onClick={() => handleCheckInToggle(b)}
-                              className={`h-7 px-2 text-[11px] font-semibold rounded-lg ${
-                                b.paymentStatus === "CANCELLED"
+                              className={`h-7 px-2 text-[11px] font-semibold rounded-lg ${b.paymentStatus === "CANCELLED"
                                   ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-800"
                                   : b.checkInStatus === "CHECKED_IN"
-                                  ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
-                                  : "bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs cursor-pointer"
-                              }`}
+                                    ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                                    : "bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs cursor-pointer"
+                                }`}
                               title={b.paymentStatus === "CANCELLED" ? "Tiket yang dibatalkan tidak dapat check-in" : undefined}
                             >
                               {isUpdatingCheckIn === b.id ? (
@@ -2875,8 +2875,8 @@ export default function AdminEventsPage() {
                                 {b.paymentStatus === "CANCELLED"
                                   ? "Batal"
                                   : b.checkInStatus === "CHECKED_IN"
-                                  ? "Batal"
-                                  : "Hadir"}
+                                    ? "Batal"
+                                    : "Hadir"}
                               </span>
                             </Button>
                           </td>
@@ -2927,7 +2927,7 @@ export default function AdminEventsPage() {
 
             <div className="p-4 bg-slate-950 flex items-center justify-center max-h-[60vh] overflow-auto">
               <img
-                src={selectedProofBooking.paymentProofUrl}
+                src={resolveSafeProofUrl(selectedProofBooking.paymentProofUrl)}
                 alt="Bukti Transfer"
                 className="max-h-[55vh] w-auto object-contain rounded-lg shadow-lg"
               />
@@ -3036,11 +3036,10 @@ export default function AdminEventsPage() {
                     activePayoutTarget.status === "REJECTED" ? payoutInputText : undefined
                   )
                 }
-                className={`text-xs font-bold text-white cursor-pointer ${
-                  activePayoutTarget.status === "PAID"
+                className={`text-xs font-bold text-white cursor-pointer ${activePayoutTarget.status === "PAID"
                     ? "bg-emerald-600 hover:bg-emerald-700"
                     : "bg-rose-600 hover:bg-rose-700"
-                }`}
+                  }`}
               >
                 {activePayoutTarget.status === "PAID" ? "Simpan & Tandai Lunas" : "Tolak Pengajuan"}
               </Button>

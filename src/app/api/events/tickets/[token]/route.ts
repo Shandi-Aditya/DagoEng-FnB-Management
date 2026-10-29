@@ -4,6 +4,13 @@ import { CommunityEvent } from "@/types/event";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { getProofsDirectory, getProofFilePath } from "@/lib/data-storage";
+import {
+  validateMagicBytes,
+  ALLOWED_PROOF_EXTENSIONS,
+  ALLOWED_PROOF_MIME_TYPES,
+  sanitizeProofFilename,
+} from "@/lib/file-security";
 
 export const dynamic = "force-dynamic";
 
@@ -62,7 +69,20 @@ export async function GET(
       totalPrice: booking.totalPrice,
       paymentMethod: booking.paymentMethod,
       paymentStatus: booking.paymentStatus,
-      paymentProofUrl: booking.paymentProofUrl || null,
+      paymentProofUrl: (() => {
+        if (!booking.paymentProofUrl) return null;
+        const guestTokenParam = encodeURIComponent(booking.guestToken || "");
+        if (booking.paymentProofUrl.startsWith("/api/events/proofs/")) {
+          return booking.paymentProofUrl.includes("?")
+            ? booking.paymentProofUrl
+            : `${booking.paymentProofUrl}?token=${guestTokenParam}`;
+        }
+        if (booking.paymentProofUrl.startsWith("/images/events/proofs/")) {
+          const filename = path.basename(booking.paymentProofUrl);
+          return `/api/events/proofs/${filename}?token=${guestTokenParam}`;
+        }
+        return booking.paymentProofUrl;
+      })(),
       paymentProofUploadedAt: booking.paymentProofUploadedAt || null,
       paymentProofNote: booking.paymentProofNote || null,
       checkInStatus: booking.checkInStatus,
@@ -74,16 +94,16 @@ export async function GET(
       createdAt: booking.createdAt,
       eventDetails: matchingEvent
         ? {
-            id: matchingEvent.id,
-            title: matchingEvent.title,
-            category: matchingEvent.category,
-            posterUrl: matchingEvent.posterUrl,
-            organizerName: matchingEvent.organizerName,
-            startDate: matchingEvent.startDate,
-            endDate: matchingEvent.endDate,
-            location: matchingEvent.location,
-            guidelines: matchingEvent.guidelines,
-          }
+          id: matchingEvent.id,
+          title: matchingEvent.title,
+          category: matchingEvent.category,
+          posterUrl: matchingEvent.posterUrl,
+          organizerName: matchingEvent.organizerName,
+          startDate: matchingEvent.startDate,
+          endDate: matchingEvent.endDate,
+          location: matchingEvent.location,
+          guidelines: matchingEvent.guidelines,
+        }
         : null,
     };
 
@@ -156,14 +176,18 @@ export async function POST(
       }
 
       // 2. Allowed extension and MIME validation (prevent arbitrary file upload)
-      const allowedExts = [".jpg", ".jpeg", ".png", ".webp", ".pdf"];
       const rawExt = path.extname(file.name || "").toLowerCase();
-      const ext = allowedExts.includes(rawExt) ? rawExt : ".jpg";
-
-      const allowedMimes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-      if (file.type && !allowedMimes.includes(file.type.toLowerCase())) {
+      if (!ALLOWED_PROOF_EXTENSIONS.has(rawExt)) {
         return NextResponse.json(
           { success: false, error: "Format file tidak didukung. Harap unggah file JPG, PNG, WEBP, atau PDF." },
+          { status: 400 }
+        );
+      }
+      const ext = rawExt;
+
+      if (file.type && !ALLOWED_PROOF_MIME_TYPES.has(file.type.toLowerCase())) {
+        return NextResponse.json(
+          { success: false, error: "Tipe MIME file tidak didukung. Harap unggah gambar JPG, PNG, WEBP, atau PDF." },
           { status: 400 }
         );
       }
@@ -171,23 +195,52 @@ export async function POST(
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
 
-      const filename = `proof-${booking.ticketCode.toLowerCase()}-${Date.now()}${ext}`;
-      const uploadDir = path.join(process.cwd(), "public/images/events/proofs");
+      // 3. Header magic bytes validation (anti-spoofing)
+      if (!validateMagicBytes(buffer, ext)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Integritas file tidak valid. Header file tidak sesuai dengan format ekstensi yang dinyatakan.",
+          },
+          { status: 400 }
+        );
+      }
+
+      // 4. Save to secure private directory (never in public/)
+      const safeTicketCode = (booking.ticketCode || "ticket").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const randomSuffix = crypto.randomBytes(4).toString("hex");
+      const filename = `proof-${safeTicketCode}-${Date.now()}-${randomSuffix}${ext}`;
+      const uploadDir = getProofsDirectory();
 
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
 
       fs.writeFileSync(path.join(uploadDir, filename), buffer);
-      proofUrl = `/images/events/proofs/${filename}`;
+      proofUrl = `/api/events/proofs/${filename}`;
     } else {
       const body = await req.json();
       proofUrl = body.paymentProofUrl;
       proofNote = body.paymentProofNote || "";
 
-      if (!proofUrl) {
+      if (!proofUrl || typeof proofUrl !== "string" || !proofUrl.trim()) {
         return NextResponse.json(
           { success: false, error: "URL bukti pembayaran wajib disertakan." },
+          { status: 400 }
+        );
+      }
+
+      // Safe URL validation
+      const trimmedUrl = proofUrl.trim();
+      const isSafeProtocol =
+        trimmedUrl.startsWith("https://") ||
+        trimmedUrl.startsWith("/api/events/proofs/") ||
+        trimmedUrl.startsWith("/images/events/proofs/");
+      const hasTraversal = trimmedUrl.includes("..") || trimmedUrl.includes("\0");
+
+      if (!isSafeProtocol || hasTraversal) {
+        return NextResponse.json(
+          { success: false, error: "Format URL bukti pembayaran tidak valid atau tidak aman." },
           { status: 400 }
         );
       }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { TRUSTED_PERSONAS } from "@/lib/server-auth";
+import { TRUSTED_PERSONAS, isDemoLoginAllowed } from "@/lib/server-auth";
 import { isOrganizerActive, getAllOrganizers } from "@/lib/organizers";
 import { PersonaKey } from "@/types/auth";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
@@ -57,6 +57,29 @@ export async function POST(req: NextRequest) {
     // 1. Check verified demo accounts
     if (normalizedEmail in DEMO_CREDENTIALS) {
       const match = DEMO_CREDENTIALS[normalizedEmail];
+
+      // Enforce demo account partition guard (production blocks static public passwords for privileged roles)
+      const demoCheck = isDemoLoginAllowed(match.personaKey);
+      if (!demoCheck.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: demoCheck.reason || "FORBIDDEN: Login akun demo tidak diizinkan di environment ini.",
+          },
+          { status: 403 }
+        );
+      }
+
+      // Enforce demo account password verification (accepted demo passwords: "Password123!" or "demo")
+      if (password !== "Password123!" && password !== "demo") {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Password yang Anda masukkan salah. Silakan periksa kembali kredensial Anda.",
+          },
+          { status: 401 }
+        );
+      }
 
       // If this is a community organizer, enforce active status from disk
       if (

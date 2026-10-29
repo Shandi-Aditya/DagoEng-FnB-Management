@@ -20,3 +20,15 @@ export function getDataDirectory(): string {
 export function getDataFilePath(filename: string): string {
   return path.join(getDataDirectory(), filename);
 }
+
+/**
+ * Returns the private, non-public directory used to store sensitive payment proofs.
+ * Guarantees that payment proofs are never placed in public/ or exposed as static assets.
+ */
+export function getProofsDirectory(): string {
+  return path.join(getDataDirectory(), "proofs");
+}
+
+export function getProofFilePath(filename: string): string {
+  return path.join(getProofsDirectory(), filename);
+}

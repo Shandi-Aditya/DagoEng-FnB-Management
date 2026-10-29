@@ -3,6 +3,89 @@
   "defaultOrganizerSharePercent": 80,
   "minPlatformFeePercent": 0,
   "maxPlatformFeePercent": 100,
+  "bookingPaymentExpiryMinutes": 60,
+  "maxTicketsPerBooking": 5,
+  "activePaymentMethod": "MANUAL_TRANSFER",
+  "allowOrganizerBankAccounts": true,
+  "allowEventBankOverride": true,
+  "paymentInstructions": "Silakan transfer tepat sesuai total nominal ke rekening resmi Dago Creative Hub. Setelah transfer, unggah foto bukti struk/screenshot transfer Anda pada halaman tiket untuk diverifikasi oleh tim admin.",
+  "allowedProofFormats": [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf"
+  ],
+  "maxProofFileSizeMb": 5,
+  "bankAccounts": [
+    {
+      "id": "bank-bca-plat",
+      "label": "BCA Platform Utama",
+      "bankName": "BCA (Bank Central Asia)",
+      "accountNumber": "1420993821",
+      "accountHolder": "PT DAGO CREATIVE HUB",
+      "branch": "KCU Dago Bandung",
+      "badge": "Utama / Rekomendasi",
+      "isDefault": true,
+      "isActive": false,
+      "accountType": "PLATFORM",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-10-28T09:32:56.336Z"
+    },
+    {
+      "id": "bank-mandiri-plat",
+      "label": "Mandiri Platform",
+      "bankName": "Bank Mandiri",
+      "accountNumber": "1300098234120",
+      "accountHolder": "PT DAGO CREATIVE HUB",
+      "branch": "KC Bandung Surapati",
+      "badge": "Bebas Biaya Admin",
+      "isDefault": false,
+      "isActive": false,
+      "accountType": "PLATFORM",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-10-28T09:32:58.234Z"
+    },
+    {
+      "id": "bank-bri-plat",
+      "label": "BRI Platform",
+      "bankName": "Bank BRI",
+      "accountNumber": "034101000928301",
+      "accountHolder": "PT DAGO CREATIVE HUB",
+      "branch": "KC Dago Bandung",
+      "badge": "Jaringan Luas",
+      "isDefault": false,
+      "isActive": true,
+      "accountType": "PLATFORM",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "bankHistory": [
+    {
+      "id": "bhist-1793179978234-ax54",
+      "changedAt": "2026-10-28T09:32:58.234Z",
+      "changedBy": "Hendra Wijaya (Owner Dago Hub)",
+      "action": "TOGGLE_ACTIVE",
+      "bankId": "bank-mandiri-plat",
+      "details": "Pembaruan rekening Bank Mandiri - 1300098234120: {\"isActive\":false}"
+    },
+    {
+      "id": "bhist-1793179976336-xsc1",
+      "changedAt": "2026-10-28T09:32:56.336Z",
+      "changedBy": "Hendra Wijaya (Owner Dago Hub)",
+      "action": "TOGGLE_ACTIVE",
+      "bankId": "bank-bca-plat",
+      "details": "Pembaruan rekening BCA (Bank Central Asia) - 1420993821: {\"isActive\":false}"
+    },
+    {
+      "id": "bhist-init-2026",
+      "changedAt": "2026-01-01T00:00:00.000Z",
+      "changedBy": "Platform Super Admin",
+      "action": "SET_DEFAULT",
+      "bankId": "bank-bca-plat",
+      "details": "Inisialisasi rekening bank default BCA (PT DAGO CREATIVE HUB - 1420993821)"
+    }
+  ],
   "effectiveDate": "2026-01-01T00:00:00.000Z",
   "policyNotes": "Kebijakan komisi standar platform DAGO Creative Hub (20% Platform / 80% Penyelenggara Komunitas).",
   "history": [

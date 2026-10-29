@@ -25,6 +25,50 @@ const AUTHORIZED_ADMIN_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
 const AUTHORIZED_MODERATION_SCOPES: ScopeLevel[] = ["PLATFORM", "ORGANIZATION"];
 
 /**
+ * Evaluates whether a demo persona account can be authenticated via login.
+ * Security enforcement:
+ * - Permitted in automated test suites (NODE_ENV === "test") and local dev (NODE_ENV === "development").
+ * - In production:
+ *   - Completely blocked by default if ENABLE_ROLE_SIMULATOR !== "true".
+ *   - Even if ENABLE_ROLE_SIMULATOR === "true" (e.g. in staging/QA sandbox), privileged administrative
+ *     personas (SUPER_ADMIN, OWNER, MANAGER) are STRICTLY BLOCKED from static passwords to prevent platform takeover.
+ */
+export function isDemoLoginAllowed(personaKey: string): { allowed: boolean; reason?: string } {
+  if (process.env.NODE_ENV === "test" || process.env.NODE_ENV === "development") {
+    return { allowed: true };
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    const simulatorEnabled = process.env.ENABLE_ROLE_SIMULATOR === "true";
+    if (!simulatorEnabled) {
+      return {
+        allowed: false,
+        reason: "FORBIDDEN: Akun demo dan password statis dinonaktifkan di environment production. Gunakan kredensial resmi terdaftar.",
+      };
+    }
+
+    const persona = TRUSTED_PERSONAS[personaKey];
+    const isPrivileged =
+      persona?.role === "SUPER_ADMIN" ||
+      persona?.role === "OWNER" ||
+      persona?.role === "MANAGER" ||
+      persona?.scopeLevel === "PLATFORM" ||
+      persona?.scopeLevel === "ORGANIZATION";
+
+    if (isPrivileged) {
+      return {
+        allowed: false,
+        reason: "FORBIDDEN: Akses administratif (Super Admin, Owner, Manager) tidak dapat diakses melalui password statis demo di environment production.",
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  return { allowed: true };
+}
+
+/**
  * Trusted in-memory persona definitions.
  * Immutable map from persona cookie keys to authenticated server identities.
  */
@@ -246,10 +290,32 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
     }
   }
 
-  // 2. Check verified active persona cookie
+  // 2. Check verified active persona cookie (only permitted in dev/test or when role simulator explicitly enabled)
   const personaCookie = req.cookies.get("dagoeng_active_persona")?.value;
   if (personaCookie && TRUSTED_PERSONAS[personaCookie]) {
     const persona = TRUSTED_PERSONAS[personaCookie];
+    const isPrivileged =
+      persona.role === "SUPER_ADMIN" ||
+      persona.role === "OWNER" ||
+      persona.role === "MANAGER" ||
+      persona.scopeLevel === "PLATFORM" ||
+      persona.scopeLevel === "ORGANIZATION";
+
+    if (process.env.NODE_ENV === "production") {
+      const simulatorEnabled = process.env.ENABLE_ROLE_SIMULATOR === "true";
+      // In production, persona cookie can NEVER grant privileged administrative roles
+      if (!simulatorEnabled || isPrivileged) {
+        return {
+          isAuthenticated: false,
+          role: null,
+          userId: null,
+          email: null,
+          scopeLevel: null,
+          error: "UNAUTHORIZED: Simulasi persona administratif tidak diizinkan di production. Gunakan sesi kredensial resmi.",
+        };
+      }
+    }
+
     return {
       isAuthenticated: true,
       role: persona.role,

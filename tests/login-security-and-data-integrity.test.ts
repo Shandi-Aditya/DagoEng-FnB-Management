@@ -213,6 +213,149 @@ describe("Login Security & Data Integrity Audit Fix (DAGO Creative Hub)", () => 
       expect(data.personaKey).toBe("COMMUNITY_BARISTA");
       expect(data.redirectUrl).toBe("/events/portal");
     });
+
+    it("should strictly reject demo accounts when invalid password is provided (HTTP 401)", async () => {
+      const demoEmails = [
+        "admin@dagoeng.com",
+        "owner.dago@dagoeng.com",
+        "cashier.sgr@kopisenja.com",
+        "baristaguild@dagocreative.id",
+      ];
+
+      for (const email of demoEmails) {
+        const req = new NextRequest("http://localhost:3000/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password: "WrongPassword999!",
+          }),
+        });
+
+        const res = await handleLogin(req);
+        expect(res.status).toBe(401);
+
+        const data = await res.json();
+        expect(data.success).toBe(false);
+        expect(data.error).toMatch(/password.*salah/i);
+        expect(data.personaKey).toBeUndefined();
+      }
+    });
+
+    it("should reject client-set persona cookie in production when role simulator is disabled", async () => {
+      const prevEnv = process.env.NODE_ENV;
+      const prevSimulator = process.env.ENABLE_ROLE_SIMULATOR;
+
+      try {
+        // @ts-ignore
+        process.env.NODE_ENV = "production";
+        process.env.ENABLE_ROLE_SIMULATOR = "false";
+
+        const req = new NextRequest("http://localhost:3000/api/events/admin/settings", {
+          headers: {
+            Cookie: "dagoeng_active_persona=SUPER_ADMIN",
+          },
+        });
+
+        const auth = await getRequestAuthUser(req);
+        expect(auth.isAuthenticated).toBe(false);
+        expect(auth.role).toBeNull();
+        expect(auth.error).toMatch(/simulasi persona/i);
+      } finally {
+        // @ts-ignore
+        process.env.NODE_ENV = prevEnv;
+        process.env.ENABLE_ROLE_SIMULATOR = prevSimulator;
+      }
+    });
+
+    it("should strictly block demo account logins in production with HTTP 403 when role simulator is disabled", async () => {
+      const prevEnv = process.env.NODE_ENV;
+      const prevSimulator = process.env.ENABLE_ROLE_SIMULATOR;
+
+      try {
+        // @ts-ignore
+        process.env.NODE_ENV = "production";
+        process.env.ENABLE_ROLE_SIMULATOR = "false";
+
+        const req = new NextRequest("http://localhost:3000/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "owner.dago@dagoeng.com",
+            password: "Password123!",
+          }),
+        });
+
+        const res = await handleLogin(req);
+        expect(res.status).toBe(403);
+        const data = await res.json();
+        expect(data.success).toBe(false);
+        expect(data.error).toMatch(/production/i);
+      } finally {
+        // @ts-ignore
+        process.env.NODE_ENV = prevEnv;
+        process.env.ENABLE_ROLE_SIMULATOR = prevSimulator;
+      }
+    });
+
+    it("should strictly block privileged demo logins (Super Admin, Owner) in production even if role simulator is enabled", async () => {
+      const prevEnv = process.env.NODE_ENV;
+      const prevSimulator = process.env.ENABLE_ROLE_SIMULATOR;
+
+      try {
+        // @ts-ignore
+        process.env.NODE_ENV = "production";
+        process.env.ENABLE_ROLE_SIMULATOR = "true";
+
+        const privilegedEmails = ["admin@dagoeng.com", "owner.dago@dagoeng.com"];
+        for (const email of privilegedEmails) {
+          const req = new NextRequest("http://localhost:3000/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email,
+              password: "Password123!",
+            }),
+          });
+
+          const res = await handleLogin(req);
+          expect(res.status).toBe(403);
+          const data = await res.json();
+          expect(data.success).toBe(false);
+          expect(data.error).toMatch(/administratif/i);
+        }
+      } finally {
+        // @ts-ignore
+        process.env.NODE_ENV = prevEnv;
+        process.env.ENABLE_ROLE_SIMULATOR = prevSimulator;
+      }
+    });
+
+    it("should reject client persona cookie for privileged administrative roles in production even if role simulator is enabled", async () => {
+      const prevEnv = process.env.NODE_ENV;
+      const prevSimulator = process.env.ENABLE_ROLE_SIMULATOR;
+
+      try {
+        // @ts-ignore
+        process.env.NODE_ENV = "production";
+        process.env.ENABLE_ROLE_SIMULATOR = "true";
+
+        const req = new NextRequest("http://localhost:3000/api/events/admin/settings", {
+          headers: {
+            Cookie: "dagoeng_active_persona=SUPER_ADMIN",
+          },
+        });
+
+        const auth = await getRequestAuthUser(req);
+        expect(auth.isAuthenticated).toBe(false);
+        expect(auth.role).toBeNull();
+        expect(auth.error).toMatch(/administratif/i);
+      } finally {
+        // @ts-ignore
+        process.env.NODE_ENV = prevEnv;
+        process.env.ENABLE_ROLE_SIMULATOR = prevSimulator;
+      }
+    });
   });
 
   // ---------------------------------------------------------------------------
