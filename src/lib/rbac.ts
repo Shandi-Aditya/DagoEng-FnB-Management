@@ -99,6 +99,14 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     module: "CO_WORKING",
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
   },
+  {
+    name: "Commercial & Tenancy",
+    href: "/commercial",
+    icon: "Building2",
+    module: "COMMERCIAL",
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+    minScope: "ORGANIZATION",
+  },
 
   // 3. Modul Prioritas 2: F&B Domain Module
   {
@@ -189,6 +197,7 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     icon: "ShieldCheck",
     module: "CORE",
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+    minScope: "ORGANIZATION",
   },
   {
     name: "Master Data & Pengaturan",
@@ -209,6 +218,54 @@ const SCOPE_HIERARCHY: Record<ScopeLevel, number> = {
 };
 
 /**
+ * Evaluates whether a user is authorized to access the Event Check-In dashboard.
+ * - Platform Super Admin has universal access.
+ * - Hub Management (OWNER, MANAGER) with ORGANIZATION or PLATFORM scope has oversight.
+ * - Users with explicit check-in or event management permissions (events:checkin, events:manage_own, *).
+ * - Field staff (WAITER, CASHIER) MUST have an explicit "events:checkin" permission; role/scope alone is insufficient.
+ * - Mitra F&B / Tenant accounts (scopeLevel === "TENANT" or user.tenant !== null) are STRICTLY excluded.
+ * - Customer role without explicit event check-in permission is STRICTLY excluded.
+ */
+export function canAccessEventCheckIn(user: AuthenticatedUser | null): boolean {
+  if (!user) return false;
+  if (user.role.slug === "SUPER_ADMIN") return true;
+
+  // Strict exclusion: F&B Tenant Owners and Tenant Staff must NEVER see Check-in Event
+  if (user.scopeLevel === "TENANT" || (user.tenant && user.tenant.businessModule === "FNB")) {
+    return false;
+  }
+
+  // Customer role has no access unless explicitly granted check-in or organizer permission
+  if (
+    user.role.slug === "CUSTOMER" &&
+    !user.permissions.includes("events:checkin") &&
+    !user.permissions.includes("events:manage_own")
+  ) {
+    return false;
+  }
+
+  // Hub Management oversight (SUPER_ADMIN or Hub OWNER/MANAGER with ORGANIZATION/PLATFORM scope)
+  if (
+    (user.role.slug === "OWNER" || user.role.slug === "MANAGER") &&
+    (user.scopeLevel === "ORGANIZATION" || user.scopeLevel === "PLATFORM")
+  ) {
+    return true;
+  }
+
+  // Explicit permission codes (Event Staff with "events:checkin", Organizer with "events:manage_own", or "*")
+  if (
+    user.permissions.includes("events:checkin") ||
+    user.permissions.includes("events:manage_own") ||
+    user.permissions.includes("*")
+  ) {
+    return true;
+  }
+
+  // F&B Field staff (WAITER, CASHIER) without explicit "events:checkin" permission are STRICTLY REJECTED!
+  return false;
+}
+
+/**
  * Filters dynamic navigation items based on Role + Access Scope + Active Org Modules.
  */
 export function getAuthorizedNavItems(
@@ -227,10 +284,15 @@ export function getAuthorizedNavItems(
       return false;
     }
 
-    // 3. Module must be active in the organization
+    // 3. Dynamic role & permission rule for Check-in Event
+    if (item.href === "/events/checkin" && !canAccessEventCheckIn(user)) {
+      return false;
+    }
+
+    // 4. Module must be active in the organization
     if (item.module !== "CORE" && !activeOrgModules.includes(item.module)) return false;
 
-    // 4. User's scope must permit this module
+    // 5. User's scope must permit this module
     if (
       item.module !== "CORE" &&
       user.scopeLevel !== "ORGANIZATION" &&

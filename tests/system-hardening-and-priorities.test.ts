@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from "vitest";
+import fs from "fs";
+import { getDataFilePath } from "@/lib/data-storage";
 import {
   expirePendingBookings,
   getEventTicketAvailability,
@@ -31,6 +33,20 @@ describe("FINAL TASK — SYSTEM HARDENING, OPERATIONAL UX & MODULE PRIORITY", ()
   const testOrganizerEmail = "organizer-hardening@dagoeng.com";
   const mockClientId = "MCH-TEST";
   const mockSecretKey = "SK-TEST";
+  let originalBookingsBackup: string | null = null;
+  const bookingsFile = getDataFilePath("event_bookings.json");
+
+  beforeAll(() => {
+    if (fs.existsSync(bookingsFile)) {
+      originalBookingsBackup = fs.readFileSync(bookingsFile, "utf-8");
+    }
+  });
+
+  afterAll(() => {
+    if (originalBookingsBackup && fs.existsSync(bookingsFile)) {
+      fs.writeFileSync(bookingsFile, originalBookingsBackup, "utf-8");
+    }
+  });
 
   beforeEach(async () => {
     // Ensure clean state and test event

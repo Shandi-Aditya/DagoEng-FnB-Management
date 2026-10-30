@@ -259,6 +259,21 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["events:manage_own"],
   },
+
+  // 13. Event Field Staff with explicit check-in permission
+  EVENT_STAFF: {
+    id: "user-event-staff-demo",
+    email: "eventstaff@dagoeng.com",
+    name: "Dago Event Field Staff",
+    phone: "+62 812-5566-7788",
+    role: { id: "role-staff", slug: "WAITER", name: "Event Staff" },
+    scopeLevel: "ORGANIZATION",
+    allowedModules: ["CORE"],
+    organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
+    tenant: null,
+    outlet: null,
+    permissions: ["events:checkin"],
+  },
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

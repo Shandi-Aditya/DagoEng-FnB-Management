@@ -36,7 +36,8 @@ export type PersonaKey =
   | "SUPER_ADMIN"
   | "COMMUNITY_BARISTA"
   | "COMMUNITY_BANDUNGDEV"
-  | "COMMUNITY_AKSARAPRIANGAN";
+  | "COMMUNITY_AKSARAPRIANGAN"
+  | "EVENT_STAFF";
 
 export interface AuthenticatedUser {
   id: string;

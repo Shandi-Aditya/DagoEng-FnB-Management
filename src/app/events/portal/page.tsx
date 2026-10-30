@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Calendar as CalendarIcon,
   MapPin,
@@ -61,6 +62,7 @@ type EventViewMode = "LIST" | "CALENDAR";
 type EventFilterStatus = "ALL" | "APPROVED" | "PENDING" | "REVISION_REQUESTED" | "REJECTED";
 
 export default function CommunityOrganizerPortalPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const [organizerEmail, setOrganizerEmail] = useState("");
   const [activeEmail, setActiveEmail] = useState("");
@@ -74,7 +76,7 @@ export default function CommunityOrganizerPortalPage() {
   const [eventViewMode, setEventViewMode] = useState<EventViewMode>("LIST");
   const [eventFilterStatus, setEventFilterStatus] = useState<EventFilterStatus>("ALL");
   const [eventSearchQuery, setEventSearchQuery] = useState("");
-  const [eventSubTab, setEventSubTab] = useState<"EVENTS" | "COLLECTIONS">("EVENTS");
+  const [isEventFilterOpen, setIsEventFilterOpen] = useState(false);
   const [calendarDate, setCalendarDate] = useState<Date>(new Date());
 
   // Attendees Filtering & QR Scanner
@@ -400,23 +402,25 @@ export default function CommunityOrganizerPortalPage() {
     }
   };
 
-  // Effective Summary computed from active dateRange filter
+  // Effective Summary computed from active dateRange filter (strictly PAID bookings for metrics)
   const effectiveSummary = useMemo(() => {
     if (!portalData) return null;
-    if (!dateRange) return portalData.summary;
 
     const filteredBookings = portalData.bookings.filter((b) =>
-      isTimestampInWitaPeriod(b.createdAt, dateRange)
+      dateRange ? isTimestampInWitaPeriod(b.createdAt, dateRange) : true
     );
     const paidBookings = filteredBookings.filter((b) => b.paymentStatus === "PAID");
     const totalTicketsSold = paidBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
     const totalAttendees = paidBookings.length;
-    const grossRevenue = filteredBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
     const eligibleRevenue = paidBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+    // Financial and ticket metrics strictly count verified PAID bookings only
+    const grossRevenue = eligibleRevenue;
     const platformFeeAmount = paidBookings.reduce((sum, b) => sum + (b.platformFeeAmount || 0), 0);
     const organizerPayoutAmount = paidBookings.reduce((sum, b) => sum + (b.organizerRevenueAmount || 0), 0);
 
-    const periodEvents = portalData.events.filter((e) => isEventInWitaPeriod(e, dateRange));
+    const periodEvents = portalData.events.filter((e) =>
+      dateRange ? isEventInWitaPeriod(e, dateRange) : true
+    );
 
     let requestedPayoutAmount = 0;
     let paidPayoutAmount = 0;
@@ -877,168 +881,197 @@ export default function CommunityOrganizerPortalPage() {
              ========================================================================= */}
           {activeNav === "EVENTS" && (
             <div className="space-y-6">
-              {/* Header Title & Sub-tabs */}
-              <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                      Kelola Event
-                    </h1>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Kelola jadwal, pantau keterisian tiket, dan pantau status moderasi event komunitas Anda.
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-2">
+              {/* Header Title & Actions */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
+                    Kelola Event
+                  </h1>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Kelola jadwal, pantau keterisian tiket, dan pantau status moderasi event komunitas Anda ({portalData?.events.length || 0} total event).
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Link href="/events/submit">
                     <Button
-                      variant="outline"
                       size="sm"
-                      onClick={() => loadPortalData(activeEmail || organizerEmail)}
-                      disabled={isLoading}
-                      className="text-xs h-9 px-3 rounded-xl border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-                      title="Segarkan data event"
+                      className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-9 px-4 rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
                     >
-                      <RefreshCw className={`w-3.5 h-3.5 text-slate-600 dark:text-slate-400 ${isLoading ? "animate-spin" : ""}`} />
-                      <span className="ml-1.5 hidden sm:inline text-xs font-semibold">Segarkan</span>
+                      <Plus className="w-4 h-4" />
+                      <span>Buat Event Baru</span>
                     </Button>
-
-                    <Link href="/events/submit">
-                      <Button
-                        size="sm"
-                        className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-9 px-4 rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Buat Event Baru</span>
-                      </Button>
-                    </Link>
-                  </div>
-                </div>
-
-                {/* Date Range Filter for Events */}
-                <div className="bg-slate-50/70 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-                  <EventDateRangeFilter
-                    onApplyFilter={(range) => setDateRange(range)}
-                    initialRange={dateRange}
-                    label="Filter Periode Pelaksanaan"
-                  />
-                </div>
-
-                {/* Sub-tabs: Events vs Collections */}
-                <div className="flex items-center space-x-6 border-b border-slate-200 dark:border-slate-800">
-                  <button
-                    type="button"
-                    onClick={() => setEventSubTab("EVENTS")}
-                    className={`pb-3 text-sm font-bold transition-all border-b-2 cursor-pointer ${
-                      eventSubTab === "EVENTS"
-                        ? "border-[#3B7A57] text-[#3B7A57]"
-                        : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    Daftar Event ({portalData?.events.length || 0})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEventSubTab("COLLECTIONS")}
-                    className={`pb-3 text-sm font-bold transition-all border-b-2 cursor-pointer ${
-                      eventSubTab === "COLLECTIONS"
-                        ? "border-[#3B7A57] text-[#3B7A57]"
-                        : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    Kategori & Fasilitas
-                  </button>
+                  </Link>
                 </div>
               </div>
 
-              {eventSubTab === "EVENTS" ? (
-                <>
-                  {/* Status Pills Filter Bar (Eventbrite Pattern) */}
-                  <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 scrollbar-none">
-                    {(
-                      [
-                        { key: "ALL", label: "Semua" },
-                        { key: "APPROVED", label: "Tayang / Live" },
-                        { key: "PENDING", label: "Menunggu Review" },
-                        { key: "REVISION_REQUESTED", label: "Perlu Revisi" },
-                        { key: "REJECTED", label: "Ditolak / Arsip" },
-                      ] as const
-                    ).map((statusTab) => {
-                      const count =
-                        portalData?.events.filter((e) => {
-                          if (statusTab.key === "ALL") return true;
-                          if (statusTab.key === "REJECTED") return e.status === "REJECTED" || e.status === "ARCHIVED";
-                          return e.status === statusTab.key;
-                        }).length || 0;
-
-                      const isActive = eventFilterStatus === statusTab.key;
-
-                      return (
-                        <button
-                          key={statusTab.key}
-                          type="button"
-                          onClick={() => setEventFilterStatus(statusTab.key)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center space-x-1.5 cursor-pointer ${
-                            isActive
-                              ? "bg-[#3B7A57] text-white shadow-xs"
-                              : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700 hover:text-slate-900 dark:hover:text-white"
-                          }`}
-                        >
-                          <span>{statusTab.label}</span>
-                          <span
-                            className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                              isActive
-                                ? "bg-white/20 text-white"
-                                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-                            }`}
-                          >
-                            {count}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Action Bar / Controls (Search, View Toggle) */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    {/* Left Controls: Search Bar */}
-                    <div className="relative w-full sm:w-72">
+              {/* Compact Unified Search & Filter Pattern */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  {/* Left: Search input + Filter button */}
+                  <div className="flex items-center space-x-2 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-80">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
                         value={eventSearchQuery}
                         onChange={(e) => setEventSearchQuery(e.target.value)}
                         placeholder="Cari event berdasarkan judul atau lokasi..."
-                        className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                        className="w-full pl-9 pr-8 py-2 text-xs rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
                       />
+                      {eventSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setEventSearchQuery("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
 
-                    {/* View Switcher: List vs Calendar */}
-                    <div className="inline-flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
-                      <button
-                        type="button"
-                        onClick={() => setEventViewMode("LIST")}
-                        className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          eventViewMode === "LIST"
-                            ? "bg-white dark:bg-[#0F172A] text-slate-900 dark:text-white shadow-xs"
-                            : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
-                        }`}
-                      >
-                        <List className="w-3.5 h-3.5" />
-                        <span>Daftar</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEventViewMode("CALENDAR")}
-                        className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          eventViewMode === "CALENDAR"
-                            ? "bg-white dark:bg-[#0F172A] text-slate-900 dark:text-white shadow-xs"
-                            : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
-                        }`}
-                      >
-                        <CalendarIcon className="w-3.5 h-3.5" />
-                        <span>Kalender</span>
-                      </button>
+                    {/* Filter Dropdown Toggle Button */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEventFilterOpen(!isEventFilterOpen)}
+                      className={`h-9 text-xs font-bold px-3 rounded-xl border transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 ${
+                        (eventFilterStatus !== "ALL" || dateRange)
+                          ? "border-[#3B7A57] bg-[#3B7A57]/10 text-[#3B7A57] dark:text-[#52B788]"
+                          : "border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5" />
+                      <span>Filter</span>
+                      {((eventFilterStatus !== "ALL" ? 1 : 0) + (dateRange ? 1 : 0)) > 0 && (
+                        <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-[#3B7A57] text-white">
+                          {(eventFilterStatus !== "ALL" ? 1 : 0) + (dateRange ? 1 : 0)}
+                        </span>
+                      )}
+                    </Button>
+                  </div>
+
+                  {/* Right: View Switcher (List vs Calendar) */}
+                  <div className="inline-flex items-center p-0.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setEventViewMode("LIST")}
+                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        eventViewMode === "LIST"
+                          ? "bg-white dark:bg-[#0F172A] text-[#3B7A57] dark:text-[#52B788] shadow-xs"
+                          : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                      }`}
+                    >
+                      <List className="w-3.5 h-3.5" />
+                      <span>Daftar</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEventViewMode("CALENDAR")}
+                      className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        eventViewMode === "CALENDAR"
+                          ? "bg-white dark:bg-[#0F172A] text-[#3B7A57] dark:text-[#52B788] shadow-xs"
+                          : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                      }`}
+                    >
+                      <CalendarIcon className="w-3.5 h-3.5" />
+                      <span>Kalender</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Filter Popover / Dropdown Panel */}
+                {isEventFilterOpen && (
+                  <div className="p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Status Moderasi</span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {([
+                          { key: "ALL", label: "Semua Status" },
+                          { key: "APPROVED", label: "Tayang / Live" },
+                          { key: "PENDING", label: "Menunggu Review" },
+                          { key: "REVISION_REQUESTED", label: "Perlu Revisi" },
+                          { key: "REJECTED", label: "Ditolak / Arsip" },
+                        ] as const).map((statusTab) => {
+                          const count = portalData?.events.filter((e) => {
+                            if (statusTab.key === "ALL") return true;
+                            if (statusTab.key === "REJECTED") return e.status === "REJECTED" || e.status === "ARCHIVED";
+                            return e.status === statusTab.key;
+                          }).length || 0;
+                          const isActive = eventFilterStatus === statusTab.key;
+                          return (
+                            <button
+                              key={statusTab.key}
+                              type="button"
+                              onClick={() => setEventFilterStatus(statusTab.key)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
+                                isActive
+                                  ? "bg-[#3B7A57] text-white shadow-xs"
+                                  : "bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57]/40"
+                              }`}
+                            >
+                              <span>{statusTab.label}</span>
+                              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isActive ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"}`}>
+                                {count}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <EventDateRangeFilter
+                        onApplyFilter={(range) => setDateRange(range)}
+                        initialRange={dateRange}
+                        label="Filter Periode Pelaksanaan"
+                      />
                     </div>
                   </div>
+                )}
+
+                {/* Active Filter Chips */}
+                {(eventSearchQuery || eventFilterStatus !== "ALL" || dateRange) && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                    <span className="text-[11px] font-semibold text-slate-400">Filter Aktif:</span>
+                    {eventSearchQuery && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs bg-[#3B7A57]/10 text-[#3B7A57] dark:text-[#52B788] border border-[#3B7A57]/20 font-medium">
+                        Cari: &quot;{eventSearchQuery}&quot;
+                        <button type="button" onClick={() => setEventSearchQuery("")} className="ml-1 hover:text-rose-600">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {eventFilterStatus !== "ALL" && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs bg-[#3B7A57]/10 text-[#3B7A57] dark:text-[#52B788] border border-[#3B7A57]/20 font-medium">
+                        Status: {eventFilterStatus === "APPROVED" ? "Tayang / Live" : eventFilterStatus === "PENDING" ? "Menunggu Review" : eventFilterStatus === "REVISION_REQUESTED" ? "Perlu Revisi" : "Ditolak / Arsip"}
+                        <button type="button" onClick={() => setEventFilterStatus("ALL")} className="ml-1 hover:text-rose-600">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    {dateRange && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs bg-[#3B7A57]/10 text-[#3B7A57] dark:text-[#52B788] border border-[#3B7A57]/20 font-medium">
+                        Periode: {dateRange.startDate} — {dateRange.endDate}
+                        <button type="button" onClick={() => setDateRange(null)} className="ml-1 hover:text-rose-600">
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEventSearchQuery("");
+                        setEventFilterStatus("ALL");
+                        setDateRange(null);
+                      }}
+                      className="text-xs text-rose-600 dark:text-rose-400 hover:underline font-semibold ml-1 cursor-pointer"
+                    >
+                      Reset Semua
+                    </button>
+                  </div>
+                )}
+              </div>
 
                   {/* =============================================================
                       LIST VIEW: Eventbrite Style Card List
@@ -1113,13 +1146,20 @@ export default function CommunityOrganizerPortalPage() {
                           return (
                             <Card
                               key={evt.id}
-                              className="p-4 sm:p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-xs"
+                              onClick={() => {
+                                if (evt.status === "REVISION_REQUESTED") {
+                                  openRevisionModal(evt);
+                                } else {
+                                  router.push(`/events/${evt.id}`);
+                                }
+                              }}
+                              className="p-4 sm:p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-[#3B7A57]/60 hover:shadow-md transition-all shadow-xs cursor-pointer group"
                             >
                               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 {/* Left Event Date & Details */}
                                 <div className="flex items-start space-x-4">
                                   {/* Date Box Indicator (DagoEng Sage Green Style) */}
-                                  <div className="flex-shrink-0 w-14 h-16 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center">
+                                  <div className="flex-shrink-0 w-14 h-16 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center group-hover:border-[#3B7A57]/40 transition-colors">
                                     <span className="text-[10px] font-black text-[#3B7A57] tracking-wider uppercase">
                                       {monthStr}
                                     </span>
@@ -1158,7 +1198,8 @@ export default function CommunityOrganizerPortalPage() {
                                       </Badge>
                                       {evt.proposedRevenueSplit?.status === "PENDING" && (
                                         <span
-                                          onClick={() => {
+                                          onClick={(e) => {
+                                            e.stopPropagation();
                                             setNegotiatingEvent(evt);
                                             setSplitOrgPercent(evt.proposedRevenueSplit?.organizerPercent ?? evt.organizerFeePercent ?? 80);
                                             setSplitPlatPercent(evt.proposedRevenueSplit?.platformPercent ?? evt.customPlatformFeePercent ?? 20);
@@ -1172,7 +1213,7 @@ export default function CommunityOrganizerPortalPage() {
                                       )}
                                     </div>
 
-                                    <h3 className="font-extrabold text-base text-slate-900 dark:text-white line-clamp-1 hover:text-[#3B7A57] transition-colors">
+                                    <h3 className="font-extrabold text-base text-slate-900 dark:text-white line-clamp-1 group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
                                       {evt.title}
                                     </h3>
 
@@ -1221,7 +1262,7 @@ export default function CommunityOrganizerPortalPage() {
                                   {/* Action Buttons */}
                                   <div className="flex items-center space-x-1.5 flex-shrink-0">
                                     {evt.status === "APPROVED" && (
-                                      <Link href={`/events/${evt.id}`} target="_blank">
+                                      <Link href={`/events/${evt.id}`} target="_blank" onClick={(e) => e.stopPropagation()}>
                                         <Button
                                           variant="outline"
                                           size="sm"
@@ -1236,7 +1277,10 @@ export default function CommunityOrganizerPortalPage() {
                                     {evt.status === "REVISION_REQUESTED" && (
                                       <Button
                                         size="sm"
-                                        onClick={() => openRevisionModal(evt)}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          openRevisionModal(evt);
+                                        }}
                                         className="text-xs h-8 px-3 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold cursor-pointer"
                                       >
                                         <FileEdit className="w-3.5 h-3.5 mr-1" />
@@ -1247,7 +1291,8 @@ export default function CommunityOrganizerPortalPage() {
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         setNegotiatingEvent(evt);
                                         setSplitOrgPercent(evt.proposedRevenueSplit?.organizerPercent ?? evt.organizerFeePercent ?? 80);
                                         setSplitPlatPercent(evt.proposedRevenueSplit?.platformPercent ?? evt.customPlatformFeePercent ?? 20);
@@ -1262,7 +1307,8 @@ export default function CommunityOrganizerPortalPage() {
 
                                     <Button
                                       size="sm"
-                                      onClick={() => {
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         setSelectedEventId(evt.id);
                                         setActiveNav("ATTENDEES");
                                       }}
@@ -1407,39 +1453,8 @@ export default function CommunityOrganizerPortalPage() {
                       </div>
                     </Card>
                   )}
-                </>
-              ) : (
-                /* Collections & Category View */
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {Array.from(new Set(portalData?.events.map((e) => e.category) || [])).map((cat) => {
-                    const catEvents = (portalData?.events || []).filter((e) => e.category === cat);
-                    return (
-                      <Card
-                        key={cat}
-                        className="p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3 shadow-xs"
-                      >
-                        <div className="flex items-center justify-between">
-                          <Badge variant="outline" className="text-xs font-bold border-[#3B7A57]/40 text-[#3B7A57]">
-                            {cat}
-                          </Badge>
-                          <span className="text-xs font-bold text-slate-400">
-                            {catEvents.length} Event
-                          </span>
-                        </div>
-                        <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                          {catEvents.map((e) => (
-                            <li key={e.id} className="truncate">
-                              • {e.title}
-                            </li>
-                          ))}
-                        </ul>
-                      </Card>
-                    );
-                  })}
                 </div>
               )}
-            </div>
-          )}
 
           {/* =========================================================================
               VIEW 2: ATTENDEES & CHECK-IN (Orders Management)
@@ -1892,13 +1907,32 @@ export default function CommunityOrganizerPortalPage() {
              ========================================================================= */}
           {activeNav === "HOME" && (
             <div className="space-y-6">
-              <div>
-                <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-                  Dashboard Overview
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Selamat datang kembali, {portalData?.summary.organizerName || "Komunitas"}. Berikut rangkuman performa event Anda.
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
+                    Dashboard Overview
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Selamat datang kembali, {portalData?.summary.organizerName || "Komunitas"}. Berikut rangkuman performa event Anda.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveNav("EVENTS")}
+                  className="text-xs font-semibold text-[#3B7A57] dark:text-[#52B788] hover:underline flex items-center space-x-1 cursor-pointer self-start sm:self-auto"
+                >
+                  <span>Lihat Semua Event</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Date Range Filter for Analytics KPI */}
+              <div className="bg-slate-50/70 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800">
+                <EventDateRangeFilter
+                  onApplyFilter={(range) => setDateRange(range)}
+                  initialRange={dateRange}
+                  label="Filter Rentang Analitik"
+                />
               </div>
 
               {/* KPI 4 Grid */}
@@ -1906,27 +1940,27 @@ export default function CommunityOrganizerPortalPage() {
                 <Card className="p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Total Event</span>
                   <div className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-                    {portalData?.summary.totalEvents || 0}
+                    {summary?.totalEvents || 0}
                   </div>
                   <span className="text-[11px] text-emerald-600 font-semibold mt-1 block">
-                    {portalData?.summary.approvedEvents || 0} Tayang Live
+                    {summary?.approvedEvents || 0} Tayang Live
                   </span>
                 </Card>
 
                 <Card className="p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Tiket Terjual</span>
                   <div className="text-2xl sm:text-3xl font-black text-sky-600 dark:text-sky-400">
-                    {portalData?.summary.totalTicketsSold || 0}
+                    {summary?.totalTicketsSold || 0}
                   </div>
                   <span className="text-[11px] text-slate-400 mt-1 block">
-                    {portalData?.summary.totalAttendees || 0} Pemesan
+                    {summary?.totalAttendees || 0} Pemesan (Lunas)
                   </span>
                 </Card>
 
                 <Card className="p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Hak Payout (80%)</span>
                   <div className="text-xl sm:text-2xl font-black text-[#3B7A57] dark:text-[#52B788]">
-                    Rp {(portalData?.summary.organizerPayoutAmount || 0).toLocaleString("id-ID")}
+                    Rp {(summary?.organizerPayoutAmount || 0).toLocaleString("id-ID")}
                   </div>
                   <span className="text-[11px] text-emerald-600 mt-1 block font-medium">Estimasi Dana Komunitas</span>
                 </Card>
@@ -1937,7 +1971,7 @@ export default function CommunityOrganizerPortalPage() {
                     <Button
                       size="sm"
                       onClick={() => setActiveNav("EVENTS")}
-                      className="w-full text-xs h-7 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-200 cursor-pointer"
+                      className="w-full text-xs h-8 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer shadow-xs"
                     >
                       Buka Kelola Events
                     </Button>

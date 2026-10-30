@@ -10,6 +10,7 @@ import {
   ExternalLink,
   ArrowLeft,
   Share2,
+  MessageCircle,
   Tag,
   User,
   CheckCircle2,
@@ -49,6 +50,20 @@ export default function EventDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCopied, setIsCopied] = useState(false);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+
+  // Close share modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsShareModalOpen(false);
+      }
+    };
+    if (isShareModalOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [isShareModalOpen]);
 
   // Booking & Ticketing States
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -109,11 +124,79 @@ export default function EventDetailPage() {
     }
   };
 
-  const handleCopyLink = () => {
-    if (typeof window !== "undefined") {
-      navigator.clipboard.writeText(window.location.href);
-      setIsCopied(true);
-      setTimeout(() => setIsCopied(false), 2000);
+  const getShareUrl = () => {
+    if (typeof window !== "undefined" && event?.id) {
+      // Canonical public URL without guestToken, search parameters, or sensitive PII
+      return `${window.location.origin}/events/${event.id}`;
+    }
+    return "";
+  };
+
+  const handleCopyLink = async () => {
+    const url = getShareUrl();
+    if (!url || typeof window === "undefined") return;
+
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        setIsCopied(true);
+        setTimeout(() => setIsCopied(false), 2500);
+        return;
+      }
+      throw new Error("Clipboard API unavailable");
+    } catch {
+      // Fallback: create temporary off-screen textarea
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = url;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        const success = document.execCommand("copy");
+        document.body.removeChild(textarea);
+        if (success) {
+          setIsCopied(true);
+          setTimeout(() => setIsCopied(false), 2500);
+          return;
+        }
+      } catch {
+        // Fallback prompt if execCommand is blocked
+      }
+      window.prompt("Salin tautan event ini:", url);
+    }
+  };
+
+  const handleShareWhatsApp = () => {
+    const url = getShareUrl();
+    const text = encodeURIComponent(`Ikuti event "${event?.title || "Event Komunitas"}" di Dago Creative Hub:\n${url}`);
+    window.open(`https://api.whatsapp.com/send?text=${text}`, "_blank");
+  };
+
+  const handleShareTwitter = () => {
+    const url = getShareUrl();
+    const text = encodeURIComponent(`Ikuti event "${event?.title || "Event Komunitas"}" di Dago Creative Hub!`);
+    window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${text}`, "_blank");
+  };
+
+  const handleShareFacebook = () => {
+    const url = getShareUrl();
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, "_blank");
+  };
+
+  const handleNativeShare = async () => {
+    const url = getShareUrl();
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: event?.title || "Event Dago Creative Hub",
+          text: `Ikuti event "${event?.title}" di Dago Creative Hub`,
+          url,
+        });
+      } catch (err) {
+        console.log("Native share dismissed/cancelled", err);
+      }
     }
   };
 
@@ -266,11 +349,12 @@ export default function EventDetailPage() {
       {/* Top Navbar */}
       <header className="sticky top-0 z-40 bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          {/* Modernized Pill Back Button */}
           <Link
             href="/events"
-            className="inline-flex items-center text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors group"
+            className="inline-flex items-center space-x-2 text-xs font-bold py-1.5 px-3.5 rounded-full bg-slate-100/80 dark:bg-slate-800/80 hover:bg-[#3B7A57]/10 dark:hover:bg-[#3B7A57]/20 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 hover:text-[#3B7A57] dark:hover:text-[#52B788] hover:border-[#3B7A57]/40 shadow-xs hover:shadow-sm transition-all duration-200 group cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4 mr-1.5 transition-transform group-hover:-translate-x-1" />
+            <ArrowLeft className="w-3.5 h-3.5 transition-transform duration-200 group-hover:-translate-x-1 text-[#3B7A57] dark:text-[#52B788]" />
             <span>Kembali ke Daftar Event</span>
           </Link>
 
@@ -279,7 +363,7 @@ export default function EventDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs h-8 px-2.5 sm:px-3 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57] hover:text-[#3B7A57] rounded-xl transition-all"
+                className="text-xs h-8 px-2.5 sm:px-3 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57] hover:text-[#3B7A57] rounded-xl transition-all cursor-pointer"
               >
                 <Ticket className="w-3.5 h-3.5 mr-1 text-[#3B7A57] dark:text-[#52B788]" />
                 <span className="hidden sm:inline">Tiket Saya</span>
@@ -287,24 +371,17 @@ export default function EventDetailPage() {
               </Button>
             </Link>
 
+            {/* Interactive Share Modal Trigger Button */}
             <Button
               variant="outline"
               size="sm"
-              onClick={handleCopyLink}
-              className="text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl"
+              onClick={() => setIsShareModalOpen(true)}
+              className="text-xs font-semibold h-8 px-3 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57] hover:text-[#3B7A57] rounded-xl transition-all cursor-pointer"
             >
-              {isCopied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                  <span>Tautan Disalin!</span>
-                </>
-              ) : (
-                <>
-                  <Share2 className="w-3.5 h-3.5 mr-1" />
-                  <span>Bagikan</span>
-                </>
-              )}
+              <Share2 className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788]" />
+              <span>Bagikan</span>
             </Button>
+
             <ThemeToggle variant="pill" />
           </div>
         </div>
@@ -312,21 +389,6 @@ export default function EventDetailPage() {
 
       {/* Main Container */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 lg:pb-12">
-        {/* Breadcrumbs */}
-        <nav className="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400 mb-6 font-medium">
-          <Link href="/" className="hover:text-slate-800 dark:hover:text-white transition-colors">
-            Beranda
-          </Link>
-          <span className="text-slate-400">/</span>
-          <Link href="/events" className="hover:text-slate-800 dark:hover:text-white transition-colors">
-            Event Komunitas
-          </Link>
-          <span className="text-slate-400">/</span>
-          <span className="text-slate-800 dark:text-slate-200 font-bold truncate max-w-xs sm:max-w-md">
-            {event.title}
-          </span>
-        </nav>
-
         {/* Poster Showcase Container with Cinematic Blur Backdrop */}
         <div className="relative rounded-3xl overflow-hidden bg-slate-900 border border-slate-200/80 dark:border-slate-800 aspect-[16/9] sm:aspect-[21/9] mb-8 shadow-lg group">
           {/* Blurred Background Glow */}
@@ -1131,6 +1193,125 @@ export default function EventDetailPage() {
                 >
                   Cari Tiket Pesanan Guest
                 </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Share Modal */}
+      {isShareModalOpen && event && (
+        <div
+          onClick={() => setIsShareModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-md bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-200 cursor-default"
+          >
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788] uppercase tracking-wider block">
+                  Bagikan ke Teman & Komunitas
+                </span>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white line-clamp-1 mt-0.5">
+                  {event.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsShareModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Social Share Buttons */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                Kanal Berbagi Cepat
+              </span>
+              <div className="grid grid-cols-3 gap-2.5">
+                {/* WhatsApp */}
+                <button
+                  type="button"
+                  onClick={handleShareWhatsApp}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-all cursor-pointer group"
+                >
+                  <MessageCircle className="w-6 h-6 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
+                  <span className="text-[11px] font-bold text-emerald-900 dark:text-emerald-200 mt-1.5">WhatsApp</span>
+                </button>
+
+                {/* X / Twitter */}
+                <button
+                  type="button"
+                  onClick={handleShareTwitter}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all cursor-pointer group"
+                >
+                  <span className="w-6 h-6 flex items-center justify-center font-black text-sm text-slate-900 dark:text-white group-hover:scale-110 transition-transform">𝕏</span>
+                  <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 mt-1.5">Twitter / 𝕏</span>
+                </button>
+
+                {/* Facebook */}
+                <button
+                  type="button"
+                  onClick={handleShareFacebook}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all cursor-pointer group"
+                >
+                  <span className="w-6 h-6 flex items-center justify-center font-black text-base text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">f</span>
+                  <span className="text-[11px] font-bold text-blue-900 dark:text-blue-200 mt-1.5">Facebook</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Native Mobile Web Share API */}
+            {typeof navigator !== "undefined" && typeof navigator.share === "function" && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleNativeShare}
+                className="w-full text-xs font-bold h-9 rounded-xl border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-center space-x-1.5"
+              >
+                <Share2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                <span>Bagikan via Aplikasi Lain</span>
+              </Button>
+            )}
+
+            {/* Copy Link Input Bar */}
+            <div className="space-y-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                Salin Tautan Langsung
+              </span>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={getShareUrl()}
+                  className="flex-1 text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 focus:outline-none select-all"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleCopyLink}
+                  className={`h-9 px-3.5 text-xs font-bold rounded-xl transition-all cursor-pointer shrink-0 ${
+                    isCopied
+                      ? "bg-emerald-600 text-white"
+                      : "bg-[#3B7A57] hover:bg-[#2E6044] text-white"
+                  }`}
+                >
+                  {isCopied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 mr-1" />
+                      <span>Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 mr-1" />
+                      <span>Salin</span>
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           </div>

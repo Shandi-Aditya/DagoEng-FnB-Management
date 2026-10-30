@@ -16,16 +16,17 @@ import {
   User,
   ArrowLeft,
   Sparkles,
-  Building2,
   Zap,
   AlertCircle,
   Ticket,
   Search,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 
 /**
  * Strictly sanitizes returnTo parameter to prevent open-redirect vulnerabilities.
- * Only allows relative application paths beginning with "/" (and not "//", "/\", or absolute URLs with protocols).
+ * Only allows relative application paths beginning with "/" (and strictly rejects "//", "/\", absolute URLs with protocols, or backslash manipulation).
  */
 function sanitizeReturnTo(url: string | null | undefined): string | null {
   if (!url || typeof url !== "string") return null;
@@ -34,7 +35,8 @@ function sanitizeReturnTo(url: string | null | undefined): string | null {
     trimmed.startsWith("/") &&
     !trimmed.startsWith("//") &&
     !trimmed.startsWith("/\\") &&
-    !trimmed.includes(":")
+    !trimmed.includes(":") &&
+    !trimmed.includes("\\")
   ) {
     return trimmed;
   }
@@ -48,7 +50,7 @@ function LoginContent() {
   const { getOrCreateMember } = useLoyalty();
 
   const fromParam = searchParams.get("from");
-  const returnTo = sanitizeReturnTo(searchParams.get("returnTo"));
+  const returnTo = sanitizeReturnTo(searchParams.get("returnTo") || searchParams.get("redirect"));
   const initialMode = searchParams.get("mode");
 
   const isFromEvents = fromParam === "events" || returnTo?.startsWith("/events");
@@ -58,138 +60,145 @@ function LoginContent() {
   const backHref = isFromEvents ? "/events" : "/";
   const backLabel = isFromEvents ? "Kembali ke Event Marketplace" : "Kembali ke Beranda";
 
-  const [activeMode, setActiveMode] = useState<"STAFF" | "CUSTOMER">("STAFF");
-  const [customerSubMode, setCustomerSubMode] = useState<"LOGIN" | "REGISTER">("LOGIN");
+  // Form Mode: Universal Login (default) or Register
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
 
+  // Universal Login Credentials
   const [email, setEmail] = useState("owner.dago@dagoeng.com");
   const [password, setPassword] = useState("Password123!");
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [staffError, setStaffError] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Customer register/login form
-  const [custName, setCustName] = useState("Ketut Dian");
-  const [custPhone, setCustPhone] = useState("+62 819-1122-3344");
-  const [custEmail, setCustEmail] = useState("ketut.dian@gmail.com");
+  // Customer Register Form States
+  const [regName, setRegName] = useState("");
+  const [regPhone, setRegPhone] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [showRegPassword, setShowRegPassword] = useState(false);
 
   useEffect(() => {
     if (initialMode === "register") {
-      setActiveMode("CUSTOMER");
-      setCustomerSubMode("REGISTER");
-    } else if (initialMode === "customer" || isFromEvents) {
-      setActiveMode("CUSTOMER");
-      setCustomerSubMode("LOGIN");
+      setIsRegisterMode(true);
     }
-  }, [initialMode, isFromEvents]);
+  }, [initialMode]);
 
-  const handleStaffLogin = async (e: React.FormEvent) => {
+  /**
+   * Universal Login Handler with Backend Role Auto-Detection & Safe Auto-Routing
+   */
+  const handleUniversalLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setStaffError(null);
+    setErrorMessage(null);
     setIsLoading(true);
 
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
 
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setStaffError(data.error || "Gagal masuk. Periksa kembali email dan password Anda.");
+        setErrorMessage(data.error || "Gagal masuk. Periksa kembali email dan password Anda.");
         setIsLoading(false);
         return;
       }
 
-      // Synchronize client context with the authenticated persona or custom user
+      // Synchronize client authentication context with the verified identity
       await login(data.personaKey, data.user);
       setIsLoading(false);
 
+      // Auto-routing destination determination
+      let targetDestination = data.redirectUrl || "/dashboard";
+
+      // If safe returnTo parameter exists, validate RBAC boundaries before redirecting:
       if (returnTo) {
-        router.push(returnTo);
-        return;
+        const userRole = data.user?.role?.slug || data.user?.role;
+        const isCustomer = userRole === "CUSTOMER";
+        const isRestrictedAdminRoute =
+          returnTo.startsWith("/dashboard") ||
+          returnTo.startsWith("/events-admin") ||
+          returnTo.startsWith("/events/checkin") ||
+          returnTo.startsWith("/events/portal") ||
+          returnTo.startsWith("/settings") ||
+          returnTo.startsWith("/reports") ||
+          returnTo.startsWith("/employees") ||
+          returnTo.startsWith("/commercial") ||
+          returnTo.startsWith("/coworking") ||
+          returnTo.startsWith("/kitchen") ||
+          returnTo.startsWith("/pos") ||
+          returnTo.startsWith("/waiter") ||
+          returnTo.startsWith("/tables") ||
+          returnTo.startsWith("/inventory") ||
+          returnTo.startsWith("/customers") ||
+          returnTo.startsWith("/activity-log");
+
+        if (isCustomer && isRestrictedAdminRoute) {
+          // Fallback to customer portal to prevent unauthorized access attempt
+          targetDestination = "/customer";
+        } else {
+          targetDestination = returnTo;
+        }
       }
 
-      router.push(data.redirectUrl || "/dashboard");
+      router.push(targetDestination);
     } catch (err: any) {
-      console.error("Staff login error:", err);
-      setStaffError("Terjadi kendala jaringan saat menghubungi server autentikasi.");
+      console.error("Universal login error:", err);
+      setErrorMessage("Terjadi kendala jaringan saat menghubungi server autentikasi.");
       setIsLoading(false);
     }
   };
 
-  const handleCustomerSubmit = async (e: React.FormEvent) => {
+  /**
+   * New Member Registration Handler
+   */
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!custPhone.trim()) return;
+    if (!regPhone.trim()) {
+      setErrorMessage("Nomor telepon/WhatsApp wajib diisi.");
+      return;
+    }
 
     setIsLoading(true);
-    setStaffError(null);
+    setErrorMessage(null);
 
     try {
-      if (customerSubMode === "REGISTER") {
-        const res = await fetch("/api/auth/register", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: custName.trim() || "Pelanggan Member",
-            email: custEmail.trim() || `${custPhone.replace(/[^0-9]/g, "")}@customer.dagoeng.com`,
-            phone: custPhone.trim(),
-            password: password || "Password123!",
-          }),
-        });
+      const cleanPhone = regPhone.trim();
+      const cleanEmail = regEmail.trim() || `${cleanPhone.replace(/[^0-9]/g, "")}@customer.dagoeng.com`;
 
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          setStaffError(data.error || "Pendaftaran gagal. Periksa kembali data Anda.");
-          setIsLoading(false);
-          return;
-        }
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: regName.trim() || "Pelanggan Member",
+          email: cleanEmail,
+          phone: cleanPhone,
+          password: regPassword || "Password123!",
+        }),
+      });
 
-        // Get loyalty member
-        const member = getOrCreateMember({
-          name: data.user.name,
-          phone: data.user.phone,
-          email: data.user.email,
-          initialPoints: 50,
-        });
-
-        await loginCustomer({
-          name: member.name,
-          phone: member.phone,
-          email: member.email,
-        });
-      } else {
-        // Customer Login via Unified Auth
-        const targetEmail = custEmail.trim() || "customer@gmail.com";
-        const res = await fetch("/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: targetEmail,
-            password: password || "Password123!",
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok || !data.success) {
-          setStaffError(data.error || "Gagal masuk. Periksa kembali email dan password Anda.");
-          setIsLoading(false);
-          return;
-        }
-
-        const member = getOrCreateMember({
-          name: data.user?.name || custName.trim() || "Pelanggan Member",
-          phone: data.user?.phone || custPhone.trim(),
-          email: data.user?.email || targetEmail,
-          initialPoints: 0,
-        });
-
-        await loginCustomer({
-          name: member.name,
-          phone: member.phone,
-          email: member.email,
-        });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setErrorMessage(data.error || "Pendaftaran gagal. Periksa kembali data Anda.");
+        setIsLoading(false);
+        return;
       }
+
+      // Initialize loyalty member
+      const member = getOrCreateMember({
+        name: data.user.name,
+        phone: data.user.phone,
+        email: data.user.email,
+        initialPoints: 50,
+      });
+
+      await loginCustomer({
+        name: member.name,
+        phone: member.phone,
+        email: member.email,
+      });
 
       setIsLoading(false);
 
@@ -199,16 +208,19 @@ function LoginContent() {
         router.push("/customer");
       }
     } catch (err: any) {
-      console.error("Customer auth error:", err);
-      setStaffError("Terjadi kendala jaringan saat memproses autentikasi.");
+      console.error("Customer registration error:", err);
+      setErrorMessage("Terjadi kendala jaringan saat memproses pendaftaran.");
       setIsLoading(false);
     }
   };
 
+  /**
+   * Quick Testing Demo Handler (executes official backend authentication for verification)
+   */
   const handleQuickLogin = async (personaKey: PersonaKey) => {
     const target = DEMO_PERSONAS[personaKey];
     if (target) {
-      setStaffError(null);
+      setErrorMessage(null);
       setIsLoading(true);
 
       try {
@@ -220,12 +232,12 @@ function LoginContent() {
 
         const data = await res.json();
         if (!res.ok || !data.success) {
-          setStaffError(data.error || "Akun demo tidak dapat diakses.");
+          setErrorMessage(data.error || "Akun demo tidak dapat diakses.");
           setIsLoading(false);
           return;
         }
 
-        await login(personaKey);
+        await login(personaKey, data.user);
         setIsLoading(false);
 
         if (returnTo) {
@@ -235,7 +247,7 @@ function LoginContent() {
 
         router.push(data.redirectUrl || "/dashboard");
       } catch (err) {
-        // Fallback for isolated offline client-only tests if fetch fails
+        // Fallback for offline isolated test environments
         await login(personaKey);
         setIsLoading(false);
         if (returnTo) router.push(returnTo);
@@ -269,7 +281,7 @@ function LoginContent() {
           <div className="flex items-center space-x-2">
             {returnTo && (
               <span className="text-[10px] bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] font-bold px-2.5 py-1 rounded-full border border-[#3B7A57]/20 dark:border-[#52B788]/30">
-                Tujuan Login Aktif
+                Tujuan: {returnTo}
               </span>
             )}
             <ThemeToggle variant="pill" />
@@ -295,7 +307,7 @@ function LoginContent() {
               DagoEng <span className="text-[#3B7A57] dark:text-[#52B788]">Platform</span>
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
-              Sistem Terpadu F&B, Co-working & Customer Loyalty
+              Sistem Terpadu F&B, Co-working, Event Marketplace & CRM
             </p>
           </div>
         </div>
@@ -312,7 +324,7 @@ function LoginContent() {
                   Akses Tiket Event Marketplace
                 </h4>
                 <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Login ke Akun DagoEng diperlukan untuk melihat tiket yang terhubung resmi dengan akun Anda. Jika Anda memesan tiket sebagai <strong>Guest</strong> tanpa akun, Anda tidak perlu login.
+                  Login diperlukan untuk tiket yang terhubung resmi dengan akun Anda. Jika Anda memesan tiket sebagai <strong>Guest</strong> tanpa akun, silakan gunakan pencarian tiket tamu.
                 </p>
               </div>
             </div>
@@ -336,66 +348,37 @@ function LoginContent() {
           </div>
         )}
 
-        {/* Primary Role Mode Switcher (Staf & Manajemen vs Pelanggan / Member) */}
-        <div className="grid grid-cols-2 p-1.5 bg-slate-200/70 dark:bg-white/5 backdrop-blur-md border border-slate-300/80 dark:border-white/10 rounded-2xl text-xs font-bold shadow-inner transition-colors">
-          <button
-            type="button"
-            onClick={() => setActiveMode("STAFF")}
-            className={`py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center space-x-1.5 ${activeMode === "STAFF"
-                ? "bg-white dark:bg-[#131B2B] text-slate-900 dark:text-white shadow-sm border border-slate-200 dark:border-white/15 scale-[1.02]"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
-          >
-            <Building2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
-            <span>Staf & Manajemen</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveMode("CUSTOMER")}
-            className={`py-2.5 rounded-xl transition-all duration-200 flex items-center justify-center space-x-1.5 ${activeMode === "CUSTOMER"
-                ? "bg-[#3B7A57] text-white shadow-md shadow-[#3B7A57]/25 border border-[#52B788]/30 scale-[1.02]"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-            <span>Pelanggan / Member</span>
-          </button>
-        </div>
-
-        {/* Main Glassmorphic Login Card */}
+        {/* Main Glassmorphic Universal Login Card */}
         <div className="bg-white dark:bg-[#131B2B] backdrop-blur-2xl border border-slate-200 dark:border-white/10 rounded-3xl shadow-xl dark:shadow-2xl overflow-hidden transition-colors">
 
           <div className="px-6 pt-6 pb-4 border-b border-slate-100 dark:border-white/5 space-y-1">
             <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
               <span>
-                {activeMode === "STAFF"
-                  ? "Masuk ke Sesi Akun Staf"
-                  : customerSubMode === "REGISTER"
-                    ? "Daftar Member Baru DagoEng"
-                    : "Masuk Akun Pelanggan"}
+                {isRegisterMode ? "Daftar Member Baru DagoEng" : "Masuk ke Akun DagoEng"}
               </span>
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              {activeMode === "STAFF"
-                ? "Gunakan kredensial terdaftar untuk membuka dashboard POS, KDS, atau manajerial."
-                : customerSubMode === "REGISTER"
-                  ? "Dapatkan langsung 50 Poin Selamat Datang dan promo eksklusif member."
-                  : "Masukkan nomor WhatsApp atau Nama untuk mengakses poin loyalty Anda."}
+              {isRegisterMode
+                ? "Dapatkan langsung 50 Poin Selamat Datang dan promo eksklusif member DagoEng."
+                : "Satu form login universal untuk seluruh akun (Owner, Manajer, Kasir, Mitra Tenant, Organizer & Member)."}
             </p>
           </div>
 
           <div className="p-6 space-y-5">
-            {activeMode === "STAFF" ? (
-              <form onSubmit={handleStaffLogin} className="space-y-4">
-                {staffError && (
-                  <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-start space-x-2 animate-in fade-in duration-200">
-                    <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                    <span className="leading-relaxed">{staffError}</span>
-                  </div>
-                )}
+            {errorMessage && (
+              <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-start space-x-2 animate-in fade-in duration-200">
+                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{errorMessage}</span>
+              </div>
+            )}
 
+            {!isRegisterMode ? (
+              /* Universal Login Form */
+              <form onSubmit={handleUniversalLogin} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Email Address</label>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Alamat Email Akun
+                  </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                     <input
@@ -403,8 +386,103 @@ function LoginContent() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
-                      placeholder="nama@bisnis.com"
+                      placeholder="nama@bisnis.com atau nama@gmail.com"
                       required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-10 pr-11 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
+                      placeholder="••••••••"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
+                      aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full h-11 text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-md shadow-[#3B7A57]/20 border border-[#52B788]/30 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                >
+                  <span>{isLoading ? "Memverifikasi Kredensial..." : "Masuk ke Sistem"}</span>
+                  <ArrowRight className="w-4 h-4 ml-1.5" />
+                </Button>
+
+                <div className="pt-2 text-center text-xs text-slate-500 dark:text-slate-400">
+                  <span>Belum memiliki akun member? </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErrorMessage(null);
+                      setIsRegisterMode(true);
+                    }}
+                    className="font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline cursor-pointer"
+                  >
+                    Daftar Member Baru (+50 Poin)
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* New Member Registration Form */
+              <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Nama Lengkap</label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                    <input
+                      type="text"
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
+                      placeholder="Contoh: Ketut Dian"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Nomor WhatsApp / HP</label>
+                  <div className="relative">
+                    <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                    <input
+                      type="tel"
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
+                      placeholder="+62 819-xxxx-xxxx"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Email</label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+                    <input
+                      type="email"
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
+                      placeholder="email@anda.com"
                     />
                   </div>
                 </div>
@@ -414,193 +492,139 @@ function LoginContent() {
                   <div className="relative">
                     <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                     <input
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
+                      type={showRegPassword ? "text" : "password"}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      className="w-full pl-10 pr-11 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
                       placeholder="••••••••"
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowRegPassword(!showRegPassword)}
+                      className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
+                      aria-label={showRegPassword ? "Sembunyikan password" : "Tampilkan password"}
+                    >
+                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                 </div>
 
                 <Button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full h-11 text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-md shadow-[#3B7A57]/20 border border-[#52B788]/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="w-full h-11 text-xs font-bold space-x-1.5 mt-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-md shadow-[#3B7A57]/20 border border-[#52B788]/30 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                 >
-                  <span>{isLoading ? "Memverifikasi..." : "Masuk ke Sistem Staf"}</span>
-                  <ArrowRight className="w-4 h-4 ml-1.5" />
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>{isLoading ? "Mendaftarkan..." : "Daftar & Klaim 50 Poin"}</span>
+                  <ArrowRight className="w-4 h-4 ml-1" />
                 </Button>
-              </form>
-            ) : (
-              <div className="space-y-4">
-                {/* Customer Sub-mode Toggle (Masuk vs Daftar) */}
-                <div className="grid grid-cols-2 p-1 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-bold">
+
+                <div className="pt-2 text-center text-xs text-slate-500 dark:text-slate-400">
+                  <span>Sudah memiliki akun? </span>
                   <button
                     type="button"
-                    onClick={() => setCustomerSubMode("LOGIN")}
-                    className={`py-2 rounded-lg transition-all ${customerSubMode === "LOGIN"
-                        ? "bg-white dark:bg-white/15 text-slate-900 dark:text-white shadow-xs border border-slate-200 dark:border-white/20"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                      }`}
+                    onClick={() => {
+                      setErrorMessage(null);
+                      setIsRegisterMode(false);
+                    }}
+                    className="font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline cursor-pointer"
                   >
-                    Masuk Akun
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setCustomerSubMode("REGISTER")}
-                    className={`py-2 rounded-lg transition-all flex items-center justify-center space-x-1 ${customerSubMode === "REGISTER"
-                        ? "bg-[#3B7A57] text-white shadow-sm shadow-[#3B7A57]/20 font-bold"
-                        : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                      }`}
-                  >
-                    <Sparkles className="w-3 h-3 text-amber-300" />
-                    <span>Daftar (+50 Poin)</span>
+                    Masuk di sini
                   </button>
                 </div>
-
-                <form onSubmit={handleCustomerSubmit} className="space-y-3.5">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Nama Lengkap</label>
-                    <div className="relative">
-                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                      <input
-                        type="text"
-                        value={custName}
-                        onChange={(e) => setCustName(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
-                        placeholder="Contoh: Ketut Dian"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Nomor WhatsApp / HP</label>
-                    <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                      <input
-                        type="tel"
-                        value={custPhone}
-                        onChange={(e) => setCustPhone(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
-                        placeholder="+62 819-xxxx-xxxx"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  {customerSubMode === "REGISTER" && (
-                    <div className="space-y-1.5 animate-in fade-in duration-200">
-                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Email (Opsional untuk E-Receipt)</label>
-                      <div className="relative">
-                        <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                        <input
-                          type="email"
-                          value={custEmail}
-                          onChange={(e) => setCustEmail(e.target.value)}
-                          className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
-                          placeholder="email@anda.com"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <Button
-                    type="submit"
-                    disabled={isLoading}
-                    className="w-full h-11 text-xs font-bold space-x-1.5 mt-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-md shadow-[#3B7A57]/20 border border-[#52B788]/30 transition-all hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    <span>
-                      {isLoading
-                        ? "Menghubungkan..."
-                        : customerSubMode === "REGISTER"
-                          ? "Daftar & Klaim 50 Poin"
-                          : "Masuk Customer Portal"}
-                    </span>
-                    <ArrowRight className="w-4 h-4 ml-1" />
-                  </Button>
-                </form>
-              </div>
+              </form>
             )}
 
-            {/* Quick 1-Click Role Login for QA / Testing Evaluator */}
+            {/* Quick Testing Demo Section (QA & Evaluator Testing Suite) */}
             <div className="pt-4 border-t border-slate-200 dark:border-white/10 space-y-2.5">
               <div className="flex items-center space-x-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 <Zap className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
-                <span>Akses Cepat 1-Klik Testing Demo:</span>
+                <span>Akses Cepat Testing Demo (QA & Evaluasi Auto-Routing):</span>
               </div>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
+                Pilih persona untuk menguji autentikasi resmi dan auto-detection routing sesuai role akun:
+              </p>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("DAGO_OWNER")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
                 >
-                  🏢 Dago Hub Owner
+                  <div className="font-bold group-hover:text-white">🏢 Owner Dago Hub</div>
+                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /dashboard</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin("SUPER_ADMIN")}
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                >
+                  <div className="font-bold group-hover:text-white">🛡️ Super Admin</div>
+                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /dashboard</div>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("TENANT_OWNER_KS")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
                 >
-                  ☕ Mitra: Kopi Senja
+                  <div className="font-bold group-hover:text-white">☕ Mitra: Kopi Senja</div>
+                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /dashboard (Mitra)</div>
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleQuickLogin("TENANT_OWNER_KITCHEN")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
+                  onClick={() => handleQuickLogin("COWORK_MANAGER")}
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
                 >
-                  🍽️ Mitra: Dapur Mama
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("TENANT_OWNER_BAKERY")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
-                >
-                  🥐 Mitra: Manis Bakery
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("TENANT_OWNER_TEA")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
-                >
-                  🍃 Mitra: Warung Bu Narti
+                  <div className="font-bold group-hover:text-white">💻 Manager Coworking</div>
+                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /coworking</div>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("CASHIER_SGR")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
                 >
-                  💵 Kasir POS (Singaraja)
+                  <div className="font-bold group-hover:text-white">💵 Kasir POS (Singaraja)</div>
+                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /pos</div>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("KITCHEN_SGR")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
                 >
-                  👨‍🍳 Chef Dapur (KDS)
+                  <div className="font-bold group-hover:text-white">👨‍🍳 Chef Dapur (KDS)</div>
+                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /kitchen</div>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("WAITER_SGR")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
+                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
                 >
-                  🤵 Waiter (Floor Meja)
+                  <div className="font-bold group-hover:text-white">🤵 Waiter Floor</div>
+                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /waiter</div>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("CUSTOMER_DEMO")}
-                  className="p-2.5 text-center bg-[#3B7A57]/10 dark:bg-[#52B788]/15 hover:bg-[#3B7A57] hover:text-white border border-[#3B7A57]/30 dark:border-[#52B788]/30 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
+                  className="p-2.5 text-left bg-[#3B7A57]/10 dark:bg-[#52B788]/15 hover:bg-[#3B7A57] hover:text-white border border-[#3B7A57]/30 dark:border-[#52B788]/30 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
                 >
-                  📱 Pelanggan QR
+                  <div className="font-bold group-hover:text-white">📱 Pelanggan / Member</div>
+                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /customer</div>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleQuickLogin("COMMUNITY_BARISTA")}
-                  className="p-2.5 text-center bg-emerald-50 dark:bg-emerald-950/30 hover:bg-[#3B7A57] hover:text-white border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer"
+                  className="p-2.5 text-left bg-emerald-50 dark:bg-emerald-950/30 hover:bg-[#3B7A57] hover:text-white border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
                 >
-                  🎪 Penyelenggara Event
+                  <div className="font-bold group-hover:text-white">🎪 Organizer Komunitas</div>
+                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /events/portal</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin("COMMUNITY_BANDUNGDEV")}
+                  className="p-2.5 text-left bg-emerald-50 dark:bg-emerald-950/30 hover:bg-[#3B7A57] hover:text-white border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                >
+                  <div className="font-bold group-hover:text-white">👾 Organizer Dev/Gaming</div>
+                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /events/portal</div>
                 </button>
               </div>
             </div>

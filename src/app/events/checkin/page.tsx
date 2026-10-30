@@ -32,6 +32,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { CommunityEvent, EventTicketOrder, AttendeeCheckInStatus } from "@/types/event";
 import { EventSearchInput } from "@/components/events/EventSearchInput";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { canAccessEventCheckIn } from "@/lib/rbac";
 
 export default function EventCheckInDashboardPage() {
   const { user } = useAuth();
@@ -43,8 +44,15 @@ export default function EventCheckInDashboardPage() {
   const [isProcessingId, setIsProcessingId] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  const isAuthorized = canAccessEventCheckIn(user);
+
   // Load events and bookings
   const loadData = async () => {
+    if (!canAccessEventCheckIn(user)) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setStatusMessage(null);
     try {
@@ -55,17 +63,16 @@ export default function EventCheckInDashboardPage() {
 
       // Determine accessible events based on user persona / role:
       // - Hub Admin (SUPER_ADMIN, DAGO_OWNER, MANAGER): all approved events
-      // - Field Staff (WAITER, CASHIER): operational venue events
-      // - Organizer: their own community events
+      // - Event Staff with "events:checkin": all approved venue events
+      // - Organizer: strictly their own community events
       const userEmail = (user?.email || "").toLowerCase();
-      const isHubStaff =
+      const isHubAdmin =
         user?.role.slug === "SUPER_ADMIN" ||
-        user?.scopeLevel === "ORGANIZATION" ||
-        user?.scopeLevel === "PLATFORM" ||
-        user?.role.slug === "WAITER" ||
-        user?.role.slug === "CASHIER";
+        ((user?.role.slug === "OWNER" || user?.role.slug === "MANAGER") &&
+          (user?.scopeLevel === "ORGANIZATION" || user?.scopeLevel === "PLATFORM"));
+      const isEventStaff = Boolean(user?.permissions?.includes("events:checkin"));
 
-      const accessibleEvents = isHubStaff
+      const accessibleEvents = (isHubAdmin || isEventStaff)
         ? allEvents.filter((e) => e.status === "APPROVED")
         : allEvents.filter(
             (e) => e.status === "APPROVED" && (e.organizerEmail || "").toLowerCase() === userEmail
@@ -209,6 +216,34 @@ export default function EventCheckInDashboardPage() {
       setIsProcessingId(null);
     }
   };
+
+  if (!isLoading && !isAuthorized) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full text-center p-8 border-red-200 dark:border-red-900/40 shadow-xl bg-white dark:bg-slate-900 rounded-2xl">
+          <div className="w-14 h-14 bg-red-100 dark:bg-red-950/60 rounded-full flex items-center justify-center mx-auto mb-5 text-red-600 dark:text-red-400">
+            <AlertCircle className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-bold tracking-tight mb-2 text-slate-900 dark:text-white">
+            Akses Terbatas: Check-in Event
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
+            Akun Anda ({user?.email || user?.role?.slug || "Tamu"}) tidak memiliki kewenangan administratif atau penugasan event untuk melakukan check-in peserta.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button asChild variant="outline" size="sm" className="rounded-xl">
+              <Link href="/">Kembali ke Beranda</Link>
+            </Button>
+            <Button asChild size="sm" className="rounded-xl">
+              <Link href={user?.role?.slug === "CUSTOMER" ? "/customer" : "/dashboard"}>
+                Ke Workspace Saya
+              </Link>
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-4 sm:p-6 lg:p-8">

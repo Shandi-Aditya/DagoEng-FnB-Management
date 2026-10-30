@@ -14,6 +14,9 @@ import {
   Sparkles,
   Ticket,
   ChevronRight,
+  ChevronLeft,
+  ChevronDown,
+  LogIn,
   History,
   Tag,
   Home,
@@ -47,6 +50,14 @@ export default function EventsListingPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewTab, setViewTab] = useState<"UPCOMING" | "PAST">("UPCOMING");
   const [priceFilter, setPriceFilter] = useState<"ALL" | "FREE" | "PAID">("ALL");
+  const [isMyTicketsDropdownOpen, setIsMyTicketsDropdownOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(8);
+
+  // Reset to page 1 on search, category, tab, price, or items-per-page change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, priceFilter, viewTab, itemsPerPage]);
 
   useEffect(() => {
     fetchEvents();
@@ -114,6 +125,12 @@ export default function EventsListingPage() {
     });
   }, [activePool, selectedCategory, priceFilter, searchQuery]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / itemsPerPage));
+  const paginatedEvents = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return filteredEvents.slice(start, start + itemsPerPage);
+  }, [filteredEvents, currentPage, itemsPerPage]);
+
   const parseDateParts = (isoStr: string) => {
     try {
       const d = new Date(isoStr);
@@ -171,29 +188,73 @@ export default function EventsListingPage() {
           </div>
 
           <div className="flex items-center space-x-2 sm:space-x-3">
-            <ThemeToggle variant="pill" />
+            {/* Unified Tiket Saya Button (supports logged-in user + guest recovery) */}
+            {user ? (
+              <Link href="/customer?tab=PROFILE">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-9 px-3 sm:px-3.5 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57] hover:text-[#3B7A57] rounded-xl transition-all cursor-pointer"
+                >
+                  <Ticket className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788]" />
+                  <span className="hidden sm:inline">Tiket Saya</span>
+                  <span className="sm:hidden">Tiket</span>
+                </Button>
+              </Link>
+            ) : (
+              <div className="relative">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsMyTicketsDropdownOpen(!isMyTicketsDropdownOpen)}
+                  className="text-xs h-9 px-3 sm:px-3.5 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57] hover:text-[#3B7A57] rounded-xl transition-all cursor-pointer"
+                >
+                  <Ticket className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788]" />
+                  <span className="hidden sm:inline">Tiket Saya</span>
+                  <span className="sm:hidden">Tiket</span>
+                  <ChevronDown className="w-3 h-3 ml-1 text-slate-400" />
+                </Button>
 
-            <Link href={user ? "/customer?tab=PROFILE" : `/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&from=events&mode=customer`}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs h-9 px-3 sm:px-3.5 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57] hover:text-[#3B7A57] rounded-xl transition-all"
-              >
-                <Ticket className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788]" />
-                <span className="hidden sm:inline">Tiket Saya</span>
-                <span className="sm:hidden">Tiket</span>
-              </Button>
-            </Link>
+                {isMyTicketsDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 shadow-2xl p-2 z-50 animate-in fade-in slide-in-from-top-2">
+                    <Link
+                      href={`/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&from=events&mode=customer`}
+                      onClick={() => setIsMyTicketsDropdownOpen(false)}
+                      className="flex items-center space-x-2.5 p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors"
+                    >
+                      <LogIn className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                      <div>
+                        <div className="font-bold">Masuk dengan Akun</div>
+                        <div className="text-[10px] text-slate-400 font-normal">Akses tiket & riwayat akun</div>
+                      </div>
+                    </Link>
+                    <Link
+                      href="/events/tickets/recovery"
+                      onClick={() => setIsMyTicketsDropdownOpen(false)}
+                      className="flex items-center space-x-2.5 p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors mt-1 border-t border-slate-100 dark:border-slate-800/80"
+                    >
+                      <Search className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                      <div>
+                        <div className="font-bold">Cari E-Tiket Tamu</div>
+                        <div className="text-[10px] text-slate-400 font-normal">Pemesanan tanpa akun Dago</div>
+                      </div>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
 
             <Link href="/events/submit">
               <Button
                 size="sm"
-                className="text-xs h-9 px-3.5 sm:px-4 font-bold bg-[#3B7A57] hover:bg-[#2E6044] dark:bg-[#3B7A57] dark:hover:bg-[#488e68] text-white rounded-xl shadow-sm transition-all hover:scale-105 active:scale-95"
+                className="text-xs h-9 px-3.5 sm:px-4 font-bold bg-[#3B7A57] hover:bg-[#2E6044] dark:bg-[#3B7A57] dark:hover:bg-[#488e68] text-white rounded-xl shadow-sm transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
                 <span>Buat Event</span>
               </Button>
             </Link>
+
+            <ThemeToggle variant="pill" />
           </div>
         </div>
       </header>
@@ -271,12 +332,13 @@ export default function EventsListingPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
         {/* Navigation Bar: Tabs & Categories */}
         <div className="space-y-4 pb-6 border-b border-slate-200 dark:border-slate-800 mb-8">
+          {/* Upcoming vs Past Toggle */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            {/* Upcoming vs Past Toggle */}
             <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
               <button
+                type="button"
                 onClick={() => setViewTab("UPCOMING")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewTab === "UPCOMING"
                     ? "bg-white dark:bg-[#1E293B] text-[#3B7A57] dark:text-[#52B788] shadow-xs"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -285,8 +347,9 @@ export default function EventsListingPage() {
                 Event Mendatang ({upcomingEvents.length})
               </button>
               <button
+                type="button"
                 onClick={() => setViewTab("PAST")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 ${
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
                   viewTab === "PAST"
                     ? "bg-white dark:bg-[#1E293B] text-[#3B7A57] dark:text-[#52B788] shadow-xs"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -296,30 +359,62 @@ export default function EventsListingPage() {
                 <span>Telah Berlalu ({pastEvents.length})</span>
               </button>
             </div>
-
-            <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Menampilkan <span className="font-bold text-slate-900 dark:text-white">{filteredEvents.length}</span> event
-            </div>
           </div>
 
-          {/* Category Chips - Scrollable */}
-          <div className="flex items-center space-x-2 overflow-x-auto w-full pb-1 scrollbar-none">
-            {CATEGORY_TABS.map((tab) => {
-              const active = selectedCategory === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  onClick={() => setSelectedCategory(tab.key)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                    active
-                      ? "bg-[#3B7A57] text-white shadow-xs"
-                      : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-white"
-                  }`}
+          {/* Category Chips Bar + Items Per Page & Count (Directly Adjacent to Filter Bar) */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
+            {/* Category Chips - Scrollable */}
+            <div className="flex items-center space-x-2 overflow-x-auto w-full md:w-auto pb-1 scrollbar-none">
+              {CATEGORY_TABS.map((tab) => {
+                const active = selectedCategory === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setSelectedCategory(tab.key)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                      active
+                        ? "bg-[#3B7A57] text-white shadow-xs"
+                        : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Event Count & Items-per-page Dropdown */}
+            <div className="flex items-center space-x-3 text-xs text-slate-500 dark:text-slate-400 shrink-0 self-end md:self-auto">
+              <span>
+                Menampilkan{" "}
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {filteredEvents.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}
+                  –
+                  {Math.min(currentPage * itemsPerPage, filteredEvents.length)}
+                </span>{" "}
+                dari{" "}
+                <span className="font-bold text-slate-900 dark:text-white">{filteredEvents.length}</span> event
+              </span>
+
+              <div className="flex items-center space-x-1.5 pl-2 border-l border-slate-200 dark:border-slate-700">
+                <span className="text-[11px] font-medium">Per hal:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="text-xs font-semibold py-1 px-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#3B7A57] cursor-pointer"
+                  aria-label="Pilih jumlah event per halaman"
                 >
-                  {tab.label}
-                </button>
-              );
-            })}
+                  <option value={8}>8</option>
+                  <option value={16}>16</option>
+                  <option value={24}>24</option>
+                  <option value={32}>32</option>
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -372,110 +467,164 @@ export default function EventsListingPage() {
           </div>
         ) : (
           /* EVENT GRID - EVENTBRITE STYLE */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredEvents.map((evt) => {
-              const isPast = new Date(evt.endDate).getTime() < now;
-              const dateParts = parseDateParts(evt.startDate);
+          <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {paginatedEvents.map((evt) => {
+                const isPast = new Date(evt.endDate).getTime() < now;
+                const dateParts = parseDateParts(evt.startDate);
 
-              return (
-                <Card
-                  key={evt.id}
-                  className={`group overflow-hidden rounded-2xl border transition-all duration-300 hover:shadow-xl flex flex-col justify-between ${
-                    isPast
-                      ? "opacity-75 bg-slate-50/60 dark:bg-[#161F31]/60 border-slate-200 dark:border-slate-800"
-                      : "bg-white dark:bg-[#1E293B] border-slate-200/90 dark:border-slate-800 hover:-translate-y-1 hover:border-[#3B7A57]/40 shadow-xs"
-                  }`}
-                >
-                  <Link href={`/events/${evt.id}`} className="block flex-1">
-                    {/* Poster Image Container */}
-                    <div className="relative h-48 w-full bg-slate-900 overflow-hidden">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={evt.posterUrl}
-                        alt={evt.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                return (
+                  <Card
+                    key={evt.id}
+                    className={`group overflow-hidden rounded-2xl border transition-all duration-300 hover:shadow-xl flex flex-col justify-between ${
+                      isPast
+                        ? "opacity-75 bg-slate-50/60 dark:bg-[#161F31]/60 border-slate-200 dark:border-slate-800"
+                        : "bg-white dark:bg-[#1E293B] border-slate-200/90 dark:border-slate-800 hover:-translate-y-1 hover:border-[#3B7A57]/40 shadow-xs"
+                    }`}
+                  >
+                    <Link href={`/events/${evt.id}`} className="block flex-1">
+                      {/* Poster Image Container */}
+                      <div className="relative h-48 w-full bg-slate-900 overflow-hidden">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={evt.posterUrl}
+                          alt={evt.title}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
-                      {/* Top Badges */}
-                      <div className="absolute top-3 left-3 flex items-center space-x-1.5">
-                        <Badge className="bg-slate-950/80 backdrop-blur-md text-white border-0 text-[10px] font-bold px-2.5 py-0.5">
-                          {evt.category}
-                        </Badge>
-                        {isPast && (
-                          <Badge variant="outline" className="bg-rose-950/80 text-rose-300 border-rose-800 text-[10px] px-2 py-0.5">
-                            Selesai
+                        {/* Top Badges */}
+                        <div className="absolute top-3 left-3 flex items-center space-x-1.5">
+                          <Badge className="bg-slate-950/80 backdrop-blur-md text-white border-0 text-[10px] font-bold px-2.5 py-0.5">
+                            {evt.category}
                           </Badge>
-                        )}
+                          {isPast && (
+                            <Badge variant="outline" className="bg-rose-950/80 text-rose-300 border-rose-800 text-[10px] px-2 py-0.5">
+                              Selesai
+                            </Badge>
+                          )}
+                        </div>
+
+                        {/* Pricing Tag Overlay */}
+                        <div className="absolute top-3 right-3">
+                          <span
+                            className={`text-[11px] font-black px-2.5 py-1 rounded-full shadow-xs backdrop-blur-md ${
+                              evt.isPaid
+                                ? "bg-amber-500/95 text-white"
+                                : "bg-[#3B7A57]/95 text-white"
+                            }`}
+                          >
+                            {evt.isPaid ? formatCurrencyIDR(evt.price) : "GRATIS"}
+                          </span>
+                        </div>
+
+                        {/* Organizer Name Floating */}
+                        <div className="absolute bottom-2.5 left-3 right-3 flex items-center space-x-1.5 text-[11px] font-medium text-white/95 drop-shadow-xs">
+                          <Users className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                          <span className="truncate">Oleh: <strong className="font-bold">{evt.organizerName}</strong></span>
+                        </div>
                       </div>
 
-                      {/* Pricing Tag Overlay */}
-                      <div className="absolute top-3 right-3">
-                        <span
-                          className={`text-[11px] font-black px-2.5 py-1 rounded-full shadow-xs backdrop-blur-md ${
-                            evt.isPaid
-                              ? "bg-amber-500/95 text-white"
-                              : "bg-[#3B7A57]/95 text-white"
-                          }`}
-                        >
-                          {evt.isPaid ? formatCurrencyIDR(evt.price) : "GRATIS"}
-                        </span>
-                      </div>
+                      {/* Card Body with Eventbrite Date Box Pattern */}
+                      <div className="p-4 sm:p-5 flex items-start space-x-3.5">
+                        {/* Date Block */}
+                        <div className="shrink-0 w-11 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60 flex flex-col items-center justify-center text-center shadow-xs">
+                          <span className="text-[9px] font-black tracking-wider text-[#3B7A57] dark:text-[#52B788] leading-none uppercase">
+                            {dateParts.month}
+                          </span>
+                          <span className="text-base font-black text-slate-900 dark:text-white leading-none mt-1">
+                            {dateParts.day}
+                          </span>
+                        </div>
 
-                      {/* Organizer Name Floating */}
-                      <div className="absolute bottom-2.5 left-3 right-3 flex items-center space-x-1.5 text-[11px] font-medium text-white/95 drop-shadow-xs">
-                        <Users className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-                        <span className="truncate">Oleh: <strong className="font-bold">{evt.organizerName}</strong></span>
-                      </div>
-                    </div>
+                        {/* Info Column */}
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white line-clamp-2 leading-snug group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                            {evt.title}
+                          </h3>
 
-                    {/* Card Body with Eventbrite Date Box Pattern */}
-                    <div className="p-4 sm:p-5 flex items-start space-x-3.5">
-                      {/* Date Block */}
-                      <div className="shrink-0 w-11 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60 flex flex-col items-center justify-center text-center shadow-xs">
-                        <span className="text-[9px] font-black tracking-wider text-[#3B7A57] dark:text-[#52B788] leading-none uppercase">
-                          {dateParts.month}
-                        </span>
-                        <span className="text-base font-black text-slate-900 dark:text-white leading-none mt-1">
-                          {dateParts.day}
-                        </span>
-                      </div>
-
-                      {/* Info Column */}
-                      <div className="flex-1 min-w-0 space-y-2">
-                        <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white line-clamp-2 leading-snug group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
-                          {evt.title}
-                        </h3>
-
-                        <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                          <div className="flex items-center space-x-1.5">
-                            <Clock className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
-                            <span className="truncate">{dateParts.weekday}, {dateParts.time} WIB</span>
-                          </div>
-                          <div className="flex items-center space-x-1.5">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span className="truncate">{evt.location}</span>
+                          <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                            <div className="flex items-center space-x-1.5">
+                              <Clock className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                              <span className="truncate">{dateParts.weekday}, {dateParts.time} WIB</span>
+                            </div>
+                            <div className="flex items-center space-x-1.5">
+                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate">{evt.location}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  </Link>
-
-                  {/* Card Footer Action */}
-                  <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-0">
-                    <Link href={`/events/${evt.id}`}>
-                      <Button
-                        variant="outline"
-                        className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 hover:bg-[#3B7A57] hover:text-white hover:border-[#3B7A57] dark:hover:bg-[#3B7A57] dark:hover:text-white transition-all rounded-xl justify-between group/btn"
-                      >
-                        <span>{evt.isPaid ? "Pesan Tiket" : "Daftar Tiket"}</span>
-                        <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />
-                      </Button>
                     </Link>
-                  </div>
-                </Card>
-              );
-            })}
+
+                    {/* Card Footer Action */}
+                    <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-0">
+                      <Link href={`/events/${evt.id}`}>
+                        <Button
+                          variant="outline"
+                          className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 hover:bg-[#3B7A57] hover:text-white hover:border-[#3B7A57] dark:hover:bg-[#3B7A57] dark:hover:text-white transition-all rounded-xl justify-between group/btn"
+                        >
+                          <span>{evt.isPaid ? "Pesan Tiket" : "Daftar Tiket"}</span>
+                          <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />
+                        </Button>
+                      </Link>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {/* Pagination Navigation Bar */}
+            {totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-8 mt-6 border-t border-slate-200 dark:border-slate-800">
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  Halaman <span className="font-bold text-slate-900 dark:text-white">{currentPage}</span> dari <span className="font-bold text-slate-900 dark:text-white">{totalPages}</span>
+                </div>
+
+                <div className="flex items-center space-x-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="h-8 px-2.5 text-xs font-semibold rounded-lg border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 mr-1" />
+                    <span>Sebelumnya</span>
+                  </Button>
+
+                  {/* Page Numbers */}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                    const isCurrent = pageNum === currentPage;
+                    return (
+                      <button
+                        key={pageNum}
+                        type="button"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          isCurrent
+                            ? "bg-[#3B7A57] text-white shadow-xs"
+                            : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57]/50"
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="h-8 px-2.5 text-xs font-semibold rounded-lg border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer"
+                  >
+                    <span>Berikutnya</span>
+                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -487,6 +636,9 @@ export default function EventsListingPage() {
           <div className="flex items-center space-x-4 font-medium">
             <Link href="/" className="hover:text-slate-800 dark:hover:text-white transition-colors">
               Beranda
+            </Link>
+            <Link href="/events/tickets/recovery" className="hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors">
+              Cari / Pemulihan Tiket
             </Link>
             <Link href="/events/submit" className="hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors">
               Pasang Event

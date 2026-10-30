@@ -1,6 +1,6 @@
 import fs from "fs";
 import { NextRequest } from "next/server";
-import { RoleSlug, ScopeLevel } from "@/types/auth";
+import { BusinessModuleCode, RoleSlug, ScopeLevel } from "@/types/auth";
 import { db } from "./db";
 import { hashSessionToken, SESSION_COOKIE_NAME } from "./session";
 import { isOrganizerActive, getOrganizerById, getOrganizerByEmail } from "./organizers";
@@ -18,6 +18,9 @@ export interface ServerAuthResult {
   scopeLevel: ScopeLevel | null;
   email?: string | null;
   name?: string;
+  permissions?: string[];
+  tenantId?: string | null;
+  businessModule?: BusinessModuleCode | null;
   error?: string;
 }
 
@@ -74,7 +77,16 @@ export function isDemoLoginAllowed(personaKey: string): { allowed: boolean; reas
  */
 export const TRUSTED_PERSONAS: Record<
   string,
-  { role: RoleSlug; scopeLevel: ScopeLevel; userId: string; email: string; name: string }
+  {
+    role: RoleSlug;
+    scopeLevel: ScopeLevel;
+    userId: string;
+    email: string;
+    name: string;
+    permissions?: string[];
+    tenantId?: string | null;
+    businessModule?: BusinessModuleCode | null;
+  }
 > = {
   DAGO_OWNER: {
     role: "OWNER",
@@ -82,6 +94,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-dago-owner",
     email: "owner.dago@dagoeng.com",
     name: "Hendra Wijaya (Owner Dago Hub)",
+    permissions: ["*"],
+    tenantId: null,
+    businessModule: "CORE",
   },
   SUPER_ADMIN: {
     role: "SUPER_ADMIN",
@@ -89,6 +104,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-admin",
     email: "admin@dagoeng.com",
     name: "Platform Super Admin",
+    permissions: ["*"],
+    tenantId: null,
+    businessModule: "CORE",
   },
   COMMERCIAL_MANAGER: {
     role: "MANAGER",
@@ -96,6 +114,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-manager-commercial",
     email: "manager.commercial@dagoeng.com",
     name: "Commercial Manager",
+    permissions: ["dashboard:view", "reports:view"],
+    tenantId: null,
+    businessModule: "COMMERCIAL",
   },
   COWORK_MANAGER: {
     role: "MANAGER",
@@ -103,6 +124,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-manager-cowork",
     email: "manager.cowork@dagoeng.com",
     name: "Co-working Manager",
+    permissions: ["dashboard:view", "tables:view"],
+    tenantId: null,
+    businessModule: "CO_WORKING",
   },
   TENANT_OWNER_KS: {
     role: "OWNER",
@@ -110,6 +134,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-owner-ks",
     email: "owner.kopisenja@dagoeng.com",
     name: "I Wayan Pratama (Owner Kopi Senja)",
+    permissions: ["dashboard:view", "pos:operate", "orders:view", "tables:view", "menu:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
   },
   TENANT_OWNER_KITCHEN: {
     role: "OWNER",
@@ -117,6 +144,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-owner-kitchen",
     email: "owner.dapurmama@dagoeng.com",
     name: "Dapur Mama Owner",
+    permissions: ["dashboard:view", "orders:view", "kitchen:kds", "menu:view"],
+    tenantId: "tenant-dapur-mama",
+    businessModule: "FNB",
   },
   TENANT_OWNER_BAKERY: {
     role: "OWNER",
@@ -124,6 +154,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-owner-bakery",
     email: "owner.manisbakery@dagoeng.com",
     name: "Manis Bakery Owner",
+    permissions: ["dashboard:view", "orders:view", "menu:view"],
+    tenantId: "tenant-manis-bakery",
+    businessModule: "FNB",
   },
   TENANT_OWNER_TEA: {
     role: "OWNER",
@@ -131,6 +164,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-owner-tea",
     email: "owner.warungbunarti@dagoeng.com",
     name: "Teh Nusantara Owner",
+    permissions: ["dashboard:view", "orders:view", "menu:view"],
+    tenantId: "tenant-teh-nusantara",
+    businessModule: "FNB",
   },
   CASHIER_SGR: {
     role: "CASHIER",
@@ -138,6 +174,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-cashier-sgr",
     email: "cashier.sgr@kopisenja.com",
     name: "Ni Kadek Sri (Kasir)",
+    permissions: ["pos:operate", "orders:view", "tables:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
   },
   KITCHEN_SGR: {
     role: "KITCHEN_STAFF",
@@ -145,6 +184,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-kitchen-sgr",
     email: "kitchen.sgr@kopisenja.com",
     name: "Kitchen Staff",
+    permissions: ["kitchen:kds", "orders:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
   },
   WAITER_SGR: {
     role: "WAITER",
@@ -152,6 +194,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-waiter-sgr",
     email: "waiter.sgr@kopisenja.com",
     name: "Waiter",
+    permissions: ["tables:view", "tables:manage", "orders:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
   },
   CUSTOMER_DEMO: {
     role: "CUSTOMER",
@@ -159,6 +204,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-customer-demo",
     email: "customer@gmail.com",
     name: "Customer Demo",
+    permissions: ["menu:view"],
+    tenantId: null,
+    businessModule: null,
   },
   // Community Organizer Personas (matching demo organizer emails)
   COMMUNITY_BARISTA: {
@@ -167,6 +215,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-comm-barista",
     email: "baristaguild@dagocreative.id",
     name: "Dago Barista Guild",
+    permissions: ["events:manage_own"],
+    tenantId: null,
+    businessModule: "COMMERCIAL",
   },
   COMMUNITY_BANDUNGDEV: {
     role: "CUSTOMER",
@@ -174,6 +225,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-comm-bandungdev",
     email: "halo@bandungdev.org",
     name: "Bandung Game Creators Collective",
+    permissions: ["events:manage_own"],
+    tenantId: null,
+    businessModule: "COMMERCIAL",
   },
   COMMUNITY_AKSARAPRIANGAN: {
     role: "CUSTOMER",
@@ -181,6 +235,20 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-comm-aksara",
     email: "info@aksarapriangan.id",
     name: "Aksara Priangan Studio",
+    permissions: ["events:manage_own"],
+    tenantId: null,
+    businessModule: "COMMERCIAL",
+  },
+  // Event Staff with explicit check-in permission
+  EVENT_STAFF: {
+    role: "WAITER",
+    scopeLevel: "ORGANIZATION",
+    userId: "user-event-staff-demo",
+    email: "eventstaff@dagoeng.com",
+    name: "Dago Event Field Staff",
+    permissions: ["events:checkin"],
+    tenantId: null,
+    businessModule: "CORE",
   },
   // Convenient aliases for tests and common role lookups
   HUB_OWNER: {
@@ -189,6 +257,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-dago-owner",
     email: "owner.dago@dagoeng.com",
     name: "Hendra Wijaya (Owner Dago Hub)",
+    permissions: ["*"],
+    tenantId: null,
+    businessModule: "CORE",
   },
   HUB_MANAGER: {
     role: "MANAGER",
@@ -196,6 +267,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-manager-commercial",
     email: "manager.commercial@dagoeng.com",
     name: "Commercial Manager",
+    permissions: ["dashboard:view", "reports:view"],
+    tenantId: null,
+    businessModule: "COMMERCIAL",
   },
   TENANT_OWNER: {
     role: "OWNER",
@@ -203,6 +277,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-owner-ks",
     email: "owner.kopisenja@dagoeng.com",
     name: "I Wayan Pratama (Owner Kopi Senja)",
+    permissions: ["dashboard:view", "pos:operate", "orders:view", "menu:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
   },
   CASHIER: {
     role: "CASHIER",
@@ -210,6 +287,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-cashier-sgr",
     email: "cashier.sgr@kopisenja.com",
     name: "Ni Kadek Sri (Kasir)",
+    permissions: ["pos:operate", "orders:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
   },
   CUSTOMER: {
     role: "CUSTOMER",
@@ -217,6 +297,9 @@ export const TRUSTED_PERSONAS: Record<
     userId: "user-customer-demo",
     email: "customer@gmail.com",
     name: "Customer Demo",
+    permissions: ["menu:view"],
+    tenantId: null,
+    businessModule: null,
   },
 };
 
@@ -268,6 +351,9 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
           email: session.user.email,
           name: session.user.name,
           scopeLevel,
+          permissions: (session.user as any).permissions || [],
+          tenantId: (session.user as any).tenantId || (primaryRole as any)?.tenantId || null,
+          businessModule: (primaryRole?.organization as any)?.businessModule || null,
         };
       }
     } catch {
@@ -285,6 +371,9 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
           email: orgSession.email,
           name: orgSession.name,
           scopeLevel: "TENANT",
+          permissions: ["events:manage_own"],
+          tenantId: null,
+          businessModule: "CORE",
         };
       }
     }
@@ -311,6 +400,9 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
           userId: null,
           email: null,
           scopeLevel: null,
+          permissions: [],
+          tenantId: null,
+          businessModule: null,
           error: "UNAUTHORIZED: Simulasi persona administratif tidak diizinkan di production. Gunakan sesi kredensial resmi.",
         };
       }
@@ -323,6 +415,9 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
       email: persona.email,
       scopeLevel: persona.scopeLevel,
       name: persona.name,
+      permissions: persona.permissions || [],
+      tenantId: persona.tenantId || null,
+      businessModule: persona.businessModule || null,
     };
   }
 
@@ -333,6 +428,9 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
     userId: null,
     email: null,
     scopeLevel: null,
+    permissions: [],
+    tenantId: null,
+    businessModule: null,
     error: "UNAUTHORIZED: Autentikasi sesi server diperlukan. Silakan login terlebih dahulu.",
   };
 }
@@ -532,9 +630,11 @@ export async function assertEventAdmin(req: NextRequest): Promise<{
  * Validates check-in authorization for field officers, staff, organizers, and hub management.
  * Security enforcement:
  * 1. Hub Management (SUPER_ADMIN, Hub OWNER, Hub MANAGER) has full event oversight.
- * 2. Field Staff / Petugas Check-in (WAITER, CASHIER) can validate attendees at the venue.
- * 3. Community Organizers can validate attendees on events they own (matching event.organizerEmail).
- * 4. Other roles (unauthenticated, unrelated guests, tenant stall owners) are rejected with HTTP 403.
+ * 2. Field Staff / Panitia: MUST have an explicit "events:checkin" permission OR valid event assignment.
+ *    WAITER and CASHIER roles do NOT automatically grant check-in access based on role/scope alone.
+ * 3. Community Organizers can validate attendees ONLY on events they own (matching event.organizerEmail).
+ * 4. F&B Tenant Owners and Tenant Staff are STRICTLY EXCLUDED (HTTP 403).
+ * 5. Other roles (unauthenticated, unrelated guests, customers) are rejected with HTTP 403.
  */
 export async function assertCheckInAuth(
   req: NextRequest,
@@ -557,10 +657,76 @@ export async function assertCheckInAuth(
     };
   }
 
-  // 1. Hub Management Oversight
+  // Strict Tenant & F&B Exclusion:
+  // Strictly attribute-based, no email domain substring checks.
+  // F&B Tenant Owners and Staff MUST NEVER access event check-in.
+  if (
+    auth.scopeLevel === "TENANT" ||
+    Boolean(auth.tenantId) ||
+    auth.businessModule === "FNB"
+  ) {
+    return {
+      authorized: false,
+      error: "FORBIDDEN: Mitra F&B / Tenant tidak memiliki wewenang untuk operasional Event Hub.",
+    };
+  }
+
+  // Customers without organizer rights are excluded
+  if (auth.role === "CUSTOMER" && !auth.permissions?.includes("events:manage_own")) {
+    return {
+      authorized: false,
+      error: "FORBIDDEN: Akun pelanggan tidak memiliki wewenang untuk operasional Event Check-in.",
+    };
+  }
+
+  const normalizedUserEmail = (auth.email || "").trim().toLowerCase();
+
+  // Load and validate event status and assignments if eventId is provided
+  let isEventOrganizer = false;
+  let isAssignedToEvent = false;
+
+  if (eventId) {
+    try {
+      const eventsFile = getDataFilePath("events.json");
+      if (fs.existsSync(eventsFile)) {
+        const raw = fs.readFileSync(eventsFile, "utf-8");
+        const events = JSON.parse(raw);
+        if (Array.isArray(events)) {
+          const eventRecord = events.find((e: any) => e.id === eventId);
+          if (eventRecord) {
+            // Priority C: Event Inactivity Guard
+            // Block check-in if event status is NOT APPROVED (e.g. PENDING, REVISION_REQUESTED, REJECTED, ARCHIVED)
+            if (eventRecord.status && eventRecord.status !== "APPROVED") {
+              return {
+                authorized: false,
+                error: `FORBIDDEN: Event "${eventRecord.title || eventId}" tidak berstatus aktif atau belum disetujui (Status: ${eventRecord.status}). Check-in ditolak.`,
+              };
+            }
+
+            if (normalizedUserEmail && (eventRecord.organizerEmail || "").trim().toLowerCase() === normalizedUserEmail) {
+              isEventOrganizer = true;
+            }
+
+            const assignedList: string[] = Array.isArray(eventRecord.assignedStaffEmails)
+              ? eventRecord.assignedStaffEmails.map((e: string) => String(e).trim().toLowerCase())
+              : [];
+            if (normalizedUserEmail && assignedList.includes(normalizedUserEmail)) {
+              isAssignedToEvent = true;
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 1. Hub Management Oversight (SUPER_ADMIN with PLATFORM scope, or Hub OWNER/MANAGER with ORGANIZATION scope)
+  // Must NOT be tied to a tenant and must NOT be FNB
   const isHubAdmin =
     (auth.role === "SUPER_ADMIN" && auth.scopeLevel === "PLATFORM") ||
-    ((auth.role === "OWNER" || auth.role === "MANAGER") && auth.scopeLevel === "ORGANIZATION");
+    ((auth.role === "OWNER" || auth.role === "MANAGER") &&
+      auth.scopeLevel === "ORGANIZATION" &&
+      !auth.tenantId);
+
   if (isHubAdmin) {
     return {
       authorized: true,
@@ -571,9 +737,23 @@ export async function assertCheckInAuth(
     };
   }
 
-  // 2. Field Staff / Petugas Check-in (WAITER, CASHIER)
-  const isFieldStaff = auth.role === "CASHIER" || auth.role === "WAITER";
-  if (isFieldStaff) {
+  // Check explicit permission code (e.g. from Hub Event Staff)
+  const hasExplicitCheckInPerm =
+    Boolean(auth.permissions?.includes("events:checkin") || auth.permissions?.includes("*"));
+
+  // 2. Organizer can ONLY check in attendees on their OWN approved event
+  if (isEventOrganizer) {
+    return {
+      authorized: true,
+      role: auth.role || undefined,
+      email: auth.email || undefined,
+      userId: auth.userId,
+      name: auth.name,
+    };
+  }
+
+  // 3. Event Staff assigned to this specific event
+  if (isAssignedToEvent) {
     return {
       authorized: true,
       role: auth.role || undefined,
@@ -584,29 +764,27 @@ export async function assertCheckInAuth(
     };
   }
 
-  // 3. Event Organizer matching event
-  if (eventId && auth.email) {
-    try {
-      const eventsFile = getDataFilePath("events.json");
-      if (fs.existsSync(eventsFile)) {
-        const raw = fs.readFileSync(eventsFile, "utf-8");
-        const events = JSON.parse(raw);
-        if (Array.isArray(events)) {
-          const event = events.find((e: any) => e.id === eventId);
-          if (event && (event.organizerEmail || "").toLowerCase() === auth.email.toLowerCase()) {
-            return {
-              authorized: true,
-              role: auth.role || undefined,
-              email: auth.email,
-              userId: auth.userId,
-              name: auth.name,
-            };
-          }
-        }
-      }
-    } catch {}
+  // 4. Hub Staff with explicit check-in permission (if eventId is not provided or generic check-in authorized)
+  if (hasExplicitCheckInPerm && auth.scopeLevel === "ORGANIZATION" && !auth.tenantId) {
+    return {
+      authorized: true,
+      role: auth.role || undefined,
+      email: auth.email || undefined,
+      userId: auth.userId,
+      name: auth.name,
+      isFieldOfficer: true,
+    };
   }
 
+  // 5. WAITER and CASHIER without explicit permission or assignment are STRICTLY REJECTED!
+  if (auth.role === "WAITER" || auth.role === "CASHIER") {
+    return {
+      authorized: false,
+      error: `FORBIDDEN: Staf [${auth.role}] tidak memiliki penugasan atau izin check-in pada event ini.`,
+    };
+  }
+
+  // Customer or other unassigned roles are rejected
   return {
     authorized: false,
     error: `FORBIDDEN: Akun [${auth.email || auth.role}] tidak memiliki penugasan atau izin check-in pada event ini.`,

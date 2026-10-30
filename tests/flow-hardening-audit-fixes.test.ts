@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from "vitest";
+import fs from "fs";
+import { getDataFilePath } from "@/lib/data-storage";
 import { NextRequest } from "next/server";
 import {
   expirePendingBookings,
@@ -46,6 +48,20 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
   const mockSecretKey = "SK-DAGOENG-TEST-SECRET-KEY-12345";
   const mockClientId = "MCH-DAGOENG-TEST-001";
   let testEventId = "";
+  let originalBookingsBackup: string | null = null;
+  const bookingsFile = getDataFilePath("event_bookings.json");
+
+  beforeAll(() => {
+    if (fs.existsSync(bookingsFile)) {
+      originalBookingsBackup = fs.readFileSync(bookingsFile, "utf-8");
+    }
+  });
+
+  afterAll(() => {
+    if (originalBookingsBackup && fs.existsSync(bookingsFile)) {
+      fs.writeFileSync(bookingsFile, originalBookingsBackup, "utf-8");
+    }
+  });
 
   beforeEach(async () => {
     process.env.DOKU_CLIENT_ID = mockClientId;

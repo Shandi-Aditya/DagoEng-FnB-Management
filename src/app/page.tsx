@@ -67,9 +67,21 @@ export default function PublicLandingPage() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const isManualScrollingRef = React.useRef(false);
   const scrollTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Computed destination for authenticated user vs guest visitor
+  const targetDashboardUrl = user
+    ? user.role?.slug === "CUSTOMER"
+      ? "/customer"
+      : user.role?.slug === "CASHIER"
+        ? "/pos"
+        : user.role?.slug === "KITCHEN_STAFF"
+          ? "/kitchen"
+          : user.role?.slug === "WAITER"
+            ? "/waiter"
+            : "/dashboard"
+    : "/login";
 
   // Hero Carousel State (Snappy 3.5-second transition)
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -149,15 +161,6 @@ export default function PublicLandingPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const handleQuickModalLogin = async (personaKey: PersonaKey) => {
-    await login(personaKey);
-    setIsLoginModalOpen(false);
-    if (personaKey === "CASHIER_SGR") router.push("/pos");
-    else if (personaKey === "KITCHEN_SGR") router.push("/kitchen");
-    else if (personaKey === "WAITER_SGR") router.push("/waiter");
-    else if (personaKey === "CUSTOMER_DEMO") router.push("/customer");
-    else router.push("/dashboard");
-  };
 
   const scrollToSection = (id: string) => {
     const el = document.getElementById(id);
@@ -244,41 +247,37 @@ export default function PublicLandingPage() {
 
           {/* Action Buttons & Theme Toggle */}
           <div className="hidden sm:flex items-center space-x-3">
-            <ThemeToggle variant="pill" />
-
-            <Link href="/customer">
+            {/* Direct Universal Login / Sign Up Link */}
+            <Link href={targetDashboardUrl}>
               <Button
+                variant="outline"
                 size="sm"
-                className="text-xs h-10 px-5 font-bold bg-[#3B7A57] text-white hover:bg-[#2E6044] shadow-md shadow-[#3B7A57]/20 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 border border-[#52B788]/40 group"
+                className="text-xs h-9 px-4 font-bold bg-white dark:bg-white/5 backdrop-blur-md border border-slate-200 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/15 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-white/40 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 group shadow-xs cursor-pointer"
               >
-                <UtensilsCrossed className="w-3.5 h-3.5 mr-1.5 transition-transform duration-300 group-hover:rotate-12" />
-                <span>Customer Portal</span>
+                <LogIn className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788] transition-transform duration-300 group-hover:translate-x-0.5" />
+                <span>{user ? (user.name ? `Akun: ${user.name.split(" ")[0]}` : "Akun Saya") : "Login / Sign Up"}</span>
               </Button>
             </Link>
 
-            {/* Interactive Login Modal Button */}
-            <Button
-              onClick={() => setIsLoginModalOpen(true)}
-              variant="outline"
-              size="sm"
-              className="text-xs h-10 px-4 font-bold bg-white dark:bg-white/5 backdrop-blur-md border border-slate-200 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/15 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-white/40 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 group shadow-xs"
-            >
-              <LogIn className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788] transition-transform duration-300 group-hover:translate-x-0.5" />
-              <span>{user ? `Akun: ${user.name.split(" ")[0]}` : "Masuk Sistem"}</span>
-            </Button>
+            <ThemeToggle variant="pill" />
           </div>
 
           {/* Mobile Menu Toggle Button & Theme Toggle */}
           <div className="flex sm:hidden items-center space-x-2">
-            <ThemeToggle />
-            <Link href="/customer">
-              <Button size="sm" className="text-[11px] h-8 px-3 font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-lg shadow-sm hover:scale-105 active:scale-95 transition-all">
-                Portal
+            <Link href={targetDashboardUrl}>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-[11px] h-8 px-2.5 font-bold border-slate-200 dark:border-white/20 text-slate-700 dark:text-slate-200 rounded-lg cursor-pointer"
+              >
+                <LogIn className="w-3 h-3 mr-1 text-[#3B7A57] dark:text-[#52B788]" />
+                <span>{user ? "Akun" : "Masuk"}</span>
               </Button>
             </Link>
+            <ThemeToggle />
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-white/20 active:scale-90 transition-all duration-200 border border-slate-200 dark:border-transparent"
+              className="p-2 rounded-xl bg-slate-100 dark:bg-white/10 text-slate-800 dark:text-white hover:bg-slate-200 dark:hover:bg-white/20 active:scale-90 transition-all duration-200 border border-slate-200 dark:border-transparent cursor-pointer"
               aria-label="Toggle Menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -306,7 +305,7 @@ export default function PublicLandingPage() {
                       setMobileMenuOpen(false);
                       scrollToSection(item.id);
                     }}
-                    className={`p-2.5 rounded-xl text-left transition-all duration-200 ${isActive
+                    className={`p-2.5 rounded-xl text-left transition-all duration-200 cursor-pointer ${isActive
                       ? "bg-[#3B7A57] text-white font-bold shadow-sm shadow-[#3B7A57]/20"
                       : "hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
                       }`}
@@ -318,21 +317,14 @@ export default function PublicLandingPage() {
             </div>
 
             <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex flex-col gap-2">
-              <Link href="/customer" onClick={() => setMobileMenuOpen(false)}>
-                <Button className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-10 rounded-xl hover:scale-[1.02] active:scale-95 transition-all shadow-md shadow-[#3B7A57]/20">
-                  Buka Customer Portal
-                </Button>
-              </Link>
-              <Button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  setIsLoginModalOpen(true);
-                }}
-                variant="outline"
-                className="w-full bg-slate-50 dark:bg-white/5 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-white/20 font-bold text-xs h-10 rounded-xl hover:scale-[1.02] active:scale-95 transition-all"
+              <Link
+                href={targetDashboardUrl}
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-10 rounded-xl flex items-center justify-center space-x-1.5 shadow-md shadow-[#3B7A57]/20 cursor-pointer transition-all"
               >
-                Masuk / Login Multi-Role
-              </Button>
+                <LogIn className="w-3.5 h-3.5" />
+                <span>{user ? "Kelola Akun" : "Login / Sign Up"}</span>
+              </Link>
             </div>
           </div>
         )}
@@ -445,14 +437,14 @@ export default function PublicLandingPage() {
           </div>
 
           {/* 2 Core Service Cards Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
 
-            {/* Service 1: F&B & Culinary */}
-            <div className="p-8 rounded-3xl bg-white dark:bg-[#131B2B] border border-slate-200 dark:border-white/10 space-y-6 flex flex-col justify-between hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-white dark:hover:to-[#131B2B] transition-all duration-300 shadow-md dark:shadow-xl group">
-              <div className="space-y-5">
+            {/* Service 1: F&B & Culinary (Compact & Modern) */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#131B2B] border border-slate-200 dark:border-white/10 space-y-4 flex flex-col justify-between hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-white dark:hover:to-[#131B2B] transition-all duration-300 shadow-sm dark:shadow-lg group">
+              <div className="space-y-3.5">
                 <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-2xl bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 flex items-center justify-center font-bold">
-                    <UtensilsCrossed className="w-6 h-6" />
+                  <div className="w-10 h-10 rounded-xl bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 flex items-center justify-center font-bold">
+                    <UtensilsCrossed className="w-5 h-5" />
                   </div>
                   <Badge className="bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 text-[10px] font-bold uppercase">
                     Kuliner & Kopi Spesialti
@@ -460,89 +452,89 @@ export default function PublicLandingPage() {
                 </div>
 
                 <div>
-                  <h3 className="text-2xl font-black text-slate-900 dark:text-white group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
                     Sajian Kuliner Artisan Multi-Mitra
                   </h3>
-                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-2">
-                    Nikmati aneka hidangan lezat dan kopi berkualitas dari para mitra terpercaya DAGO — mulai dari seduhan Kopi Senja, hidangan nusantara Dapur Mama, hingga pastry manis Manis Bakery. Pesan mandiri via QR Meja dengan pembayaran instan.
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-1.5">
+                    Nikmati aneka hidangan lezat dan kopi berkualitas dari mitra artisan terpercaya DAGO (Kopi Senja, Dapur Mama, Manis Bakery, Bu Narti) dengan pemesanan mandiri via scan QR Meja.
                   </p>
                 </div>
 
                 {/* Tenant Badges */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
                     ☕ Kopi Senja
                   </span>
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
                     🍲 Dapur Mama
                   </span>
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
                     🥐 Manis Bakery
                   </span>
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
                     🍛 Warung Bu Narti
                   </span>
                 </div>
 
                 {/* Key Features */}
-                <div className="pt-2 space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
                     <span>Pemesanan mandiri via scan QR Meja tanpa antrean kasir</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
-                    <span>Pesanan otomatis terhubung ke Kitchen Display System (KDS) mitra</span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <span>Pesanan otomatis terhubung ke KDS & cetak struk dapur mitra</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
                     <span>Struk digital transparan & penambahan loyalty points otomatis</span>
                   </div>
                 </div>
 
-                {/* Popular Menu Preview */}
-                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-2">
+                {/* Compact Popular Menu Preview */}
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
                     <span className="flex items-center space-x-1">
                       <Flame className="w-3.5 h-3.5 text-amber-500" />
                       <span>Menu Favorit Pengunjung:</span>
                     </span>
-                    <span className="text-slate-500 dark:text-slate-400 font-normal">Harga Transparan</span>
+                    <span className="text-slate-400 font-normal text-[10px]">Harga Transparan</span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-[11px]">
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
-                      <span className="font-bold text-slate-800 dark:text-white block truncate">Kopi Senja Aren</span>
-                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">{formatCurrencyIDR(24000)}</span>
+                  <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Kopi Senja</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">{formatCurrencyIDR(24000)}</span>
                     </div>
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
-                      <span className="font-bold text-slate-800 dark:text-white block truncate">Nasi Beef Bowl</span>
-                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">{formatCurrencyIDR(45000)}</span>
+                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Beef Bowl</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">{formatCurrencyIDR(45000)}</span>
                     </div>
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
-                      <span className="font-bold text-slate-800 dark:text-white block truncate">Butter Croissant</span>
-                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">{formatCurrencyIDR(20000)}</span>
+                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Croissant</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">{formatCurrencyIDR(20000)}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-slate-100 dark:border-white/10">
+              <div className="pt-3 border-t border-slate-100 dark:border-white/10">
                 <Link href="/customer?tab=MENU">
-                  <Button className="w-full h-12 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-2xl shadow-lg shadow-[#3B7A57]/20 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2 border border-[#52B788]/30">
-                    <UtensilsCrossed className="w-4 h-4" />
+                  <Button className="w-full h-10 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-md shadow-[#3B7A57]/20 transition-all hover:scale-[1.01] active:scale-95 flex items-center justify-center space-x-2 border border-[#52B788]/30 cursor-pointer">
+                    <UtensilsCrossed className="w-3.5 h-3.5" />
                     <span>Explore F&B & Pesan Mandiri</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </Button>
                 </Link>
               </div>
             </div>
 
-            {/* Service 2: Co-Working & Workspace */}
-            <div className="p-8 rounded-3xl bg-white dark:bg-[#131B2B] border border-slate-200 dark:border-white/10 space-y-6 flex flex-col justify-between hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-white dark:hover:to-[#131B2B] transition-all duration-300 shadow-md dark:shadow-xl group">
-              <div className="space-y-5">
+            {/* Service 2: Co-Working & Workspace (Compact & Modern) */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#131B2B] border border-slate-200 dark:border-white/10 space-y-4 flex flex-col justify-between hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-white dark:hover:to-[#131B2B] transition-all duration-300 shadow-sm dark:shadow-lg group">
+              <div className="space-y-3.5">
                 <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-2xl bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 flex items-center justify-center font-bold">
-                    <Laptop className="w-6 h-6" />
+                  <div className="w-10 h-10 rounded-xl bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 flex items-center justify-center font-bold">
+                    <Laptop className="w-5 h-5" />
                   </div>
                   <Badge className="bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 text-[10px] font-bold uppercase">
                     Ruang Kerja & Produktivitas
@@ -550,78 +542,78 @@ export default function PublicLandingPage() {
                 </div>
 
                 <div>
-                  <h3 className="text-2xl font-black text-slate-900 dark:text-white group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
                     Ruang Kerja Kolaboratif & Meeting Room
                   </h3>
-                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-2">
-                    Fasilitas kerja representatif yang dirancang untuk freelancer, remote worker, profesional, dan tim yang membutuhkan ruang tenang, kolaboratif, serta didukung fasilitas audio visual lengkap.
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-1.5">
+                    Fasilitas kerja representatif untuk freelancer, remote worker, dan tim: ruang tenang, internet dedicated fiber optic, smart TV 4K, audio conference, dan free-flow water.
                   </p>
                 </div>
 
                 {/* Workspace Badges */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
                     💻 Hot Desk Flex
                   </span>
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
                     🖥️ Dedicated Desk
                   </span>
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
                     🎙️ Focus Audio Pod
                   </span>
-                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
                     👥 Meeting Suite (10 Pax)
                   </span>
                 </div>
 
                 {/* Key Features */}
-                <div className="pt-2 space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
                     <span>Koneksi internet dedicated fiber optic berkecepatan tinggi & stabil</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
                     <span>Reservasi fleksibel: pilihan sewa per jam, harian, atau bulanan</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
                     <span>Fasilitas lengkap: Smart TV 4K, audio conference, & free-flow water</span>
                   </div>
                 </div>
 
-                {/* Popular Workspace Preview */}
-                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-2">
+                {/* Compact Popular Workspace Preview */}
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
                     <span className="flex items-center space-x-1">
                       <ShieldCheck className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
                       <span>Pilihan Ruang Tersedia:</span>
                     </span>
-                    <span className="text-slate-500 dark:text-slate-400 font-normal">Pemesanan Langsung</span>
+                    <span className="text-slate-400 font-normal text-[10px]">Pemesanan Langsung</span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-[11px]">
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
-                      <span className="font-bold text-slate-800 dark:text-white block truncate">Hot Desk Flex</span>
-                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">Rp 15.000<span className="text-[10px] font-normal">/jam</span></span>
+                  <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Hot Desk</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">Rp 15.000<span className="text-[9px] font-normal">/jam</span></span>
                     </div>
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
-                      <span className="font-bold text-slate-800 dark:text-white block truncate">Focus Audio Pod</span>
-                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">Rp 35.000<span className="text-[10px] font-normal">/jam</span></span>
+                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Audio Pod</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">Rp 35.000<span className="text-[9px] font-normal">/jam</span></span>
                     </div>
-                    <div className="p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
-                      <span className="font-bold text-slate-800 dark:text-white block truncate">Meeting Room Alpha</span>
-                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold">Rp 150.000<span className="text-[10px] font-normal">/jam</span></span>
+                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Meeting Room</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">Rp 150.000<span className="text-[9px] font-normal">/jam</span></span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-6 border-t border-slate-100 dark:border-white/10">
+              <div className="pt-3 border-t border-slate-100 dark:border-white/10">
                 <Link href="/customer?tab=COWORKING">
-                  <Button className="w-full h-12 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-2xl shadow-lg shadow-[#3B7A57]/20 transition-all hover:scale-[1.02] active:scale-95 flex items-center justify-center space-x-2 border border-[#52B788]/30">
-                    <Laptop className="w-4 h-4" />
+                  <Button className="w-full h-10 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-md shadow-[#3B7A57]/20 transition-all hover:scale-[1.01] active:scale-95 flex items-center justify-center space-x-2 border border-[#52B788]/30 cursor-pointer">
+                    <Laptop className="w-3.5 h-3.5" />
                     <span>Explore Co-Working & Reservasi Ruang</span>
-                    <ArrowRight className="w-4 h-4" />
+                    <ArrowRight className="w-3.5 h-3.5" />
                   </Button>
                 </Link>
               </div>
@@ -720,8 +712,8 @@ export default function PublicLandingPage() {
                       <div className="absolute top-3 right-3">
                         <span
                           className={`text-[10px] font-black px-2.5 py-1 rounded-full shadow-xs backdrop-blur-md ${evt.isPaid
-                              ? "bg-slate-900/90 text-emerald-400 border border-emerald-500/30"
-                              : "bg-[#3B7A57]/90 text-white"
+                            ? "bg-slate-900/90 text-emerald-400 border border-emerald-500/30"
+                            : "bg-[#3B7A57]/90 text-white"
                             }`}
                         >
                           {evt.isPaid ? formatCurrencyIDR(evt.price) : "GRATIS"}
@@ -985,9 +977,9 @@ export default function PublicLandingPage() {
                 <Link href="/customer?tab=COWORKING" className="hover:text-[#52B788] transition-colors">Layanan Co-Working Space</Link>
                 <Link href="/customer?tab=LOYALTY" className="hover:text-[#52B788] transition-colors">Program Member Loyalty</Link>
                 <Link href="/events" className="hover:text-[#52B788] transition-colors">Event Komunitas</Link>
-                <button onClick={() => setIsLoginModalOpen(true)} className="text-left hover:text-[#52B788] transition-colors cursor-pointer">
+                <Link href="/login" className="text-left hover:text-[#52B788] transition-colors cursor-pointer">
                   Akses Staf & Manajemen
-                </button>
+                </Link>
               </div>
             </div>
 
@@ -1003,107 +995,6 @@ export default function PublicLandingPage() {
           </div>
         </div>
       </footer>
-
-      {/* 8. INTERACTIVE LOGIN MODAL POPUP */}
-      {isLoginModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity animate-in fade-in"
-            onClick={() => setIsLoginModalOpen(false)}
-          />
-
-          <div className="relative w-full max-w-md bg-white dark:bg-[#131B2B] border border-slate-200 dark:border-white/15 rounded-3xl p-6 sm:p-7 shadow-2xl z-10 text-slate-900 dark:text-white space-y-5 animate-in zoom-in-95 duration-200 transition-colors">
-
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-white/10">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center font-bold">
-                  <LogIn className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-black text-base text-slate-900 dark:text-white">Masuk ke Sistem DagoEng</h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">Pilih akses cepat role untuk demo atau form login</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsLoginModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Quick 1-Click Role Access Grid */}
-            <div className="space-y-2">
-              <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-                Akses Langsung 1-Klik Role:
-              </span>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  onClick={() => handleQuickModalLogin("DAGO_OWNER")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
-                >
-                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Owner Dago Hub</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Executive Org</span>
-                </button>
-
-                <button
-                  onClick={() => handleQuickModalLogin("TENANT_OWNER_KS")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
-                >
-                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Owner Kopi Senja</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Tenant F&B</span>
-                </button>
-
-                <button
-                  onClick={() => handleQuickModalLogin("CASHIER_SGR")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
-                >
-                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Kasir POS</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Singaraja POS</span>
-                </button>
-
-                <button
-                  onClick={() => handleQuickModalLogin("KITCHEN_SGR")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
-                >
-                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Chef Dapur (KDS)</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Antrean Dapur</span>
-                </button>
-
-                <button
-                  onClick={() => handleQuickModalLogin("WAITER_SGR")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
-                >
-                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Pramusaji / Waiter</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Denah Meja</span>
-                </button>
-
-                <button
-                  onClick={() => handleQuickModalLogin("CUSTOMER_DEMO")}
-                  className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 text-left transition-all group shadow-2xs cursor-pointer"
-                >
-                  <span className="block font-bold text-slate-800 dark:text-white group-hover:text-white">Pelanggan QR</span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 group-hover:text-white/80">Customer Portal</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Link to Full Login Form */}
-            <div className="pt-2 border-t border-slate-200 dark:border-white/10 flex items-center justify-between text-xs">
-              <Link
-                href="/login"
-                onClick={() => setIsLoginModalOpen(false)}
-                className="text-[#3B7A57] dark:text-[#52B788] font-bold hover:underline flex items-center space-x-1"
-              >
-                <span>Buka Form Login Email Lengkap</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-          </div>
-        </div>
-      )}
 
     </div>
   );

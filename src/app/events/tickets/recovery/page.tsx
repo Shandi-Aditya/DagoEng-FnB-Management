@@ -65,7 +65,9 @@ export default function TicketRecoveryPage() {
 
       const match = json.data[0];
       if (!match.guestToken) {
-        setSearchError("Token akses untuk tiket ini tidak tersedia.");
+        setSearchError(
+          "Tiket ini adalah tiket warisan (legacy) tanpa token tautan privat langsung. Silakan tunjukkan kode booking ini kepada panitia saat registrasi di venue atau hubungi admin DagoEng."
+        );
         return;
       }
 
