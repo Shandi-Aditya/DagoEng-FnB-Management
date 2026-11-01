@@ -58,7 +58,6 @@ function LoginContent() {
   // Determine back navigation link explicitly based on source context.
   // NEVER send the visitor to returnTo (which may be a protected destination) on cancel/back!
   const backHref = isFromEvents ? "/events" : "/";
-  const backLabel = isFromEvents ? "Kembali ke Event Marketplace" : "Kembali ke Beranda";
 
   // Form Mode: Universal Login (default) or Register
   const [isRegisterMode, setIsRegisterMode] = useState(false);
@@ -275,15 +274,10 @@ function LoginContent() {
             className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white backdrop-blur-md shadow-xs transition-all duration-200 hover:scale-105 active:scale-95"
           >
             <ArrowLeft className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
-            <span>{backLabel}</span>
+            <span>Kembali</span>
           </Link>
 
-          <div className="flex items-center space-x-2">
-            {returnTo && (
-              <span className="text-[10px] bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] font-bold px-2.5 py-1 rounded-full border border-[#3B7A57]/20 dark:border-[#52B788]/30">
-                Tujuan: {returnTo}
-              </span>
-            )}
+          <div className="flex items-center">
             <ThemeToggle variant="pill" />
           </div>
         </div>
