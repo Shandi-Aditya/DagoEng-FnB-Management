@@ -7,14 +7,14 @@ import {
   recoverStalePrintingJobs,
   dispatchPrintJob,
   trimQueuePreservingActionableJobs,
-} from "@/lib/printer";
+} from "../src/lib/printer";
 import {
   KitchenTicketData,
   PrintJob,
   PrinterDeviceConfig,
   DEFAULT_PRINTING_SETTINGS,
-} from "@/types/printer";
-import { POSReceiptData } from "@/features/pos/types";
+} from "../src/types/printer";
+import { POSReceiptData } from "../src/features/pos/types";
 
 describe("POS Dual Receipt & Kitchen Printing System", () => {
   const sampleKitchenTicket: KitchenTicketData = {
@@ -409,11 +409,11 @@ describe("POS Dual Receipt & Kitchen Printing System", () => {
       const trimmed = trimQueuePreservingActionableJobs(fullQueue, 50);
 
       // Pastikan failedJob dan offlineJob TIDAK PERNAH terhapus
-      expect(trimmed.some((j) => j.id === "job-failed-critical")).toBe(true);
-      expect(trimmed.some((j) => j.id === "job-offline-critical")).toBe(true);
+      expect(trimmed.some((j: PrintJob) => j.id === "job-failed-critical")).toBe(true);
+      expect(trimmed.some((j: PrintJob) => j.id === "job-offline-critical")).toBe(true);
 
       // Pastikan hanya terminal jobs yang dipotong ke maksimal 50
-      const remainingTerminal = trimmed.filter((j) => j.status === "BRIDGE_ACKNOWLEDGED");
+      const remainingTerminal = trimmed.filter((j: PrintJob) => j.status === "BRIDGE_ACKNOWLEDGED");
       expect(remainingTerminal.length).toBe(50);
       expect(trimmed.length).toBe(52); // 50 terminal + 2 actionable
     });
