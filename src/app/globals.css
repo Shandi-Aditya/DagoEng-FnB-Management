@@ -177,12 +177,36 @@
 }
 
 /* 3. Input Controls, Textarea, Select */
-.dark input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="range"]),
-.dark textarea,
-.dark select {
-  background-color: #0F172A !important;
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="range"]):not(.bg-transparent):not([class*="bg-transparent"]):not([class*="dark:bg-"]):not([class*="bg-"]),
+.dark textarea:not(.bg-transparent):not([class*="bg-transparent"]):not([class*="dark:bg-"]):not([class*="bg-"]),
+.dark select:not(.bg-transparent):not([class*="bg-transparent"]):not([class*="dark:bg-"]):not([class*="bg-"]) {
+  background-color: #1E293B !important;
   border-color: #334155 !important;
   color: #E2E8F0 !important;
+}
+
+/* Explicit transparent / custom-styled inputs inside composite search/filter/action bars */
+.dark input.bg-transparent,
+.dark input[class*="bg-transparent"],
+.dark input.border-0,
+.dark input[class*="border-none"],
+.dark input[class*="border-0"] {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  border-width: 0 !important;
+  box-shadow: none !important;
+}
+
+.dark input.bg-transparent:focus,
+.dark input[class*="bg-transparent"]:focus,
+.dark input.border-0:focus,
+.dark input[class*="border-none"]:focus,
+.dark input[class*="border-0"]:focus {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  border-width: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 .dark select option {
@@ -195,7 +219,7 @@
   color: #64748B !important;
 }
 
-.dark input:focus,
+.dark input:not(.bg-transparent):not([class*="bg-transparent"]):not([class*="border-0"]):not([class*="border-none"]):focus,
 .dark textarea:focus,
 .dark select:focus {
   border-color: #52B788 !important;

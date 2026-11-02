@@ -74,21 +74,25 @@ export function Header({
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Desktop & Tablet Landscape Sidebar Toggle (only shown when sidebar is closed/hidden) */}
-        {isSidebarCollapsed && (
+        {/* Desktop Sidebar Toggle */}
+        {onToggleSidebar && (
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="hidden lg:flex p-2 -ml-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors shrink-0 items-center justify-center min-h-[40px] min-w-[40px] touch-manipulation"
-            title="Buka Menu Navigasi"
-            aria-label="Buka Menu Navigasi"
+            className="hidden lg:flex p-2 -ml-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors shrink-0 items-center justify-center min-h-[40px] min-w-[40px] touch-manipulation cursor-pointer"
+            title={isSidebarCollapsed ? "Perluas Sidebar Menu" : "Perkecil Sidebar Menu"}
+            aria-label={isSidebarCollapsed ? "Perluas Sidebar Menu" : "Perkecil Sidebar Menu"}
           >
-            <PanelLeftOpen className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788]" />
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788]" />
+            ) : (
+              <PanelLeftClose className="w-5 h-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" />
+            )}
           </button>
         )}
 
-        <div className="flex items-center space-x-2 truncate">
-          <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-1.5 truncate">
+        <div className="hidden sm:flex items-center space-x-2 shrink-0">
+          <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
             {user?.scopeLevel === "ORGANIZATION" ? (
               <>
                 <Building className="w-4 h-4 text-primary dark:text-emerald-400" />

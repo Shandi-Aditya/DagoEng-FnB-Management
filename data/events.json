@@ -1,5 +1,91 @@
 [
   {
+    "id": "evt-1793515068148-7xazf",
+    "title": "cek sans 1",
+    "category": "CREATIVE",
+    "description": "cek cek tes tes",
+    "startDate": "2026-11-10T01:00:00.000Z",
+    "endDate": "2026-11-13T08:30:00.000Z",
+    "location": "hotel 1",
+    "maxCapacity": 10,
+    "destinationBankId": null,
+    "isPaid": false,
+    "price": 0,
+    "posterUrl": "/images/events/poster-1793514907494-0487c0b8.png",
+    "externalRegistrationUrl": null,
+    "organizerName": "sans cek",
+    "organizerEmail": "sansaditya2105@gmail.com",
+    "organizerPhone": "085737654572",
+    "guidelines": [
+      "cek",
+      "cek",
+      "cek",
+      "cek"
+    ],
+    "status": "REVISION_REQUESTED",
+    "collaborationFacilities": [],
+    "collaborationPromotion": [
+      "Instagram Story & Post @dagocreativehub"
+    ],
+    "collaborationNotes": "cek sans 1",
+    "organizerFeePercent": 80,
+    "customPlatformFeePercent": 20,
+    "proposedRevenueSplit": {
+      "organizerPercent": 80,
+      "platformPercent": 20,
+      "proposedBy": "ORGANIZER",
+      "reason": "Usulan bagi hasil awal saat pengajuan event",
+      "status": "PENDING",
+      "proposedAt": "2026-11-01T06:37:48.148Z",
+      "counterProposal": null
+    },
+    "revenueSplitHistory": [],
+    "payoutStatus": "UNQUALIFIED",
+    "payoutHistory": [],
+    "createdAt": "2026-11-01T06:37:48.148Z",
+    "updatedAt": "2026-11-01T07:08:38.435Z",
+    "revisionNotes": "revisi dari posternya, kurang menarik"
+  },
+  {
+    "id": "evt-1793513163350-b87do",
+    "title": "Cek 1234567890",
+    "category": "WORKSHOP",
+    "description": "seminar workshop yang sangat penting diikuti oleh semua orang yang ada di singaraja khususnya",
+    "startDate": "2026-11-05T01:00:00.000Z",
+    "endDate": "2026-11-10T02:00:00.000Z",
+    "location": "hotel cek 123",
+    "maxCapacity": 10,
+    "destinationBankId": null,
+    "isPaid": false,
+    "price": 0,
+    "posterUrl": "/images/events/poster-1793512640647-fa14f972.png",
+    "externalRegistrationUrl": null,
+    "organizerName": "sans cek",
+    "organizerEmail": "sansaditya2105@gmail.com",
+    "organizerPhone": "085737654572",
+    "guidelines": null,
+    "status": "PENDING",
+    "collaborationFacilities": [],
+    "collaborationPromotion": [],
+    "collaborationNotes": null,
+    "organizerFeePercent": 50,
+    "customPlatformFeePercent": 50,
+    "proposedRevenueSplit": {
+      "organizerPercent": 50,
+      "platformPercent": 50,
+      "proposedBy": "ORGANIZER",
+      "reason": "nanti kalau lebih dari target, kita komunikasikan kembali",
+      "status": "PENDING",
+      "proposedAt": "2026-11-01T06:06:03.350Z",
+      "counterProposal": null
+    },
+    "revenueSplitHistory": [],
+    "payoutStatus": "UNQUALIFIED",
+    "payoutHistory": [],
+    "createdAt": "2026-11-01T06:06:03.350Z",
+    "updatedAt": "2026-11-01T06:06:03.350Z"
+  },
+  {
     "id": "evt-1793173055748-1ujzs",
     "title": "1234567890sdfgfg",
     "category": "WORKSHOP",
@@ -16,7 +102,7 @@
     "organizerEmail": "customer@gmail.com",
     "organizerPhone": "08987654321",
     "guidelines": null,
-    "status": "PENDING",
+    "status": "ARCHIVED",
     "collaborationFacilities": [],
     "collaborationPromotion": [],
     "collaborationNotes": null,
@@ -60,7 +146,7 @@
       "4",
       "5"
     ],
-    "status": "PENDING",
+    "status": "ARCHIVED",
     "collaborationFacilities": [
       "Set Meja & Kursi Tambahan (Hingga 50 Pax)"
     ],
@@ -102,7 +188,7 @@
     "organizerEmail": "1@gmail.com",
     "organizerPhone": "080987654321",
     "guidelines": null,
-    "status": "APPROVED",
+    "status": "ARCHIVED",
     "createdAt": "2026-10-27T06:47:45.643Z",
     "updatedAt": "2026-10-27T06:48:00.049Z"
   },
@@ -129,7 +215,7 @@
       "2",
       "3"
     ],
-    "status": "APPROVED",
+    "status": "ARCHIVED",
     "createdAt": "2026-10-27T03:58:58.004Z",
     "updatedAt": "2026-10-27T05:45:05.732Z"
   },
@@ -204,7 +290,7 @@
       "cek",
       "cek"
     ],
-    "status": "APPROVED",
+    "status": "ARCHIVED",
     "createdAt": "2026-10-26T08:51:19.534Z",
     "updatedAt": "2026-10-26T08:51:45.548Z"
   },
@@ -268,8 +354,8 @@
     "title": "Pilatesan Vol. 5 — In My Aura Era",
     "category": "COMMUNITY",
     "description": "Rasakan keseruan workout outdoor di alam terbuka! Pilatesan Vol. 5 menghadirkan 50 Minute Pilates Session, Goodiebag & Doorprize, Special Refreshment, Pilates Equipment provided, Cake Decorating activity, dan Free Documentation. Limited spots available!",
-    "startDate": "2026-10-31T07:00:00.000Z",
-    "endDate": "2026-10-31T11:00:00.000Z",
+    "startDate": "2026-11-02T07:00:00.000Z",
+    "endDate": "2026-11-02T11:00:00.000Z",
     "location": "Krisna Funtastic Land, Singaraja",
     "isPaid": true,
     "price": 200000,
@@ -414,7 +500,7 @@
     "organizerName": "Dago Specialty Coffee Society",
     "organizerEmail": "baristaguild@dagocreative.id",
     "organizerPhone": "+62 812-9876-5432",
-    "status": "APPROVED",
+    "status": "ARCHIVED",
     "createdAt": "2026-10-08T06:59:08.719Z",
     "updatedAt": "2026-10-08T06:59:08.719Z"
   },
@@ -433,7 +519,7 @@
     "organizerName": "Dago Hijau Berkelanjutan",
     "organizerEmail": "kontak@dagohijau.id",
     "organizerPhone": "+62 819-8877-6655",
-    "status": "APPROVED",
+    "status": "ARCHIVED",
     "createdAt": "2026-10-05T06:59:08.719Z",
     "updatedAt": "2026-10-05T06:59:08.719Z"
   }

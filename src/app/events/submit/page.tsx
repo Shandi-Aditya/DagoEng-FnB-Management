@@ -29,6 +29,7 @@ import {
   Info,
   Ticket,
   Eye,
+  EyeOff,
   Check,
   ShieldCheck,
   Building,
@@ -85,16 +86,18 @@ const WIZARD_STEPS = [
 
 export default function SubmitEventPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, login } = useAuth();
 
   // Wizard Step State (1 to 4)
   const [currentStep, setCurrentStep] = useState<number>(1);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
 
   // Form State
   const [formData, setFormData] = useState<EventSubmissionPayload>({
     organizerName: "",
     organizerEmail: "",
     organizerPhone: "",
+    password: "",
     title: "",
     category: "COMMUNITY",
     description: "",
@@ -126,6 +129,28 @@ export default function SubmitEventPage() {
       organizerPhone: prev.organizerPhone || user?.phone || "",
     }));
   }, [user]);
+
+  // Venue Dago Hub Detection
+  const isDagoVenue = Boolean(
+    formData.location && (
+      QUICK_VENUES.some((v) => v.toLowerCase() === formData.location.trim().toLowerCase()) ||
+      formData.location.toLowerCase().includes("dago") ||
+      formData.location.toLowerCase().includes("amphitheater") ||
+      formData.location.toLowerCase().includes("main hall") ||
+      formData.location.toLowerCase().includes("tech lab") ||
+      formData.location.toLowerCase().includes("maker space") ||
+      formData.location.toLowerCase().includes("boardroom") ||
+      formData.location.toLowerCase().includes("seminyak") ||
+      formData.location.toLowerCase().includes("ubud")
+    )
+  );
+
+  // Automatically reset collaboration facilities if non-Dago venue is chosen
+  React.useEffect(() => {
+    if (!isDagoVenue && Array.isArray(formData.collaborationFacilities) && formData.collaborationFacilities.length > 0) {
+      setFormData((prev) => ({ ...prev, collaborationFacilities: [] }));
+    }
+  }, [isDagoVenue]);
 
   const toggleFacility = (facility: string) => {
     setFormData((prev) => {
@@ -267,6 +292,9 @@ export default function SubmitEventPage() {
       if (!formData.organizerPhone.trim() || !phoneRegex.test(formData.organizerPhone.trim())) {
         errors.push("Nomor WhatsApp/HP tidak valid (contoh: 08123456789).");
       }
+      if (!user && (!formData.password || formData.password.trim().length < 6)) {
+        errors.push("Password akun penyelenggara minimal 6 karakter (digunakan untuk login ke Portal Penyelenggara).");
+      }
       if (!formData.title.trim() || formData.title.trim().length < 3) {
         errors.push("Judul event wajib diisi (minimal 3 karakter).");
       }
@@ -320,16 +348,6 @@ export default function SubmitEventPage() {
       if (orgPercent < 0 || platPercent < 0 || orgPercent > 100 || platPercent > 100) {
         errors.push("Persentase bagi hasil harus bernilai antara 0% dan 100%.");
       }
-      if (formData.externalRegistrationUrl?.trim()) {
-        try {
-          const u = new URL(formData.externalRegistrationUrl.trim());
-          if (u.protocol !== "http:" && u.protocol !== "https:") {
-            errors.push("URL pendaftaran eksternal harus HTTP atau HTTPS.");
-          }
-        } catch {
-          errors.push("Format URL pendaftaran eksternal tidak valid.");
-        }
-      }
     }
 
     setStepErrors(errors);
@@ -369,6 +387,9 @@ export default function SubmitEventPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
+          password: formData.password ? formData.password.trim() : undefined,
+          collaborationFacilities: isDagoVenue ? formData.collaborationFacilities : [],
+          externalRegistrationUrl: null,
           price: formData.isPaid ? Number(formData.price) : 0,
           maxCapacity: formData.maxCapacity ? Number(formData.maxCapacity) : 50,
         }),
@@ -389,6 +410,15 @@ export default function SubmitEventPage() {
       if (typeof window !== "undefined" && formData.organizerEmail) {
         localStorage.setItem("dago_organizer_email", formData.organizerEmail.trim().toLowerCase());
       }
+
+      if (data.user) {
+        try {
+          await login(undefined, data.user);
+        } catch (loginErr) {
+          console.warn("Client session sync warning:", loginErr);
+        }
+      }
+
       setSubmitSuccess(true);
       setSubmittedEventId(data.data?.id || "");
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -467,13 +497,13 @@ export default function SubmitEventPage() {
               </div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 text-left mb-6 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-200 text-left mb-6 space-y-1">
               <div className="flex items-center space-x-1.5 font-bold">
-                <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                <span>Aktivasi Akun Penyelenggara Otomatis</span>
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Akun Penyelenggara Otomatis Terhubung & Aktif</span>
               </div>
-              <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                Email Anda (<strong>{formData.organizerEmail}</strong>) otomatis diaktifkan sebagai penyelenggara. Anda dapat langsung membuka portal untuk memantau proposal atau login akun terpadu.
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                Email Anda (<strong>{formData.organizerEmail}</strong>) telah otomatis terhubung. Sesi portal aktif sehingga Anda dapat langsung melihat progres verifikasi event yang berstatus <strong>PENDING</strong>.
               </p>
             </div>
 
@@ -483,13 +513,6 @@ export default function SubmitEventPage() {
                   Buka Portal Penyelenggara
                 </Button>
               </Link>
-              {!user && (
-                <Link href="/login?returnTo=/events/portal&from=events&mode=customer">
-                  <Button variant="outline" className="w-full sm:w-auto text-xs font-semibold rounded-xl border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 hover:bg-amber-50 dark:hover:bg-amber-950/40 cursor-pointer">
-                    Masuk / Buat Akun Dago
-                  </Button>
-                </Link>
-              )}
               <Link href="/events">
                 <Button variant="outline" className="w-full sm:w-auto text-xs font-semibold rounded-xl border-slate-200 dark:border-slate-700 cursor-pointer">
                   Kembali ke Daftar Event
@@ -599,49 +622,86 @@ export default function SubmitEventPage() {
                   </div>
 
                   {/* Organizer Details */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Nama Komunitas / PIC <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        name="organizerName"
-                        required
-                        value={formData.organizerName}
-                        onChange={handleInputChange}
-                        placeholder="Contoh: Dago Coffee Lab"
-                        className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
-                      />
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 space-y-3.5">
+                    {user ? (
+                      <div className="flex items-center space-x-2 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>Terhubung dengan akun aktif: <strong>{user.name}</strong> ({user.email})</span>
+                      </div>
+                    ) : null}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Nama Komunitas / PIC <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          name="organizerName"
+                          required
+                          value={formData.organizerName}
+                          onChange={handleInputChange}
+                          placeholder="Contoh: Dago Coffee Lab"
+                          className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Email Penyelenggara <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="email"
+                          name="organizerEmail"
+                          required
+                          value={formData.organizerEmail}
+                          onChange={handleInputChange}
+                          placeholder="komunitas@dagoeng.com"
+                          className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          No. WhatsApp / HP <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="tel"
+                          name="organizerPhone"
+                          required
+                          value={formData.organizerPhone}
+                          onChange={handleInputChange}
+                          placeholder="08123456789"
+                          className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Email Penyelenggara <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        name="organizerEmail"
-                        required
-                        value={formData.organizerEmail}
-                        onChange={handleInputChange}
-                        placeholder="komunitas@dagoeng.com"
-                        className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        No. WhatsApp / HP <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        name="organizerPhone"
-                        required
-                        value={formData.organizerPhone}
-                        onChange={handleInputChange}
-                        placeholder="08123456789"
-                        className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
-                      />
-                    </div>
+
+                    {!user && (
+                      <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800">
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Password Akun Penyelenggara <span className="text-rose-500">*</span>
+                          <span className="text-slate-400 font-normal ml-1.5">(Minimal 6 karakter, untuk login ke Portal Penyelenggara)</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            name="password"
+                            required
+                            value={formData.password || ""}
+                            onChange={handleInputChange}
+                            placeholder="Buat password akun penyelenggara..."
+                            className="w-full px-3 py-2 pr-10 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                            tabIndex={-1}
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Title & Category */}
@@ -958,6 +1018,23 @@ export default function SubmitEventPage() {
                         ))}
                       </div>
                     </div>
+
+                    {/* Venue Type Context Indicator */}
+                    {formData.location.trim() && (
+                      <div className="pt-2 text-[11px] flex items-center space-x-1.5">
+                        {isDagoVenue ? (
+                          <span className="inline-flex items-center space-x-1.5 text-emerald-600 dark:text-emerald-400 font-medium bg-emerald-50/60 dark:bg-emerald-950/30 px-2.5 py-1 rounded-lg border border-emerald-200/50 dark:border-emerald-800/30">
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                            <span>Ruangan Dago Hub terpilih — Kebutuhan fasilitas & operasional venue akan tersedia di Langkah 3.</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1.5 text-slate-500 dark:text-slate-400 font-medium bg-slate-100 dark:bg-slate-800/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <Info className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span>Lokasi di luar Dago Hub — Fasilitas operasional ruangan Dago Hub tidak diperlukan.</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </Card>
               )}
@@ -973,7 +1050,9 @@ export default function SubmitEventPage() {
                       <span>Tiket, Kolaborasi Venue & Usulan Bagi Hasil</span>
                     </h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      Tentukan skema tiket masuk, kebutuhan fasilitas venue, dukungan promosi, dan usulan kesepakatan bagi hasil.
+                      {isDagoVenue
+                        ? "Tentukan skema tiket masuk, kebutuhan fasilitas venue, dukungan promosi, dan usulan kesepakatan bagi hasil."
+                        : "Tentukan skema tiket masuk, dukungan promosi, dan usulan kesepakatan bagi hasil."}
                     </p>
                   </div>
 
@@ -1135,51 +1214,58 @@ export default function SubmitEventPage() {
                     </div>
                   </div>
 
-                  {/* Section: Kebutuhan Kolaborasi Fasilitas Venue */}
+                  {/* Section: Kebutuhan Kolaborasi Fasilitas Venue (Hanya tampil jika memilih ruangan di Dago Hub) */}
+                  {isDagoVenue && (
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3 animate-in fade-in">
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                          Kebutuhan Fasilitas & Operasional Hub
+                        </span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Pilih perlengkapan dan dukungan yang ingin disediakan Dago Hub untuk acara Anda di {formData.location}.
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {COLLABORATION_FACILITIES_OPTIONS.map((item) => {
+                          const isChecked = (formData.collaborationFacilities || []).includes(item);
+                          return (
+                            <button
+                              key={item}
+                              type="button"
+                              onClick={() => toggleFacility(item)}
+                              className={`p-2.5 rounded-xl border text-left text-xs font-medium transition-all flex items-center justify-between cursor-pointer ${
+                                isChecked
+                                  ? "bg-emerald-50 dark:bg-emerald-950/40 border-[#3B7A57] text-[#3B7A57] dark:text-[#52B788]"
+                                  : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                              }`}
+                            >
+                              <span>{item}</span>
+                              {isChecked ? (
+                                <Check className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                              ) : (
+                                <div className="w-3.5 h-3.5 rounded border border-slate-300 dark:border-slate-600 shrink-0" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Section: Dukungan Publikasi & Promosi (Opsional) */}
                   <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
                     <div>
-                      <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                        Kebutuhan Fasilitas & Operasional Hub
-                      </span>
+                      <div className="flex items-center space-x-2 mb-0.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">
+                          Dukungan Promosi & Media Sosial
+                        </span>
+                        <span className="text-[10px] bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300 font-semibold px-2 py-0.5 rounded-full">
+                          Opsional
+                        </span>
+                      </div>
                       <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Pilih perlengkapan dan dukungan yang ingin disediakan Dago Hub untuk acara Anda.
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {COLLABORATION_FACILITIES_OPTIONS.map((item) => {
-                        const isChecked = (formData.collaborationFacilities || []).includes(item);
-                        return (
-                          <button
-                            key={item}
-                            type="button"
-                            onClick={() => toggleFacility(item)}
-                            className={`p-2.5 rounded-xl border text-left text-xs font-medium transition-all flex items-center justify-between cursor-pointer ${
-                              isChecked
-                                ? "bg-emerald-50 dark:bg-emerald-950/40 border-[#3B7A57] text-[#3B7A57] dark:text-[#52B788]"
-                                : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
-                            }`}
-                          >
-                            <span>{item}</span>
-                            {isChecked ? (
-                              <Check className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
-                            ) : (
-                              <div className="w-3.5 h-3.5 rounded border border-slate-300 dark:border-slate-600 shrink-0" />
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Section: Dukungan Publikasi & Promosi */}
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
-                    <div>
-                      <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                        Dukungan Promosi & Media Sosial
-                      </span>
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                        Kolaborasi jangkauan audiens melalui saluran media komunitas DAGO.
+                        Pilih saluran jika Anda membutuhkan bantuan publikasi dari Dago Creative Hub. Kosongkan jika tidak diperlukan.
                       </span>
                     </div>
 
@@ -1210,7 +1296,7 @@ export default function SubmitEventPage() {
 
                     <div className="pt-2">
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Catatan Tambahan Kolaborasi / Bentuk Kerja Sama
+                        Catatan Tambahan Kolaborasi / Bentuk Kerja Sama (Opsional)
                       </label>
                       <textarea
                         name="collaborationNotes"
@@ -1227,7 +1313,7 @@ export default function SubmitEventPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                        Kapasitas / Kuota Maksimal Peserta
+                        Kapasitas / Kuota Maksimal Peserta <span className="text-rose-500">*</span>
                       </label>
                       <input
                         type="number"
@@ -1236,37 +1322,26 @@ export default function SubmitEventPage() {
                         max="500"
                         value={formData.maxCapacity || 50}
                         onChange={handleInputChange}
-                        className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
                       />
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        Pendaftaran tiket dan check-in QR peserta dikelola langsung oleh platform DagoEng.
+                      </span>
                     </div>
 
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                        Link Pendaftaran Eksternal (Opsional)
+                        Panduan Khusus Peserta (Opsional)
                       </label>
-                      <input
-                        type="url"
-                        name="externalRegistrationUrl"
-                        value={formData.externalRegistrationUrl || ""}
+                      <textarea
+                        name="guidelines"
+                        rows={2}
+                        value={typeof formData.guidelines === "string" ? formData.guidelines : ""}
                         onChange={handleInputChange}
-                        placeholder="https://forms.gle/... (jika ada form khusus)"
-                        className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                        placeholder="Contoh: Peserta diharapkan membawa laptop sendiri dengan Node.js terpasang."
+                        className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
                       />
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                      Panduan Khusus Peserta (Opsional)
-                    </label>
-                    <textarea
-                      name="guidelines"
-                      rows={2}
-                      value={typeof formData.guidelines === "string" ? formData.guidelines : ""}
-                      onChange={handleInputChange}
-                      placeholder="Contoh: Peserta diharapkan membawa laptop sendiri dengan Node.js terpasang."
-                      className="w-full px-3.5 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                    />
                   </div>
                 </Card>
               )}
@@ -1349,7 +1424,7 @@ export default function SubmitEventPage() {
                               {formData.proposedOrganizerPercent ?? 80}% Penyelenggara : {formData.proposedPlatformPercent ?? 20}% Dago
                             </span>
                           </div>
-                          {Array.isArray(formData.collaborationFacilities) && formData.collaborationFacilities.length > 0 && (
+                          {isDagoVenue && Array.isArray(formData.collaborationFacilities) && formData.collaborationFacilities.length > 0 && (
                             <div>
                               <span className="text-slate-400 block">Fasilitas Diminta:</span>
                               <span className="text-slate-700 dark:text-slate-300 font-medium">

@@ -179,7 +179,7 @@ export async function registerUnifiedUser(payload: RegisterUserPayload): Promise
 /**
  * Synchronizes password hash to organizer_credentials.json so organizer logins succeed seamlessly.
  */
-function syncOrganizerCredentials(organizerId: string, email: string, passwordHash: string): void {
+export function syncOrganizerCredentials(organizerId: string, email: string, passwordHash: string): void {
   try {
     const creds: OrganizerCredentialRecord[] = loadCredentialsFromDisk();
     const existingIdx = creds.findIndex((c: OrganizerCredentialRecord) => c.email.toLowerCase() === email.toLowerCase());

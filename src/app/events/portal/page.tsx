@@ -39,13 +39,17 @@ import {
   SlidersHorizontal,
   Lock,
   LogIn,
+  LogOut,
   Camera,
+  Upload,
+  Image as ImageIcon,
+  AlertTriangle,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { CommunityEvent, EventTicketOrder, OrganizerPortalData, AttendeeCheckInStatus, PayoutRecord } from "@/types/event";
+import { CommunityEvent, EventTicketOrder, OrganizerPortalData, AttendeeCheckInStatus, PayoutRecord, EventCategory } from "@/types/event";
 import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { useAuth } from "@/contexts/AuthContext";
 import { OrganizerQRScannerModal } from "./OrganizerQRScannerModal";
@@ -63,7 +67,7 @@ type EventFilterStatus = "ALL" | "APPROVED" | "PENDING" | "REVISION_REQUESTED" |
 
 export default function CommunityOrganizerPortalPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [organizerEmail, setOrganizerEmail] = useState("");
   const [activeEmail, setActiveEmail] = useState("");
   const [portalData, setPortalData] = useState<OrganizerPortalData | null>(null);
@@ -89,10 +93,16 @@ export default function CommunityOrganizerPortalPage() {
   // Revision Modal State
   const [revisionEvent, setRevisionEvent] = useState<CommunityEvent | null>(null);
   const [revisionTitle, setRevisionTitle] = useState("");
+  const [revisionCategory, setRevisionCategory] = useState<EventCategory>("CREATIVE");
   const [revisionDesc, setRevisionDesc] = useState("");
   const [revisionLocation, setRevisionLocation] = useState("");
   const [revisionCapacity, setRevisionCapacity] = useState<number>(50);
   const [revisionGuidelines, setRevisionGuidelines] = useState("");
+  const [revisionPosterUrl, setRevisionPosterUrl] = useState("");
+  const [revisionStartDate, setRevisionStartDate] = useState("");
+  const [revisionEndDate, setRevisionEndDate] = useState("");
+  const [isUploadingRevisionPoster, setIsUploadingRevisionPoster] = useState(false);
+  const [revisionUploadError, setRevisionUploadError] = useState<string | null>(null);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
 
   // Revenue split negotiation modal in portal
@@ -255,18 +265,71 @@ export default function CommunityOrganizerPortalPage() {
     }
   };
 
+  const toDateTimeLocal = (isoString?: string) => {
+    if (!isoString) return "";
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return "";
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
   const openRevisionModal = (evt: CommunityEvent) => {
     setRevisionEvent(evt);
-    setRevisionTitle(evt.title);
-    setRevisionDesc(evt.description);
-    setRevisionLocation(evt.location);
+    setRevisionTitle(evt.title || "");
+    setRevisionCategory(evt.category || "CREATIVE");
+    setRevisionDesc(evt.description || "");
+    setRevisionLocation(evt.location || "");
     setRevisionCapacity(evt.maxCapacity || 50);
     setRevisionGuidelines(Array.isArray(evt.guidelines) ? evt.guidelines.join("\n") : (evt.guidelines || ""));
+    setRevisionPosterUrl(evt.posterUrl || "");
+    setRevisionStartDate(toDateTimeLocal(evt.startDate));
+    setRevisionEndDate(toDateTimeLocal(evt.endDate));
+    setRevisionUploadError(null);
+  };
+
+  const handleUploadRevisionPoster = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setRevisionUploadError("File harus berupa gambar (JPG, PNG, atau WebP).");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setRevisionUploadError("Ukuran gambar maksimal 5MB.");
+      return;
+    }
+
+    try {
+      setIsUploadingRevisionPoster(true);
+      setRevisionUploadError(null);
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/events/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Gagal mengunggah file poster.");
+      }
+
+      setRevisionPosterUrl(json.url);
+    } catch (err: any) {
+      setRevisionUploadError(err.message || "Gagal mengunggah gambar poster.");
+    } finally {
+      setIsUploadingRevisionPoster(false);
+    }
   };
 
   const handleSaveRevision = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!revisionEvent || !activeEmail) return;
+    const targetEmail = activeEmail || organizerEmail || user?.email || "";
+    if (!revisionEvent || !targetEmail) return;
 
     try {
       setIsSubmittingRevision(true);
@@ -276,13 +339,17 @@ export default function CommunityOrganizerPortalPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: activeEmail,
+          email: targetEmail,
           eventId: revisionEvent.id,
           updates: {
             title: revisionTitle,
+            category: revisionCategory,
             description: revisionDesc,
             location: revisionLocation,
             maxCapacity: Number(revisionCapacity),
+            posterUrl: revisionPosterUrl,
+            startDate: revisionStartDate ? new Date(revisionStartDate).toISOString() : revisionEvent.startDate,
+            endDate: revisionEndDate ? new Date(revisionEndDate).toISOString() : revisionEvent.endDate,
             guidelines: revisionGuidelines,
           },
         }),
@@ -294,7 +361,7 @@ export default function CommunityOrganizerPortalPage() {
         return;
       }
 
-      setSuccessMessage("Event berhasil diajukan ulang ke antrean review kurator!");
+      setSuccessMessage("Event berhasil diperbaiki dan diajukan ulang ke antrean review kurator Dago Hub!");
       setRevisionEvent(null);
       await loadPortalData(activeEmail);
     } catch (err: any) {
@@ -452,6 +519,14 @@ export default function CommunityOrganizerPortalPage() {
   }, [portalData, dateRange]);
 
   const summary = effectiveSummary || portalData?.summary;
+
+  const revisionEvents = useMemo(() => {
+    return portalData?.events.filter((e) => e.status === "REVISION_REQUESTED") || [];
+  }, [portalData?.events]);
+
+  const rejectedEvents = useMemo(() => {
+    return portalData?.events.filter((e) => e.status === "REJECTED" || e.status === "ARCHIVED") || [];
+  }, [portalData?.events]);
 
   // Filtered Events based on search query, status filter, and WITA date range
   const filteredEvents = useMemo(() => {
@@ -636,6 +711,24 @@ export default function CommunityOrganizerPortalPage() {
                 {activeEmail || organizerEmail}
               </div>
             </div>
+
+            {/* Logout Button */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={async () => {
+                if (typeof window !== "undefined") {
+                  localStorage.removeItem("dago_organizer_email");
+                }
+                await logout();
+                router.push("/login");
+              }}
+              className="text-xs h-9 px-3 rounded-xl border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-rose-600 hover:border-rose-300 dark:hover:border-rose-800 font-bold transition-all cursor-pointer flex items-center space-x-1.5 ml-1"
+              title="Keluar dari Akun Penyelenggara"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Keluar</span>
+            </Button>
           </div>
         </div>
       </header>
@@ -728,6 +821,23 @@ export default function CommunityOrganizerPortalPage() {
             <ExternalLink className="w-4 h-4" />
             <span className="text-[8px] font-semibold mt-0.5">Katalog</span>
           </Link>
+
+          {/* Sidebar Logout Button */}
+          <button
+            type="button"
+            onClick={async () => {
+              if (typeof window !== "undefined") {
+                localStorage.removeItem("dago_organizer_email");
+              }
+              await logout();
+              router.push("/login");
+            }}
+            className="w-11 h-11 rounded-2xl flex flex-col items-center justify-center text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer mt-auto"
+            title="Keluar dari Akun Penyelenggara"
+          >
+            <LogOut className="w-4 h-4" />
+            <span className="text-[7.5px] font-bold mt-0.5 text-center leading-none">Keluar</span>
+          </button>
         </aside>
 
         {/* Right Workspace Main Content Area */}
@@ -754,6 +864,73 @@ export default function CommunityOrganizerPortalPage() {
               <button onClick={() => setSuccessMessage(null)} className="p-1 hover:text-emerald-900 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
+            </div>
+          )}
+
+          {/* Subtle Revision Notice */}
+          {portalData && revisionEvents.length > 0 && (
+            <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 space-y-2.5">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                  Event Perlu Revisi ({revisionEvents.length})
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {revisionEvents.map((rev) => (
+                  <div
+                    key={rev.id}
+                    className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div className="flex items-center space-x-3 min-w-0">
+                      {rev.posterUrl ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={rev.posterUrl}
+                          alt={rev.title}
+                          className="w-10 h-10 object-cover rounded-lg border border-slate-200 dark:border-slate-800 shrink-0"
+                        />
+                      ) : null}
+                      <div className="min-w-0">
+                        <span className="font-bold text-slate-900 dark:text-white block truncate">{rev.title}</span>
+                        <span className="text-[11px] text-amber-700 dark:text-amber-300">
+                          Catatan: &ldquo;{rev.revisionNotes}&rdquo;
+                        </span>
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      onClick={() => openRevisionModal(rev)}
+                      className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs h-8 px-3.5 rounded-lg shrink-0 cursor-pointer font-bold"
+                    >
+                      <FileEdit className="w-3.5 h-3.5 mr-1" />
+                      <span>Perbaiki Event</span>
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Rejected Notification Alert Card */}
+          {portalData && rejectedEvents.length > 0 && (
+            <div className="p-4 rounded-2xl bg-rose-500/10 dark:bg-rose-500/15 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-xs space-y-2">
+              <div className="flex items-center space-x-2 font-bold">
+                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                <span>Pemberitahuan Event Ditolak ({rejectedEvents.length})</span>
+              </div>
+              <div className="space-y-1.5">
+                {rejectedEvents.map((rej) => (
+                  <div key={rej.id} className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-800 flex items-center justify-between">
+                    <div>
+                      <span className="font-extrabold text-slate-900 dark:text-white">{rej.title}:</span>{" "}
+                      <span className="text-rose-700 dark:text-rose-300">{rej.rejectionReason || rej.revisionNotes || "Tidak memenuhi kriteria kurasi komunitas Dago Hub."}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -999,6 +1176,7 @@ export default function CommunityOrganizerPortalPage() {
                             return e.status === statusTab.key;
                           }).length || 0;
                           const isActive = eventFilterStatus === statusTab.key;
+                          const isRevisionAlert = statusTab.key === "REVISION_REQUESTED" && count > 0;
                           return (
                             <button
                               key={statusTab.key}
@@ -1007,11 +1185,19 @@ export default function CommunityOrganizerPortalPage() {
                               className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all flex items-center space-x-1.5 cursor-pointer ${
                                 isActive
                                   ? "bg-[#3B7A57] text-white shadow-xs"
+                                  : isRevisionAlert
+                                  ? "bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-200"
                                   : "bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57]/40"
                               }`}
                             >
                               <span>{statusTab.label}</span>
-                              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${isActive ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"}`}>
+                              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                                isActive
+                                  ? "bg-white/20 text-white"
+                                  : isRevisionAlert
+                                  ? "bg-amber-500 text-white"
+                                  : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                              }`}>
                                 {count}
                               </span>
                             </button>
@@ -1153,7 +1339,7 @@ export default function CommunityOrganizerPortalPage() {
                                   router.push(`/events/${evt.id}`);
                                 }
                               }}
-                              className="p-4 sm:p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-[#3B7A57]/60 hover:shadow-md transition-all shadow-xs cursor-pointer group"
+                              className="p-4 sm:p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl hover:border-slate-300 dark:hover:border-slate-700 transition-all shadow-xs cursor-pointer group"
                             >
                               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 {/* Left Event Date & Details */}
@@ -1183,7 +1369,7 @@ export default function CommunityOrganizerPortalPage() {
                                         </span>
                                       )}
                                       {evt.status === "REVISION_REQUESTED" && (
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
                                           ✏️ Perlu Revisi
                                         </span>
                                       )}
@@ -1205,10 +1391,10 @@ export default function CommunityOrganizerPortalPage() {
                                             setSplitPlatPercent(evt.proposedRevenueSplit?.platformPercent ?? evt.customPlatformFeePercent ?? 20);
                                             setSplitReason("");
                                           }}
-                                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 animate-pulse cursor-pointer"
+                                          className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 cursor-pointer"
                                           title="Klik untuk membuka negosiasi bagi hasil"
                                         >
-                                          💬 Usulan Bagi Hasil: {evt.proposedRevenueSplit.organizerPercent}% / {evt.proposedRevenueSplit.platformPercent}% ({evt.proposedRevenueSplit.proposedBy === "ORGANIZER" ? "Terkirim" : "Dari Dago - Butuh Respon"})
+                                          💬 Bagi Hasil: {evt.proposedRevenueSplit.organizerPercent}% / {evt.proposedRevenueSplit.platformPercent}% ({evt.proposedRevenueSplit.proposedBy === "ORGANIZER" ? "Terkirim" : "Dari Dago"})
                                         </span>
                                       )}
                                     </div>
@@ -1232,6 +1418,14 @@ export default function CommunityOrganizerPortalPage() {
                                         {evt.isPaid ? `Rp ${(evt.price || 0).toLocaleString("id-ID")}` : "Free"}
                                       </span>
                                     </div>
+
+                                    {/* Curator Feedback Box in Card */}
+                                    {evt.status === "REVISION_REQUESTED" && evt.revisionNotes && (
+                                      <div className="mt-2 text-xs text-amber-800 dark:text-amber-300 flex items-start space-x-1.5">
+                                        <span className="font-bold shrink-0">Catatan:</span>
+                                        <span className="italic font-medium">&ldquo;{evt.revisionNotes}&rdquo;</span>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
 
@@ -1281,10 +1475,10 @@ export default function CommunityOrganizerPortalPage() {
                                           e.stopPropagation();
                                           openRevisionModal(evt);
                                         }}
-                                        className="text-xs h-8 px-3 rounded-lg bg-sky-600 hover:bg-sky-700 text-white font-bold cursor-pointer"
+                                        className="text-xs h-8 px-3 rounded-lg bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold cursor-pointer shadow-xs flex items-center space-x-1"
                                       >
-                                        <FileEdit className="w-3.5 h-3.5 mr-1" />
-                                        <span>Revisi</span>
+                                        <FileEdit className="w-3.5 h-3.5 mr-0.5" />
+                                        <span>Perbaiki</span>
                                       </Button>
                                     )}
 
@@ -1986,80 +2180,208 @@ export default function CommunityOrganizerPortalPage() {
       </div>
 
       {/* =========================================================================
-          3. REVISION MODAL
+          3. REVISION MODAL (UPGRADED IN-PLACE RE-SUBMISSION WORKFLOW)
          ========================================================================= */}
       {revisionEvent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-lg bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+          <div className="relative w-full max-w-2xl bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-5 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
             <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
-                <span className="text-[10px] font-bold text-sky-600 dark:text-sky-400 uppercase tracking-wider block">
-                  Perbaiki & Ajukan Ulang Event
+                <span className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
+                  Perbaiki & Ajukan Ulang Event Komunitas
                 </span>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                <h3 className="text-lg font-black text-slate-900 dark:text-white mt-0.5">
                   {revisionEvent.title}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={() => setRevisionEvent(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
+            {/* Curator Feedback Banner */}
             {revisionEvent.revisionNotes && (
-              <div className="p-3 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60 text-xs text-sky-800 dark:text-sky-300">
-                <span className="font-bold block mb-1">Catatan Kurator:</span>
-                <p className="text-[11px] leading-relaxed">{revisionEvent.revisionNotes}</p>
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                <div className="flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span className="font-bold text-amber-900 dark:text-amber-100">
+                    Catatan Kurator Dago Hub:
+                  </span>
+                </div>
+                <p className="text-[12px] italic leading-relaxed pl-6 font-medium text-amber-950 dark:text-amber-200">
+                  &ldquo;{revisionEvent.revisionNotes}&rdquo;
+                </p>
               </div>
             )}
 
-            <form onSubmit={handleSaveRevision} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Judul Acara
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={revisionTitle}
-                  onChange={(e) => setRevisionTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
-                />
+            <form onSubmit={handleSaveRevision} className="space-y-4 text-xs">
+              {/* Poster Update Section */}
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-slate-800 dark:text-slate-200">
+                    Poster Event
+                  </label>
+                  <span className="text-[10px] text-slate-400">PNG, JPG, WebP (Maks. 5MB)</span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  {/* Poster Preview */}
+                  <div className="w-32 h-20 rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-200 dark:bg-slate-800 flex items-center justify-center shrink-0 shadow-xs">
+                    {revisionPosterUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={revisionPosterUrl}
+                        alt="Poster Preview"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as any).src = "https://images.unsplash.com/photo-1511920170033";
+                        }}
+                      />
+                    ) : (
+                      <div className="text-center p-2 text-slate-400">
+                        <ImageIcon className="w-5 h-5 mx-auto mb-1 text-slate-400" />
+                        <span className="text-[9px] block">Belum ada poster</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex-1 w-full space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="cursor-pointer inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs shadow-xs transition-all">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{isUploadingRevisionPoster ? "Mengunggah..." : "Pilih File Gambar Baru"}</span>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/jpg"
+                          onChange={handleUploadRevisionPoster}
+                          disabled={isUploadingRevisionPoster}
+                          className="hidden"
+                        />
+                      </label>
+                      {revisionPosterUrl !== revisionEvent.posterUrl && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                          ✓ Gambar Berhasil Dipilih
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Text input without HTML5 URL validation */}
+                    <input
+                      type="text"
+                      value={revisionPosterUrl}
+                      onChange={(e) => setRevisionPosterUrl(e.target.value)}
+                      placeholder="URL poster (terisi otomatis saat unggah gambar)..."
+                      className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-[#3B7A57] text-[11px] font-mono"
+                    />
+
+                    {revisionUploadError && (
+                      <p className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">
+                        {revisionUploadError}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Lokasi Venue
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={revisionLocation}
-                  onChange={(e) => setRevisionLocation(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
-                />
+              {/* Title & Category Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Judul Acara
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={revisionTitle}
+                    onChange={(e) => setRevisionTitle(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Kategori
+                  </label>
+                  <select
+                    value={revisionCategory}
+                    onChange={(e) => setRevisionCategory(e.target.value as EventCategory)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  >
+                    <option value="CREATIVE">CREATIVE</option>
+                    <option value="WORKSHOP">WORKSHOP</option>
+                    <option value="MEETUP">MEETUP</option>
+                    <option value="COMMUNITY">COMMUNITY</option>
+                    <option value="TECH">TECH</option>
+                    <option value="SEMINAR">SEMINAR</option>
+                    <option value="OTHER">OTHER</option>
+                  </select>
+                </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Kapasitas Peserta (Orang)
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  required
-                  value={revisionCapacity}
-                  onChange={(e) => setRevisionCapacity(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
-                />
+              {/* Schedule Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Tanggal & Waktu Mulai
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={revisionStartDate}
+                    onChange={(e) => setRevisionStartDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Tanggal & Waktu Selesai
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={revisionEndDate}
+                    onChange={(e) => setRevisionEndDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
               </div>
 
+              {/* Location & Capacity Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Lokasi Venue
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={revisionLocation}
+                    onChange={(e) => setRevisionLocation(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Kapasitas (Orang)
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    required
+                    value={revisionCapacity}
+                    onChange={(e) => setRevisionCapacity(Number(e.target.value))}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
+              </div>
+
+              {/* Description */}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Deskripsi Lengkap
+                  Deskripsi Lengkap Acara
                 </label>
                 <textarea
                   required
@@ -2070,6 +2392,7 @@ export default function CommunityOrganizerPortalPage() {
                 />
               </div>
 
+              {/* Guidelines */}
               <div>
                 <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
                   Panduan Acara / Catatan Tambahan (Opsional)
@@ -2083,7 +2406,8 @@ export default function CommunityOrganizerPortalPage() {
                 />
               </div>
 
-              <div className="pt-3 flex items-center justify-end space-x-2">
+              {/* Action Buttons */}
+              <div className="pt-3 flex items-center justify-end space-x-2 border-t border-slate-100 dark:border-slate-800">
                 <Button
                   type="button"
                   variant="outline"
@@ -2094,11 +2418,15 @@ export default function CommunityOrganizerPortalPage() {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isSubmittingRevision}
-                  className="text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl cursor-pointer"
+                  disabled={isSubmittingRevision || isUploadingRevisionPoster}
+                  className="text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-xs cursor-pointer flex items-center space-x-1.5 h-10 px-5"
                 >
-                  {isSubmittingRevision ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-                  <span>Kirim Revisi ke Kurator</span>
+                  {isSubmittingRevision ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" />
+                  ) : (
+                    <FileEdit className="w-3.5 h-3.5 mr-1" />
+                  )}
+                  <span>Simpan Perubahan & Ajukan Ulang ke Kurator</span>
                 </Button>
               </div>
             </form>

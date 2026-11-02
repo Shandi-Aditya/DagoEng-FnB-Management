@@ -18,8 +18,8 @@
     "platformFeeAmount": 200000,
     "organizerRevenueAmount": 800000,
     "paymentMethod": "TRANSFER",
-    "paymentStatus": "PENDING",
-    "checkInStatus": "REGISTERED",
+    "paymentStatus": "PAID",
+    "checkInStatus": "PARTIALLY_CHECKED_IN",
     "destinationBankSnapshot": {
       "bankId": "bank-bca-plat",
       "label": "BCA Platform Utama",
@@ -30,13 +30,15 @@
       "accountType": "PLATFORM"
     },
     "createdAt": "2026-10-28T09:29:47.698Z",
-    "updatedAt": "2026-10-28T09:30:16.942Z",
+    "updatedAt": "2026-11-02T03:32:50.738Z",
     "dokuInvoiceNumber": "INV-DAGO-EVT-72676",
     "dokuPaymentUrl": "/checkout-link-v2/5a48d1d6d2d4e9f1d07c3eb3b4ddd85c?invoice=INV-DAGO-EVT-72676",
     "paymentProofUrl": "/api/events/proofs/proof-dago-evt-72676-1793179816938.png",
     "paymentProofNote": "cek mas cek",
     "paymentProofUploadedAt": "2026-10-28T09:30:16.942Z",
-    "paymentRejectionReason": null
+    "paymentRejectionReason": null,
+    "checkedInQty": 3,
+    "checkInTime": "2026-11-02T03:18:58.173Z"
   },
   {
     "id": "tkt-1793179365695-s5ff6",
@@ -69,7 +71,7 @@
       "accountType": "PLATFORM"
     },
     "createdAt": "2026-10-28T09:22:45.695Z",
-    "updatedAt": "2026-10-28T09:28:10.160Z",
+    "updatedAt": "2026-11-02T02:59:24.429Z",
     "dokuInvoiceNumber": "INV-DAGO-EVT-51628",
     "dokuPaymentUrl": "/checkout-link-v2/9cb8e1895e60651845e9955670e305ee?invoice=INV-DAGO-EVT-51628",
     "paymentProofUrl": "/api/events/proofs/proof-dago-evt-51628-1793179519555.png",
@@ -78,7 +80,9 @@
     "paymentRejectionReason": null,
     "paidAt": "2026-10-28T09:28:10.160Z",
     "paymentVerifiedAt": "2026-10-28T09:28:10.160Z",
-    "paymentVerifiedBy": "Hendra Wijaya (Owner Dago Hub)"
+    "paymentVerifiedBy": "Hendra Wijaya (Owner Dago Hub)",
+    "checkedInQty": 0,
+    "checkInTime": null
   },
   {
     "id": "tkt-1793172545847-qvep3",
@@ -100,9 +104,11 @@
     "organizerRevenueAmount": 0,
     "paymentMethod": "FREE",
     "paymentStatus": "PAID",
-    "checkInStatus": "REGISTERED",
+    "checkInStatus": "CHECKED_IN",
     "createdAt": "2026-10-28T07:29:05.847Z",
-    "updatedAt": "2026-10-28T07:29:05.847Z"
+    "updatedAt": "2026-11-02T01:35:39.343Z",
+    "checkedInQty": 2,
+    "checkInTime": "2026-11-02T01:35:39.343Z"
   },
   {
     "id": "tkt-1793083308712-i8s9m",
@@ -124,9 +130,11 @@
     "organizerRevenueAmount": 0,
     "paymentMethod": "FREE",
     "paymentStatus": "PAID",
-    "checkInStatus": "REGISTERED",
+    "checkInStatus": "CHECKED_IN",
     "createdAt": "2026-10-27T06:41:48.713Z",
-    "updatedAt": "2026-10-27T06:41:48.713Z"
+    "updatedAt": "2026-11-02T01:36:08.675Z",
+    "checkedInQty": 1,
+    "checkInTime": "2026-11-02T01:36:08.675Z"
   },
   {
     "id": "tkt-1793078986768-3o040",
@@ -228,5 +236,49 @@
     "updatedAt": "2026-10-26T08:30:28.250Z",
     "checkedInQty": 2,
     "checkInTime": "2026-10-26T08:30:26.932Z"
+  },
+  {
+    "id": "tkt-fit-hours-001",
+    "ticketCode": "DAGO-EVT-FIT01",
+    "eventId": "evt-fit-hours-party",
+    "eventTitle": "Fit Hours Party — Main Character Energy",
+    "eventDate": "2026-11-06T08:30:00.000Z",
+    "eventLocation": "Amphitheater Dago Creative Hub",
+    "guestName": "Jessica Wijaya",
+    "guestEmail": "jessica.wijaya@gmail.com",
+    "guestPhone": "081234567811",
+    "ticketCount": 1,
+    "checkedInQty": 1,
+    "unitPrice": 50000,
+    "totalPrice": 50000,
+    "platformFeePercent": 20,
+    "platformFeeAmount": 10000,
+    "organizerRevenueAmount": 40000,
+    "paymentMethod": "QRIS",
+    "paymentStatus": "PAID",
+    "checkInStatus": "CHECKED_IN",
+    "checkInTime": "2026-11-02T02:36:28.610Z",
+    "updatedAt": "2026-11-02T02:36:28.610Z"
+  },
+  {
+    "id": "tkt-fit-hours-002",
+    "ticketCode": "DAGO-EVT-FIT02",
+    "eventId": "evt-fit-hours-party",
+    "eventTitle": "Fit Hours Party — Main Character Energy",
+    "eventDate": "2026-11-06T08:30:00.000Z",
+    "eventLocation": "Amphitheater Dago Creative Hub",
+    "guestName": "Rian Pratama",
+    "guestEmail": "rian.pratama@gmail.com",
+    "guestPhone": "081234567822",
+    "ticketCount": 2,
+    "checkedInQty": 0,
+    "unitPrice": 50000,
+    "totalPrice": 100000,
+    "platformFeePercent": 20,
+    "platformFeeAmount": 20000,
+    "organizerRevenueAmount": 80000,
+    "paymentMethod": "QRIS",
+    "paymentStatus": "PAID",
+    "checkInStatus": "REGISTERED"
   }
 ]

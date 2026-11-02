@@ -2340,7 +2340,8 @@ export async function organizerCheckInAttendee(
 export async function organizerResubmitEvent(
   organizerEmail: string,
   eventId: string,
-  updates: Partial<EventSubmissionPayload>
+  updates: Partial<EventSubmissionPayload>,
+  isAdmin: boolean = false
 ): Promise<CommunityEvent> {
   const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
   const all = loadEventsFromDisk();
@@ -2350,7 +2351,7 @@ export async function organizerResubmitEvent(
   }
 
   const existing = all[index];
-  if ((existing.organizerEmail || "").toLowerCase() !== normalizedEmail) {
+  if (!isAdmin && (existing.organizerEmail || "").toLowerCase() !== normalizedEmail) {
     throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk mengubah event milik komunitas lain.");
   }
 

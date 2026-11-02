@@ -37,7 +37,21 @@ const AUTHORIZED_MODERATION_SCOPES: ScopeLevel[] = ["PLATFORM", "ORGANIZATION"];
  *     personas (SUPER_ADMIN, OWNER, MANAGER) are STRICTLY BLOCKED from static passwords to prevent platform takeover.
  */
 export function isDemoLoginAllowed(personaKey: string): { allowed: boolean; reason?: string } {
-  if (process.env.NODE_ENV === "test" || process.env.NODE_ENV === "development") {
+  if (process.env.DISABLE_DEMO_LOGIN === "true") {
+    return {
+      allowed: false,
+      reason: "FORBIDDEN: Akun demo dinonaktifkan oleh administrator.",
+    };
+  }
+
+  // Pitch Deck / Client Demo flag or Vercel cloud deployment
+  const isVercelDemo =
+    Boolean(process.env.VERCEL || process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.VERCEL_ENV) ||
+    process.env.ALLOW_DEMO_LOGIN === "true" ||
+    process.env.NEXT_PUBLIC_ALLOW_DEMO_LOGIN === "true" ||
+    process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
+  if (isVercelDemo) {
     return { allowed: true };
   }
 
@@ -245,7 +259,7 @@ export const TRUSTED_PERSONAS: Record<
     scopeLevel: "ORGANIZATION",
     userId: "user-event-staff-demo",
     email: "eventstaff@dagoeng.com",
-    name: "Dago Event Field Staff",
+    name: "Bagus Pratama (Petugas Check-In Dago)",
     permissions: ["events:checkin"],
     tenantId: null,
     businessModule: "CORE",
@@ -391,20 +405,28 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
       persona.scopeLevel === "ORGANIZATION";
 
     if (process.env.NODE_ENV === "production") {
-      const simulatorEnabled = process.env.ENABLE_ROLE_SIMULATOR === "true";
-      // In production, persona cookie can NEVER grant privileged administrative roles
-      if (!simulatorEnabled || isPrivileged) {
-        return {
-          isAuthenticated: false,
-          role: null,
-          userId: null,
-          email: null,
-          scopeLevel: null,
-          permissions: [],
-          tenantId: null,
-          businessModule: null,
-          error: "UNAUTHORIZED: Simulasi persona administratif tidak diizinkan di production. Gunakan sesi kredensial resmi.",
-        };
+      const isVercelDemo =
+        Boolean(process.env.VERCEL || process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.VERCEL_ENV) ||
+        process.env.ALLOW_DEMO_LOGIN === "true" ||
+        process.env.NEXT_PUBLIC_ALLOW_DEMO_LOGIN === "true" ||
+        process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
+      if (!isVercelDemo) {
+        const simulatorEnabled = process.env.ENABLE_ROLE_SIMULATOR === "true";
+        // In strict production, persona cookie cannot grant privileged administrative roles
+        if (!simulatorEnabled || isPrivileged) {
+          return {
+            isAuthenticated: false,
+            role: null,
+            userId: null,
+            email: null,
+            scopeLevel: null,
+            permissions: [],
+            tenantId: null,
+            businessModule: null,
+            error: "UNAUTHORIZED: Simulasi persona administratif tidak diizinkan di production. Gunakan sesi kredensial resmi.",
+          };
+        }
       }
     }
 

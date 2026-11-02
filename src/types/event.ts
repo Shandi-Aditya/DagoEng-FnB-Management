@@ -178,6 +178,7 @@ export interface EventSubmissionPayload {
   externalRegistrationUrl?: string;
   guidelines?: string[] | string | null;
   honeypot?: string; // Anti-spam trap
+  password?: string; // Optional password for auto-login / account linking
 
   // Collaboration requirements
   collaborationFacilities?: string[] | string | null;

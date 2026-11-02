@@ -1,5 +1,20 @@
 [
   {
+    "id": "org-comm-mvxgkbjh-3k22",
+    "name": "sans cek",
+    "category": "CREATIVE",
+    "contactPerson": "sans cek",
+    "phone": "085737654572",
+    "email": "sansaditya2105@gmail.com",
+    "status": "ACTIVE",
+    "serviceModule": "CO_WORKING",
+    "scopeLevel": "TENANT",
+    "roleName": "Penyelenggara Event",
+    "notes": "Akun penyelenggara otomatis dari pengajuan event",
+    "createdAt": "2026-11-01T06:37:48.269Z",
+    "updatedAt": "2026-11-01T06:37:48.269Z"
+  },
+  {
     "id": "org-comm-mvrh7q7b-cosk",
     "name": "dago",
     "category": "OTHER",

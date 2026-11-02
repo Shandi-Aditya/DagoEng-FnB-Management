@@ -150,7 +150,9 @@ export function Sidebar({
 
   return (
     <div
-      className="w-64 flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between h-full select-none"
+      className={`${
+        isCollapsed ? "w-20" : "w-64"
+      } flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between h-full select-none transition-all duration-300 ease-in-out`}
     >
       {/* Brand Header & Minimize Toggle */}
       <div>
@@ -223,7 +225,7 @@ export function Sidebar({
         <nav className={`p-2 space-y-1 ${isCollapsed ? "flex flex-col items-center" : ""}`}>
           {!isCollapsed && (
             <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between">
-              <span>Menu ({user?.role.name})</span>
+              <span>Menu ({user?.role?.name || (typeof user?.role === "string" ? user.role : user?.role?.slug) || "Dashboard"})</span>
               <span className="text-[9px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded font-mono text-slate-600 dark:text-slate-400">
                 {user?.scopeLevel}
               </span>

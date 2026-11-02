@@ -2,6 +2,15 @@ import { AuthenticatedUser, RoleSlug, BusinessModuleCode, ScopeLevel } from "@/t
 import { PermissionCode } from "@/types/rbac";
 
 /**
+ * Normalizes role slug whether user.role is a string or an object with slug.
+ */
+export function getRoleSlug(user: AuthenticatedUser | null | any): RoleSlug | null {
+  if (!user || !user.role) return null;
+  if (typeof user.role === "string") return user.role as RoleSlug;
+  return user.role.slug || null;
+}
+
+/**
  * Checks if a user has access to a specific business module.
  */
 export function hasModuleAccess(
@@ -10,7 +19,8 @@ export function hasModuleAccess(
   activeOrgModules: BusinessModuleCode[] = ["CORE", "FNB", "CO_WORKING"]
 ): boolean {
   if (!user) return false;
-  if (user.role.slug === "SUPER_ADMIN") return true;
+  const roleSlug = getRoleSlug(user);
+  if (roleSlug === "SUPER_ADMIN") return true;
 
   // 1. Check if module is globally active in the organization
   if (moduleCode !== "CORE" && !activeOrgModules.includes(moduleCode)) {
@@ -31,7 +41,8 @@ export function hasPermission(
   targetTenantId?: string
 ): boolean {
   if (!user) return false;
-  if (user.role.slug === "SUPER_ADMIN" || user.scopeLevel === "PLATFORM") return true;
+  const roleSlug = getRoleSlug(user);
+  if (roleSlug === "SUPER_ADMIN" || user.scopeLevel === "PLATFORM") return true;
 
   const hasCode = user.permissions.includes(permissionCode);
   if (!hasCode) return false;
@@ -49,8 +60,10 @@ export function hasPermission(
  */
 export function hasRole(user: AuthenticatedUser | null, allowedRoles: RoleSlug[]): boolean {
   if (!user) return false;
-  if (user.role.slug === "SUPER_ADMIN") return true;
-  return allowedRoles.includes(user.role.slug);
+  const roleSlug = getRoleSlug(user);
+  if (!roleSlug) return false;
+  if (roleSlug === "SUPER_ADMIN") return true;
+  return allowedRoles.includes(roleSlug);
 }
 
 /**
@@ -67,7 +80,8 @@ export function assertPermission(user: AuthenticatedUser | null, permissionCode:
  */
 export function assertRole(user: AuthenticatedUser | null, allowedRoles: RoleSlug[]): void {
   if (!hasRole(user, allowedRoles)) {
-    throw new Error(`FORBIDDEN: User role [${user?.role.slug}] is not authorized for this action.`);
+    const roleSlug = getRoleSlug(user);
+    throw new Error(`FORBIDDEN: User role [${roleSlug}] is not authorized for this action.`);
   }
 }
 
@@ -228,7 +242,8 @@ const SCOPE_HIERARCHY: Record<ScopeLevel, number> = {
  */
 export function canAccessEventCheckIn(user: AuthenticatedUser | null): boolean {
   if (!user) return false;
-  if (user.role.slug === "SUPER_ADMIN") return true;
+  const roleSlug = getRoleSlug(user);
+  if (roleSlug === "SUPER_ADMIN") return true;
 
   // Strict exclusion: F&B Tenant Owners and Tenant Staff must NEVER see Check-in Event
   if (user.scopeLevel === "TENANT" || (user.tenant && user.tenant.businessModule === "FNB")) {
@@ -237,7 +252,7 @@ export function canAccessEventCheckIn(user: AuthenticatedUser | null): boolean {
 
   // Customer role has no access unless explicitly granted check-in or organizer permission
   if (
-    user.role.slug === "CUSTOMER" &&
+    roleSlug === "CUSTOMER" &&
     !user.permissions.includes("events:checkin") &&
     !user.permissions.includes("events:manage_own")
   ) {
@@ -246,7 +261,7 @@ export function canAccessEventCheckIn(user: AuthenticatedUser | null): boolean {
 
   // Hub Management oversight (SUPER_ADMIN or Hub OWNER/MANAGER with ORGANIZATION/PLATFORM scope)
   if (
-    (user.role.slug === "OWNER" || user.role.slug === "MANAGER") &&
+    (roleSlug === "OWNER" || roleSlug === "MANAGER") &&
     (user.scopeLevel === "ORGANIZATION" || user.scopeLevel === "PLATFORM")
   ) {
     return true;
@@ -273,11 +288,13 @@ export function getAuthorizedNavItems(
   activeOrgModules: BusinessModuleCode[] = ["CORE", "FNB", "CO_WORKING"]
 ): NavigationItem[] {
   if (!user) return [];
-  if (user.role.slug === "SUPER_ADMIN") return ALL_NAV_ITEMS;
+  const roleSlug = getRoleSlug(user);
+  if (!roleSlug) return [];
+  if (roleSlug === "SUPER_ADMIN") return ALL_NAV_ITEMS;
 
   return ALL_NAV_ITEMS.filter((item) => {
     // 1. Role must match
-    if (!item.allowedRoles.includes(user.role.slug)) return false;
+    if (!item.allowedRoles.includes(roleSlug)) return false;
 
     // 2. Minimum Scope Level check
     if (item.minScope && SCOPE_HIERARCHY[user.scopeLevel] < SCOPE_HIERARCHY[item.minScope]) {

@@ -15,7 +15,10 @@ import {
   Clock,
   MapPin,
   ChevronRight,
+  ChevronDown,
   LogIn,
+  LogOut,
+  Ticket,
   Phone,
   Check,
   Crown,
@@ -61,14 +64,26 @@ const HERO_SLIDES = [
 
 export default function PublicLandingPage() {
   const router = useRouter();
-  const { user, login } = useAuth();
+  const { user, login, logout } = useAuth();
 
   // Scroll State for Navbar Glassmorphism & Active Spy
   const [isScrolled, setIsScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = React.useRef<HTMLDivElement>(null);
   const isManualScrollingRef = React.useRef(false);
   const scrollTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Computed destination for authenticated user vs guest visitor
   const targetDashboardUrl = user
@@ -247,24 +262,135 @@ export default function PublicLandingPage() {
 
           {/* Action Buttons & Theme Toggle */}
           <div className="hidden sm:flex items-center space-x-3">
-            {/* Direct Universal Login / Sign Up Link */}
-            <Link href={targetDashboardUrl}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs h-9 px-4 font-bold bg-white dark:bg-white/5 backdrop-blur-md border border-slate-200 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/15 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-white/40 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 group shadow-xs cursor-pointer"
-              >
-                <LogIn className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788] transition-transform duration-300 group-hover:translate-x-0.5" />
-                <span>{user ? (user.name ? `Akun: ${user.name.split(" ")[0]}` : "Akun Saya") : "Login / Sign Up"}</span>
-              </Button>
-            </Link>
+            {/* User Account Dropdown vs Guest Login Button */}
+            {user ? (
+              <div className="relative" ref={userMenuRef}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="text-xs h-9 px-3.5 font-bold bg-white dark:bg-white/5 backdrop-blur-md border border-slate-200 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/15 hover:text-slate-900 dark:hover:text-white rounded-xl transition-all duration-200 shadow-xs cursor-pointer flex items-center space-x-2"
+                >
+                  <div className="w-5 h-5 rounded-full bg-[#3B7A57] text-white flex items-center justify-center text-[10px] font-black">
+                    {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                  </div>
+                  <span className="max-w-[130px] truncate">{user.name ? `Akun: ${user.name.split(" ")[0]}` : "Akun Saya"}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${userMenuOpen ? "rotate-180" : ""}`} />
+                </Button>
+
+                {userMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 shadow-2xl p-2 space-y-1 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="p-2.5 pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <div className="text-xs font-black text-slate-900 dark:text-white truncate">
+                        {user.name || "Pengguna DagoEng"}
+                      </div>
+                      <div className="text-[10px] text-slate-400 truncate">
+                        {user.email}
+                      </div>
+                      <div className="mt-1.5">
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#3B7A57]/10 text-[#3B7A57] dark:text-[#52B788] border border-[#3B7A57]/20 uppercase">
+                          {user.role?.slug === "OWNER" ? "Owner Dago Hub" : user.role?.slug === "CUSTOMER" ? "Member Pelanggan & Penyelenggara" : user.role?.name || user.role?.slug}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Quick Menu: Organizer Portal */}
+                    <Link
+                      href="/events/portal"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-start space-x-2.5 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group cursor-pointer"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                        <Ticket className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788]">
+                          Portal Penyelenggara Event
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          Kelola event, tiket & check-in peserta
+                        </div>
+                      </div>
+                    </Link>
+
+                    {/* Quick Menu: Customer Portal */}
+                    <Link
+                      href="/customer"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex items-start space-x-2.5 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group cursor-pointer"
+                    >
+                      <div className="w-7 h-7 rounded-lg bg-emerald-500/10 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center shrink-0 mt-0.5">
+                        <UtensilsCrossed className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788]">
+                          Portal Pelanggan & Loyalty
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          Pesan F&B kafe, coworking & reward
+                        </div>
+                      </div>
+                    </Link>
+
+                    {(user.role?.slug === "OWNER" || user.role?.slug === "SUPER_ADMIN" || user.role?.slug === "MANAGER") && (
+                      <Link
+                        href="/dashboard"
+                        onClick={() => setUserMenuOpen(false)}
+                        className="flex items-start space-x-2.5 p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group cursor-pointer"
+                      >
+                        <div className="w-7 h-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                          <ShieldCheck className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788]">
+                            Dashboard Manajemen Hub
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            Supervisi & laporan eksekutif
+                          </div>
+                        </div>
+                      </Link>
+                    )}
+
+                    <div className="pt-1 border-t border-slate-100 dark:border-slate-800">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setUserMenuOpen(false);
+                          if (typeof window !== "undefined") {
+                            localStorage.removeItem("dago_organizer_email");
+                          }
+                          await logout();
+                          router.push("/login");
+                        }}
+                        className="w-full flex items-center space-x-2 p-2 rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span>Keluar (Logout)</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link href="/login">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-9 px-4 font-bold bg-white dark:bg-white/5 backdrop-blur-md border border-slate-200 dark:border-white/20 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/15 hover:text-slate-900 dark:hover:text-white rounded-xl transition-all duration-300 hover:scale-105 active:scale-95 group shadow-xs cursor-pointer flex items-center"
+                >
+                  <LogIn className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788] transition-transform duration-300 group-hover:translate-x-0.5" />
+                  <span>Login / Sign Up</span>
+                </Button>
+              </Link>
+            )}
 
             <ThemeToggle variant="pill" />
           </div>
 
           {/* Mobile Menu Toggle Button & Theme Toggle */}
           <div className="flex sm:hidden items-center space-x-2">
-            <Link href={targetDashboardUrl}>
+            <Link href={user ? "/events/portal" : "/login"}>
               <Button
                 size="sm"
                 variant="outline"
@@ -316,16 +442,56 @@ export default function PublicLandingPage() {
               })}
             </div>
 
-            <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex flex-col gap-2">
-              <Link
-                href={targetDashboardUrl}
-                onClick={() => setMobileMenuOpen(false)}
-                className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-10 rounded-xl flex items-center justify-center space-x-1.5 shadow-md shadow-[#3B7A57]/20 cursor-pointer transition-all"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>{user ? "Kelola Akun" : "Login / Sign Up"}</span>
-              </Link>
-            </div>
+            {/* Mobile Account Switcher Options */}
+            {user ? (
+              <div className="pt-3 border-t border-slate-200 dark:border-white/10 space-y-2">
+                <div className="px-1 text-xs font-bold text-slate-500">
+                  Masuk sebagai: <span className="text-slate-900 dark:text-white font-black">{user.name}</span>
+                </div>
+                <Link
+                  href="/events/portal"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full bg-[#3B7A57] text-white font-bold text-xs h-9 rounded-xl flex items-center justify-center space-x-1.5 shadow-sm"
+                >
+                  <Ticket className="w-3.5 h-3.5" />
+                  <span>Portal Penyelenggara Event</span>
+                </Link>
+                <Link
+                  href="/customer"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-bold text-xs h-9 rounded-xl flex items-center justify-center space-x-1.5"
+                >
+                  <UtensilsCrossed className="w-3.5 h-3.5" />
+                  <span>Portal Pelanggan & Loyalty</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setMobileMenuOpen(false);
+                    if (typeof window !== "undefined") {
+                      localStorage.removeItem("dago_organizer_email");
+                    }
+                    await logout();
+                    router.push("/login");
+                  }}
+                  className="w-full text-rose-600 dark:text-rose-400 font-bold text-xs h-8 rounded-xl flex items-center justify-center space-x-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Keluar</span>
+                </button>
+              </div>
+            ) : (
+              <div className="pt-3 border-t border-slate-200 dark:border-white/10 flex flex-col gap-2">
+                <Link
+                  href="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-10 rounded-xl flex items-center justify-center space-x-1.5 shadow-md shadow-[#3B7A57]/20 cursor-pointer transition-all"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Login / Sign Up</span>
+                </Link>
+              </div>
+            )}
           </div>
         )}
       </header>
@@ -341,7 +507,7 @@ export default function PublicLandingPage() {
               }`}
           >
             <div
-              className="absolute inset-0 bg-cover bg-center transition-transform duration-[4000ms] ease-linear"
+              className="absolute inset-0 bg-cover bg-center transition-transform duration-1000 ease-linear"
               style={{ backgroundImage: `url(${slide.bgImage})` }}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-[#0B0F17] via-slate-950/75 to-slate-950/60" />

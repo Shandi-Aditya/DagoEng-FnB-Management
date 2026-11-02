@@ -1,5 +1,16 @@
 [
   {
+    "id": "user-cust-mvxgkbjd-j00p",
+    "email": "sansaditya2105@gmail.com",
+    "name": "sans cek",
+    "phone": "085737654572",
+    "passwordHash": "$2a$10$n2J2ZL92VYWAokgjwfzD7etosqDpkcbuayy2Nx9uH5tAfM./KAGgi",
+    "role": "CUSTOMER",
+    "organizerProfileId": null,
+    "createdAt": "2026-11-01T06:37:48.263Z",
+    "updatedAt": "2026-11-01T06:37:48.263Z"
+  },
+  {
     "id": "user-customer-demo",
     "email": "customer@gmail.com",
     "name": "Ketut Dian (Customer Member)",

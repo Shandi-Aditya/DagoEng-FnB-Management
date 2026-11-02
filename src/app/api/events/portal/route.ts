@@ -127,7 +127,7 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    const updated = await organizerResubmitEvent(auth.email, eventId, updates || {});
+    const updated = await organizerResubmitEvent(auth.email, eventId, updates || {}, auth.isAdmin);
 
     return NextResponse.json({
       success: true,

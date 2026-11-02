@@ -36,6 +36,7 @@ import { getDataDirectory, getDataFilePath } from "@/lib/data-storage";
 const getDataDir = () => getDataDirectory();
 const getInvitesFile = () => getDataFilePath("organizer_invites.json");
 const getCredentialsFile = () => getDataFilePath("organizer_credentials.json");
+const getSessionsFile = () => getDataFilePath("organizer_sessions.json");
 
 
 // Concurrency Mutex Lock
@@ -617,10 +618,85 @@ export async function verifyOrganizerCredentials(
  * 6. Session Management for authenticated organizers.
  * Integrates with db.session if PostgreSQL is active, and provides in-memory fallback.
  */
-const activeOrganizerSessions = new Map<
+interface PersistedOrganizerSession {
+  tokenHash: string;
+  email: string;
+  name: string;
+  expiresAt: string;
+  userId: string;
+}
+
+function loadSessionsFromDisk(): Map<
   string,
   { email: string; name: string; expiresAt: Date; userId: string }
->();
+> {
+  try {
+    const file = getSessionsFile();
+    if (!fs.existsSync(file)) {
+      return new Map();
+    }
+    const raw = fs.readFileSync(file, "utf-8");
+    const parsed: PersistedOrganizerSession[] = JSON.parse(raw);
+    const map = new Map<
+      string,
+      { email: string; name: string; expiresAt: Date; userId: string }
+    >();
+    const now = new Date();
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        const exp = new Date(item.expiresAt);
+        if (exp > now) {
+          map.set(item.tokenHash, {
+            email: item.email,
+            name: item.name,
+            expiresAt: exp,
+            userId: item.userId,
+          });
+        }
+      }
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function saveSessionsToDisk(
+  map: Map<string, { email: string; name: string; expiresAt: Date; userId: string }>
+): void {
+  try {
+    const file = getSessionsFile();
+    const dir = path.dirname(file);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    // Merge existing disk sessions to prevent multi-worker overwrites
+    const diskSessions = loadSessionsFromDisk();
+    for (const [k, v] of diskSessions.entries()) {
+      if (!map.has(k)) {
+        map.set(k, v);
+      }
+    }
+    const arr: PersistedOrganizerSession[] = [];
+    const now = new Date();
+    for (const [tokenHash, val] of map.entries()) {
+      if (val.expiresAt > now) {
+        arr.push({
+          tokenHash,
+          email: val.email,
+          name: val.name,
+          expiresAt: val.expiresAt.toISOString(),
+          userId: val.userId,
+        });
+      }
+    }
+    fs.writeFileSync(file, JSON.stringify(arr, null, 2), "utf-8");
+  } catch (err) {
+    console.error("Failed to persist organizer session to disk:", err);
+  }
+}
+
+const activeOrganizerSessions = loadSessionsFromDisk();
 
 export async function createOrganizerSession(
   email: string,
@@ -671,6 +747,7 @@ export async function createOrganizerSession(
     expiresAt,
     userId,
   });
+  saveSessionsToDisk(activeOrganizerSessions);
 
   // Also try saving session to database if connected
   try {
@@ -692,7 +769,7 @@ export async function createOrganizerSession(
       return { rawToken, expiresAt, sessionId: dbSession.id };
     }
   } catch {
-    // DB offline, in-memory activeOrganizerSessions handles seamlessly in dev
+    // DB offline, disk-backed activeOrganizerSessions handles seamlessly in dev
   }
 
   return { rawToken, expiresAt, sessionId };
@@ -707,10 +784,18 @@ export function getOrganizerSession(tokenHash: string): {
   if (!isLocalDevFallbackAllowed()) {
     return null;
   }
-  const session = activeOrganizerSessions.get(tokenHash);
+  let session = activeOrganizerSessions.get(tokenHash);
+  if (!session) {
+    const diskSessions = loadSessionsFromDisk();
+    for (const [k, v] of diskSessions.entries()) {
+      activeOrganizerSessions.set(k, v);
+    }
+    session = activeOrganizerSessions.get(tokenHash);
+  }
   if (!session) return null;
   if (session.expiresAt < new Date()) {
     activeOrganizerSessions.delete(tokenHash);
+    saveSessionsToDisk(activeOrganizerSessions);
     return null;
   }
   return session;
@@ -718,5 +803,6 @@ export function getOrganizerSession(tokenHash: string): {
 
 export function revokeOrganizerSession(tokenHash: string): void {
   activeOrganizerSessions.delete(tokenHash);
+  saveSessionsToDisk(activeOrganizerSessions);
 }
 

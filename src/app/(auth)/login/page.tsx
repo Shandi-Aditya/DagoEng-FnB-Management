@@ -620,6 +620,14 @@ function LoginContent() {
                   <div className="font-bold group-hover:text-white">👾 Organizer Dev/Gaming</div>
                   <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /events/portal</div>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => handleQuickLogin("EVENT_STAFF")}
+                  className="p-2.5 text-left bg-emerald-50 dark:bg-emerald-950/30 hover:bg-[#3B7A57] hover:text-white border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                >
+                  <div className="font-bold group-hover:text-white">🎟️ Petugas Check-in Event</div>
+                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /events/checkin</div>
+                </button>
               </div>
             </div>
 

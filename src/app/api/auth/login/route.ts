@@ -7,7 +7,10 @@ import {
   verifyOrganizerCredentials,
   createOrganizerSession,
 } from "@/lib/organizer-activation";
-import { verifyUnifiedUserPassword } from "@/lib/unified-account";
+import {
+  verifyUnifiedUserPassword,
+  syncOrganizerCredentials,
+} from "@/lib/unified-account";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +34,7 @@ const DEMO_CREDENTIALS: Record<string, { personaKey: PersonaKey; defaultRedirect
   "baristaguild@dagocreative.id": { personaKey: "COMMUNITY_BARISTA", defaultRedirect: "/events/portal" },
   "halo@bandungdev.org": { personaKey: "COMMUNITY_BANDUNGDEV", defaultRedirect: "/events/portal" },
   "info@aksarapriangan.id": { personaKey: "COMMUNITY_AKSARAPRIANGAN", defaultRedirect: "/events/portal" },
+  "eventstaff@dagoeng.com": { personaKey: "EVENT_STAFF", defaultRedirect: "/events/checkin" },
 };
 
 export async function POST(req: NextRequest) {
@@ -233,7 +237,58 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // If not activated yet or inactive in DB, return 403 boundary notice
+      // If credentials were not in organizer_credentials.json, check unified user account (e.g. registered during event creation)
+      const unifiedAuth = await verifyUnifiedUserPassword(normalizedEmail, password);
+      if (unifiedAuth.success && unifiedAuth.user) {
+        // Auto-sync organizer credentials so both tables remain synchronized
+        syncOrganizerCredentials(registeredOrganizer.id, normalizedEmail, unifiedAuth.user.passwordHash);
+
+        try {
+          const session = await createOrganizerSession(
+            normalizedEmail,
+            req.headers.get("user-agent") || undefined,
+            req.headers.get("x-forwarded-for") || undefined
+          );
+
+          const res = NextResponse.json({
+            success: true,
+            redirectUrl: "/events/portal",
+            user: {
+              id: unifiedAuth.user.id,
+              name: unifiedAuth.user.name,
+              email: unifiedAuth.user.email,
+              phone: unifiedAuth.user.phone,
+              role: "CUSTOMER",
+              redirectTo: "/events/portal",
+            },
+          });
+
+          res.cookies.set({
+            name: SESSION_COOKIE_NAME,
+            value: session.rawToken,
+            path: "/",
+            httpOnly: true,
+            maxAge: 7 * 24 * 60 * 60,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
+
+          res.cookies.delete("dagoeng_active_persona");
+          return res;
+        } catch (sessErr) {
+          console.error("Failed to establish session for verified unified organizer:", sessErr);
+        }
+      } else if (unifiedAuth.error && unifiedAuth.error.includes("Password yang Anda masukkan salah")) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: unifiedAuth.error,
+          },
+          { status: 401 }
+        );
+      }
+
+      // If not activated anywhere in DB or local credentials, return 403 boundary notice
       return NextResponse.json(
         {
           success: false,

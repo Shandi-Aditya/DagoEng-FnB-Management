@@ -71,7 +71,9 @@ import {
   Key,
   Copy,
   ExternalLink,
+  Printer,
 } from "lucide-react";
+import { PrinterSettingsTab } from "@/features/settings/PrinterSettingsTab";
 import { CommunityOrganizerProfile, INITIAL_ORGANIZERS } from "@/types/organizer";
 import { CommunityEvent, EventRevenueSharingPolicy, DEFAULT_EVENT_POLICY } from "@/types/event";
 import {
@@ -860,6 +862,7 @@ export default function SettingsPage() {
     "Konfigurasi Platform & Pajak",
     "Paket Langganan & Add-on",
     "Manajemen Wi-Fi",
+    "Printer & Nota POS",
   ];
 
   const MASTER_TAB_ICONS: Record<string, React.ReactNode> = {
@@ -871,6 +874,7 @@ export default function SettingsPage() {
     "Konfigurasi Platform & Pajak": <Settings className="w-3.5 h-3.5" />,
     "Paket Langganan & Add-on": <Sparkles className="w-3.5 h-3.5 text-purple-600" />,
     "Manajemen Wi-Fi": <Wifi className="w-3.5 h-3.5 text-blue-600" />,
+    "Printer & Nota POS": <Printer className="w-3.5 h-3.5 text-emerald-600" />,
   };
 
   // Filtered & Sorted Master Products (Revisi 7)
@@ -2728,6 +2732,10 @@ export default function SettingsPage() {
               {MASTER_DATA_TABS.filter((tab) => {
                 if (tab === "Manajemen Wi-Fi") {
                   return isOrgOwner || isSuperAdmin;
+                }
+                if (tab === "Printer & Nota POS") {
+                  if (user?.scopeLevel === "TENANT") return false;
+                  return isOrgOwner || isSuperAdmin || user?.role?.slug === "MANAGER" || user?.role?.slug === "CASHIER";
                 }
                 return true;
               }).map((tab) => (
@@ -6695,6 +6703,10 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+            )}
+
+            {selectedMasterTab === "Printer & Nota POS" && (
+              <PrinterSettingsTab />
             )}
           </Card>
 

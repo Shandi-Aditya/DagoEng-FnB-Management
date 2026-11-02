@@ -264,9 +264,9 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
   EVENT_STAFF: {
     id: "user-event-staff-demo",
     email: "eventstaff@dagoeng.com",
-    name: "Dago Event Field Staff",
+    name: "Bagus Pratama (Petugas Check-In Dago)",
     phone: "+62 812-5566-7788",
-    role: { id: "role-staff", slug: "WAITER", name: "Event Staff" },
+    role: { id: "role-staff", slug: "WAITER", name: "Petugas Check-In" },
     scopeLevel: "ORGANIZATION",
     allowedModules: ["CORE"],
     organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
@@ -288,11 +288,11 @@ function syncPersonaCookie(personaKey: string | null) {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Default perspective: Dago Organization Owner
-  const [user, setUser] = useState<AuthenticatedUser | null>(DEMO_PERSONAS.DAGO_OWNER);
+  // Default perspective: null (Guest / Unauthenticated until explicit login or saved session)
+  const [user, setUser] = useState<AuthenticatedUser | null>(null);
   // Default Active Modules in Organization: F&B + Co-working (Commercial is INACTIVE by default)
   const [activeOrgModules, setActiveOrgModules] = useState<BusinessModuleCode[]>(["CORE", "FNB", "CO_WORKING"]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
 
   useEffect(() => {
@@ -300,15 +300,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (isLoggedOut) {
       setUser(null);
       syncPersonaCookie(null);
+      setIsLoading(false);
       return;
     }
     const savedCustom = localStorage.getItem("dagoeng_custom_customer");
     if (savedCustom) {
       try {
         const parsed = JSON.parse(savedCustom);
-        if (parsed && parsed.role?.slug === "CUSTOMER") {
+        if (parsed) {
+          // If this was actually a demo persona saved to custom_customer, resolve to canonical persona
+          const personaMatch = Object.entries(DEMO_PERSONAS).find(
+            ([_, p]) => p.email.toLowerCase() === parsed.email?.toLowerCase()
+          );
+          if (personaMatch) {
+            setUser(personaMatch[1]);
+            localStorage.setItem("dagoeng_active_persona", personaMatch[0]);
+            localStorage.removeItem("dagoeng_custom_customer");
+            syncPersonaCookie(personaMatch[0]);
+            setIsLoading(false);
+            return;
+          }
+
+          // Normalize role if stored as string
+          if (typeof parsed.role === "string") {
+            const rSlug = parsed.role as RoleSlug;
+            parsed.role = {
+              id: `role-${rSlug.toLowerCase()}`,
+              slug: rSlug,
+              name: rSlug === "OWNER" ? "Owner" : rSlug === "CUSTOMER" ? "Customer" : rSlug,
+            };
+          }
+
           setUser(parsed);
-          syncPersonaCookie("CUSTOMER_DEMO");
+          // Do not poison custom user session with CUSTOMER_DEMO persona; rely on verified session
+          syncPersonaCookie(null);
+          setIsLoading(false);
           return;
         }
       } catch (e) {
@@ -316,22 +342,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     const savedKey = localStorage.getItem("dagoeng_active_persona") as PersonaKey | null;
-    let initialUser = (savedKey && DEMO_PERSONAS[savedKey]) ? DEMO_PERSONAS[savedKey] : DEMO_PERSONAS.DAGO_OWNER;
-    const activeKey = (savedKey && DEMO_PERSONAS[savedKey]) ? savedKey : "DAGO_OWNER";
-    syncPersonaCookie(activeKey);
-
-    if (initialUser?.tenant?.id) {
-      const freshName = getTenantName(initialUser.tenant.id);
-      if (freshName && freshName !== initialUser.tenant.name) {
-        initialUser = {
-          ...initialUser,
-          tenant: { ...initialUser.tenant, name: freshName },
-        };
-      }
-    }
     if (savedKey && DEMO_PERSONAS[savedKey]) {
+      let initialUser = DEMO_PERSONAS[savedKey];
+      if (initialUser?.tenant?.id) {
+        const freshName = getTenantName(initialUser.tenant.id);
+        if (freshName && freshName !== initialUser.tenant.name) {
+          initialUser = {
+            ...initialUser,
+            tenant: { ...initialUser.tenant, name: freshName },
+          };
+        }
+      }
       setUser(initialUser);
+      syncPersonaCookie(savedKey);
+    } else {
+      setUser(null);
+      syncPersonaCookie(null);
     }
+    setIsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -362,27 +390,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  const login = async (personaKey?: PersonaKey, customUser?: AuthenticatedUser) => {
+  const login = async (personaKey?: PersonaKey, customUser?: any) => {
     setIsLoading(true);
-    if (customUser) {
-      setUser(customUser);
-      localStorage.removeItem("dagoeng_is_logged_out");
-      localStorage.setItem("dagoeng_custom_customer", JSON.stringify(customUser));
-      localStorage.removeItem("dagoeng_active_persona");
-      syncPersonaCookie(null);
-      if (customUser.email) {
-        localStorage.setItem("dago_organizer_email", customUser.email);
-      }
-    } else {
-      const key = personaKey || "DAGO_OWNER";
-      const targetUser = DEMO_PERSONAS[key];
+
+    // If personaKey is provided or customUser matches a known demo persona email, ALWAYS prioritize canonical DEMO_PERSONAS
+    const matchedKey = personaKey || (customUser?.email
+      ? (Object.keys(DEMO_PERSONAS) as PersonaKey[]).find(
+          (k) => DEMO_PERSONAS[k].email.toLowerCase() === customUser.email.toLowerCase()
+        )
+      : undefined);
+
+    if (matchedKey && DEMO_PERSONAS[matchedKey]) {
+      const targetUser = DEMO_PERSONAS[matchedKey];
       setUser(targetUser);
       localStorage.removeItem("dagoeng_is_logged_out");
       localStorage.removeItem("dagoeng_custom_customer");
-      localStorage.setItem("dagoeng_active_persona", key);
-      syncPersonaCookie(key);
+      localStorage.setItem("dagoeng_active_persona", matchedKey);
+      syncPersonaCookie(matchedKey);
       if (targetUser?.email) {
         localStorage.setItem("dago_organizer_email", targetUser.email);
+      }
+    } else if (customUser) {
+      const roleSlug: RoleSlug = typeof customUser.role === "string" ? customUser.role : customUser.role?.slug || "CUSTOMER";
+      const normalizedRole = {
+        id: `role-${roleSlug.toLowerCase()}`,
+        slug: roleSlug,
+        name: typeof customUser.role === "object" && customUser.role?.name
+          ? customUser.role.name
+          : roleSlug === "OWNER" ? "Owner" : roleSlug === "CUSTOMER" ? "Customer" : roleSlug,
+      };
+
+      const normalizedUser: AuthenticatedUser = {
+        ...customUser,
+        role: normalizedRole,
+        scopeLevel: customUser.scopeLevel || "TENANT",
+        allowedModules: customUser.allowedModules || ["CORE", "FNB", "CO_WORKING"],
+        permissions: customUser.permissions || [],
+      };
+
+      setUser(normalizedUser);
+      localStorage.removeItem("dagoeng_is_logged_out");
+      localStorage.setItem("dagoeng_custom_customer", JSON.stringify(normalizedUser));
+      localStorage.removeItem("dagoeng_active_persona");
+      syncPersonaCookie(null);
+      if (normalizedUser.email) {
+        localStorage.setItem("dago_organizer_email", normalizedUser.email);
       }
     }
     setIsLoading(false);

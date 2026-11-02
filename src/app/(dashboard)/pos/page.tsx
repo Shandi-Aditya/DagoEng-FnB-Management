@@ -27,6 +27,9 @@ import {
 import { ModifierModal } from "@/features/pos/ModifierModal";
 import { PaymentModal } from "@/features/pos/PaymentModal";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
+import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
+import { usePrinter } from "@/contexts/PrinterContext";
+import { KitchenTicketData } from "@/types/printer";
 import { CashDrawerShiftModal } from "@/features/pos/CashDrawerShiftModal";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { isTenantActive, DEFAULT_FNB_TENANTS, getAllFnbTenants, getTenantName } from "@/lib/tenant";
@@ -245,6 +248,19 @@ export default function POSPage() {
   const [isModifierModalOpen, setIsModifierModalOpen] = useState<boolean>(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
+  const [isKitchenReceiptModalOpen, setIsKitchenReceiptModalOpen] = useState<boolean>(false);
+  const [kitchenModalTicket, setKitchenModalTicket] = useState<KitchenTicketData | null>(null);
+  const [kitchenPrintNotification, setKitchenPrintNotification] = useState<{
+    type: "success" | "error" | "info";
+    text: string;
+    jobId?: string;
+  } | null>(null);
+  const {
+    settings: printerSettings,
+    printKitchenOrder,
+    activeKitchenPrinter,
+    retryPrintJob,
+  } = usePrinter();
   const [isClosingShiftModalOpen, setIsClosingShiftModalOpen] = useState<boolean>(false);
   const [lastReceiptData, setLastReceiptData] = useState<POSReceiptData | null>(null);
   const [posToast, setPosToast] = useState<string>("");
@@ -594,6 +610,48 @@ export default function POSPage() {
         notes: c.notes,
       })),
     });
+
+    // 1.5. Dual Receipt: Automatic Kitchen Order Dispatch (Non-blocking)
+    const kitchenTicket: KitchenTicketData = {
+      orderId: createdOrder.id,
+      orderNumber: createdOrder.orderNumber,
+      outletId: createdOrder.outletId,
+      outletName: activeOutlet?.name || "Singaraja",
+      tableNumber: orderType === "DINE_IN" ? selectedTable : "TAKEAWAY",
+      customerName: effectiveCustomerName,
+      orderType,
+      purpose: "NEW_ORDER",
+      items: cartItems.map((c, i) => ({
+        id: `kit-${i}-${Date.now()}`,
+        productName: c.productName,
+        quantity: c.quantity,
+        variantName: c.selectedVariant?.name,
+        modifiers: c.selectedModifiers.map((m) => m.name),
+        notes: c.notes,
+      })),
+      cashierName: user?.name || "Kasir Bertugas",
+      timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
+    };
+    setKitchenModalTicket(kitchenTicket);
+
+    if (printerSettings.autoPrintKitchenOrder) {
+      printKitchenOrder(kitchenTicket, "NEW_ORDER").then((res) => {
+        if (res.success) {
+          setKitchenPrintNotification({
+            type: "success",
+            text: res.message,
+            jobId: res.job.id,
+          });
+          setTimeout(() => setKitchenPrintNotification(null), 5000);
+        } else {
+          setKitchenPrintNotification({
+            type: "error",
+            text: `Nota Dapur: ${res.message}`,
+            jobId: res.job.id,
+          });
+        }
+      });
+    }
 
     // 2. Cross-Module: Auto-deduct inventory ingredients based on Recipe BOM
     cartItems.forEach((item) => {
@@ -2356,14 +2414,82 @@ export default function POSPage() {
         onPaymentSuccess={handlePaymentSuccess}
       />
 
-      {/* 3. Receipt Modal */}
+      {/* 3. Receipt Modal (Customer Receipt) */}
       {lastReceiptData && (
         <ReceiptModal
           isOpen={isReceiptModalOpen}
           onClose={handleStartNewTransaction}
           onNewTransaction={handleStartNewTransaction}
+          onViewKitchenTicket={() => setIsKitchenReceiptModalOpen(true)}
           receiptData={lastReceiptData}
         />
+      )}
+
+      {/* 3.5. Kitchen Order Receipt Modal (Dedicated Kitchen Ticket) */}
+      {kitchenModalTicket && (
+        <KitchenOrderReceiptModal
+          isOpen={isKitchenReceiptModalOpen}
+          ticketData={kitchenModalTicket}
+          onClose={() => setIsKitchenReceiptModalOpen(false)}
+        />
+      )}
+
+      {/* 3.6. Kitchen Print Floating Notification for Cashier */}
+      {kitchenPrintNotification && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          <div
+            className={`p-3.5 rounded-2xl shadow-xl border flex items-center space-x-3 text-xs font-semibold max-w-md ${
+              kitchenPrintNotification.type === "success"
+                ? "bg-emerald-950 text-emerald-200 border-emerald-700/60"
+                : "bg-slate-900 text-rose-300 border-rose-700/60"
+            }`}
+          >
+            {kitchenPrintNotification.type === "success" ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+            )}
+            <div className="flex-1">
+              <p className="font-bold">{kitchenPrintNotification.text}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Printer: {activeKitchenPrinter?.name || "Printer Dapur"}
+              </p>
+            </div>
+            {kitchenPrintNotification.type === "error" && kitchenPrintNotification.jobId && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const res = await retryPrintJob(kitchenPrintNotification.jobId!);
+                    setKitchenPrintNotification({
+                      type: res.success ? "success" : "error",
+                      text: res.message,
+                      jobId: kitchenPrintNotification.jobId,
+                    });
+                    if (res.success) {
+                      setTimeout(() => setKitchenPrintNotification(null), 4000);
+                    }
+                  } catch (e: any) {
+                    setKitchenPrintNotification((prev) =>
+                      prev ? { ...prev, text: e.message || "Retry gagal" } : null
+                    );
+                  }
+                }}
+                className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] h-7 px-2.5 rounded-xl font-bold cursor-pointer shrink-0"
+              >
+                Coba Lagi
+              </Button>
+            )}
+            <button
+              type="button"
+              onClick={() => setKitchenPrintNotification(null)}
+              className="text-slate-400 hover:text-white p-1"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       )}
 
       {/* 4. Voucher Modal */}

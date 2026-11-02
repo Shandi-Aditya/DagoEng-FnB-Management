@@ -12,6 +12,7 @@ import { ProductProvider } from "@/contexts/ProductContext";
 import { TableProvider } from "@/contexts/TableContext";
 import { InventoryProvider } from "@/contexts/InventoryContext";
 import { OrderProvider } from "@/contexts/OrderContext";
+import { PrinterProvider } from "@/contexts/PrinterContext";
 import { LoyaltyProvider } from "@/contexts/LoyaltyContext";
 import { CoworkingProvider } from "@/contexts/CoworkingContext";
 import { CommercialProvider } from "@/contexts/CommercialContext";
@@ -30,15 +31,17 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
                   <InventoryProvider>
                     <TableProvider>
                       <OrderProvider>
-                        <LoyaltyProvider>
-                          <CoworkingProvider>
-                            <CommercialProvider>
-                              <EmployeeShiftProvider>
-                                {children}
-                              </EmployeeShiftProvider>
-                            </CommercialProvider>
-                          </CoworkingProvider>
-                        </LoyaltyProvider>
+                        <PrinterProvider>
+                          <LoyaltyProvider>
+                            <CoworkingProvider>
+                              <CommercialProvider>
+                                <EmployeeShiftProvider>
+                                  {children}
+                                </EmployeeShiftProvider>
+                              </CommercialProvider>
+                            </CoworkingProvider>
+                          </LoyaltyProvider>
+                        </PrinterProvider>
                       </OrderProvider>
                     </TableProvider>
                   </InventoryProvider>

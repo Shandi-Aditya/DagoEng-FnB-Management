@@ -20,15 +20,21 @@ import {
   PlusCircle,
   Filter,
   Sparkles,
+  Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { soundChime } from "@/lib/audio-chime";
 import { ProFeatureBadge } from "@/components/premium";
 import { isAddonActive } from "@/lib/subscription";
+import { usePrinter } from "@/contexts/PrinterContext";
+import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
+import { KitchenTicketData } from "@/types/printer";
 
 export default function KitchenKDSPage() {
   const { activeOutlet, activeOutletId } = useOutlet();
   const { filteredOrders, advanceOrderStatus, createOrder } = useOrders();
+  const [selectedTicketForPrint, setSelectedTicketForPrint] = useState<KitchenTicketData | null>(null);
+  const [isKitchenReceiptModalOpen, setIsKitchenReceiptModalOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState<number>(Date.now());
   const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(true);
   const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("ALL");
@@ -190,6 +196,19 @@ export default function KitchenKDSPage() {
 
   return (
     <div className="space-y-4">
+      {/* Banner Mode Operasional Nota Dapur */}
+      <div className="p-3.5 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-2xs">
+        <div className="flex items-center space-x-2.5 text-emerald-950 dark:text-emerald-200">
+          <Printer className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span className="leading-snug">
+            <strong>Operasional Berbasis Nota Dapur Aktif</strong> — Setiap pesanan masuk otomatis dialirkan ke printer thermal dapur. Staf dapur tidak diwajibkan menggunakan tablet/layar sentuh. Layar KDS ini berfungsi sebagai visual backup pipeline.
+          </span>
+        </div>
+        <span className="text-[10px] bg-emerald-200/60 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 px-2.5 py-1 rounded-lg font-bold uppercase shrink-0">
+          Tablet Opsional
+        </span>
+      </div>
+
       {/* KDS Header with Live Controls & SLA Metrics */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-200 dark:border-slate-800 gap-3">
         <div>
@@ -425,13 +444,46 @@ export default function KitchenKDSPage() {
                             ))}
                           </div>
 
-                          {/* Action Button to Advance Order */}
-                          {col.nextStatus && (
-                            <div className="pt-2.5">
+                          {/* Action Button & Print Trigger */}
+                          <div className="pt-2.5 flex items-center space-x-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedTicketForPrint({
+                                  orderId: order.id,
+                                  orderNumber: order.orderNumber,
+                                  outletId: order.outletId,
+                                  outletName: order.outletName || "Singaraja",
+                                  tableNumber: order.tableNumber,
+                                  customerName: order.customerName,
+                                  orderType: order.orderType,
+                                  purpose: "REPRINT",
+                                  items: (order.items || []).map((it) => ({
+                                    id: it.id,
+                                    productName: it.productName,
+                                    quantity: it.quantity,
+                                    modifiers: it.modifiers,
+                                    notes: it.notes,
+                                  })),
+                                  cashierName: "Dapur KDS",
+                                  timestamp: new Date().toLocaleTimeString("id-ID") + " WITA",
+                                  reprintedBy: "Kitchen Staff",
+                                });
+                                setIsKitchenReceiptModalOpen(true);
+                              }}
+                              className="h-8 px-2 text-[10px] font-bold text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
+                              title="Cetak ulang tiket fisik dapur"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                            </Button>
+
+                            {col.nextStatus && (
                               <Button
                                 size="sm"
                                 onClick={() => handleAdvance(order.id, col.nextStatus!)}
-                                className={`w-full h-8 text-xs font-bold justify-center shadow-xs ${
+                                className={`flex-1 h-8 text-xs font-bold justify-center shadow-xs ${
                                   col.nextStatus === "COOKING"
                                     ? "bg-amber-500 hover:bg-amber-600 text-white"
                                     : col.nextStatus === "READY"
@@ -444,8 +496,8 @@ export default function KitchenKDSPage() {
                                 {col.nextIcon}
                                 <span>{col.nextLabel}</span>
                               </Button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </Card>
                       );
                     })
@@ -456,6 +508,13 @@ export default function KitchenKDSPage() {
           );
         })}
       </div>
+
+      {/* Kitchen Ticket Reprint Modal */}
+      <KitchenOrderReceiptModal
+        isOpen={isKitchenReceiptModalOpen}
+        ticketData={selectedTicketForPrint}
+        onClose={() => setIsKitchenReceiptModalOpen(false)}
+      />
     </div>
   );
 }

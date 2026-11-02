@@ -4,11 +4,12 @@ import React from "react";
 import Image from "next/image";
 import { POSReceiptData } from "./types";
 import { formatCurrencyIDR } from "@/lib/utils";
-import { X, Printer, Share2, CheckCircle2, RotateCcw, Store, MessageSquare } from "lucide-react";
+import { X, Printer, Share2, CheckCircle2, RotateCcw, Store, MessageSquare, UtensilsCrossed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FNB_TENANTS, getAllStoredTenantSettings, getTenantName } from "@/lib/tenant";
 import { getOrCreateSimulatedWifiVoucher, getSimulatedWifiCalcBasis } from "@/lib/wifi";
 import { isAddonActive } from "@/lib/subscription";
+import { usePrinter } from "@/contexts/PrinterContext";
 
 interface ReceiptModalProps {
   isOpen?: boolean;
@@ -16,6 +17,7 @@ interface ReceiptModalProps {
   order?: POSReceiptData | null;
   onClose: () => void;
   onNewTransaction?: () => void;
+  onViewKitchenTicket?: () => void;
 }
 
 export function ReceiptModal({
@@ -24,12 +26,18 @@ export function ReceiptModal({
   order,
   onClose,
   onNewTransaction,
+  onViewKitchenTicket,
 }: ReceiptModalProps) {
   const receiptData = rawReceiptData || order;
+  const { printCustomerReceipt } = usePrinter();
   if (!isOpen || !receiptData) return null;
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    try {
+      await printCustomerReceipt(receiptData, { isManualReprint: true });
+    } catch {
+      window.print();
+    }
   };
 
   // Distinct tenant identification
@@ -410,6 +418,19 @@ export function ReceiptModal({
               <Printer className="w-4 h-4 text-slate-600 dark:text-slate-400" />
               <span>Cetak Thermal</span>
             </Button>
+
+            {onViewKitchenTicket && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onViewKitchenTicket}
+                className="flex-1 min-w-[130px] text-xs font-bold space-x-1.5 border-emerald-300 text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100"
+                title="Buka Pratinjau & Cetak Nota Pesanan Dapur"
+              >
+                <UtensilsCrossed className="w-4 h-4 text-emerald-600" />
+                <span>Nota Dapur</span>
+              </Button>
+            )}
 
             {isAddonActive("WHATSAPP_AUTO_DISPATCH") && (
               <Button

@@ -36,6 +36,9 @@ import { PaymentModal } from "@/features/pos/PaymentModal";
 import { POSCartItem, POSPaymentMethod, POSReceiptData } from "@/features/pos/types";
 import { OrdersReportPDFModal } from "@/features/orders/OrdersReportPDFModal";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
+import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
+import { usePrinter } from "@/contexts/PrinterContext";
+import { KitchenTicketData, PrintPurpose } from "@/types/printer";
 import { getTenantName } from "@/lib/tenant";
 
 export default function OrdersPage() {
@@ -62,7 +65,33 @@ export default function OrdersPage() {
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
   const [receiptModalOrder, setReceiptModalOrder] = useState<POSReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
+  const [kitchenModalTicket, setKitchenModalTicket] = useState<KitchenTicketData | null>(null);
+  const [isKitchenModalOpen, setIsKitchenModalOpen] = useState<boolean>(false);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+  const { queue } = usePrinter();
+
+  const convertOrderToKitchenTicket = (order: OrderRecord, purpose: PrintPurpose = "REPRINT"): KitchenTicketData => {
+    return {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      outletId: order.outletId,
+      outletName: order.outletName || "Singaraja",
+      tableNumber: order.tableNumber,
+      customerName: order.customerName,
+      orderType: order.orderType,
+      purpose,
+      items: (order.items || []).map((i) => ({
+        id: i.id,
+        productName: i.productName,
+        quantity: i.quantity,
+        modifiers: i.modifiers,
+        notes: i.notes,
+      })),
+      cashierName: user?.name || "Kasir / Petugas",
+      timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
+      reprintedBy: purpose === "REPRINT" ? user?.name || "Petugas" : undefined,
+    };
+  };
 
   const convertOrderToReceiptData = (order: OrderRecord): POSReceiptData => {
     const primaryTenantId = order.items[0]?.tenantId || "tenant-ks";
@@ -669,10 +698,42 @@ export default function OrdersPage() {
                       setReceiptModalOrder(convertOrderToReceiptData(selectedOrder));
                       setIsReceiptModalOpen(true);
                     }}
-                    className="text-xs font-bold space-x-1.5 border-slate-300"
+                    className="text-xs font-bold space-x-1.5 border-slate-300 dark:border-slate-700"
+                    title="Cetak struk pembayaran pelanggan"
                   >
                     <Printer className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Cetak Nota Struk</span>
+                    <span>Struk Kasir</span>
+                  </Button>
+                )}
+
+                {/* Tombol Cetak Ulang Nota Dapur */}
+                {selectedOrder.status !== "CANCELLED" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setKitchenModalTicket(convertOrderToKitchenTicket(selectedOrder, "REPRINT"));
+                      setIsKitchenModalOpen(true);
+                    }}
+                    className="text-xs font-bold space-x-1.5 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100"
+                    title="Cetak ulang tiket pesanan untuk staf dapur (Watermark REPRINT)"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Nota Dapur (Salinan)</span>
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setKitchenModalTicket(convertOrderToKitchenTicket(selectedOrder, "CANCELLATION"));
+                      setIsKitchenModalOpen(true);
+                    }}
+                    className="text-xs font-bold space-x-1.5 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100"
+                    title="Cetak slip pembatalan pesanan untuk dapur"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Slip Pembatalan</span>
                   </Button>
                 )}
               </div>
@@ -715,11 +776,18 @@ export default function OrdersPage() {
         outletName={filteredOrders[0]?.outletName || "Singaraja"}
       />
 
-      {/* POS Thermal Receipt Modal for Reprinting */}
+      {/* POS Thermal Receipt Modal for Reprinting (Customer) */}
       <ReceiptModal
         isOpen={isReceiptModalOpen}
         receiptData={receiptModalOrder}
         onClose={() => setIsReceiptModalOpen(false)}
+      />
+
+      {/* Kitchen Order Thermal Ticket Modal for Reprinting (Kitchen) */}
+      <KitchenOrderReceiptModal
+        isOpen={isKitchenModalOpen}
+        ticketData={kitchenModalTicket}
+        onClose={() => setIsKitchenModalOpen(false)}
       />
     </div>
   );

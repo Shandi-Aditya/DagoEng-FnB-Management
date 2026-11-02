@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEventBookings, getEventOperationalStats } from "@/lib/events";
-import { assertEventAdmin, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
+import { assertEventAdmin, assertCheckInAuth, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/events/bookings
- * Admin-only endpoint to list event ticket bookings and aggregate statistics.
+ * Endpoint to list event ticket bookings and aggregate statistics.
+ * Accessible to Hub Event Admins and Authorized Event Check-in Officers.
  * Query params:
  * - eventId: filter bookings by event
  * - includeStats: "true" to include high-level operational statistics
@@ -14,10 +15,21 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   try {
-    const auth = await assertEventAdmin(req);
-    if (!auth.authorized) {
+    const adminAuth = await assertEventAdmin(req);
+    let isAuthorized = adminAuth.authorized;
+    let authRole = adminAuth.role;
+
+    if (!isAuthorized) {
+      const checkInAuth = await assertCheckInAuth(req);
+      if (checkInAuth.authorized) {
+        isAuthorized = true;
+        authRole = checkInAuth.role;
+      }
+    }
+
+    if (!isAuthorized) {
       return NextResponse.json(
-        { success: false, error: auth.error },
+        { success: false, error: adminAuth.error || "Akses pemesanan tiket ditolak." },
         { status: 403 }
       );
     }
@@ -28,7 +40,7 @@ export async function GET(req: NextRequest) {
     const allowUnmasked = searchParams.get("unmasked") === "true";
 
     const canViewUnmasked =
-      allowUnmasked && (auth.role === "SUPER_ADMIN" || auth.role === "OWNER");
+      allowUnmasked && (authRole === "SUPER_ADMIN" || authRole === "OWNER");
 
     const rawBookings = await getEventBookings(eventId);
 

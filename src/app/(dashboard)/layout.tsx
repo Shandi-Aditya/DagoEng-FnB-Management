@@ -64,13 +64,11 @@ export default function DashboardLayout({
         {/* Desktop Sidebar (visible on large screens >= 1024px) */}
         <aside
           className={`hidden lg:flex flex-shrink-0 transition-all duration-300 ease-in-out ${
-            isSidebarCollapsed
-              ? "w-0 -ml-64 opacity-0 pointer-events-none overflow-hidden"
-              : "w-64 opacity-100"
+            isSidebarCollapsed ? "w-20" : "w-64"
           }`}
         >
           <Sidebar
-            isCollapsed={false}
+            isCollapsed={isSidebarCollapsed}
             onToggleCollapse={handleToggleSidebar}
           />
         </aside>

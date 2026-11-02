@@ -6,6 +6,16 @@ import {
   validateEventSubmission,
 } from "@/lib/events";
 import { EventSubmissionPayload } from "@/types/event";
+import { getRequestAuthUser } from "@/lib/server-auth";
+import {
+  findUnifiedUserByEmail,
+  registerUnifiedUser,
+  verifyUnifiedUserPassword,
+  syncOrganizerCredentials,
+} from "@/lib/unified-account";
+import { getOrganizerByEmail, createOrganizer } from "@/lib/organizers";
+import { createOrganizerSession } from "@/lib/organizer-activation";
+import { SESSION_COOKIE_NAME } from "@/lib/session";
 export const dynamic = "force-dynamic";
 
 /**
@@ -102,20 +112,131 @@ export async function POST(req: NextRequest) {
     // 5. Create submission with status PENDING
     const created = await createEventSubmission(body);
 
-    return NextResponse.json(
+    // 6. Seamless Organizer Account Setup & Auto-Login Session
+    let sessionUser: any = null;
+    let rawSessionToken: string | null = null;
+
+    try {
+      const normalizedEmail = body.organizerEmail.trim().toLowerCase();
+      const organizerName = body.organizerName.trim();
+      const organizerPhone = body.organizerPhone.trim();
+
+      // Check if user is already authenticated
+      const existingAuth = await getRequestAuthUser(req);
+      if (existingAuth.isAuthenticated && existingAuth.email?.toLowerCase() === normalizedEmail) {
+        sessionUser = {
+          id: existingAuth.userId,
+          name: existingAuth.name || organizerName,
+          email: existingAuth.email,
+          role: existingAuth.role,
+        };
+      } else {
+        const rawPassword = body.password?.trim() || "Password123!";
+        const existingUser = findUnifiedUserByEmail(normalizedEmail);
+
+        if (existingUser) {
+          // If user exists, check credentials if password provided
+          const passCheck = await verifyUnifiedUserPassword(normalizedEmail, rawPassword);
+          if (passCheck.success && passCheck.user) {
+            sessionUser = {
+              id: passCheck.user.id,
+              name: passCheck.user.name,
+              email: passCheck.user.email,
+              phone: passCheck.user.phone,
+              role: passCheck.user.role,
+            };
+          } else {
+            sessionUser = {
+              id: existingUser.id,
+              name: existingUser.name,
+              email: existingUser.email,
+              phone: existingUser.phone,
+              role: existingUser.role,
+            };
+          }
+        } else {
+          // Register new unified user account
+          const regResult = await registerUnifiedUser({
+            name: organizerName,
+            email: normalizedEmail,
+            phone: organizerPhone,
+            password: rawPassword,
+            role: "CUSTOMER",
+          });
+          sessionUser = {
+            id: regResult.user.id,
+            name: regResult.user.name,
+            email: regResult.user.email,
+            phone: regResult.user.phone,
+            role: regResult.user.role,
+          };
+        }
+
+        // Ensure community organizer profile exists in organizers.json
+        let orgProfile = getOrganizerByEmail(normalizedEmail);
+        if (!orgProfile) {
+          orgProfile = createOrganizer({
+            name: organizerName,
+            category: body.category || "Komunitas",
+            contactPerson: organizerName,
+            phone: organizerPhone,
+            email: normalizedEmail,
+            notes: "Akun penyelenggara otomatis dari pengajuan event",
+            initialStatus: "ACTIVE",
+          });
+        }
+
+        // Keep organizer_credentials.json synchronized with the unified user's password
+        const uUser = findUnifiedUserByEmail(normalizedEmail);
+        if (orgProfile && uUser?.passwordHash) {
+          syncOrganizerCredentials(orgProfile.id, normalizedEmail, uUser.passwordHash);
+        }
+
+        // Create server session for seamless portal access
+        if (sessionUser) {
+          const session = await createOrganizerSession(
+            normalizedEmail,
+            req.headers.get("user-agent") || undefined,
+            req.headers.get("x-forwarded-for") || undefined
+          );
+          rawSessionToken = session.rawToken;
+        }
+      }
+    } catch (authErr) {
+      console.error("Auto-login organizer setup error:", authErr);
+      // Non-fatal: event is already safely created
+    }
+
+    const response = NextResponse.json(
       {
         success: true,
         message:
-          "Pengajuan event berhasil diterima! Tim Dago Creative Hub akan meninjau kelayakan acara Anda sebelum dipublikasikan.",
+          "Pengajuan event berhasil diterima! Akun penyelenggara Anda otomatis aktif.",
         data: {
           id: created.id,
           title: created.title,
           status: created.status,
           createdAt: created.createdAt,
         },
+        user: sessionUser,
+        autoLoggedIn: Boolean(rawSessionToken),
       },
       { status: 201 }
     );
+
+    if (rawSessionToken) {
+      response.cookies.set({
+        name: SESSION_COOKIE_NAME,
+        value: rawSessionToken,
+        path: "/",
+        httpOnly: true,
+        maxAge: 7 * 24 * 60 * 60, // 7 days
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+    }
+
+    return response;
   } catch (error: any) {
     console.error("POST /api/events error:", error);
     return NextResponse.json(

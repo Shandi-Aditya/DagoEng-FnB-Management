@@ -293,13 +293,21 @@ export function OrganizerQRScannerModal({
         throw new Error("Elemen video scanner belum siap.");
       }
 
-      const html5Qr = new Html5Qrcode("dagoeng-camera-reader");
+      const html5Qr = new Html5Qrcode("dagoeng-camera-reader", {
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
+        verbose: false,
+      });
       scannerRef.current = html5Qr;
 
       const qrConfig = {
-        fps: 12,
-        qrbox: { width: 240, height: 240 },
-        aspectRatio: 1.0,
+        fps: 20,
+        qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+          const size = Math.max(200, Math.floor(minEdge * 0.9));
+          return { width: size, height: size };
+        },
       };
 
       await html5Qr.start(

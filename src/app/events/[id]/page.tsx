@@ -338,11 +338,6 @@ export default function EventDetailPage() {
   }
 
   const isPast = new Date(event.endDate).getTime() < Date.now();
-  const hasValidExternalUrl =
-    event.externalRegistrationUrl &&
-    event.externalRegistrationUrl.trim().length > 0 &&
-    (event.externalRegistrationUrl.startsWith("http://") ||
-      event.externalRegistrationUrl.startsWith("https://"));
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E2E8F0] transition-colors duration-200">
@@ -685,18 +680,6 @@ export default function EventDetailPage() {
                       <Ticket className="w-4 h-4" />
                       <span>{event.isPaid ? "Pesan Tiket Sekarang" : "Daftar Tiket Gratis (RSVP)"}</span>
                     </Button>
-
-                    {hasValidExternalUrl && (
-                      <a
-                        href={event.externalRegistrationUrl!}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block text-center text-[11px] text-slate-500 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors py-1 flex items-center justify-center space-x-1 font-medium"
-                      >
-                        <span>Pendaftaran eksternal penyelenggara</span>
-                        <ExternalLink className="w-3 h-3 ml-0.5" />
-                      </a>
-                    )}
                   </>
                 )}
               </div>
