@@ -55,25 +55,25 @@ const OutletContext = createContext<OutletContextType | undefined>(undefined);
 
 export function OutletProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const [activeOutletId, setActiveOutletId] = useState<string>("ALL");
+  // Operational default is Singaraja (the only active branch)
+  const [activeOutletId, setActiveOutletId] = useState<string>("outlet-sgr");
 
   useEffect(() => {
-    // If user is Cashier, Kitchen, Waiter, or Inventory, lock to their assigned outlet
-    if (user && user.role.slug !== "OWNER" && user.role.slug !== "SUPER_ADMIN") {
-      if (user.outlet) {
-        setActiveOutletId(user.outlet.id);
-      } else {
-        setActiveOutletId("outlet-sgr");
-      }
+    // If user has specific assigned outlet, lock to it; otherwise default to Singaraja
+    if (user?.outlet?.id) {
+      setActiveOutletId(user.outlet.id);
+    } else {
+      setActiveOutletId("outlet-sgr");
     }
   }, [user]);
 
-  const activeOutlet = DEMO_OUTLETS.find((o) => o.id === activeOutletId) || null;
-  const isAllOutlets = activeOutletId === "ALL";
+  const activeOutlet = DEMO_OUTLETS.find((o) => o.id === activeOutletId) || DEMO_OUTLETS[0];
+  const isAllOutlets = false;
 
   const setOutlet = (outletId: string) => {
-    // Staff roles cannot switch to 'ALL'
-    if (outletId === "ALL" && user && user.role.slug !== "OWNER" && user.role.slug !== "SUPER_ADMIN" && user.role.slug !== "MANAGER") {
+    // Single active outlet operational scope (Singaraja)
+    if (outletId === "ALL") {
+      setActiveOutletId("outlet-sgr");
       return;
     }
     setActiveOutletId(outletId);

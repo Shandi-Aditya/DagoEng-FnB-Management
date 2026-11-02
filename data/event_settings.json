@@ -25,11 +25,11 @@
       "accountHolder": "PT DAGO CREATIVE HUB",
       "branch": "KCU Dago Bandung",
       "badge": "Utama / Rekomendasi",
-      "isDefault": true,
+      "isDefault": false,
       "isActive": false,
       "accountType": "PLATFORM",
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-10-28T09:32:56.336Z"
+      "updatedAt": "2026-11-02T06:23:26.279Z"
     },
     {
       "id": "bank-mandiri-plat",
@@ -43,7 +43,7 @@
       "isActive": false,
       "accountType": "PLATFORM",
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-10-28T09:32:58.234Z"
+      "updatedAt": "2026-11-02T06:23:26.279Z"
     },
     {
       "id": "bank-bri-plat",
@@ -53,14 +53,22 @@
       "accountHolder": "PT DAGO CREATIVE HUB",
       "branch": "KC Dago Bandung",
       "badge": "Jaringan Luas",
-      "isDefault": false,
+      "isDefault": true,
       "isActive": true,
       "accountType": "PLATFORM",
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-01-01T00:00:00.000Z"
+      "updatedAt": "2026-11-02T06:23:26.279Z"
     }
   ],
   "bankHistory": [
+    {
+      "id": "bhist-1793600606279-6z0g",
+      "changedAt": "2026-11-02T06:23:26.279Z",
+      "changedBy": "Hendra Wijaya (Owner Dago Hub)",
+      "action": "SET_DEFAULT",
+      "bankId": "bank-bri-plat",
+      "details": "Menetapkan rekening Bank BRI - 034101000928301 a.n. PT DAGO CREATIVE HUB sebagai default platform."
+    },
     {
       "id": "bhist-1793179978234-ax54",
       "changedAt": "2026-10-28T09:32:58.234Z",

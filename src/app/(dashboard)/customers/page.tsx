@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
@@ -26,6 +26,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pagination";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { CustomersReportPDFModal } from "@/features/customers/CustomersReportPDFModal";
@@ -116,6 +117,19 @@ export default function CustomersPage() {
       (c.email && c.email.toLowerCase().includes(q))
     );
   });
+
+  // Pagination states for Customers table
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [displayedMembers.length, searchQuery]);
+
+  const paginatedMembers = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return displayedMembers.slice(start, start + pageSize);
+  }, [displayedMembers, currentPage, pageSize]);
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,15 +296,25 @@ export default function CustomersPage() {
         </Card>
       </div>
 
-      {/* Search Input */}
-      <div className="flex items-center space-x-2 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm text-slate-900 dark:text-slate-100">
-        <Search className="w-4 h-4 text-slate-400 ml-1" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Cari pelanggan berdasarkan nama, nomor telepon, email, atau tier..."
-          className="w-full text-xs bg-transparent border-none focus:outline-none placeholder:text-slate-400"
+      {/* Search Input & Page Size Selector */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex items-center space-x-2 bg-white dark:bg-slate-800 p-2.5 sm:p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm text-slate-900 dark:text-slate-100 flex-1">
+          <Search className="w-4 h-4 text-slate-400 ml-1 shrink-0" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Cari pelanggan berdasarkan nama, nomor telepon, email, atau tier..."
+            className="w-full text-xs bg-transparent border-none focus:outline-none placeholder:text-slate-400"
+          />
+        </div>
+        <TablePageSizeSelector
+          pageSize={pageSize}
+          onPageSizeChange={(sz) => {
+            setPageSize(sz);
+            setCurrentPage(1);
+          }}
+          label="pelanggan"
         />
       </div>
 
@@ -311,7 +335,14 @@ export default function CustomersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
-                {displayedMembers.map((c) => (
+                {displayedMembers.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-8 text-center text-slate-400 text-xs">
+                      Tidak ada data pelanggan yang sesuai dengan pencarian.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedMembers.map((c: LoyaltyMember) => (
                   <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50">
                     <td className="p-3 font-semibold text-slate-900 dark:text-slate-100 whitespace-nowrap">
                       <p>{c.name}</p>
@@ -379,10 +410,24 @@ export default function CustomersPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                ))
+              )}
               </tbody>
             </table>
           </div>
+          {displayedMembers.length > 0 && (
+            <TablePagination
+              currentPage={currentPage}
+              totalItems={displayedMembers.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(sz) => {
+                setPageSize(sz);
+                setCurrentPage(1);
+              }}
+              itemLabel="pelanggan"
+            />
+          )}
         </CardContent>
       </Card>
 

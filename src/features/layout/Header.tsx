@@ -20,9 +20,6 @@ import {
   Check,
   ExternalLink,
   Menu,
-  Globe,
-  PanelLeftClose,
-  PanelLeftOpen,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 
@@ -62,9 +59,9 @@ export function Header({
 
   return (
     <header className="h-16 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xs border-b border-slate-200/90 dark:border-slate-800 px-3 sm:px-6 flex items-center justify-between sticky top-0 z-30 gap-2 transition-colors duration-200">
-      {/* Left: Hamburger & Desktop Sidebar Toggle & Organization Title */}
+      {/* Left: Mobile Drawer Trigger & Active Operational Outlet */}
       <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
-        {/* Mobile & Tablet Drawer Trigger (<1024px) */}
+        {/* Mobile Drawer Trigger (<1024px) */}
         <button
           onClick={onOpenMobileMenu}
           className="lg:hidden p-2 -ml-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors shrink-0"
@@ -74,110 +71,17 @@ export function Header({
           <Menu className="w-5 h-5" />
         </button>
 
-        {/* Desktop Sidebar Toggle */}
-        {onToggleSidebar && (
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            className="hidden lg:flex p-2 -ml-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors shrink-0 items-center justify-center min-h-[40px] min-w-[40px] touch-manipulation cursor-pointer"
-            title={isSidebarCollapsed ? "Perluas Sidebar Menu" : "Perkecil Sidebar Menu"}
-            aria-label={isSidebarCollapsed ? "Perluas Sidebar Menu" : "Perkecil Sidebar Menu"}
-          >
-            {isSidebarCollapsed ? (
-              <PanelLeftOpen className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788]" />
-            ) : (
-              <PanelLeftClose className="w-5 h-5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" />
-            )}
-          </button>
-        )}
-
-        <div className="hidden sm:flex items-center space-x-2 shrink-0">
-          <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
-            {user?.scopeLevel === "ORGANIZATION" ? (
-              <>
-                <Building className="w-4 h-4 text-primary dark:text-emerald-400" />
-                <span>Dago Creative Hub</span>
-              </>
-            ) : user?.tenant ? (
-              <>
-                <Coffee className="w-4 h-4 text-primary" />
-                <span>{user.tenant.name}</span>
-              </>
-            ) : (
-              <span>{user?.organization?.name || "DagoEng Hub"}</span>
-            )}
+        {/* Active Operational Outlet Badge (Singaraja) */}
+        <div className="flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-2xs">
+          <Store className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+          <span className="truncate max-w-[130px] sm:max-w-none">
+            <span className="hidden sm:inline">Outlet </span>Singaraja (Pusat)
           </span>
-          <span className="text-slate-300 dark:text-slate-700">/</span>
+          <span className="hidden sm:inline text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full">
+            ● Beroperasi Aktif
+          </span>
+          <span className="sm:hidden w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Beroperasi Aktif" />
         </div>
-
-        {/* Outlet Switcher Dropdown */}
-        {canSwitchOutlets ? (
-          <div className="relative">
-            <button
-              onClick={() => setIsOutletDropdownOpen(!isOutletDropdownOpen)}
-              className="flex items-center space-x-2 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 transition-colors"
-            >
-              <Store className="w-3.5 h-3.5 text-primary dark:text-emerald-400" />
-              <span>
-                {isAllOutlets ? "Semua Outlet (Konsolidasi)" : outlets.find((o) => o.id === activeOutletId)?.name}
-              </span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-            </button>
-
-            {isOutletDropdownOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setIsOutletDropdownOpen(false)} />
-                <div className="absolute left-0 mt-1 w-64 bg-white dark:bg-slate-800 rounded-lg shadow-dropdown border border-slate-200 dark:border-slate-700 py-1.5 z-50 text-slate-900 dark:text-slate-100 animate-in fade-in zoom-in-95 duration-100">
-                  <div className="px-3 py-1 text-[11px] font-semibold text-slate-400 dark:text-slate-400 uppercase tracking-wider border-b border-slate-100 dark:border-slate-700">
-                    Pilih Lingkup Outlet
-                  </div>
-                  <button
-                    onClick={() => {
-                      setOutlet("ALL");
-                      setIsOutletDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-700/60 flex items-center justify-between ${
-                      isAllOutlets ? "text-primary dark:text-emerald-400 font-bold bg-primary/10 dark:bg-primary/20" : "text-slate-700 dark:text-slate-200"
-                    }`}
-                  >
-                    <span className="flex items-center">
-                      <Globe className="w-3.5 h-3.5 mr-1.5 text-slate-500 dark:text-slate-400" />
-                      Semua Outlet (Konsolidasi Data)
-                    </span>
-                    {isAllOutlets && <span className="text-[10px] bg-primary text-white dark:text-slate-950 px-1.5 rounded font-bold">Aktif</span>}
-                  </button>
-                  <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
-                  {outlets.map((outlet) => {
-                    const isSelected = activeOutletId === outlet.id;
-                    return (
-                      <button
-                        key={outlet.id}
-                        onClick={() => {
-                          setOutlet(outlet.id);
-                          setIsOutletDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700/60 flex items-center justify-between ${
-                          isSelected ? "text-primary dark:text-emerald-400 font-bold bg-primary/10 dark:bg-primary/20" : "text-slate-700 dark:text-slate-200"
-                        }`}
-                      >
-                        <div>
-                          <p className="font-semibold">{outlet.name}</p>
-                          <p className="text-[10px] text-slate-400 dark:text-slate-400">{outlet.code}</p>
-                        </div>
-                        {isSelected && <span className="text-[10px] bg-primary text-white dark:text-slate-950 px-1.5 rounded font-bold">Aktif</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center space-x-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs font-semibold text-slate-700 dark:text-slate-200">
-            <Store className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-            <span>Outlet: {user?.outlet?.name || "Singaraja"}</span>
-          </div>
-        )}
       </div>
 
       {/* Right: Scope Status Pill, Date, Theme Toggle, and Notification Center */}

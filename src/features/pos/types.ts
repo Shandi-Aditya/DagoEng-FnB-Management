@@ -81,8 +81,8 @@ export interface POSReceiptData {
   receiptHeader?: string;
   receiptFooter?: string;
   outletName: string;
-  outletAddress: string;
-  outletPhone: string;
+  outletAddress?: string;
+  outletPhone?: string;
   tableNumber: string;
   customerName: string;
   customerPhone?: string;

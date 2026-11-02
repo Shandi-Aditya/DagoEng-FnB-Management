@@ -167,10 +167,10 @@ export default function DashboardPage() {
           </div>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
             {isDagoOwner
-              ? "Ringkasan eksekutif konsolidasi seluruh domain bisnis Dago Creative Hub"
+              ? "Ringkasan eksekutif operasional Dago Creative Hub"
               : `Ringkasan operasional bisnis ${user?.tenant?.name || "Kopi Senja"}`} •{" "}
             <span className="font-semibold text-slate-700 dark:text-slate-300">
-              {isAllOutlets ? "Semua Outlet" : `Outlet ${activeOutlet?.name}`}
+              Outlet {activeOutlet?.name || "Singaraja (Pusat)"}
             </span>
           </p>
         </div>

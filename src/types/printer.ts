@@ -112,8 +112,8 @@ export const DEFAULT_PRINTER_DEVICES: PrinterDeviceConfig[] = [
   {
     id: "prn-cashier-default",
     name: "Printer Kasir Thermal (Default)",
-    outletId: "ALL",
-    outletName: "Semua Outlet",
+    outletId: "outlet-sgr",
+    outletName: "Singaraja (Pusat)",
     role: "CUSTOMER_RECEIPT",
     connectionType: "BROWSER_SYSTEM",
     paperWidth: "80mm",
@@ -127,8 +127,8 @@ export const DEFAULT_PRINTER_DEVICES: PrinterDeviceConfig[] = [
   {
     id: "prn-kitchen-default",
     name: "Printer Dapur Thermal (Default)",
-    outletId: "ALL",
-    outletName: "Semua Outlet",
+    outletId: "outlet-sgr",
+    outletName: "Singaraja (Pusat)",
     role: "KITCHEN_ORDER",
     connectionType: "BROWSER_SYSTEM",
     paperWidth: "80mm",

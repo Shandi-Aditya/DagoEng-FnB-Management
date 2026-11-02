@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useInventory } from "@/contexts/InventoryContext";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -29,9 +29,10 @@ import {
   History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pagination";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
-import { PurchaseOrder, StockAdjustmentLog, RecipeBOM, StockOpnameRecord, StockOpnameReason } from "@/types/inventory";
+import { IngredientItem, PurchaseOrder, StockAdjustmentLog, RecipeBOM, StockOpnameRecord, StockOpnameReason } from "@/types/inventory";
 import { useProducts } from "@/contexts/ProductContext";
 import { InventoryReportPDFModal } from "@/features/inventory/InventoryReportPDFModal";
 import { StockOpnameReportPDFModal } from "@/features/inventory/StockOpnameReportPDFModal";
@@ -120,6 +121,19 @@ export default function InventoryPage() {
       item.category.toLowerCase().includes(searchQuery.toLowerCase());
     return matchStatus && matchCategory && matchSearch;
   });
+
+  // Pagination states for Inventory table
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [displayedIngredients.length, statusFilter, categoryFilter, searchQuery]);
+
+  const paginatedIngredients = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return displayedIngredients.slice(start, start + pageSize);
+  }, [displayedIngredients, currentPage, pageSize]);
 
   // KPI Calculations
   const criticalItems = filteredIngredients.filter((i) => i.status === "CRITICAL" || i.stockNumber <= i.min * 0.4);
@@ -658,6 +672,15 @@ export default function InventoryPage() {
                   Reset Filter
                 </button>
               )}
+
+              <TablePageSizeSelector
+                pageSize={pageSize}
+                onPageSizeChange={(sz) => {
+                  setPageSize(sz);
+                  setCurrentPage(1);
+                }}
+                label="records"
+              />
             </div>
           </div>
 
@@ -707,7 +730,7 @@ export default function InventoryPage() {
                       </td>
                     </tr>
                   ) : (
-                    displayedIngredients.map((item) => {
+                    paginatedIngredients.map((item: IngredientItem) => {
                       const isOutOfStock = item.stockNumber <= 0;
                       const isCritical = !isOutOfStock && (item.status === "CRITICAL" || item.stockNumber <= item.min * 0.4);
                       const isLow = !isOutOfStock && !isCritical && item.status === "LOW";
@@ -836,6 +859,19 @@ export default function InventoryPage() {
                 </tbody>
               </table>
             </div>
+            {displayedIngredients.length > 0 && (
+              <TablePagination
+                currentPage={currentPage}
+                totalItems={displayedIngredients.length}
+                pageSize={pageSize}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={(sz) => {
+                  setPageSize(sz);
+                  setCurrentPage(1);
+                }}
+                itemLabel="bahan baku"
+              />
+            )}
           </Card>
 
           {/* Real-Time Stock Movement Logs */}

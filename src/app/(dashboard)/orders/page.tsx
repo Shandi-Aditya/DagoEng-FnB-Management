@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { useInventory } from "@/contexts/InventoryContext";
@@ -31,6 +31,7 @@ import {
   Printer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pagination";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { PaymentModal } from "@/features/pos/PaymentModal";
 import { POSCartItem, POSPaymentMethod, POSReceiptData } from "@/features/pos/types";
@@ -58,6 +59,19 @@ export default function OrdersPage() {
     if (!isTenantOwner || !userTenantId) return filteredOrders;
     return filteredOrders.filter((o) => o.items.some((it) => it.tenantId === userTenantId));
   }, [filteredOrders, isTenantOwner, userTenantId]);
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [displayedOrders.length]);
+
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return displayedOrders.slice(start, start + pageSize);
+  }, [displayedOrders, currentPage, pageSize]);
 
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
   const [paymentOrder, setPaymentOrder] = useState<OrderRecord | null>(null);
@@ -360,6 +374,15 @@ export default function OrdersPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <TablePageSizeSelector
+            pageSize={pageSize}
+            onPageSizeChange={(sz) => {
+              setPageSize(sz);
+              setCurrentPage(1);
+            }}
+            label="records"
+          />
+
           <Button
             size="sm"
             variant="outline"
@@ -416,7 +439,7 @@ export default function OrdersPage() {
                     </td>
                   </tr>
                 ) : (
-                  displayedOrders.map((o) => {
+                  paginatedOrders.map((o) => {
                     const metrics = calculateOrderMetrics(o);
                     const isDelayed = metrics.slaStatus === "DELAYED";
                     const isCompleted = o.status === "COMPLETED";
@@ -508,6 +531,19 @@ export default function OrdersPage() {
               </tbody>
             </table>
           </div>
+          {displayedOrders.length > 0 && (
+            <TablePagination
+              currentPage={currentPage}
+              totalItems={displayedOrders.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(sz) => {
+                setPageSize(sz);
+                setCurrentPage(1);
+              }}
+              itemLabel="pesanan"
+            />
+          )}
         </CardContent>
       </Card>
 

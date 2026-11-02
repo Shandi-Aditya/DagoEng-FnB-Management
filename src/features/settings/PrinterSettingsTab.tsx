@@ -90,7 +90,7 @@ export function PrinterSettingsTab() {
   const openAddModal = () => {
     setEditingDeviceId(null);
     setFormName("");
-    setFormOutletId("ALL");
+    setFormOutletId("outlet-sgr");
     setFormRole("KITCHEN_ORDER");
     setFormConnectionType("BROWSER_SYSTEM");
     setFormBridgeEndpoint("http://localhost:8080/print");
@@ -107,7 +107,7 @@ export function PrinterSettingsTab() {
   const openEditModal = (device: PrinterDeviceConfig) => {
     setEditingDeviceId(device.id);
     setFormName(device.name);
-    setFormOutletId(device.outletId);
+    setFormOutletId(device.outletId === "ALL" ? "outlet-sgr" : device.outletId);
     setFormRole(device.role);
     setFormConnectionType(device.connectionType);
     setFormBridgeEndpoint(device.bridgeEndpoint || "http://localhost:8080/print");
@@ -125,8 +125,8 @@ export function PrinterSettingsTab() {
     e.preventDefault();
     if (!formName.trim()) return;
 
-    const matchedOutlet = outlets.find((o) => o.id === formOutletId);
-    const outletName = formOutletId === "ALL" ? "Semua Outlet" : matchedOutlet?.name || "Outlet";
+    const matchedOutlet = outlets.find((o) => o.id === formOutletId) || outlets[0];
+    const outletName = matchedOutlet?.name || "Singaraja (Pusat)";
 
     if (editingDeviceId) {
       updateDevice(editingDeviceId, {
@@ -827,10 +827,9 @@ export function PrinterSettingsTab() {
                     onChange={(e) => setFormOutletId(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 font-medium"
                   >
-                    <option value="ALL">Semua Outlet (Global)</option>
                     {outlets.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.name}
+                      <option key={o.id} value={o.id} disabled={o.isComingSoon}>
+                        {o.name} {o.isComingSoon ? "(Segera Hadir)" : "— Outlet Beroperasi"}
                       </option>
                     ))}
                   </select>

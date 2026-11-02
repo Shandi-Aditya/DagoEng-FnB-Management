@@ -5,6 +5,14 @@ import { AppProviders } from "@/components/providers/AppProviders";
 export const metadata: Metadata = {
   title: "DagoEng F&B Management — Smarter F&B. Better Operations.",
   description: "Platform terintegrasi untuk mengelola transaksi, operasional, inventory, customer, dan performa bisnis F&B.",
+  icons: {
+    icon: [
+      { url: "/logo-dago.png", href: "/logo-dago.png" },
+      { url: "/favicon.ico", href: "/favicon.ico" },
+    ],
+    shortcut: "/logo-dago.png",
+    apple: "/logo-dago.png",
+  },
 };
 
 export default function RootLayout({
@@ -15,6 +23,9 @@ export default function RootLayout({
   return (
     <html lang="id" suppressHydrationWarning>
       <head>
+        <link rel="icon" href="/logo-dago.png" type="image/png" />
+        <link rel="shortcut icon" href="/logo-dago.png" type="image/png" />
+        <link rel="apple-touch-icon" href="/logo-dago.png" />
         <script
           dangerouslySetInnerHTML={{
             __html: `

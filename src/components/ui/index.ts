@@ -7,3 +7,4 @@ export * from "./tabs";
 export * from "./skeleton";
 export * from "./animated-counter";
 export * from "./ThemeToggle";
+export * from "./table-pagination";

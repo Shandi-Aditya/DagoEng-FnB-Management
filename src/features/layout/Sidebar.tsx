@@ -158,7 +158,7 @@ export function Sidebar({
       <div>
         <div
           className={`p-4 border-b border-slate-100 dark:border-slate-800 flex items-center ${
-            isCollapsed ? "flex-col space-y-2 justify-center" : "justify-between"
+            isCollapsed ? "justify-center" : "justify-between"
           }`}
         >
           {!isCollapsed ? (
@@ -185,39 +185,57 @@ export function Sidebar({
               </div>
 
               {!isDrawer && (
-                <button
-                  type="button"
-                  onClick={toggleCollapsed}
-                  className="p-2 min-h-[44px] min-w-[44px] rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center shrink-0 touch-manipulation"
-                  title="Perkecil / Tutup Sidebar"
-                  aria-label="Perkecil / Tutup Sidebar"
-                >
-                  <PanelLeftClose className="w-5 h-5" />
-                </button>
+                <div className="relative group/close">
+                  <button
+                    type="button"
+                    onClick={toggleCollapsed}
+                    className="p-2 min-h-[44px] min-w-[44px] rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center shrink-0 touch-manipulation cursor-pointer"
+                    title="Tutup sidebar"
+                    aria-label="Tutup sidebar"
+                  >
+                    <PanelLeftClose className="w-5 h-5" />
+                  </button>
+                  <div className="absolute right-0 top-full mt-1 hidden group-hover/close:flex items-center z-50 pointer-events-none animate-in fade-in duration-150">
+                    <div className="bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 px-2.5 py-1 rounded-full text-[10px] font-semibold whitespace-nowrap shadow-md">
+                      Tutup sidebar
+                    </div>
+                  </div>
+                </div>
               )}
             </>
           ) : (
-            <>
-              <div className="w-8 h-8 relative flex-shrink-0">
-                <Image
-                  src="/logo-dago.png"
-                  alt="Dago Creative Hub"
-                  width={32}
-                  height={32}
-                  priority
-                  className="object-contain"
-                />
-              </div>
+            <div className="relative group/toggle flex justify-center w-full">
               <button
                 type="button"
                 onClick={toggleCollapsed}
-                className="p-2 min-h-[44px] min-w-[44px] rounded-xl text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center touch-manipulation"
-                title="Perluas Sidebar"
-                aria-label="Perluas Sidebar"
+                className="relative w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center transition-all duration-200 cursor-pointer shadow-xs touch-manipulation group"
+                aria-label="Buka sidebar"
               >
-                <PanelLeftOpen className="w-5 h-5" />
+                {/* Default State: Logo Dago (tampil saat normal / tidak di-hover) */}
+                <div className="w-6 h-6 relative flex items-center justify-center transition-all duration-200 group-hover/toggle:opacity-0 group-hover/toggle:scale-75 group-hover/toggle:rotate-12">
+                  <Image
+                    src="/logo-dago.png"
+                    alt="Dago Creative Hub"
+                    width={24}
+                    height={24}
+                    priority
+                    className="object-contain"
+                  />
+                </div>
+
+                {/* Hover State: Tombol Buka Sidebar (tampil otomatis saat cursor hover di logo) */}
+                <div className="absolute inset-0 flex items-center justify-center opacity-0 scale-75 group-hover/toggle:opacity-100 group-hover/toggle:scale-100 transition-all duration-200 text-slate-700 dark:text-slate-100">
+                  <PanelLeftOpen className="w-5 h-5" />
+                </div>
               </button>
-            </>
+
+              {/* Floating Pill Tooltip: "Buka sidebar" persis seperti Gemini / Modern Apps */}
+              <div className="absolute left-full ml-3 top-1/2 -translate-y-1/2 hidden group-hover/toggle:flex items-center z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-150">
+                <div className="bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100 px-3.5 py-1.5 rounded-2xl text-xs font-semibold whitespace-nowrap shadow-xl flex items-center space-x-1.5 border border-slate-300 dark:border-slate-700">
+                  <span>Buka sidebar</span>
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
