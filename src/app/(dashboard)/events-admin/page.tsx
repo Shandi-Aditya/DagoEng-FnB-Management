@@ -1006,11 +1006,11 @@ export default function AdminEventsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none sm:flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-none sm:flex-wrap">
           <Link href="/events/submit" className="shrink-0">
             <Button
               size="sm"
-              className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl shadow-xs flex items-center space-x-1.5 h-8 sm:h-9 px-3 cursor-pointer"
+              className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl shadow-xs flex items-center space-x-1.5 h-8 sm:h-9 px-2.5 sm:px-3 cursor-pointer"
             >
               <PlusCircle className="w-3.5 h-3.5" />
               <span>Tambah Event</span>
@@ -1023,14 +1023,14 @@ export default function AdminEventsPage() {
             className="shrink-0 text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl h-8 sm:h-9 px-2.5 sm:px-3 cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 mr-1" />
-            <span>Ekspor Data</span>
+            <span>Ekspor</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={loadAdminEvents}
             disabled={isLoading}
-            className="shrink-0 text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl h-8 sm:h-9 px-2.5 sm:px-3"
+            className="shrink-0 text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl h-8 sm:h-9 px-2 sm:px-3"
             title="Segarkan data"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
@@ -1043,7 +1043,7 @@ export default function AdminEventsPage() {
               className="text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl h-8 sm:h-9 px-2.5 sm:px-3"
             >
               <ExternalLink className="w-3.5 h-3.5 mr-1" />
-              <span>Katalog Publik</span>
+              <span>Katalog</span>
             </Button>
           </a>
         </div>
@@ -1117,59 +1117,67 @@ export default function AdminEventsPage() {
       {adminSection === "MODERATION" && (
         <>
           {/* 4 Kartu Ringkasan Operasional Sederhana */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-              <div className="flex items-start justify-between gap-2 pb-1">
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight min-w-0">Total Event Terdaftar</span>
-                <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center shrink-0">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3.5">
+            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between min-h-[92px] sm:min-h-[104px]">
+              <div className="flex items-center justify-between gap-1.5 pb-1">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">Total Event</span>
+                <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center shrink-0">
                   <Calendar className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <div className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
-                {events.length} <span className="text-xs font-normal text-slate-400">Event</span>
+              <div>
+                <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white leading-tight">
+                  {events.length} <span className="text-xs font-normal text-slate-400">Event</span>
+                </div>
+                <span className="text-[10px] text-slate-400 truncate block mt-0.5">Semua agenda terdaftar</span>
               </div>
-              <span className="text-[10px] text-slate-400 truncate block">Seluruh agenda komunitas</span>
             </Card>
 
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-              <div className="flex items-start justify-between gap-2 pb-1">
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight min-w-0">Event Aktif & Tayang</span>
-                <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
+            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between min-h-[92px] sm:min-h-[104px]">
+              <div className="flex items-center justify-between gap-1.5 pb-1">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">Event Aktif</span>
+                <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <div className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">
-                {events.filter((e) => e.status === "APPROVED").length} <span className="text-xs font-normal text-slate-400">Disetujui</span>
+              <div>
+                <div className="text-base sm:text-xl font-black text-emerald-600 dark:text-emerald-400 leading-tight">
+                  {events.filter((e) => e.status === "APPROVED").length} <span className="text-xs font-normal text-slate-400">Disetujui</span>
+                </div>
+                <span className="text-[10px] text-slate-400 truncate block mt-0.5">Tayang di katalog publik</span>
               </div>
-              <span className="text-[10px] text-slate-400 truncate block">Dapat diakses publik</span>
             </Card>
 
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-              <div className="flex items-start justify-between gap-2 pb-1">
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight min-w-0">Menunggu Moderasi</span>
-                <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center shrink-0">
+            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between min-h-[92px] sm:min-h-[104px]">
+              <div className="flex items-center justify-between gap-1.5 pb-1">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">Menunggu Review</span>
+                <div className="w-6 h-6 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center shrink-0">
                   <Clock className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <div className="text-lg sm:text-xl font-black text-amber-600 dark:text-amber-400">
-                {events.filter((e) => e.status === "PENDING" || e.status === "REVISION_REQUESTED").length} <span className="text-xs font-normal text-slate-400">Review</span>
+              <div>
+                <div className="text-base sm:text-xl font-black text-amber-600 dark:text-amber-400 leading-tight">
+                  {events.filter((e) => e.status === "PENDING" || e.status === "REVISION_REQUESTED").length} <span className="text-xs font-normal text-slate-400">Antrean</span>
+                </div>
+                <span className="text-[10px] text-slate-400 truncate block mt-0.5">Perlu kurasi admin</span>
               </div>
-              <span className="text-[10px] text-slate-400 truncate block">Perlu tindakan kurasi</span>
             </Card>
 
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-              <div className="flex items-start justify-between gap-2 pb-1">
-                <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight min-w-0">Total Tiket & Peserta</span>
-                <div className="w-7 h-7 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 flex items-center justify-center shrink-0">
+            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between min-h-[92px] sm:min-h-[104px]">
+              <div className="flex items-center justify-between gap-1.5 pb-1">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">Tiket & Peserta</span>
+                <div className="w-6 h-6 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 flex items-center justify-center shrink-0">
                   <Ticket className="w-3.5 h-3.5" />
                 </div>
               </div>
-              <div className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
-                {allBookings.filter((b) => b.paymentStatus === "PAID").length} <span className="text-xs font-normal text-slate-400">Peserta</span>
+              <div>
+                <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white leading-tight">
+                  {allBookings.filter((b) => b.paymentStatus === "PAID").length} <span className="text-xs font-normal text-slate-400">Peserta</span>
+                </div>
+                <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788] truncate block mt-0.5">
+                  {formatCurrencyIDR(allBookings.filter((b) => b.paymentStatus === "PAID").reduce((sum, b) => sum + b.totalPrice, 0))}
+                </span>
               </div>
-              <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788] truncate block">
-                {formatCurrencyIDR(allBookings.filter((b) => b.paymentStatus === "PAID").reduce((sum, b) => sum + b.totalPrice, 0))}
-              </span>
             </Card>
           </div>
 

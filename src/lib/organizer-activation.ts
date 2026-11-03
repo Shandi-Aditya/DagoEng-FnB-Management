@@ -31,7 +31,7 @@ export interface OrganizerCredentialRecord {
   updatedAt: string;
 }
 
-import { getDataDirectory, getDataFilePath } from "@/lib/data-storage";
+import { getDataDirectory, getDataFilePath, syncStorageFromDb, persistStorageToDb } from "@/lib/data-storage";
 
 const getDataDir = () => getDataDirectory();
 const getInvitesFile = () => getDataFilePath("organizer_invites.json");
@@ -68,7 +68,7 @@ export function markDbOffline(): void {
   lastDbFailureTime = Date.now();
 }
 
-export async function withDbTimeout<T>(fn: () => Promise<T>, timeoutMs = 200): Promise<T> {
+export async function withDbTimeout<T>(fn: () => Promise<T>, timeoutMs = 5000): Promise<T> {
   if (!isDbAvailable()) {
     throw new Error("Database known to be offline");
   }
@@ -110,6 +110,9 @@ function loadInvitesFromDisk(): OrganizerActivationTokenRecord[] {
 
 // Environment guard for local development / test fallbacks
 export function isLocalDevFallbackAllowed(): boolean {
+  if (process.env.ALLOW_LOCAL_AUTH_FALLBACK === "true") {
+    return true;
+  }
   if (process.env.NODE_ENV === "production") {
     return false;
   }
@@ -184,6 +187,11 @@ export function saveCredentialsToDisk(credentials: OrganizerCredentialRecord[]):
       fs.unlinkSync(tmpFile);
     } catch {}
   }
+
+  // Distributed sync to database SystemSetting
+  try {
+    persistStorageToDb("organizer_credentials.json", JSON.stringify(credentials, null, 2)).catch(() => {});
+  } catch {}
 }
 
 /**
@@ -515,7 +523,7 @@ export async function verifyOrganizerCredentials(
   }
 
   if (dbError) {
-    // In production, database query failure MUST NOT fall back to local JSON
+    console.warn("[organizer-activation] Database check had error, falling back to local/unified credentials:", dbError?.message || dbError);
     if (!isLocalDevFallbackAllowed()) {
       return {
         success: false,
@@ -575,6 +583,7 @@ export async function verifyOrganizerCredentials(
     };
   }
 
+  // 2. Check local activated credentials (with sync/upsert to DB)
   const credentials = loadCredentialsFromDisk();
   const cred = credentials.find((c) => c.email === normalizedEmail);
 

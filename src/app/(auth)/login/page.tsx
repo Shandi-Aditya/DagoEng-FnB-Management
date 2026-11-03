@@ -360,9 +360,19 @@ function LoginContent() {
 
           <div className="p-6 space-y-5">
             {errorMessage && (
-              <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-start space-x-2 animate-in fade-in duration-200">
-                <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                <span className="leading-relaxed">{errorMessage}</span>
+              <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-start justify-between space-x-2 animate-in fade-in duration-200">
+                <div className="flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                  <span className="leading-relaxed">{errorMessage}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setErrorMessage(null)}
+                  className="text-rose-400 hover:text-rose-600 dark:hover:text-rose-200 p-0.5 cursor-pointer shrink-0"
+                  title="Tutup pesan"
+                >
+                  ✕
+                </button>
               </div>
             )}
 
@@ -530,106 +540,113 @@ function LoginContent() {
               </form>
             )}
 
-            {/* Quick Testing Demo Section (QA & Evaluator Testing Suite) */}
-            <div className="pt-4 border-t border-slate-200 dark:border-white/10 space-y-2.5">
-              <div className="flex items-center space-x-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                <Zap className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
-                <span>Akses Cepat Testing Demo (QA & Evaluasi Auto-Routing):</span>
+            {/* Quick Testing Demo Collapsible Section (QA & Evaluator Testing Suite) */}
+            <details className="group pt-3 border-t border-slate-200 dark:border-white/10">
+              <summary className="flex items-center justify-between cursor-pointer list-none py-1 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">
+                <div className="flex items-center space-x-1.5 text-[11px] font-bold uppercase tracking-wider text-[#3B7A57] dark:text-[#52B788]">
+                  <Zap className="w-3.5 h-3.5 shrink-0" />
+                  <span>Akses Cepat Testing Demo (Auto-Login)</span>
+                </div>
+                <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded-md group-open:rotate-180 transition-transform">
+                  ▼
+                </span>
+              </summary>
+              <div className="pt-2.5 space-y-2">
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
+                  Pilih persona untuk langsung menguji autentikasi dan auto-routing sesuai role sistem:
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("DAGO_OWNER")}
+                    className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                  >
+                    <div className="font-bold group-hover:text-white">🏢 Owner Dago Hub</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /dashboard</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("SUPER_ADMIN")}
+                    className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                  >
+                    <div className="font-bold group-hover:text-white">🛡️ Super Admin</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /dashboard</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("TENANT_OWNER_KS")}
+                    className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                  >
+                    <div className="font-bold group-hover:text-white">☕ Mitra: Kopi Senja</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /dashboard (Mitra)</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("COWORK_MANAGER")}
+                    className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                  >
+                    <div className="font-bold group-hover:text-white">💻 Manager Coworking</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /coworking</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("CASHIER_SGR")}
+                    className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                  >
+                    <div className="font-bold group-hover:text-white">💵 Kasir POS (Singaraja)</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /pos</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("KITCHEN_SGR")}
+                    className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                  >
+                    <div className="font-bold group-hover:text-white">👨‍🍳 Chef Dapur (KDS)</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /kitchen</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("WAITER_SGR")}
+                    className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                  >
+                    <div className="font-bold group-hover:text-white">🤵 Waiter Floor</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /waiter</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("CUSTOMER_DEMO")}
+                    className="p-2.5 text-left bg-[#3B7A57]/10 dark:bg-[#52B788]/15 hover:bg-[#3B7A57] hover:text-white border border-[#3B7A57]/30 dark:border-[#52B788]/30 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                  >
+                    <div className="font-bold group-hover:text-white">📱 Pelanggan / Member</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /customer</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("COMMUNITY_BARISTA")}
+                    className="p-2.5 text-left bg-emerald-50 dark:bg-emerald-950/30 hover:bg-[#3B7A57] hover:text-white border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                  >
+                    <div className="font-bold group-hover:text-white">🎪 Organizer Komunitas</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /events/portal</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("COMMUNITY_BANDUNGDEV")}
+                    className="p-2.5 text-left bg-emerald-50 dark:bg-emerald-950/30 hover:bg-[#3B7A57] hover:text-white border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                  >
+                    <div className="font-bold group-hover:text-white">👾 Organizer Dev/Gaming</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /events/portal</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("EVENT_STAFF")}
+                    className="p-2.5 text-left bg-emerald-50 dark:bg-emerald-950/30 hover:bg-[#3B7A57] hover:text-white border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
+                  >
+                    <div className="font-bold group-hover:text-white">🎟️ Petugas Check-in Event</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /events/checkin</div>
+                  </button>
+                </div>
               </div>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
-                Pilih persona untuk menguji autentikasi resmi dan auto-detection routing sesuai role akun:
-              </p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("DAGO_OWNER")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
-                >
-                  <div className="font-bold group-hover:text-white">🏢 Owner Dago Hub</div>
-                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /dashboard</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("SUPER_ADMIN")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
-                >
-                  <div className="font-bold group-hover:text-white">🛡️ Super Admin</div>
-                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /dashboard</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("TENANT_OWNER_KS")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
-                >
-                  <div className="font-bold group-hover:text-white">☕ Mitra: Kopi Senja</div>
-                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /dashboard (Mitra)</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("COWORK_MANAGER")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
-                >
-                  <div className="font-bold group-hover:text-white">💻 Manager Coworking</div>
-                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /coworking</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("CASHIER_SGR")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
-                >
-                  <div className="font-bold group-hover:text-white">💵 Kasir POS (Singaraja)</div>
-                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /pos</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("KITCHEN_SGR")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
-                >
-                  <div className="font-bold group-hover:text-white">👨‍🍳 Chef Dapur (KDS)</div>
-                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /kitchen</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("WAITER_SGR")}
-                  className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
-                >
-                  <div className="font-bold group-hover:text-white">🤵 Waiter Floor</div>
-                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /waiter</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("CUSTOMER_DEMO")}
-                  className="p-2.5 text-left bg-[#3B7A57]/10 dark:bg-[#52B788]/15 hover:bg-[#3B7A57] hover:text-white border border-[#3B7A57]/30 dark:border-[#52B788]/30 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
-                >
-                  <div className="font-bold group-hover:text-white">📱 Pelanggan / Member</div>
-                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /customer</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("COMMUNITY_BARISTA")}
-                  className="p-2.5 text-left bg-emerald-50 dark:bg-emerald-950/30 hover:bg-[#3B7A57] hover:text-white border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
-                >
-                  <div className="font-bold group-hover:text-white">🎪 Organizer Komunitas</div>
-                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /events/portal</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("COMMUNITY_BANDUNGDEV")}
-                  className="p-2.5 text-left bg-emerald-50 dark:bg-emerald-950/30 hover:bg-[#3B7A57] hover:text-white border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
-                >
-                  <div className="font-bold group-hover:text-white">👾 Organizer Dev/Gaming</div>
-                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /events/portal</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleQuickLogin("EVENT_STAFF")}
-                  className="p-2.5 text-left bg-emerald-50 dark:bg-emerald-950/30 hover:bg-[#3B7A57] hover:text-white border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl font-bold text-[11px] text-[#3B7A57] dark:text-[#52B788] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
-                >
-                  <div className="font-bold group-hover:text-white">🎟️ Petugas Check-in Event</div>
-                  <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /events/checkin</div>
-                </button>
-              </div>
-            </div>
+            </details>
 
           </div>
         </div>

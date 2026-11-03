@@ -51,7 +51,7 @@ export {
   type PayoutRecord,
 };
 
-import { getDataFilePath } from "@/lib/data-storage";
+import { getDataFilePath, syncStorageFromDb, persistStorageToDb } from "@/lib/data-storage";
 import { ensureOrganizerActive } from "@/lib/organizers";
 
 const getEventsFile = () => getDataFilePath("events.json");
@@ -704,6 +704,11 @@ function saveEventsToDisk(events: CommunityEvent[]): void {
       fs.writeFileSync(eventsFile, JSON.stringify(events, null, 2), "utf-8");
       try { fs.unlinkSync(tmpFile); } catch {}
     }
+
+    // Persist to distributed PostgreSQL SystemSetting for multi-instance serverless resilience
+    try {
+      persistStorageToDb("events.json", JSON.stringify(events, null, 2)).catch(() => {});
+    } catch {}
   } catch (err) {
     console.error("Failed to write events to disk", err);
   }
@@ -942,6 +947,7 @@ export async function getPublicEventById(id: string): Promise<PublicCommunityEve
  * Internal only: Includes full organizer contact and moderation fields.
  */
 export async function getAdminEvents(statusFilter?: EventStatus): Promise<CommunityEvent[]> {
+  await syncStorageFromDb("events.json").catch(() => {});
   const all = loadEventsFromDisk();
   const filtered = statusFilter ? all.filter((e) => e.status === statusFilter) : all;
   return [...filtered].sort(
@@ -1222,6 +1228,7 @@ export async function updateEventStatus(
     revisionNotes?: string | null;
   }
 ): Promise<CommunityEvent> {
+  await syncStorageFromDb("events.json").catch(() => {});
   const all = loadEventsFromDisk();
   const index = all.findIndex((e) => e.id === id);
   if (index === -1) {
@@ -1540,6 +1547,11 @@ export function saveBookingsToDisk(bookings: EventTicketOrder[]): void {
       fs.writeFileSync(bookingsFile, JSON.stringify(bookings, null, 2), "utf-8");
       try { fs.unlinkSync(tmpFile); } catch {}
     }
+
+    // Persist to distributed PostgreSQL SystemSetting for multi-instance serverless resilience
+    try {
+      persistStorageToDb("event_bookings.json", JSON.stringify(bookings, null, 2)).catch(() => {});
+    } catch {}
   } catch (err) {
     console.error("Failed to write event bookings to disk", err);
   }
@@ -2209,6 +2221,8 @@ export async function getOrganizerPortalData(
     throw new Error("Alamat email penyelenggara tidak valid.");
   }
 
+  await syncStorageFromDb("events.json").catch(() => {});
+  await syncStorageFromDb("event_bookings.json").catch(() => {});
   const allEvents = loadEventsFromDisk();
   const myEvents = (isAdmin && normalizedEmail === "all_admin")
     ? allEvents
@@ -2349,6 +2363,7 @@ export async function organizerResubmitEvent(
   isAdmin: boolean = false
 ): Promise<CommunityEvent> {
   const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
+  await syncStorageFromDb("events.json").catch(() => {});
   const all = loadEventsFromDisk();
   const index = all.findIndex((e) => e.id === eventId);
   if (index === -1) {

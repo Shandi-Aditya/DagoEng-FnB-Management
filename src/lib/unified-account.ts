@@ -25,7 +25,7 @@ export interface UnifiedUserAccount {
   updatedAt: string;
 }
 
-import { getDataDirectory, getDataFilePath } from "@/lib/data-storage";
+import { getDataDirectory, getDataFilePath, syncStorageFromDb, persistStorageToDb } from "@/lib/data-storage";
 
 const getDataDir = () => getDataDirectory();
 const getUsersFile = () => getDataFilePath("unified_users.json");
@@ -91,6 +91,11 @@ export function saveUnifiedUsersToDisk(users: UnifiedUserAccount[]): void {
         fs.unlinkSync(tmpFile);
       } catch {}
     }
+
+    // Distributed persist to PostgreSQL SystemSetting
+    try {
+      persistStorageToDb("unified_users.json", JSON.stringify(users, null, 2)).catch(() => {});
+    } catch {}
   } catch (err) {
     console.error("Failed to write unified_users to disk", err);
   }
@@ -167,6 +172,27 @@ export async function registerUnifiedUser(payload: RegisterUserPayload): Promise
 
   all.unshift(newUser);
   saveUnifiedUsersToDisk(all);
+
+  // Sync to PostgreSQL db.user if available
+  try {
+    const { db } = await import("./db");
+    await db.user.upsert({
+      where: { email: normalizedEmail },
+      create: {
+        email: normalizedEmail,
+        name: normalizedName,
+        phone: normalizedPhone,
+        passwordHash,
+        isActive: true,
+      },
+      update: {
+        name: normalizedName,
+        phone: normalizedPhone,
+        passwordHash,
+        isActive: true,
+      },
+    }).catch(() => {});
+  } catch {}
 
   // If already an organizer, make sure credentials record is also synchronized
   if (existingOrg) {

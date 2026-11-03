@@ -264,42 +264,46 @@ export function EventDateRangeFilter({
   return (
     <div className={`space-y-2.5 ${className}`}>
       {/* Preset Buttons & Label */}
-      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-        <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 flex items-center space-x-1.5 shrink-0 mr-1">
-          <Calendar className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
-          <span>{label}:</span>
-        </span>
-
-        {presets.map((p) => {
-          const isActive = activePreset === p.key;
-          return (
-            <button
-              key={p.key}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
+            <Calendar className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+            <span>{label}</span>
+          </span>
+          {isFilterActive && (
+            <Button
               type="button"
-              onClick={() => handleApplyPreset(p.key)}
-              className={`text-xs font-semibold px-2.5 py-1 rounded-lg transition-all cursor-pointer ${isActive
-                ? "bg-[#3B7A57] text-white shadow-xs"
-                : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-[#3B7A57]/50 hover:text-slate-900 dark:hover:text-white"
-                }`}
+              variant="ghost"
+              size="sm"
+              onClick={handleReset}
+              className="h-6 text-[11px] font-semibold px-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
+              title="Reset ke Semua Waktu"
             >
-              {p.label}
-            </button>
-          );
-        })}
+              <RotateCcw className="w-3 h-3 mr-1" />
+              Reset
+            </Button>
+          )}
+        </div>
 
-        {isFilterActive && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={handleReset}
-            className="h-7 text-xs font-semibold px-2 text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
-            title="Reset ke Semua Waktu"
-          >
-            <RotateCcw className="w-3 h-3 mr-1" />
-            Reset
-          </Button>
-        )}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none no-scrollbar -mx-1 px-1">
+          {presets.map((p) => {
+            const isActive = activePreset === p.key;
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => handleApplyPreset(p.key)}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-xl whitespace-nowrap shrink-0 transition-all cursor-pointer ${
+                  isActive
+                    ? "bg-[#3B7A57] text-white shadow-xs font-bold"
+                    : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-[#3B7A57]/50"
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Custom Inputs Panel (if custom preset chosen or user wants custom dates) */}

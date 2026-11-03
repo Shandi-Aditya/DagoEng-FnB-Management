@@ -89,3 +89,61 @@ export function getProofsDirectory(): string {
 export function getProofFilePath(filename: string): string {
   return path.join(getProofsDirectory(), filename);
 }
+
+/**
+ * Distributed Cloud Synchronization:
+ * On Vercel / serverless deployments where local disk (/tmp) is container-ephemeral,
+ * persists and synchronizes critical state across instances using PostgreSQL SystemSetting.
+ */
+export async function syncStorageFromDb(filename: string): Promise<boolean> {
+  if (process.env.NODE_ENV === "test") return false;
+  if (!process.env.DATABASE_URL) return false;
+
+  try {
+    const { db } = await import("./db");
+    const key = `STORAGE_${filename}`;
+    const setting = await Promise.race([
+      db.systemSetting.findUnique({ where: { key } }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500)),
+    ]);
+
+    if (setting && setting.value && setting.value.trim().length > 2) {
+      const filePath = getDataFilePath(filename);
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(filePath, setting.value, "utf-8");
+      return true;
+    }
+  } catch (err) {
+    // Non-fatal: continue using local disk replica
+    console.warn(`[data-storage] syncStorageFromDb skipped for ${filename}:`, err);
+  }
+  return false;
+}
+
+export async function persistStorageToDb(filename: string, content: string): Promise<void> {
+  if (process.env.NODE_ENV === "test") return;
+  if (!process.env.DATABASE_URL) return;
+
+  try {
+    const { db } = await import("./db");
+    const key = `STORAGE_${filename}`;
+    await Promise.race([
+      db.systemSetting.upsert({
+        where: { key },
+        create: {
+          key,
+          value: content,
+          description: `Distributed persistent cloud store for ${filename}`,
+        },
+        update: {
+          value: content,
+        },
+      }),
+      new Promise<void>((resolve) => setTimeout(() => resolve(), 3500)),
+    ]);
+  } catch (err) {
+    console.warn(`[data-storage] persistStorageToDb skipped for ${filename}:`, err);
+  }
+}
+

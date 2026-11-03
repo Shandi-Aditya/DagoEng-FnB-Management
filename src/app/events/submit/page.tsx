@@ -432,27 +432,29 @@ export default function SubmitEventPage() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B1120] text-[#1E293B] dark:text-[#E2E8F0] transition-colors duration-200 flex flex-col justify-between">
       {/* Top Navbar */}
-      <header className="sticky top-0 z-40 bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
+        <div className="max-w-5xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
             <Link
               href="/events"
-              className="inline-flex items-center text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors group"
+              className="inline-flex items-center justify-center w-8 h-8 rounded-lg sm:w-auto sm:h-auto sm:rounded-none bg-slate-100 dark:bg-slate-800 sm:bg-transparent text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors shrink-0 group"
+              title="Kembali ke Daftar Event"
             >
-              <ArrowLeft className="w-4 h-4 mr-1.5 transition-transform group-hover:-translate-x-1" />
-              <span>Kembali ke Daftar Event</span>
+              <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
+              <span className="hidden sm:inline ml-1.5">Kembali ke Daftar Event</span>
             </Link>
-            <span className="text-slate-300 dark:text-slate-700">|</span>
-            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+            <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
+            <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
               Buat Event Komunitas
             </span>
           </div>
 
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
             <ThemeToggle variant="pill" />
             <Link href="/events/portal">
-              <Button variant="ghost" size="sm" className="text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-[#3B7A57]">
-                Portal Penyelenggara
+              <Button variant="ghost" size="sm" className="h-8 sm:h-9 px-2 sm:px-3 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-[#3B7A57] dark:hover:text-[#52B788] rounded-xl border border-slate-200/80 dark:border-slate-800 sm:border-transparent">
+                <span className="hidden sm:inline">Portal Penyelenggara</span>
+                <span className="sm:hidden font-bold">Portal</span>
               </Button>
             </Link>
           </div>
@@ -1115,7 +1117,7 @@ export default function SubmitEventPage() {
 
                   {/* Section: Usulan Bagi Hasil (Revenue Split Proposal) */}
                   <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
                         <span className="text-xs font-bold text-slate-900 dark:text-white block">
                           Usulan Pembagian Hasil (Revenue Split)
@@ -1126,7 +1128,7 @@ export default function SubmitEventPage() {
                       </div>
                       <Badge
                         variant="outline"
-                        className={`text-[10px] font-bold ${
+                        className={`text-[10px] font-bold self-start sm:self-auto ${
                           Number(formData.proposedOrganizerPercent ?? 80) + Number(formData.proposedPlatformPercent ?? 20) === 100
                             ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
                             : "border-rose-500 text-rose-600 dark:text-rose-400"
@@ -1451,27 +1453,27 @@ export default function SubmitEventPage() {
               )}
 
               {/* Wizard Navigation Action Buttons */}
-              <div className="flex items-center justify-between pt-2">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 pt-3">
                 {currentStep > 1 ? (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handlePrevStep}
                     disabled={isSubmitting}
-                    className="text-xs font-bold rounded-xl border-slate-200 dark:border-slate-700 px-4 py-2 cursor-pointer"
+                    className="w-full sm:w-auto h-11 sm:h-10 text-xs font-bold rounded-xl border-slate-200 dark:border-slate-700 px-4 py-2 cursor-pointer flex items-center justify-center"
                   >
                     <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
                     <span>Langkah Sebelumnya</span>
                   </Button>
                 ) : (
-                  <div />
+                  <div className="hidden sm:block" />
                 )}
 
                 {currentStep < 4 ? (
                   <Button
                     type="button"
                     onClick={handleNextStep}
-                    className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl px-5 py-2.5 shadow-xs transition-all cursor-pointer"
+                    className="w-full sm:w-auto h-11 sm:h-10 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl px-5 py-2.5 shadow-xs transition-all cursor-pointer flex items-center justify-center"
                   >
                     <span>Lanjut ke Langkah {currentStep + 1}</span>
                     <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
@@ -1480,7 +1482,7 @@ export default function SubmitEventPage() {
                   <Button
                     type="submit"
                     disabled={isSubmitting}
-                    className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl px-6 py-2.5 shadow-md shadow-[#3B7A57]/25 transition-all cursor-pointer"
+                    className="w-full sm:w-auto h-11 sm:h-10 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl px-6 py-2.5 shadow-md shadow-[#3B7A57]/25 transition-all cursor-pointer flex items-center justify-center"
                   >
                     {isSubmitting ? (
                       <span>Mengirim Pengajuan...</span>

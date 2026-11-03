@@ -652,8 +652,9 @@ export default function CommunityOrganizerPortalPage() {
         return;
       }
 
-      setSuccessMessage("Event berhasil diperbaiki dan diajukan ulang ke antrean review kurator Dago Hub!");
+      setSuccessMessage("Event berhasil diperbaiki dan diajukan ulang! Status kembali ke [Menunggu Review].");
       setRevisionEvent(null);
+      setEventFilterStatus("ALL");
       await loadPortalData(activeEmail);
     } catch (err: any) {
       setErrorMessage(err.message || "Gagal mengirim revisi.");
