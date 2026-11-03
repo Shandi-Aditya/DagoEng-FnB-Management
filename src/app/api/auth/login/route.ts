@@ -11,6 +11,7 @@ import {
   verifyUnifiedUserPassword,
   syncOrganizerCredentials,
 } from "@/lib/unified-account";
+import { syncStorageFromDb } from "@/lib/data-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,13 @@ export async function POST(req: NextRequest) {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+
+    // Ensure distributed cloud tables are synchronized with persistent PostgreSQL
+    await Promise.allSettled([
+      syncStorageFromDb("organizers.json"),
+      syncStorageFromDb("unified_users.json"),
+      syncStorageFromDb("organizer_credentials.json"),
+    ]);
 
     // 1. Check verified demo accounts
     if (normalizedEmail in DEMO_CREDENTIALS) {

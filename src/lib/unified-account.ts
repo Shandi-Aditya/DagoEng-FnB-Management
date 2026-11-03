@@ -236,7 +236,27 @@ export async function verifyUnifiedUserPassword(
   email: string,
   plainPassword: string
 ): Promise<{ success: boolean; user: UnifiedUserAccount | null; error?: string }> {
-  const user = findUnifiedUserByEmail(email);
+  let user = findUnifiedUserByEmail(email);
+  if (!user && process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
+    try {
+      const { db } = await import("./db");
+      const dbUser = await db.user.findUnique({
+        where: { email: email.trim().toLowerCase() },
+      });
+      if (dbUser && dbUser.passwordHash) {
+        user = {
+          id: dbUser.id,
+          name: dbUser.name || "User",
+          email: dbUser.email,
+          phone: dbUser.phone || "",
+          passwordHash: dbUser.passwordHash,
+          role: "CUSTOMER",
+          createdAt: dbUser.createdAt.toISOString(),
+          updatedAt: dbUser.updatedAt.toISOString(),
+        };
+      }
+    } catch {}
+  }
   if (!user) {
     return { success: false, user: null, error: "Akun tidak ditemukan." };
   }

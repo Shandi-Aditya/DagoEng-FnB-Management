@@ -1116,6 +1116,7 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
     throw new Error(`Validasi gagal: ${validation.errors.join(", ")}`);
   }
 
+  await syncStorageFromDb("events.json").catch(() => {});
   const all = loadEventsFromDisk();
 
   // Prevent rapid duplicate submission (same email + same title within 5 minutes)
@@ -1622,6 +1623,7 @@ export function expirePendingBookings(
  * Get all event bookings with optional eventId filter.
  */
 export async function getEventBookings(eventId?: string): Promise<EventTicketOrder[]> {
+  await syncStorageFromDb("event_bookings.json").catch(() => {});
   expirePendingBookings();
   const all = loadBookingsFromDisk();
   const filtered = eventId ? all.filter((b) => b.eventId === eventId) : all;
@@ -1634,6 +1636,7 @@ export async function getEventBookings(eventId?: string): Promise<EventTicketOrd
  * Get single booking by ID.
  */
 export async function getBookingById(id: string): Promise<EventTicketOrder | null> {
+  await syncStorageFromDb("event_bookings.json").catch(() => {});
   const all = loadBookingsFromDisk();
   return all.find((b) => b.id === id) || null;
 }
@@ -1713,6 +1716,8 @@ export async function createEventBooking(
   }
 
   return withBookingLock(async () => {
+    await syncStorageFromDb("events.json").catch(() => {});
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
     const allEvents = loadEventsFromDisk();
     const event = allEvents.find((e) => e.id === payload.eventId);
     if (!event) {

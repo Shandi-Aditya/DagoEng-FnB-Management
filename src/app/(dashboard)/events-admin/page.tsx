@@ -1303,8 +1303,130 @@ export default function AdminEventsPage() {
                 Tidak ada pengajuan event pada status ini.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
+              <div className="w-full">
+                {/* Mobile View: Clean, Modern Card List (md:hidden) */}
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 md:hidden">
+                  {paginatedEvents.map((evt) => {
+                    const evtBookings = allBookings.filter((b) => b.eventId === evt.id && b.paymentStatus === "PAID");
+                    const totalTickets = evtBookings.reduce((sum, b) => sum + b.ticketCount, 0);
+
+                    return (
+                      <div
+                        key={evt.id}
+                        onClick={() => {
+                          setSelectedEvent(evt);
+                          setIsDetailModalOpen(true);
+                        }}
+                        className="p-4 space-y-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={evt.posterUrl}
+                              alt=""
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as any).src = "https://images.unsplash.com/photo-1511920170033";
+                              }}
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-slate-300 dark:border-slate-700">
+                                {evt.category}
+                              </Badge>
+                              {renderStatusBadge(evt.status)}
+                            </div>
+                            <h4 className="font-bold text-slate-900 dark:text-white text-sm line-clamp-2 leading-tight">
+                              {evt.title}
+                            </h4>
+                            <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                              ID: {evt.id}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <Calendar className="w-3.5 h-3.5 text-[#3B7A57] shrink-0" />
+                            <span className="truncate">{new Date(evt.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 truncate">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="truncate">{evt.location}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 truncate">
+                            <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            <span>{evtBookings.length} Peserta ({totalTickets} Tiket)</span>
+                          </div>
+                          <div className="font-bold text-slate-900 dark:text-white truncate">
+                            {evt.isPaid ? formatCurrencyIDR(evt.price) : "Gratis"}
+                          </div>
+                        </div>
+
+                        {/* Action buttons on mobile card */}
+                        <div className="flex items-center gap-2 pt-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedEventForAttendees(evt);
+                              setAttendeeSearchQuery("");
+                              setIsAttendeesModalOpen(true);
+                            }}
+                            className="flex-1 h-8 text-[11px] font-bold text-[#3B7A57] dark:text-[#52B788] border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg"
+                          >
+                            <Ticket className="w-3.5 h-3.5 mr-1" />
+                            Peserta ({totalTickets})
+                          </Button>
+
+                          {evt.status === "PENDING" && (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={() => handleUpdateStatus(evt.id, "APPROVED")}
+                                disabled={isProcessingAction}
+                                className="flex-1 h-8 text-[11px] font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-lg"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                Setujui
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedEvent(evt);
+                                  setModalNotes(evt.revisionNotes || "");
+                                  setIsRevisionModalOpen(true);
+                                }}
+                                className="h-8 px-2.5 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-800 rounded-lg text-[11px]"
+                              >
+                                Revisi
+                              </Button>
+                            </>
+                          )}
+
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setSelectedEvent(evt);
+                              setIsDetailModalOpen(true);
+                            }}
+                            className="h-8 px-2.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-lg text-[11px]"
+                          >
+                            Detail →
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop View: Full Table (hidden on mobile) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-50/80 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                       <th className="py-3 px-4">Event & Poster</th>
@@ -1559,7 +1681,8 @@ export default function AdminEventsPage() {
                   </tbody>
                 </table>
               </div>
-            )}
+            </div>
+          )}
             {filteredEvents.length > 0 && (
               <TablePagination
                 currentPage={eventPage}
