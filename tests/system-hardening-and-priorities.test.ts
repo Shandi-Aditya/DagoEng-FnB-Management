@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, beforeAll, afterAll, vi } from "vitest";
 import fs from "fs";
-import { getDataFilePath } from "@/lib/data-storage";
+import { getDataFilePath } from "../src/lib/data-storage";
 import {
   expirePendingBookings,
   getEventTicketAvailability,
@@ -13,20 +13,20 @@ import {
   organizerCheckInAttendee,
   getBookingPaymentExpiryMs,
   updateBookingPaymentStatus,
-} from "@/lib/events";
+} from "../src/lib/events";
 import {
   getWitaStartOfDay,
   getWitaEndOfDay,
   isEventInWitaPeriod,
   isTimestampInWitaPeriod,
   DateRange,
-} from "@/components/events/EventDateRangeFilter";
-import { ALL_NAV_ITEMS } from "@/lib/rbac";
-import { resolveVenueCapacity } from "@/lib/event-capacity";
-import { POST as handleDokuWebhook } from "@/app/api/webhooks/doku/route";
-import { generateDokuSignature } from "@/lib/doku";
+} from "../src/components/events/EventDateRangeFilter";
+import { ALL_NAV_ITEMS } from "../src/lib/rbac";
+import { resolveVenueCapacity } from "../src/lib/event-capacity";
+import { POST as handleDokuWebhook } from "../src/app/api/webhooks/doku/route";
+import { generateDokuSignature } from "../src/lib/doku";
 import { NextRequest } from "next/server";
-import { EventTicketOrder } from "@/types/event";
+import { EventTicketOrder } from "../src/types/event";
 
 describe("FINAL TASK — SYSTEM HARDENING, OPERATIONAL UX & MODULE PRIORITY", () => {
   let testEventId = "";
@@ -199,7 +199,7 @@ describe("FINAL TASK — SYSTEM HARDENING, OPERATIONAL UX & MODULE PRIORITY", ()
 
     it("6. Booking terminal tidak diproses ulang secara keliru", async () => {
       const allBookings = await loadBookingsFromDisk();
-      const cancelledBooking: EventTicketOrder = {
+      const cancelledBooking = {
         id: "term-cancelled-001",
         ticketCode: "TCK-TERM-CANCELLED",
         eventId: testEventId,
@@ -212,7 +212,7 @@ describe("FINAL TASK — SYSTEM HARDENING, OPERATIONAL UX & MODULE PRIORITY", ()
         checkInStatus: "REGISTERED",
         checkedInQty: 0,
         createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-      };
+      } as unknown as EventTicketOrder;
       allBookings.push(cancelledBooking);
       await saveBookingsToDisk(allBookings);
 
@@ -288,7 +288,7 @@ describe("FINAL TASK — SYSTEM HARDENING, OPERATIONAL UX & MODULE PRIORITY", ()
       });
 
       // Simulate FAILED callback
-      const updated = await updateBookingPaymentStatus(booking.id, "FAILED", {
+      const updated = await updateBookingPaymentStatus(booking.id, "FAILED" as any, {
         reason: "Insufficient funds / simulated failure",
       });
 
@@ -594,10 +594,10 @@ describe("FINAL TASK — SYSTEM HARDENING, OPERATIONAL UX & MODULE PRIORITY", ()
         endDate: new Date(Date.now() + 14 * 86400000 + 7200000).toISOString(),
         location: "Kopi Senja Ground Floor",
         maxCapacity: 10,
-        ticketPrice: 0,
-        isFree: true,
+        price: 0,
+        isPaid: false,
         requiresApproval: false,
-      });
+      } as any);
       await updateEventStatus(otherEvent.id, "APPROVED");
 
       const bookingOnOtherEvent = await createEventBooking({

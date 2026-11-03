@@ -55,3 +55,4 @@ describe("Vercel Serverless Storage Compatibility", () => {
     expect(isSafePublicUrl("ftp://example.com/image.jpg").safe).toBe(false);
   });
 });
+
