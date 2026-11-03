@@ -1,5 +1,20 @@
 [
   {
+    "id": "org-comm-mvzf52bb-y531",
+    "name": "Sanz Comunity",
+    "category": "COMMUNITY",
+    "contactPerson": "Sanz Comunity",
+    "phone": "085737654572",
+    "email": "shandi@student.undiksha.ac.id",
+    "status": "ACTIVE",
+    "serviceModule": "CO_WORKING",
+    "scopeLevel": "TENANT",
+    "roleName": "Penyelenggara Event",
+    "notes": "Akun penyelenggara otomatis dari pengajuan event",
+    "createdAt": "2026-11-02T15:33:29.207Z",
+    "updatedAt": "2026-11-02T15:33:29.207Z"
+  },
+  {
     "id": "org-comm-mvxgkbjh-3k22",
     "name": "sans cek",
     "category": "CREATIVE",

@@ -1,5 +1,16 @@
 [
   {
+    "id": "user-cust-mvzf52b4-lwgi",
+    "email": "shandi@student.undiksha.ac.id",
+    "name": "Sanz Comunity",
+    "phone": "085737654572",
+    "passwordHash": "$2a$10$.rVnEY19gYb1g/CPOWPOC.YGXCHK1fzBYT/o4A7wYa2b4Dp7j1/ci",
+    "role": "CUSTOMER",
+    "organizerProfileId": null,
+    "createdAt": "2026-11-02T15:33:29.195Z",
+    "updatedAt": "2026-11-02T15:33:29.195Z"
+  },
+  {
     "id": "user-cust-mvxgkbjd-j00p",
     "email": "sansaditya2105@gmail.com",
     "name": "sans cek",

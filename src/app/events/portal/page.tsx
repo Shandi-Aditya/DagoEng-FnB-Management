@@ -56,6 +56,7 @@ import {
   Building2,
   Phone,
   Save,
+  Menu,
 } from "lucide-react";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
@@ -119,6 +120,7 @@ export default function CommunityOrganizerPortalPage() {
 
   // Sidebar Expand / Collapse State (Consistent with FnB Dashboard)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -952,15 +954,56 @@ export default function CommunityOrganizerPortalPage() {
       .join("");
   }, [portalData?.summary.organizerName, user?.name]);
 
+  const organizerNavItems: {
+    id: OrganizerNavView;
+    label: string;
+    icon: React.ReactNode;
+    title: string;
+    badge?: number;
+  }[] = [
+    {
+      id: "HOME",
+      label: "Ringkasan",
+      icon: <Home className="w-4 h-4" />,
+      title: "Overview & Metrik Ringkasan",
+    },
+    {
+      id: "EVENTS",
+      label: "Kelola Event",
+      icon: <CalendarIcon className="w-4 h-4" />,
+      title: "Daftar Event & Penjadwalan",
+      badge: portalData?.events.length,
+    },
+    {
+      id: "ATTENDEES",
+      label: "Pesanan & Tiket",
+      icon: <Users className="w-4 h-4" />,
+      title: "Pesanan Tiket & Daftar Peserta",
+      badge: portalData?.bookings.length,
+    },
+    {
+      id: "FINANCE",
+      label: "Keuangan & Payout",
+      icon: <DollarSign className="w-4 h-4" />,
+      title: "Laporan Pendapatan & Pencairan Saldo",
+    },
+    {
+      id: "SETTINGS",
+      label: "Pengaturan Mitra",
+      icon: <Settings className="w-4 h-4" />,
+      title: "Pengaturan Profil & Rekening Bank",
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0A0F1D] text-[#1E293B] dark:text-[#E2E8F0] flex antialiased">
       {/* =========================================================================
-          1. LEFT SIDEBAR NAVIGATION (100% Consistent with FnB Dashboard Sidebar)
+          1. DESKTOP LEFT SIDEBAR (Visible only on large screens >= 1024px)
          ========================================================================= */}
       <aside
-        className={`${
+        className={`hidden lg:flex ${
           isSidebarCollapsed ? "w-20" : "w-64"
-        } bg-white dark:bg-[#0F172A] border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between select-none transition-all duration-300 ease-in-out flex-shrink-0 min-h-screen sticky top-0 h-screen z-40`}
+        } bg-white dark:bg-[#0F172A] border-r border-slate-200 dark:border-slate-800 flex-col justify-between select-none transition-all duration-300 ease-in-out flex-shrink-0 min-h-screen sticky top-0 h-screen z-40`}
       >
         <div>
           {/* Brand Header & Minimize Toggle (Identical to FnB Sidebar) */}
@@ -1055,40 +1098,7 @@ export default function CommunityOrganizerPortalPage() {
 
             {/* Navigation Buttons */}
             <nav className={`space-y-1.5 ${isSidebarCollapsed ? "flex flex-col items-center" : ""}`}>
-              {[
-                {
-                  id: "HOME",
-                  label: "Ringkasan",
-                  icon: <Home className="w-4 h-4" />,
-                  title: "Overview & Metrik Ringkasan",
-                },
-                {
-                  id: "EVENTS",
-                  label: "Kelola Event",
-                  icon: <CalendarIcon className="w-4 h-4" />,
-                  title: "Daftar Event & Penjadwalan",
-                  badge: portalData?.events.length,
-                },
-                {
-                  id: "ATTENDEES",
-                  label: "Pesanan & Tiket",
-                  icon: <Users className="w-4 h-4" />,
-                  title: "Pesanan Tiket & Daftar Peserta",
-                  badge: portalData?.bookings.length,
-                },
-                {
-                  id: "FINANCE",
-                  label: "Keuangan & Payout",
-                  icon: <DollarSign className="w-4 h-4" />,
-                  title: "Laporan Pendapatan & Pencairan Saldo",
-                },
-                {
-                  id: "SETTINGS",
-                  label: "Pengaturan Mitra",
-                  icon: <Settings className="w-4 h-4" />,
-                  title: "Pengaturan Profil & Rekening Bank",
-                },
-              ].map((item) => {
+              {organizerNavItems.map((item) => {
                 const isActive = activeNav === item.id;
 
                 if (isSidebarCollapsed) {
@@ -1096,7 +1106,7 @@ export default function CommunityOrganizerPortalPage() {
                     <div key={item.id} className="relative group w-full flex justify-center">
                       <button
                         type="button"
-                        onClick={() => setActiveNav(item.id as OrganizerNavView)}
+                        onClick={() => setActiveNav(item.id)}
                         className={`w-11 h-11 flex items-center justify-center rounded-xl transition-all cursor-pointer ${
                           isActive
                             ? "bg-[#3B7A57] text-white shadow-md shadow-[#3B7A57]/20"
@@ -1277,50 +1287,221 @@ export default function CommunityOrganizerPortalPage() {
           </div>
         </aside>
 
+        {/* =========================================================================
+            2. MOBILE & TABLET SLIDE-OVER DRAWER (< 1024px)
+           ========================================================================= */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden flex animate-in fade-in duration-150">
+            <div
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white dark:bg-[#0F172A] border-r border-slate-200 dark:border-slate-800 z-10 shadow-2xl animate-in slide-in-from-left duration-200 overflow-y-auto">
+              {/* Header */}
+              <div className="h-16 px-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <Link
+                  href="/events/portal"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="flex items-center space-x-3 overflow-hidden min-w-0"
+                >
+                  <div className="w-8 h-10 relative flex-shrink-0">
+                    <NextImage
+                      src="/logo-dago.png"
+                      alt="Dago Creative Hub"
+                      width={32}
+                      height={40}
+                      priority
+                      className="object-contain"
+                    />
+                  </div>
+                  <div className="truncate">
+                    <h1 className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100 leading-tight truncate">
+                      dago<span className="text-[#3B7A57] dark:text-[#52B788]">eng</span>
+                    </h1>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">
+                      ORGANIZER
+                    </p>
+                  </div>
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-2 min-h-[44px] min-w-[44px] rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center justify-center touch-manipulation cursor-pointer"
+                  aria-label="Tutup Menu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Navigation Links */}
+              <div className="p-3 space-y-4 flex-1">
+                <div className="px-3 pt-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Menu Penyelenggara
+                </div>
+
+                <nav className="space-y-1.5">
+                  {organizerNavItems.map((item) => {
+                    const isActive = activeNav === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveNav(item.id);
+                          setIsMobileMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                          isActive
+                            ? "bg-[#3B7A57] text-white shadow-sm"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-100"
+                        }`}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <span className={isActive ? "text-white" : "text-slate-400"}>
+                            {item.icon}
+                          </span>
+                          <span>{item.label}</span>
+                        </div>
+                        {item.badge !== undefined && (
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-extrabold ${
+                              isActive
+                                ? "bg-white/20 text-white"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </nav>
+
+                <div className="border-t border-slate-100 dark:border-slate-800 my-3" />
+
+                <div className="space-y-1">
+                  <div className="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                    Pintasan Ekosistem
+                  </div>
+                  <Link
+                    href="/customer"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 transition-all"
+                  >
+                    <Compass className="w-4 h-4 text-emerald-600" />
+                    <span>Customer Portal</span>
+                  </Link>
+                  <Link
+                    href="/events"
+                    target="_blank"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 transition-all"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <ExternalLink className="w-4 h-4 text-slate-400" />
+                      <span>Katalog Publik</span>
+                    </div>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-slate-400" />
+                  </Link>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
+                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 flex items-center space-x-2.5">
+                  <div className="w-8 h-8 rounded-full bg-[#3B7A57] text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs">
+                    {userInitial || "OR"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {portalData?.summary.organizerName || "Penyelenggara"}
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate">
+                      {activeEmail || organizerEmail}
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (typeof window !== "undefined") {
+                      localStorage.removeItem("dago_organizer_email");
+                    }
+                    await logout();
+                    router.push("/login");
+                  }}
+                  className="w-full flex items-center justify-center space-x-2 px-3 py-2.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-rose-200 dark:hover:border-rose-800"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Keluar dari Akun</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Right Workspace Main Content Area (Header + Main) */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto min-h-screen">
+        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto min-h-screen w-full">
           {/* Top Sticky Header for Workspace Area */}
-          <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#0F172A]/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-800 h-16 flex items-center justify-between px-4 sm:px-6 shadow-xs">
-            {/* Left: Active Section breadcrumb / title */}
-            <div className="flex items-center space-x-2">
-              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500">Portal Komunitas</span>
-              <span className="text-slate-300 dark:text-slate-700">/</span>
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                {activeNav === "HOME"
-                  ? "Ringkasan"
-                  : activeNav === "EVENTS"
-                  ? "Kelola Event"
-                  : activeNav === "ATTENDEES"
-                  ? "Pesanan & Tiket"
-                  : activeNav === "FINANCE"
-                  ? "Keuangan & Payout"
-                  : "Pengaturan Mitra"}
-              </span>
+          <header className="sticky top-0 z-30 bg-white/95 dark:bg-[#0F172A]/95 backdrop-blur-xs border-b border-slate-200 dark:border-slate-800 h-16 flex items-center justify-between px-3 sm:px-6 shadow-xs gap-2">
+            {/* Left: Mobile Drawer Trigger & Active Title */}
+            <div className="flex items-center space-x-2 min-w-0">
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="lg:hidden p-2 -ml-1 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors shrink-0 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                title="Buka Menu Navigasi"
+                aria-label="Buka Menu"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="flex items-center space-x-2 min-w-0">
+                <span className="hidden sm:inline text-xs font-semibold text-slate-400 dark:text-slate-500 shrink-0">
+                  Portal Komunitas /
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 truncate">
+                  {activeNav === "HOME"
+                    ? "Ringkasan"
+                    : activeNav === "EVENTS"
+                    ? "Kelola Event"
+                    : activeNav === "ATTENDEES"
+                    ? "Pesanan & Tiket"
+                    : activeNav === "FINANCE"
+                    ? "Keuangan & Payout"
+                    : "Pengaturan Mitra"}
+                </span>
+              </div>
             </div>
 
             {/* Right Action & User Profile Area */}
-            <div className="flex items-center space-x-2 sm:space-x-4">
+            <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
               <ThemeToggle variant="pill" />
 
               {/* Quick Create Event CTA Button */}
               <Link href="/events/submit">
                 <Button
                   size="sm"
-                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-9 px-4 rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-8 sm:h-9 px-2.5 sm:px-4 rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>Create Event</span>
+                  <Plus className="w-4 h-4 shrink-0" />
+                  <span className="hidden sm:inline">Buat Event</span>
                 </Button>
               </Link>
 
               {/* User Profile Pill Avatar */}
-              <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-                <div
-                  className="w-8 h-8 rounded-full bg-[#1E293B] dark:bg-slate-800 text-white flex items-center justify-center text-xs font-bold border border-slate-300 dark:border-slate-700 shadow-xs"
+              <div className="flex items-center space-x-2 pl-1.5 sm:pl-2 border-l border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(true)}
+                  className="w-8 h-8 rounded-full bg-[#1E293B] dark:bg-slate-800 text-white flex items-center justify-center text-xs font-bold border border-slate-300 dark:border-slate-700 shadow-xs cursor-pointer"
                   title={activeEmail || organizerEmail}
+                  aria-label="Buka Menu Pengguna"
                 >
                   {userInitial || "OR"}
-                </div>
+                </button>
                 <div className="hidden md:block text-left">
                   <div className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[140px]">
                     {portalData?.summary.organizerName || "Penyelenggara"}
@@ -1334,7 +1515,7 @@ export default function CommunityOrganizerPortalPage() {
           </header>
 
           {/* Right Workspace Main Content Area */}
-          <main className="flex-1 p-4 sm:p-8 max-w-7xl mx-auto w-full space-y-6">
+          <main className="flex-1 p-3.5 sm:p-6 lg:p-8 pb-24 lg:pb-8 max-w-7xl mx-auto w-full space-y-5 sm:space-y-6">
           {/* Notifications */}
           {errorMessage && (
             <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center justify-between animate-in fade-in">
@@ -1715,7 +1896,7 @@ export default function CommunityOrganizerPortalPage() {
                   })}
                 </div>
 
-                <div className="flex items-center justify-between sm:justify-end gap-2.5">
+                <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap sm:flex-nowrap">
                   <TablePageSizeSelector
                     pageSize={eventPageSize}
                     onPageSizeChange={(sz) => {
@@ -1725,7 +1906,7 @@ export default function CommunityOrganizerPortalPage() {
                     label="records"
                   />
 
-                  <div className="relative min-w-[180px] sm:min-w-[220px]">
+                  <div className="relative flex-1 sm:flex-initial min-w-[140px] sm:min-w-[220px]">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
                     <input
                       type="text"
@@ -3675,6 +3856,93 @@ export default function CommunityOrganizerPortalPage() {
           )}
         </main>
       </div>
+
+      {/* =========================================================================
+          3. MOBILE BOTTOM NAVIGATION (Thumb-friendly for smartphone users)
+         ========================================================================= */}
+      <nav
+        aria-label="Navigasi Bawah Mobile"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0F172A]/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 flex items-center justify-around px-1 py-1.5 shadow-lg"
+      >
+        <button
+          type="button"
+          onClick={() => setActiveNav("HOME")}
+          className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+            activeNav === "HOME"
+              ? "text-[#3B7A57] dark:text-[#52B788] font-bold"
+              : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+          }`}
+        >
+          <Home className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] leading-tight">Ringkasan</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveNav("EVENTS")}
+          className={`relative flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+            activeNav === "EVENTS"
+              ? "text-[#3B7A57] dark:text-[#52B788] font-bold"
+              : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+          }`}
+        >
+          <div className="relative">
+            <CalendarIcon className="w-5 h-5 mb-0.5" />
+            {portalData?.events.length ? (
+              <span className="absolute -top-1 -right-2.5 bg-[#3B7A57] text-white text-[9px] font-bold px-1 rounded-full leading-tight">
+                {portalData.events.length}
+              </span>
+            ) : null}
+          </div>
+          <span className="text-[10px] leading-tight">Event</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveNav("ATTENDEES")}
+          className={`relative flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+            activeNav === "ATTENDEES"
+              ? "text-[#3B7A57] dark:text-[#52B788] font-bold"
+              : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+          }`}
+        >
+          <div className="relative">
+            <Users className="w-5 h-5 mb-0.5" />
+            {portalData?.bookings.length ? (
+              <span className="absolute -top-1 -right-2.5 bg-[#3B7A57] text-white text-[9px] font-bold px-1 rounded-full leading-tight">
+                {portalData.bookings.length}
+              </span>
+            ) : null}
+          </div>
+          <span className="text-[10px] leading-tight">Pesanan</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveNav("FINANCE")}
+          className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+            activeNav === "FINANCE"
+              ? "text-[#3B7A57] dark:text-[#52B788] font-bold"
+              : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+          }`}
+        >
+          <DollarSign className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] leading-tight">Keuangan</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setIsMobileMenuOpen(true)}
+          className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
+            activeNav === "SETTINGS" || isMobileMenuOpen
+              ? "text-[#3B7A57] dark:text-[#52B788] font-bold"
+              : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+          }`}
+        >
+          <Menu className="w-5 h-5 mb-0.5" />
+          <span className="text-[10px] leading-tight">Menu</span>
+        </button>
+      </nav>
 
       {/* =========================================================================
           EVENT DETAIL MODAL (ORGANIZER VIEW)

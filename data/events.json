@@ -1,5 +1,61 @@
 [
   {
+    "id": "evt-1793633608893-1exsz",
+    "title": "Pengajian Akbar",
+    "category": "COMMUNITY",
+    "description": "Bergabunglah dalam Pengajian Akbar yang akan menghadirkan penceramah inspiratif dan ustadz/ustadzah ternama. Acara ini dirancang untuk memperdalam pemahaman agama, memperkuat ukhuwah, dan menumbuhkan semangat keimanan bagi seluruh peserta. Selain sesi ceramah, akan ada doa bersama, tanya jawab, serta kegiatan keagamaan lainnya yang interaktif dan bermanfaat. Jangan lewatkan kesempatan untuk mendapatkan ilmu, keberkahan, dan pengalaman spiritual yang mendalam dalam suasana yang hangat dan penuh kekeluargaan.",
+    "startDate": "2026-11-10T00:30:00.000Z",
+    "endDate": "2026-11-10T04:00:00.000Z",
+    "location": "Auditorium Universitas Pendidikan Ganesha",
+    "maxCapacity": 45,
+    "destinationBankId": null,
+    "isPaid": false,
+    "price": 0,
+    "posterUrl": "/images/events/poster-1793633309702-c430081f.webp",
+    "externalRegistrationUrl": null,
+    "organizerName": "Sanz Comunity",
+    "organizerEmail": "shandi@student.undiksha.ac.id",
+    "organizerPhone": "085737654572",
+    "guidelines": [
+      "Harap membawa juz 30 masing-masing"
+    ],
+    "status": "APPROVED",
+    "collaborationFacilities": [],
+    "collaborationPromotion": [
+      "Instagram Story & Post @dagocreativehub"
+    ],
+    "collaborationNotes": null,
+    "organizerFeePercent": 85,
+    "customPlatformFeePercent": 15,
+    "proposedRevenueSplit": {
+      "organizerPercent": 85,
+      "platformPercent": 15,
+      "proposedBy": "ORGANIZER",
+      "reason": "Nanti soalnya untuk keperluan sudah kami siapkan semuanya",
+      "status": "ACCEPTED",
+      "proposedAt": "2026-11-02T15:33:28.895Z",
+      "counterProposal": null
+    },
+    "revenueSplitHistory": [
+      {
+        "id": "rev-split-1793634623107",
+        "previousOrganizerPercent": 80,
+        "previousPlatformPercent": 20,
+        "newOrganizerPercent": 85,
+        "newPlatformPercent": 15,
+        "proposedBy": "ORGANIZER",
+        "reason": "Nanti soalnya untuk keperluan sudah kami siapkan semuanya",
+        "approvedBy": "Platform Curator Admin",
+        "approvedAt": "2026-11-02T15:50:23.107Z",
+        "effectiveDate": "2026-11-02T15:50:23.107Z"
+      }
+    ],
+    "payoutStatus": "UNQUALIFIED",
+    "payoutHistory": [],
+    "createdAt": "2026-11-02T15:33:28.895Z",
+    "updatedAt": "2026-11-02T15:50:23.105Z"
+  },
+  {
     "id": "evt-1793515068148-7xazf",
     "title": "cek sans 1",
     "category": "OTHER",
