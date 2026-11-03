@@ -305,7 +305,7 @@ export default function SubmitEventPage() {
         errors.push("Poster event wajib diunggah (pilih file atau drag & drop gambar).");
       } else {
         const p = formData.posterUrl.trim();
-        if (!p.startsWith("/images/") && !p.startsWith("/uploads/")) {
+        if (!p.startsWith("/images/") && !p.startsWith("/uploads/") && !p.startsWith("data:image/")) {
           try {
             const u = new URL(p);
             if (u.protocol !== "http:" && u.protocol !== "https:") {

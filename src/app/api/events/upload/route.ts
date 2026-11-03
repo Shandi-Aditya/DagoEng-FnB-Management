@@ -64,24 +64,59 @@ export async function POST(req: NextRequest) {
     const uniqueSuffix = `${Date.now()}-${crypto.randomBytes(4).toString("hex")}`;
     const filename = `poster-${uniqueSuffix}${ext}`;
 
-    const uploadDir = path.join(process.cwd(), "public/images/events");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    const isVercel = Boolean(
+      process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL_ENV
+    );
+
+    // If running in Vercel Serverless environment, local filesystem is read-only.
+    // Encode image directly as safe Base64 Data URI so it renders immediately anywhere without cloud credentials.
+    if (isVercel) {
+      const base64 = buffer.toString("base64");
+      const dataUri = `data:${file.type};base64,${base64}`;
+
+      return NextResponse.json({
+        success: true,
+        url: dataUri,
+        filename,
+        originalName: file.name,
+        size: file.size,
+        mimeType: file.type,
+      });
     }
 
-    const filepath = path.join(uploadDir, filename);
-    fs.writeFileSync(filepath, buffer);
+    try {
+      const uploadDir = path.join(process.cwd(), "public/images/events");
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
 
-    const publicUrl = `/images/events/${filename}`;
+      const filepath = path.join(uploadDir, filename);
+      fs.writeFileSync(filepath, buffer);
 
-    return NextResponse.json({
-      success: true,
-      url: publicUrl,
-      filename,
-      originalName: file.name,
-      size: file.size,
-      mimeType: file.type,
-    });
+      const publicUrl = `/images/events/${filename}`;
+
+      return NextResponse.json({
+        success: true,
+        url: publicUrl,
+        filename,
+        originalName: file.name,
+        size: file.size,
+        mimeType: file.type,
+      });
+    } catch (fsErr: any) {
+      console.warn("Local upload write failed, falling back to data URI:", fsErr?.message);
+      const base64 = buffer.toString("base64");
+      const dataUri = `data:${file.type};base64,${base64}`;
+
+      return NextResponse.json({
+        success: true,
+        url: dataUri,
+        filename,
+        originalName: file.name,
+        size: file.size,
+        mimeType: file.type,
+      });
+    }
   } catch (error: any) {
     console.error("POST /api/events/upload error:", error);
     return NextResponse.json(

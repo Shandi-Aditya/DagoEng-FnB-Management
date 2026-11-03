@@ -758,6 +758,11 @@ export function isSafePublicUrl(urlString: string): { safe: boolean; reason?: st
       return { safe: true };
     }
 
+    // Allow safe data URIs for images (used in serverless environments like Vercel)
+    if (trimmed.startsWith("data:image/")) {
+      return { safe: true };
+    }
+
     const url = new URL(trimmed);
 
     if (url.protocol !== "http:" && url.protocol !== "https:") {
