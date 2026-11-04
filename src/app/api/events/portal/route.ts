@@ -135,6 +135,15 @@ export async function PUT(req: NextRequest) {
       data: updated,
     });
   } catch (err: any) {
+    if (err?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database cloud sedang mengalami gangguan. Pengajuan ulang event belum dapat dikonfirmasi demi menjaga konsistensi antrean review. Silakan coba kembali.",
+        },
+        { status: 503 }
+      );
+    }
     const status = err.message?.includes("FORBIDDEN") ? 403 : 400;
     return NextResponse.json(
       {

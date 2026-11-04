@@ -908,6 +908,57 @@ export default function AdminEventsPage() {
     setPayoutPage(1);
   }, [payoutFilterStatus, payoutSearchQuery]);
 
+  // Lock body scroll when any modal is open
+  useEffect(() => {
+    const isAnyModalOpen =
+      isDetailModalOpen ||
+      isEditModalOpen ||
+      isRevisionModalOpen ||
+      isRejectModalOpen ||
+      isAttendeesModalOpen ||
+      Boolean(selectedProofBooking) ||
+      Boolean(rejectPaymentTarget) ||
+      payoutPromptModalOpen ||
+      isAddBankModalOpen;
+
+    if (isAnyModalOpen) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [
+    isDetailModalOpen,
+    isEditModalOpen,
+    isRevisionModalOpen,
+    isRejectModalOpen,
+    isAttendeesModalOpen,
+    selectedProofBooking,
+    rejectPaymentTarget,
+    payoutPromptModalOpen,
+    isAddBankModalOpen,
+  ]);
+
+  // Global Escape key listener to close modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsDetailModalOpen(false);
+        setIsEditModalOpen(false);
+        setIsRevisionModalOpen(false);
+        setIsRejectModalOpen(false);
+        setIsAttendeesModalOpen(false);
+        setSelectedProofBooking(null);
+        setRejectPaymentTarget(null);
+        setPayoutPromptModalOpen(false);
+        setIsAddBankModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const filteredAdminPayouts = useMemo(() => {
     return allAdminPayouts.filter((p) => {
       const matchStatus = payoutFilterStatus === "ALL" || p.status === payoutFilterStatus;
@@ -1237,35 +1288,38 @@ export default function AdminEventsPage() {
 
           {/* Filter Tabs & Search Bar with Page Size Selector */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2">
-            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-              {STATUS_TABS.map((tab) => {
-                const active = selectedStatusTab === tab.key;
-                const count =
-                  tab.status !== undefined
-                    ? events.filter((e) => e.status === tab.status).length
-                    : events.length;
+            <div className="relative overflow-hidden">
+              <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none pr-6">
+                {STATUS_TABS.map((tab) => {
+                  const active = selectedStatusTab === tab.key;
+                  const count =
+                    tab.status !== undefined
+                      ? events.filter((e) => e.status === tab.status).length
+                      : events.length;
 
-                return (
-                  <button
-                    key={tab.key}
-                    onClick={() => setSelectedStatusTab(tab.key)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center space-x-1.5 ${active
-                        ? "bg-[#3B7A57] text-white shadow-sm"
-                        : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
-                      }`}
-                  >
-                    <span>{tab.label}</span>
-                    <span
-                      className={`px-1.5 py-0.2 rounded-full text-[10px] ${active
-                          ? "bg-white/20 text-white"
-                          : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setSelectedStatusTab(tab.key)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center space-x-1.5 cursor-pointer ${active
+                          ? "bg-[#3B7A57] text-white shadow-sm"
+                          : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
                         }`}
                     >
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
+                      <span>{tab.label}</span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded-full text-[10px] ${active
+                            ? "bg-white/20 text-white"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-500"
+                          }`}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="absolute right-0 top-0 bottom-1 w-6 pointer-events-none bg-gradient-to-l from-white dark:from-[#0B1120] to-transparent sm:hidden" />
             </div>
 
             <div className="flex items-center justify-between sm:justify-end gap-2.5">

@@ -288,6 +288,14 @@ export async function POST(req: NextRequest) {
         } catch (sessErr) {
           console.error("Failed to establish session for verified unified organizer:", sessErr);
         }
+      } else if (unifiedAuth.error && unifiedAuth.error.startsWith("INFRASTRUCTURE_ERROR")) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Layanan autentikasi database sedang mengalami gangguan. Silakan coba beberapa saat lagi.",
+          },
+          { status: 500 }
+        );
       } else if (unifiedAuth.error && unifiedAuth.error.includes("Password yang Anda masukkan salah")) {
         return NextResponse.json(
           {
@@ -310,6 +318,15 @@ export async function POST(req: NextRequest) {
 
     // 3. Check Unified Customer / User Account
     const unifiedAuth = await verifyUnifiedUserPassword(normalizedEmail, password);
+    if (unifiedAuth.error && unifiedAuth.error.startsWith("INFRASTRUCTURE_ERROR")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan autentikasi database sedang mengalami gangguan. Silakan coba beberapa saat lagi.",
+        },
+        { status: 500 }
+      );
+    }
     if (unifiedAuth.success && unifiedAuth.user) {
       const uUser = unifiedAuth.user;
       const orgProfile = uUser.organizerProfileId ? getAllOrganizers().find(o => o.id === uUser.organizerProfileId) : null;

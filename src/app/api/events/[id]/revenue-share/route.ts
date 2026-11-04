@@ -78,6 +78,15 @@ export async function POST(
       data: updatedEvent,
     });
   } catch (error: any) {
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database cloud sedang mengalami gangguan. Usulan bagi hasil belum dapat dikonfirmasi demi menjaga konsistensi data kesepakatan. Silakan coba kembali.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: error.message || "Gagal mengajukan usulan bagi hasil." },
       { status: error.message?.includes("FORBIDDEN") ? 403 : 400 }
@@ -166,6 +175,15 @@ export async function PATCH(
       data: updatedEvent,
     });
   } catch (error: any) {
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database cloud sedang mengalami gangguan. Respons bagi hasil belum dapat dikonfirmasi demi menjaga konsistensi data kesepakatan. Silakan coba kembali.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memproses respons bagi hasil." },
       { status: error.message?.includes("FORBIDDEN") ? 403 : 400 }

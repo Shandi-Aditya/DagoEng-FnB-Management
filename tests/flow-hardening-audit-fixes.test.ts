@@ -126,10 +126,10 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
       const idx = allBookings.findIndex((b) => b.id === booking.id);
       expect(idx).not.toBe(-1);
       allBookings[idx].createdAt = new Date(Date.now() - 65 * 60 * 1000).toISOString();
-      saveBookingsToDisk(allBookings);
+      await saveBookingsToDisk(allBookings);
 
       // 3. Panggil expirePendingBookings atau getEventTicketAvailability
-      const expiredCount = expirePendingBookings();
+      const expiredCount = await expirePendingBookings();
       expect(expiredCount).toBeGreaterThanOrEqual(1);
 
       // 4. Pastikan status booking berubah menjadi CANCELLED atau EXPIRED

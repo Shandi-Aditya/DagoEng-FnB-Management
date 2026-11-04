@@ -154,7 +154,7 @@ export default function EventsListingPage() {
         year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
-      }) + " WIB";
+      }) + " WITA";
     } catch {
       return isoStr;
     }
@@ -546,7 +546,7 @@ export default function EventsListingPage() {
                           <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
                             <div className="flex items-center space-x-1.5">
                               <Clock className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
-                              <span className="truncate">{dateParts.weekday}, {dateParts.time} WIB</span>
+                              <span className="truncate">{dateParts.weekday}, {dateParts.time} WITA</span>
                             </div>
                             <div className="flex items-center space-x-1.5">
                               <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />

@@ -121,13 +121,38 @@ export async function syncStorageFromDb(filename: string): Promise<boolean> {
   return false;
 }
 
-export async function persistStorageToDb(filename: string, content: string): Promise<void> {
-  if (process.env.NODE_ENV === "test") return;
-  if (!process.env.DATABASE_URL) return;
+export class DatabasePersistenceError extends Error {
+  public readonly filename: string;
+  public readonly isTransient: boolean;
+
+  constructor(message: string, filename: string, isTransient: boolean = true) {
+    super(message);
+    this.name = "DatabasePersistenceError";
+    this.filename = filename;
+    this.isTransient = isTransient;
+    Object.setPrototypeOf(this, DatabasePersistenceError.prototype);
+  }
+}
+
+export async function persistStorageToDb(filename: string, content: string): Promise<boolean> {
+  if (process.env.NODE_ENV === "test") return true;
+
+  if (!process.env.DATABASE_URL) {
+    if (process.env.NODE_ENV === "production") {
+      throw new DatabasePersistenceError(
+        `Gagal menyimpan [${filename}] ke database cloud: DATABASE_URL tidak terkonfigurasi pada runtime Production.`,
+        filename,
+        false
+      );
+    }
+    console.warn(`[data-storage] DATABASE_URL tidak diset pada local development. Hanya menyimpan ke disk lokal untuk ${filename}`);
+    return false;
+  }
 
   try {
     const { db } = await import("./db");
     const key = `STORAGE_${filename}`;
+
     await Promise.race([
       db.systemSetting.upsert({
         where: { key },
@@ -140,10 +165,31 @@ export async function persistStorageToDb(filename: string, content: string): Pro
           value: content,
         },
       }),
-      new Promise<void>((resolve) => setTimeout(() => resolve(), 3500)),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () =>
+            reject(
+              new DatabasePersistenceError(
+                `Batas waktu (timeout 6000ms) penyimpanan [${filename}] ke database PostgreSQL terlampaui. Operasi belum dapat dikonfirmasi oleh database.`,
+                filename,
+                true
+              )
+            ),
+          6000
+        )
+      ),
     ]);
-  } catch (err) {
-    console.warn(`[data-storage] persistStorageToDb skipped for ${filename}:`, err);
+    return true;
+  } catch (err: any) {
+    console.error(`[data-storage] persistStorageToDb critical failure for ${filename}:`, err?.message || err);
+    if (err instanceof DatabasePersistenceError) {
+      throw err;
+    }
+    throw new DatabasePersistenceError(
+      `Gagal mengamankan penyimpanan [${filename}] ke database PostgreSQL: ${err?.message || "Koneksi database terputus"}`,
+      filename,
+      true
+    );
   }
 }
 

@@ -239,9 +239,19 @@ export async function POST(req: NextRequest) {
     return response;
   } catch (error: any) {
     console.error("POST /api/events error:", error);
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database penyimpanan cloud sedang mengalami gangguan sementara. Pengajuan event belum dapat dikonfirmasi demi menjaga integritas data. Silakan coba beberapa saat lagi.",
+        },
+        { status: 503 }
+      );
+    }
+    const isClientError = error.message?.includes("Validasi gagal") || error.message?.includes("judul serupa");
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memproses pengajuan event." },
-      { status: 500 }
+      { status: isClientError ? 400 : 500 }
     );
   }
 }

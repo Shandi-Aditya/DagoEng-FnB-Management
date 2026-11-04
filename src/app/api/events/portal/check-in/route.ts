@@ -72,6 +72,15 @@ export async function PATCH(req: NextRequest) {
       data: updated,
     });
   } catch (err: any) {
+    if (err?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database check-in sedang mengalami gangguan. Status kehadiran belum dapat dikonfirmasi demi mencegah double check-in. Silakan ulangi scan.",
+        },
+        { status: 503 }
+      );
+    }
     const status = err.message?.includes("FORBIDDEN") ? 403 : 400;
     return NextResponse.json(
       {

@@ -60,7 +60,7 @@ export async function POST(
               dokuPaymentUrl: dokuSession.paymentUrl,
               updatedAt: new Date().toISOString(),
             };
-            saveBookingsToDisk(allBookings);
+            await saveBookingsToDisk(allBookings);
             booking = allBookings[idx];
           }
         } catch (dokuErr: any) {
@@ -79,7 +79,7 @@ export async function POST(
                 paymentStatus: "CANCELLED",
                 updatedAt: new Date().toISOString(),
               };
-              saveBookingsToDisk(allBookings);
+              await saveBookingsToDisk(allBookings);
             }
             return NextResponse.json(
               {
@@ -122,6 +122,15 @@ export async function POST(
     );
   } catch (error: any) {
     console.error(`POST /api/events/${params.id}/book error:`, error);
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database penyimpanan tiket sedang mengalami gangguan. Pemesanan tiket Anda belum dapat dikonfirmasi demi mencegah duplikasi pesanan. Silakan coba sesaat lagi.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memproses pemesanan tiket." },
       { status: 400 }

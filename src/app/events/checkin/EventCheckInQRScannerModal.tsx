@@ -375,16 +375,33 @@ export function EventCheckInQRScannerModal({
   // Handle Modal Lifecycle
   useEffect(() => {
     if (isOpen) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = "hidden";
       const timer = setTimeout(() => {
         startCamera();
       }, 300);
-      return () => clearTimeout(timer);
+      return () => {
+        document.body.style.overflow = originalStyle;
+        clearTimeout(timer);
+      };
     } else {
       stopCameraStream();
       setFeedback(null);
       setManualCode("");
     }
   }, [isOpen, facingMode]);
+
+  // Global Escape key listener to close scanner
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen) {
+        stopCameraStream();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose, stopCameraStream]);
 
   // Toggle Camera Facing Mode
   const toggleCameraDirection = () => {

@@ -505,6 +505,45 @@ export default function CommunityOrganizerPortalPage() {
     loadPortalData(targetEmail || undefined);
   }, [user?.email, user?.role?.slug]);
 
+  // Lock body scroll when any modal is open
+  useEffect(() => {
+    const isAnyModalOpen =
+      Boolean(viewingDetailEvent) ||
+      Boolean(revisionEvent) ||
+      Boolean(negotiatingEvent) ||
+      isPayoutModalOpen ||
+      isMobileMenuOpen;
+
+    if (isAnyModalOpen) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [
+    viewingDetailEvent,
+    revisionEvent,
+    negotiatingEvent,
+    isPayoutModalOpen,
+    isMobileMenuOpen,
+  ]);
+
+  // Global Escape key listener to close modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setViewingDetailEvent(null);
+        setRevisionEvent(null);
+        setNegotiatingEvent(null);
+        setIsPayoutModalOpen(false);
+        setIsMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const loadPortalData = async (email?: string) => {
     try {
       setIsLoading(true);
@@ -652,9 +691,9 @@ export default function CommunityOrganizerPortalPage() {
         return;
       }
 
-      setSuccessMessage("Event berhasil diperbaiki dan diajukan ulang! Status kembali ke [Menunggu Review].");
+      setSuccessMessage(`Event "${revisionEvent.title}" berhasil diperbaiki dan diajukan ulang! Status event kini kembali ke [Menunggu Review] dan dapat Anda pantau langsung.`);
       setRevisionEvent(null);
-      setEventFilterStatus("ALL");
+      setEventFilterStatus("PENDING");
       await loadPortalData(activeEmail);
     } catch (err: any) {
       setErrorMessage(err.message || "Gagal mengirim revisi.");

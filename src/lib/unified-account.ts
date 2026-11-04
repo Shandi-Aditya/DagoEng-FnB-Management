@@ -255,7 +255,14 @@ export async function verifyUnifiedUserPassword(
           updatedAt: dbUser.updatedAt.toISOString(),
         };
       }
-    } catch {}
+    } catch (err: any) {
+      console.error("[unified-account] Database connectivity error during credential check:", err?.message || err);
+      return {
+        success: false,
+        user: null,
+        error: "INFRASTRUCTURE_ERROR: Layanan autentikasi database sedang mengalami gangguan.",
+      };
+    }
   }
   if (!user) {
     return { success: false, user: null, error: "Akun tidak ditemukan." };

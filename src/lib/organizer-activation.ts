@@ -68,7 +68,7 @@ export function markDbOffline(): void {
   lastDbFailureTime = Date.now();
 }
 
-export async function withDbTimeout<T>(fn: () => Promise<T>, timeoutMs = 5000): Promise<T> {
+export async function withDbTimeout<T>(fn: () => Promise<T>, timeoutMs = 9000): Promise<T> {
   if (!isDbAvailable()) {
     throw new Error("Database known to be offline");
   }

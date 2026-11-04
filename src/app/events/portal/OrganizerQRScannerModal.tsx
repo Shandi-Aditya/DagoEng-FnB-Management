@@ -368,11 +368,16 @@ export function OrganizerQRScannerModal({
   // Handle modal open/close lifecycle
   useEffect(() => {
     if (isOpen) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = "hidden";
       // Auto start camera with slight delay to ensure DOM is rendered
       const timer = setTimeout(() => {
         startCameraStream();
       }, 250);
-      return () => clearTimeout(timer);
+      return () => {
+        document.body.style.overflow = originalStyle;
+        clearTimeout(timer);
+      };
     } else {
       stopCameraStream();
       setFeedback(null);

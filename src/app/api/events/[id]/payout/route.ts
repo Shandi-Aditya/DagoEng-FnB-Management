@@ -58,6 +58,15 @@ export async function POST(
       data: result,
     });
   } catch (error: any) {
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database keuangan sedang mengalami gangguan. Pengajuan pencairan dana belum dapat dikonfirmasi demi mencegah double-payout. Silakan coba kembali.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: error.message || "Gagal mengajukan pencairan dana." },
       { status: error.message?.includes("FORBIDDEN") ? 403 : 400 }
@@ -118,6 +127,15 @@ export async function PATCH(
       data: result,
     });
   } catch (error: any) {
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database keuangan sedang mengalami gangguan. Pembaruan status pencairan dana belum dapat dikonfirmasi demi mencegah double-payout. Silakan coba kembali.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memperbarui status pencairan dana." },
       { status: error.message?.includes("FORBIDDEN") ? 403 : 400 }

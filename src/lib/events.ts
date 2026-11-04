@@ -685,9 +685,8 @@ function loadEventsFromDisk(): CommunityEvent[] {
  * Writes to a temporary file first, then atomically renames to DATA_FILE.
  * Prevents file corruption, zero-byte reads, or truncated JSON during process restarts.
  */
-function saveEventsToDisk(events: CommunityEvent[]): void {
+export async function saveEventsToDisk(events: CommunityEvent[]): Promise<void> {
   try {
-    cachedEvents = events;
     const eventsFile = getEventsFile();
     const dir = path.dirname(eventsFile);
     if (!fs.existsSync(dir)) {
@@ -705,12 +704,17 @@ function saveEventsToDisk(events: CommunityEvent[]): void {
       try { fs.unlinkSync(tmpFile); } catch {}
     }
 
-    // Persist to distributed PostgreSQL SystemSetting for multi-instance serverless resilience
-    try {
-      persistStorageToDb("events.json", JSON.stringify(events, null, 2)).catch(() => {});
-    } catch {}
+    // Explicitly await persistence to distributed PostgreSQL SystemSetting
+    // Prevents Vercel serverless freeze from dropping updates
+    await persistStorageToDb("events.json", JSON.stringify(events, null, 2));
+
+    // Only update in-memory cache once persistence to persistent store succeeds
+    cachedEvents = events;
   } catch (err) {
-    console.error("Failed to write events to disk", err);
+    // Invalidate in-memory cache to prevent dirty/unconfirmed state
+    cachedEvents = null;
+    console.error("[events] Failed to persist events to persistent store:", err);
+    throw err;
   }
 }
 
@@ -900,11 +904,20 @@ export function getEventTicketAvailability(eventId: string): EventTicketAvailabi
 
   const capacityRes = resolveVenueCapacity(event);
   const totalCapacity = capacityRes.capacity;
-  expirePendingBookings();
+  const now = Date.now();
+  const expiryWindow = getBookingPaymentExpiryMs();
   const allBookings = loadBookingsFromDisk();
-  const activeBookings = allBookings.filter(
-    (b) => b.eventId === eventId && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
-  );
+  const activeBookings = allBookings.filter((b) => {
+    if (b.eventId !== eventId) return false;
+    if (b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED") return false;
+    if (b.paymentStatus === "PENDING" && b.totalPrice > 0) {
+      const createdMs = new Date(b.createdAt).getTime();
+      const expiresAtMs = b.expiresAt ? new Date(b.expiresAt).getTime() : NaN;
+      if (!isNaN(expiresAtMs) && now > expiresAtMs) return false;
+      if (!isNaN(createdMs) && now - createdMs > expiryWindow) return false;
+    }
+    return true;
+  });
 
   const ticketsReserved = activeBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
   const ticketsRemaining = Math.max(0, totalCapacity - ticketsReserved);
@@ -1116,104 +1129,106 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
     throw new Error(`Validasi gagal: ${validation.errors.join(", ")}`);
   }
 
-  await syncStorageFromDb("events.json").catch(() => {});
-  const all = loadEventsFromDisk();
+  return withEventLock(async () => {
+    await syncStorageFromDb("events.json").catch(() => {});
+    const all = loadEventsFromDisk();
 
-  // Prevent rapid duplicate submission (same email + same title within 5 minutes)
-  const normalizedTitle = payload.title.trim().toLowerCase();
-  const normalizedEmail = payload.organizerEmail.trim().toLowerCase();
-  const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+    // Prevent rapid duplicate submission (same email + same title within 5 minutes)
+    const normalizedTitle = payload.title.trim().toLowerCase();
+    const normalizedEmail = payload.organizerEmail.trim().toLowerCase();
+    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
 
-  const isDuplicate = all.some((e) => {
-    const isSameOrganizer = e.organizerEmail.toLowerCase() === normalizedEmail;
-    const isSameTitle = e.title.toLowerCase() === normalizedTitle;
-    const isRecent = new Date(e.createdAt).getTime() > fiveMinutesAgo;
-    return isSameOrganizer && isSameTitle && isRecent && e.status === "PENDING";
-  });
+    const isDuplicate = all.some((e) => {
+      const isSameOrganizer = e.organizerEmail.toLowerCase() === normalizedEmail;
+      const isSameTitle = e.title.toLowerCase() === normalizedTitle;
+      const isRecent = new Date(e.createdAt).getTime() > fiveMinutesAgo;
+      return isSameOrganizer && isSameTitle && isRecent && e.status === "PENDING";
+    });
 
-  if (isDuplicate) {
-    throw new Error(
-      "Pengajuan event dengan judul serupa dari email ini baru saja dikirimkan dan sedang dalam antrean review. Mohon menunggu proses kurasi tim kurator platform."
-    );
-  }
+    if (isDuplicate) {
+      throw new Error(
+        "Pengajuan event dengan judul serupa dari email ini baru saja dikirimkan dan sedang dalam antrean review. Mohon menunggu proses kurasi tim kurator platform."
+      );
+    }
 
-  const orgPct =
-    typeof payload.proposedOrganizerPercent === "number" &&
-    payload.proposedOrganizerPercent >= 0 &&
-    payload.proposedOrganizerPercent <= 100
-      ? Number(payload.proposedOrganizerPercent)
-      : 80;
-  const pltPct = 100 - orgPct;
+    const orgPct =
+      typeof payload.proposedOrganizerPercent === "number" &&
+      payload.proposedOrganizerPercent >= 0 &&
+      payload.proposedOrganizerPercent <= 100
+        ? Number(payload.proposedOrganizerPercent)
+        : 80;
+    const pltPct = 100 - orgPct;
 
-  const newEvent: CommunityEvent = {
-    id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    title: sanitizeHtmlText(payload.title),
-    category: payload.category,
-    description: sanitizeHtmlText(payload.description),
-    startDate: new Date(payload.startDate).toISOString(),
-    endDate: new Date(payload.endDate).toISOString(),
-    location: sanitizeHtmlText(payload.location),
-    maxCapacity:
-      typeof payload.maxCapacity === "number" &&
-      Number.isInteger(payload.maxCapacity) &&
-      payload.maxCapacity > 0
-        ? payload.maxCapacity
-        : undefined,
-    maxTicketsPerBooking:
-      typeof payload.maxTicketsPerBooking === "number" && payload.maxTicketsPerBooking > 0
-        ? Math.floor(payload.maxTicketsPerBooking)
-        : undefined,
-    destinationBankId: payload.destinationBankId || null,
-    isPaid: Boolean(payload.isPaid),
-    price: payload.isPaid ? Number(payload.price || 0) : 0,
-    posterUrl: payload.posterUrl.trim(),
-    externalRegistrationUrl: payload.externalRegistrationUrl ? payload.externalRegistrationUrl.trim() : null,
-    organizerName: sanitizeHtmlText(payload.organizerName),
-    organizerEmail: payload.organizerEmail.trim().toLowerCase(),
-    organizerPhone: payload.organizerPhone.trim(),
-    guidelines: parseGuidelinesInput(payload.guidelines),
-    status: "PENDING", // Always PENDING on submission
+    const newEvent: CommunityEvent = {
+      id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      title: sanitizeHtmlText(payload.title),
+      category: payload.category,
+      description: sanitizeHtmlText(payload.description),
+      startDate: new Date(payload.startDate).toISOString(),
+      endDate: new Date(payload.endDate).toISOString(),
+      location: sanitizeHtmlText(payload.location),
+      maxCapacity:
+        typeof payload.maxCapacity === "number" &&
+        Number.isInteger(payload.maxCapacity) &&
+        payload.maxCapacity > 0
+          ? payload.maxCapacity
+          : undefined,
+      maxTicketsPerBooking:
+        typeof payload.maxTicketsPerBooking === "number" && payload.maxTicketsPerBooking > 0
+          ? Math.floor(payload.maxTicketsPerBooking)
+          : undefined,
+      destinationBankId: payload.destinationBankId || null,
+      isPaid: Boolean(payload.isPaid),
+      price: payload.isPaid ? Number(payload.price || 0) : 0,
+      posterUrl: payload.posterUrl.trim(),
+      externalRegistrationUrl: payload.externalRegistrationUrl ? payload.externalRegistrationUrl.trim() : null,
+      organizerName: sanitizeHtmlText(payload.organizerName),
+      organizerEmail: payload.organizerEmail.trim().toLowerCase(),
+      organizerPhone: payload.organizerPhone.trim(),
+      guidelines: parseGuidelinesInput(payload.guidelines),
+      status: "PENDING", // Always PENDING on submission
 
-    // Collaboration requirements
-    collaborationFacilities: Array.isArray(payload.collaborationFacilities)
-      ? payload.collaborationFacilities.map((f) => sanitizeHtmlText(String(f)))
-      : typeof payload.collaborationFacilities === "string"
-      ? payload.collaborationFacilities.split(",").map((f) => sanitizeHtmlText(f.trim())).filter(Boolean)
-      : null,
-    collaborationPromotion: Array.isArray(payload.collaborationPromotion)
-      ? payload.collaborationPromotion.map((p) => sanitizeHtmlText(String(p)))
-      : typeof payload.collaborationPromotion === "string"
-      ? sanitizeHtmlText(payload.collaborationPromotion)
-      : null,
-    collaborationNotes: payload.collaborationNotes ? sanitizeHtmlText(payload.collaborationNotes) : null,
-
-    // Revenue sharing proposal
-    organizerFeePercent: orgPct,
-    customPlatformFeePercent: pltPct,
-    proposedRevenueSplit:
-      payload.proposedOrganizerPercent !== undefined
-        ? {
-            organizerPercent: orgPct,
-            platformPercent: pltPct,
-            proposedBy: "ORGANIZER",
-            reason: sanitizeHtmlText(payload.revenueSplitReason || "Usulan bagi hasil awal saat pengajuan event"),
-            status: "PENDING",
-            proposedAt: new Date().toISOString(),
-            counterProposal: null,
-          }
+      // Collaboration requirements
+      collaborationFacilities: Array.isArray(payload.collaborationFacilities)
+        ? payload.collaborationFacilities.map((f) => sanitizeHtmlText(String(f)))
+        : typeof payload.collaborationFacilities === "string"
+        ? payload.collaborationFacilities.split(",").map((f) => sanitizeHtmlText(f.trim())).filter(Boolean)
         : null,
-    revenueSplitHistory: [],
-    payoutStatus: "UNQUALIFIED",
-    payoutHistory: [],
+      collaborationPromotion: Array.isArray(payload.collaborationPromotion)
+        ? payload.collaborationPromotion.map((p) => sanitizeHtmlText(String(p)))
+        : typeof payload.collaborationPromotion === "string"
+        ? sanitizeHtmlText(payload.collaborationPromotion)
+        : null,
+      collaborationNotes: payload.collaborationNotes ? sanitizeHtmlText(payload.collaborationNotes) : null,
 
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
+      // Revenue sharing proposal
+      organizerFeePercent: orgPct,
+      customPlatformFeePercent: pltPct,
+      proposedRevenueSplit:
+        payload.proposedOrganizerPercent !== undefined
+          ? {
+              organizerPercent: orgPct,
+              platformPercent: pltPct,
+              proposedBy: "ORGANIZER",
+              reason: sanitizeHtmlText(payload.revenueSplitReason || "Usulan bagi hasil awal saat pengajuan event"),
+              status: "PENDING",
+              proposedAt: new Date().toISOString(),
+              counterProposal: null,
+            }
+          : null,
+      revenueSplitHistory: [],
+      payoutStatus: "UNQUALIFIED",
+      payoutHistory: [],
 
-  all.unshift(newEvent);
-  saveEventsToDisk(all);
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
 
-  return newEvent;
+    all.unshift(newEvent);
+    await saveEventsToDisk(all);
+
+    return newEvent;
+  });
 }
 
 /**
@@ -1229,63 +1244,65 @@ export async function updateEventStatus(
     revisionNotes?: string | null;
   }
 ): Promise<CommunityEvent> {
-  await syncStorageFromDb("events.json").catch(() => {});
-  const all = loadEventsFromDisk();
-  const index = all.findIndex((e) => e.id === id);
-  if (index === -1) {
-    throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
-  }
-
-  const existing = all[index];
-  const updated: CommunityEvent = {
-    ...existing,
-    status,
-    adminNotes: options?.adminNotes !== undefined ? options.adminNotes : existing.adminNotes,
-    rejectionReason: options?.rejectionReason !== undefined ? options.rejectionReason : existing.rejectionReason,
-    revisionNotes: options?.revisionNotes !== undefined ? options.revisionNotes : existing.revisionNotes,
-    updatedAt: new Date().toISOString(),
-  };
-
-  // If approved, ensure organizer profile is registered and active
-  if (status === "APPROVED") {
-    ensureOrganizerActive({
-      email: existing.organizerEmail,
-      name: existing.organizerName,
-      category: existing.category,
-      phone: existing.organizerPhone,
-      notes: `Penyelenggara aktif resmi dari event disetujui: ${existing.title}`,
-    });
-
-    // If there was a pending proposal by organizer, approve it into revenueSplitHistory
-    if (existing.proposedRevenueSplit && existing.proposedRevenueSplit.status === "PENDING") {
-      const split = existing.proposedRevenueSplit;
-      updated.organizerFeePercent = split.organizerPercent;
-      updated.customPlatformFeePercent = split.platformPercent;
-      updated.proposedRevenueSplit = {
-        ...split,
-        status: "ACCEPTED",
-      };
-      const hist = existing.revenueSplitHistory || [];
-      hist.push({
-        id: `rev-split-${Date.now()}`,
-        previousOrganizerPercent: 80,
-        previousPlatformPercent: 20,
-        newOrganizerPercent: split.organizerPercent,
-        newPlatformPercent: split.platformPercent,
-        proposedBy: split.proposedBy,
-        reason: split.reason || "Disepakati bersama saat persetujuan event",
-        approvedBy: "Platform Curator Admin",
-        approvedAt: new Date().toISOString(),
-        effectiveDate: new Date().toISOString(),
-      });
-      updated.revenueSplitHistory = hist;
+  return withEventLock(async () => {
+    await syncStorageFromDb("events.json").catch(() => {});
+    const all = loadEventsFromDisk();
+    const index = all.findIndex((e) => e.id === id);
+    if (index === -1) {
+      throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
     }
-  }
 
-  all[index] = updated;
-  saveEventsToDisk(all);
+    const existing = all[index];
+    const updated: CommunityEvent = {
+      ...existing,
+      status,
+      adminNotes: options?.adminNotes !== undefined ? options.adminNotes : existing.adminNotes,
+      rejectionReason: options?.rejectionReason !== undefined ? options.rejectionReason : existing.rejectionReason,
+      revisionNotes: options?.revisionNotes !== undefined ? options.revisionNotes : existing.revisionNotes,
+      updatedAt: new Date().toISOString(),
+    };
 
-  return updated;
+    // If approved, ensure organizer profile is registered and active
+    if (status === "APPROVED") {
+      ensureOrganizerActive({
+        email: existing.organizerEmail,
+        name: existing.organizerName,
+        category: existing.category,
+        phone: existing.organizerPhone,
+        notes: `Penyelenggara aktif resmi dari event disetujui: ${existing.title}`,
+      });
+
+      // If there was a pending proposal by organizer, approve it into revenueSplitHistory
+      if (existing.proposedRevenueSplit && existing.proposedRevenueSplit.status === "PENDING") {
+        const split = existing.proposedRevenueSplit;
+        updated.organizerFeePercent = split.organizerPercent;
+        updated.customPlatformFeePercent = split.platformPercent;
+        updated.proposedRevenueSplit = {
+          ...split,
+          status: "ACCEPTED",
+        };
+        const hist = existing.revenueSplitHistory || [];
+        hist.push({
+          id: `rev-split-${Date.now()}`,
+          previousOrganizerPercent: 80,
+          previousPlatformPercent: 20,
+          newOrganizerPercent: split.organizerPercent,
+          newPlatformPercent: split.platformPercent,
+          proposedBy: split.proposedBy,
+          reason: split.reason || "Disepakati bersama saat persetujuan event",
+          approvedBy: "Platform Curator Admin",
+          approvedAt: new Date().toISOString(),
+          effectiveDate: new Date().toISOString(),
+        });
+        updated.revenueSplitHistory = hist;
+      }
+    }
+
+    all[index] = updated;
+    await saveEventsToDisk(all);
+
+    return updated;
+  });
 }
 
 /**
@@ -1297,63 +1314,66 @@ export async function updateEventDetails(
   id: string,
   updates: Partial<Omit<CommunityEvent, "id" | "createdAt" | "status">>
 ): Promise<CommunityEvent> {
-  const all = loadEventsFromDisk();
-  const index = all.findIndex((e) => e.id === id);
-  if (index === -1) {
-    throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
-  }
-
-  const existing = all[index];
-
-  // Whitelist only editable content fields. Reject or discard status / audit fields
-  const sanitizedUpdates: Partial<CommunityEvent> = {};
-  if (updates.title !== undefined) sanitizedUpdates.title = sanitizeHtmlText(updates.title);
-  if (updates.category !== undefined) sanitizedUpdates.category = updates.category;
-  if (updates.description !== undefined) sanitizedUpdates.description = sanitizeHtmlText(updates.description);
-  if (updates.startDate !== undefined) sanitizedUpdates.startDate = new Date(updates.startDate).toISOString();
-  if (updates.endDate !== undefined) sanitizedUpdates.endDate = new Date(updates.endDate).toISOString();
-  if (updates.location !== undefined) sanitizedUpdates.location = sanitizeHtmlText(updates.location);
-  if (updates.isPaid !== undefined) sanitizedUpdates.isPaid = Boolean(updates.isPaid);
-  if (updates.price !== undefined) sanitizedUpdates.price = Number(updates.price || 0);
-  if (updates.posterUrl !== undefined) {
-    const check = isSafePublicUrl(updates.posterUrl);
-    if (!check.safe) throw new Error(`URL poster tidak valid: ${check.reason}`);
-    sanitizedUpdates.posterUrl = updates.posterUrl.trim();
-  }
-  if (updates.externalRegistrationUrl !== undefined) {
-    if (updates.externalRegistrationUrl && updates.externalRegistrationUrl.trim() !== "") {
-      const check = isSafePublicUrl(updates.externalRegistrationUrl);
-      if (!check.safe) throw new Error(`URL pendaftaran eksternal tidak valid: ${check.reason}`);
-      sanitizedUpdates.externalRegistrationUrl = updates.externalRegistrationUrl.trim();
-    } else {
-      sanitizedUpdates.externalRegistrationUrl = null;
+  return withEventLock(async () => {
+    await syncStorageFromDb("events.json").catch(() => {});
+    const all = loadEventsFromDisk();
+    const index = all.findIndex((e) => e.id === id);
+    if (index === -1) {
+      throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
     }
-  }
-  if (updates.organizerName !== undefined) sanitizedUpdates.organizerName = sanitizeHtmlText(updates.organizerName);
-  if (updates.guidelines !== undefined) sanitizedUpdates.guidelines = parseGuidelinesInput(updates.guidelines);
-  if (updates.customPlatformFeePercent !== undefined) {
-    if (updates.customPlatformFeePercent === null) {
-      sanitizedUpdates.customPlatformFeePercent = null;
-    } else {
-      const num = Number(updates.customPlatformFeePercent);
-      if (isNaN(num) || num < 0 || num > 100) {
-        throw new Error("Persentase komisi override harus berupa angka antara 0% hingga 100%.");
+
+    const existing = all[index];
+
+    // Whitelist only editable content fields. Reject or discard status / audit fields
+    const sanitizedUpdates: Partial<CommunityEvent> = {};
+    if (updates.title !== undefined) sanitizedUpdates.title = sanitizeHtmlText(updates.title);
+    if (updates.category !== undefined) sanitizedUpdates.category = updates.category;
+    if (updates.description !== undefined) sanitizedUpdates.description = sanitizeHtmlText(updates.description);
+    if (updates.startDate !== undefined) sanitizedUpdates.startDate = new Date(updates.startDate).toISOString();
+    if (updates.endDate !== undefined) sanitizedUpdates.endDate = new Date(updates.endDate).toISOString();
+    if (updates.location !== undefined) sanitizedUpdates.location = sanitizeHtmlText(updates.location);
+    if (updates.isPaid !== undefined) sanitizedUpdates.isPaid = Boolean(updates.isPaid);
+    if (updates.price !== undefined) sanitizedUpdates.price = Number(updates.price || 0);
+    if (updates.posterUrl !== undefined) {
+      const check = isSafePublicUrl(updates.posterUrl);
+      if (!check.safe) throw new Error(`URL poster tidak valid: ${check.reason}`);
+      sanitizedUpdates.posterUrl = updates.posterUrl.trim();
+    }
+    if (updates.externalRegistrationUrl !== undefined) {
+      if (updates.externalRegistrationUrl && updates.externalRegistrationUrl.trim() !== "") {
+        const check = isSafePublicUrl(updates.externalRegistrationUrl);
+        if (!check.safe) throw new Error(`URL pendaftaran eksternal tidak valid: ${check.reason}`);
+        sanitizedUpdates.externalRegistrationUrl = updates.externalRegistrationUrl.trim();
+      } else {
+        sanitizedUpdates.externalRegistrationUrl = null;
       }
-      sanitizedUpdates.customPlatformFeePercent = num;
     }
-  }
+    if (updates.organizerName !== undefined) sanitizedUpdates.organizerName = sanitizeHtmlText(updates.organizerName);
+    if (updates.guidelines !== undefined) sanitizedUpdates.guidelines = parseGuidelinesInput(updates.guidelines);
+    if (updates.customPlatformFeePercent !== undefined) {
+      if (updates.customPlatformFeePercent === null) {
+        sanitizedUpdates.customPlatformFeePercent = null;
+      } else {
+        const num = Number(updates.customPlatformFeePercent);
+        if (isNaN(num) || num < 0 || num > 100) {
+          throw new Error("Persentase komisi override harus berupa angka antara 0% hingga 100%.");
+        }
+        sanitizedUpdates.customPlatformFeePercent = num;
+      }
+    }
 
-  const updated: CommunityEvent = {
-    ...existing,
-    ...sanitizedUpdates,
-    status: existing.status, // NEVER overwrite status via updateEventDetails
-    updatedAt: new Date().toISOString(),
-  };
+    const updated: CommunityEvent = {
+      ...existing,
+      ...sanitizedUpdates,
+      status: existing.status, // NEVER overwrite status via updateEventDetails
+      updatedAt: new Date().toISOString(),
+    };
 
-  all[index] = updated;
-  saveEventsToDisk(all);
+    all[index] = updated;
+    await saveEventsToDisk(all);
 
-  return updated;
+    return updated;
+  });
 }
 
 /**
@@ -1363,30 +1383,33 @@ export async function setEventCommissionOverride(
   eventId: string,
   customFeePercent: number | null
 ): Promise<CommunityEvent> {
-  const all = loadEventsFromDisk();
-  const index = all.findIndex((e) => e.id === eventId);
-  if (index === -1) {
-    throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
-  }
-
-  let finalPercent: number | null = null;
-  if (customFeePercent !== null) {
-    const num = Number(customFeePercent);
-    if (isNaN(num) || num < 0 || num > 100) {
-      throw new Error("Persentase komisi override harus berupa angka antara 0% hingga 100%.");
+  return withEventLock(async () => {
+    await syncStorageFromDb("events.json").catch(() => {});
+    const all = loadEventsFromDisk();
+    const index = all.findIndex((e) => e.id === eventId);
+    if (index === -1) {
+      throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
     }
-    finalPercent = num;
-  }
 
-  const updated: CommunityEvent = {
-    ...all[index],
-    customPlatformFeePercent: finalPercent,
-    updatedAt: new Date().toISOString(),
-  };
+    let finalPercent: number | null = null;
+    if (customFeePercent !== null) {
+      const num = Number(customFeePercent);
+      if (isNaN(num) || num < 0 || num > 100) {
+        throw new Error("Persentase komisi override harus berupa angka antara 0% hingga 100%.");
+      }
+      finalPercent = num;
+    }
 
-  all[index] = updated;
-  saveEventsToDisk(all);
-  return updated;
+    const updated: CommunityEvent = {
+      ...all[index],
+      customPlatformFeePercent: finalPercent,
+      updatedAt: new Date().toISOString(),
+    };
+
+    all[index] = updated;
+    await saveEventsToDisk(all);
+    return updated;
+  });
 }
 
 // =============================================================================
@@ -1531,9 +1554,8 @@ export function loadBookingsFromDisk(): EventTicketOrder[] {
   }
 }
 
-export function saveBookingsToDisk(bookings: EventTicketOrder[]): void {
+export async function saveBookingsToDisk(bookings: EventTicketOrder[]): Promise<void> {
   try {
-    cachedBookings = bookings;
     const bookingsFile = getBookingsFile();
     const dir = path.dirname(bookingsFile);
     if (!fs.existsSync(dir)) {
@@ -1549,12 +1571,17 @@ export function saveBookingsToDisk(bookings: EventTicketOrder[]): void {
       try { fs.unlinkSync(tmpFile); } catch {}
     }
 
-    // Persist to distributed PostgreSQL SystemSetting for multi-instance serverless resilience
-    try {
-      persistStorageToDb("event_bookings.json", JSON.stringify(bookings, null, 2)).catch(() => {});
-    } catch {}
+    // Explicitly await persistence to distributed PostgreSQL SystemSetting
+    // Prevents Vercel serverless freeze from dropping bookings
+    await persistStorageToDb("event_bookings.json", JSON.stringify(bookings, null, 2));
+
+    // Only update in-memory cache once persistence to persistent store succeeds
+    cachedBookings = bookings;
   } catch (err) {
-    console.error("Failed to write event bookings to disk", err);
+    // Invalidate in-memory cache to prevent dirty/unconfirmed state
+    cachedBookings = null;
+    console.error("[events] Failed to persist event bookings to persistent store:", err);
+    throw err;
   }
 }
 
@@ -1582,10 +1609,10 @@ export function getBookingPaymentExpiryMs(): number {
  * Releases ticket quota immediately. Idempotent and safe to run concurrently.
  * Strictly guarantees that PAID tickets NEVER expire.
  */
-export function expirePendingBookings(
+export async function expirePendingBookings(
   maxAgeMs?: number,
   targetStatus: TicketPaymentStatus = "EXPIRED"
-): number {
+): Promise<number> {
   const expiryWindow = typeof maxAgeMs === "number" && maxAgeMs > 0 ? maxAgeMs : getBookingPaymentExpiryMs();
   const allBookings = loadBookingsFromDisk();
   const now = Date.now();
@@ -1613,7 +1640,7 @@ export function expirePendingBookings(
   }
 
   if (modified) {
-    saveBookingsToDisk(allBookings);
+    await saveBookingsToDisk(allBookings);
   }
 
   return count;
@@ -1624,7 +1651,7 @@ export function expirePendingBookings(
  */
 export async function getEventBookings(eventId?: string): Promise<EventTicketOrder[]> {
   await syncStorageFromDb("event_bookings.json").catch(() => {});
-  expirePendingBookings();
+  await expirePendingBookings();
   const all = loadBookingsFromDisk();
   const filtered = eventId ? all.filter((b) => b.eventId === eventId) : all;
   return [...filtered].sort(
@@ -1729,7 +1756,7 @@ export async function createEventBooking(
       throw new Error(`Validasi gagal: ${validation.errors.join(", ")}`);
     }
 
-    expirePendingBookings();
+    await expirePendingBookings();
     const allBookings = loadBookingsFromDisk();
     const activeBookings = allBookings.filter(
       (b) => b.eventId === event.id && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
@@ -1827,7 +1854,7 @@ export async function createEventBooking(
     };
 
     allBookings.unshift(newBooking);
-    saveBookingsToDisk(allBookings);
+    await saveBookingsToDisk(allBookings);
 
     return newBooking;
   });
@@ -1973,7 +2000,7 @@ export async function updateBookingCheckIn(
     };
 
     allBookings[index] = updated;
-    saveBookingsToDisk(allBookings);
+    await saveBookingsToDisk(allBookings);
 
     return updated;
   } finally {
@@ -1981,7 +2008,6 @@ export async function updateBookingCheckIn(
   }
 }
 
-/**
 /**
  * Updates ticket payment status (e.g. PAID or CANCELLED) with optional audit details.
  */
@@ -1995,38 +2021,41 @@ export async function updateBookingPaymentStatus(
     reason?: string;
   }
 ): Promise<EventTicketOrder> {
-  const allBookings = loadBookingsFromDisk();
-  const index = allBookings.findIndex((b) => b.id === bookingId);
-  if (index === -1) {
-    throw new Error(`Pemesanan tiket dengan ID ${bookingId} tidak ditemukan.`);
-  }
+  return withBookingLock(async () => {
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
+    const allBookings = loadBookingsFromDisk();
+    const index = allBookings.findIndex((b) => b.id === bookingId);
+    if (index === -1) {
+      throw new Error(`Pemesanan tiket dengan ID ${bookingId} tidak ditemukan.`);
+    }
 
-  const existing = allBookings[index];
+    const existing = allBookings[index];
 
-  // Two-Step Reversal Guard:
-  // Tolak pembatalan pembayaran jika tiket masih tercatat hadir (CHECKED_IN)
-  if (status === "CANCELLED" && existing.checkInStatus === "CHECKED_IN") {
-    throw new Error(
-      "Tiket sudah digunakan untuk check-in. Batalkan status kehadiran terlebih dahulu sebelum membatalkan pembayaran."
-    );
-  }
+    // Two-Step Reversal Guard:
+    // Tolak pembatalan pembayaran jika tiket masih tercatat hadir (CHECKED_IN)
+    if (status === "CANCELLED" && existing.checkInStatus === "CHECKED_IN") {
+      throw new Error(
+        "Tiket sudah digunakan untuk check-in. Batalkan status kehadiran terlebih dahulu sebelum membatalkan pembayaran."
+      );
+    }
 
-  const now = new Date().toISOString();
-  const updated: EventTicketOrder = {
-    ...existing,
-    paymentStatus: status,
-    paidAt: status === "PAID" ? existing.paidAt || now : existing.paidAt,
-    paymentVerifiedAt: (status === "PAID" || options?.rejectionReason) ? now : existing.paymentVerifiedAt,
-    paymentVerifiedBy: options?.actorName || existing.paymentVerifiedBy,
-    paymentVerificationNote: options?.verificationNote !== undefined ? options.verificationNote : existing.paymentVerificationNote,
-    paymentRejectionReason: options?.rejectionReason !== undefined ? options.rejectionReason : (status === "PAID" ? null : existing.paymentRejectionReason),
-    updatedAt: now,
-  };
+    const now = new Date().toISOString();
+    const updated: EventTicketOrder = {
+      ...existing,
+      paymentStatus: status,
+      paidAt: status === "PAID" ? existing.paidAt || now : existing.paidAt,
+      paymentVerifiedAt: (status === "PAID" || options?.rejectionReason) ? now : existing.paymentVerifiedAt,
+      paymentVerifiedBy: options?.actorName || existing.paymentVerifiedBy,
+      paymentVerificationNote: options?.verificationNote !== undefined ? options.verificationNote : existing.paymentVerificationNote,
+      paymentRejectionReason: options?.rejectionReason !== undefined ? options.rejectionReason : (status === "PAID" ? null : existing.paymentRejectionReason),
+      updatedAt: now,
+    };
 
-  allBookings[index] = updated;
-  saveBookingsToDisk(allBookings);
+    allBookings[index] = updated;
+    await saveBookingsToDisk(allBookings);
 
-  return updated;
+    return updated;
+  });
 }
 
 /**
@@ -2082,45 +2111,48 @@ export async function updateBookingPaymentProof(
     throw new Error("URL atau data bukti transfer tidak valid.");
   }
 
-  const allBookings = loadBookingsFromDisk();
-  const index = allBookings.findIndex((b) =>
-    normalizedId.bookingId && b.id === normalizedId.bookingId
-      ? true
-      : normalizedId.guestToken && b.guestToken === normalizedId.guestToken
-      ? true
-      : false
-  );
+  return withBookingLock(async () => {
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
+    const allBookings = loadBookingsFromDisk();
+    const index = allBookings.findIndex((b) =>
+      normalizedId.bookingId && b.id === normalizedId.bookingId
+        ? true
+        : normalizedId.guestToken && b.guestToken === normalizedId.guestToken
+        ? true
+        : false
+    );
 
-  if (index === -1) {
-    throw new Error("Pemesanan tiket tidak ditemukan.");
-  }
+    if (index === -1) {
+      throw new Error("Pemesanan tiket tidak ditemukan.");
+    }
 
-  const existing = allBookings[index];
+    const existing = allBookings[index];
 
-  if (existing.paymentStatus === "EXPIRED") {
-    throw new Error("Pemesanan tiket telah kedaluwarsa. Bukti transfer tidak dapat diunggah.");
-  }
-  if (existing.paymentStatus === "CANCELLED") {
-    throw new Error("Pemesanan tiket telah dibatalkan. Bukti transfer tidak dapat diunggah.");
-  }
-  if (existing.paymentStatus === "PAID") {
-    throw new Error("Pemesanan tiket telah lunas terverifikasi.");
-  }
+    if (existing.paymentStatus === "EXPIRED") {
+      throw new Error("Pemesanan tiket telah kedaluwarsa. Bukti transfer tidak dapat diunggah.");
+    }
+    if (existing.paymentStatus === "CANCELLED") {
+      throw new Error("Pemesanan tiket telah dibatalkan. Bukti transfer tidak dapat diunggah.");
+    }
+    if (existing.paymentStatus === "PAID") {
+      throw new Error("Pemesanan tiket telah lunas terverifikasi.");
+    }
 
-  const updated: EventTicketOrder = {
-    ...existing,
-    paymentProofUrl: normalizedProof.paymentProofUrl,
-    paymentProofNote: normalizedProof.paymentProofNote || existing.paymentProofNote,
-    paymentProofUploadedAt: new Date().toISOString(),
-    paymentRejectionReason: null, // Clear any previous rejection upon new upload
-    paymentMethod: "TRANSFER",
-    updatedAt: new Date().toISOString(),
-  };
+    const updated: EventTicketOrder = {
+      ...existing,
+      paymentProofUrl: normalizedProof.paymentProofUrl,
+      paymentProofNote: normalizedProof.paymentProofNote || existing.paymentProofNote,
+      paymentProofUploadedAt: new Date().toISOString(),
+      paymentRejectionReason: null, // Clear any previous rejection upon new upload
+      paymentMethod: "TRANSFER",
+      updatedAt: new Date().toISOString(),
+    };
 
-  allBookings[index] = updated;
-  saveBookingsToDisk(allBookings);
+    allBookings[index] = updated;
+    await saveBookingsToDisk(allBookings);
 
-  return updated;
+    return updated;
+  });
 }
 
 /**
@@ -2367,63 +2399,65 @@ export async function organizerResubmitEvent(
   updates: Partial<EventSubmissionPayload>,
   isAdmin: boolean = false
 ): Promise<CommunityEvent> {
-  const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
-  await syncStorageFromDb("events.json").catch(() => {});
-  const all = loadEventsFromDisk();
-  const index = all.findIndex((e) => e.id === eventId);
-  if (index === -1) {
-    throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
-  }
+  return withEventLock(async () => {
+    const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
+    await syncStorageFromDb("events.json").catch(() => {});
+    const all = loadEventsFromDisk();
+    const index = all.findIndex((e) => e.id === eventId);
+    if (index === -1) {
+      throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
+    }
 
-  const existing = all[index];
-  if (!isAdmin && (existing.organizerEmail || "").toLowerCase() !== normalizedEmail) {
-    throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk mengubah event milik komunitas lain.");
-  }
+    const existing = all[index];
+    if (!isAdmin && (existing.organizerEmail || "").toLowerCase() !== normalizedEmail) {
+      throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk mengubah event milik komunitas lain.");
+    }
 
-  let updatedProposedRevenueSplit = existing.proposedRevenueSplit;
-  if (
-    typeof updates.proposedOrganizerPercent === "number" &&
-    typeof updates.proposedPlatformPercent === "number" &&
-    updates.proposedOrganizerPercent + updates.proposedPlatformPercent === 100
-  ) {
-    updatedProposedRevenueSplit = {
-      id: `split-prop-${Date.now()}`,
-      proposedBy: "ORGANIZER",
-      organizerPercent: updates.proposedOrganizerPercent,
-      platformPercent: updates.proposedPlatformPercent,
-      reason: updates.revenueSplitReason || existing.proposedRevenueSplit?.reason || "Usulan saat revisi proposal",
-      status: "PENDING",
-      createdAt: new Date().toISOString(),
+    let updatedProposedRevenueSplit = existing.proposedRevenueSplit;
+    if (
+      typeof updates.proposedOrganizerPercent === "number" &&
+      typeof updates.proposedPlatformPercent === "number" &&
+      updates.proposedOrganizerPercent + updates.proposedPlatformPercent === 100
+    ) {
+      updatedProposedRevenueSplit = {
+        id: `split-prop-${Date.now()}`,
+        proposedBy: "ORGANIZER",
+        organizerPercent: updates.proposedOrganizerPercent,
+        platformPercent: updates.proposedPlatformPercent,
+        reason: updates.revenueSplitReason || existing.proposedRevenueSplit?.reason || "Usulan saat revisi proposal",
+        status: "PENDING",
+        createdAt: new Date().toISOString(),
+      };
+    }
+
+    const updated: CommunityEvent = {
+      ...existing,
+      title: updates.title ? sanitizeHtmlText(updates.title) : existing.title,
+      category: updates.category || existing.category,
+      description: updates.description ? sanitizeHtmlText(updates.description) : existing.description,
+      startDate: updates.startDate ? new Date(updates.startDate).toISOString() : existing.startDate,
+      endDate: updates.endDate ? new Date(updates.endDate).toISOString() : existing.endDate,
+      location: updates.location ? sanitizeHtmlText(updates.location) : existing.location,
+      maxCapacity: updates.maxCapacity && updates.maxCapacity > 0 ? Number(updates.maxCapacity) : existing.maxCapacity,
+      isPaid: updates.isPaid !== undefined ? Boolean(updates.isPaid) : existing.isPaid,
+      price: updates.price !== undefined ? Number(updates.price || 0) : existing.price,
+      posterUrl: updates.posterUrl ? updates.posterUrl.trim() : existing.posterUrl,
+      externalRegistrationUrl: updates.externalRegistrationUrl !== undefined ? updates.externalRegistrationUrl : existing.externalRegistrationUrl,
+      guidelines: updates.guidelines ? parseGuidelinesInput(updates.guidelines) : existing.guidelines,
+      collaborationFacilities: updates.collaborationFacilities !== undefined ? updates.collaborationFacilities : existing.collaborationFacilities,
+      collaborationPromotion: updates.collaborationPromotion !== undefined ? updates.collaborationPromotion : existing.collaborationPromotion,
+      collaborationNotes: typeof updates.collaborationNotes === "string" ? sanitizeHtmlText(updates.collaborationNotes) : existing.collaborationNotes,
+      proposedRevenueSplit: updatedProposedRevenueSplit,
+      status: "PENDING", // Back to review queue
+      revisionNotes: null, // Cleared on resubmission
+      updatedAt: new Date().toISOString(),
     };
-  }
 
-  const updated: CommunityEvent = {
-    ...existing,
-    title: updates.title ? sanitizeHtmlText(updates.title) : existing.title,
-    category: updates.category || existing.category,
-    description: updates.description ? sanitizeHtmlText(updates.description) : existing.description,
-    startDate: updates.startDate ? new Date(updates.startDate).toISOString() : existing.startDate,
-    endDate: updates.endDate ? new Date(updates.endDate).toISOString() : existing.endDate,
-    location: updates.location ? sanitizeHtmlText(updates.location) : existing.location,
-    maxCapacity: updates.maxCapacity && updates.maxCapacity > 0 ? Number(updates.maxCapacity) : existing.maxCapacity,
-    isPaid: updates.isPaid !== undefined ? Boolean(updates.isPaid) : existing.isPaid,
-    price: updates.price !== undefined ? Number(updates.price || 0) : existing.price,
-    posterUrl: updates.posterUrl ? updates.posterUrl.trim() : existing.posterUrl,
-    externalRegistrationUrl: updates.externalRegistrationUrl !== undefined ? updates.externalRegistrationUrl : existing.externalRegistrationUrl,
-    guidelines: updates.guidelines ? parseGuidelinesInput(updates.guidelines) : existing.guidelines,
-    collaborationFacilities: updates.collaborationFacilities !== undefined ? updates.collaborationFacilities : existing.collaborationFacilities,
-    collaborationPromotion: updates.collaborationPromotion !== undefined ? updates.collaborationPromotion : existing.collaborationPromotion,
-    collaborationNotes: typeof updates.collaborationNotes === "string" ? sanitizeHtmlText(updates.collaborationNotes) : existing.collaborationNotes,
-    proposedRevenueSplit: updatedProposedRevenueSplit,
-    status: "PENDING", // Back to review queue
-    revisionNotes: null, // Cleared on resubmission
-    updatedAt: new Date().toISOString(),
-  };
+    all[index] = updated;
+    await saveEventsToDisk(all);
 
-  all[index] = updated;
-  saveEventsToDisk(all);
-
-  return updated;
+    return updated;
+  });
 }
 
 /**
@@ -2440,50 +2474,53 @@ export async function proposeEventRevenueSplit(
   actorEmail: string,
   isAdmin: boolean = false
 ): Promise<CommunityEvent> {
-  if (organizerPercent + platformPercent !== 100) {
-    throw new Error("Total persentase bagi hasil harus tepat 100%.");
-  }
-  if (organizerPercent < 0 || platformPercent < 0 || organizerPercent > 100 || platformPercent > 100) {
-    throw new Error("Persentase harus berada di antara 0% dan 100%.");
-  }
+  return withEventLock(async () => {
+    if (organizerPercent + platformPercent !== 100) {
+      throw new Error("Total persentase bagi hasil harus tepat 100%.");
+    }
+    if (organizerPercent < 0 || platformPercent < 0 || organizerPercent > 100 || platformPercent > 100) {
+      throw new Error("Persentase harus berada di antara 0% dan 100%.");
+    }
 
-  const all = loadEventsFromDisk();
-  const index = all.findIndex((e) => e.id === eventId);
-  if (index === -1) {
-    throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
-  }
+    await syncStorageFromDb("events.json").catch(() => {});
+    const all = loadEventsFromDisk();
+    const index = all.findIndex((e) => e.id === eventId);
+    if (index === -1) {
+      throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
+    }
 
-  const event = all[index];
-  const normalizedActorEmail = (actorEmail || "").trim().toLowerCase();
-  const normalizedOrganizerEmail = (event.organizerEmail || "").trim().toLowerCase();
+    const event = all[index];
+    const normalizedActorEmail = (actorEmail || "").trim().toLowerCase();
+    const normalizedOrganizerEmail = (event.organizerEmail || "").trim().toLowerCase();
 
-  const isDagoAdminParty = proposedBy === "DAGO_ADMIN" || (proposedBy as string) === "ADMIN";
+    const isDagoAdminParty = proposedBy === "DAGO_ADMIN" || (proposedBy as string) === "ADMIN";
 
-  if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
-    throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk mengusulkan bagi hasil event ini.");
-  }
-  if (isDagoAdminParty && !isAdmin) {
-    throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat mengusulkan bagi hasil atas nama Dago.");
-  }
+    if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
+      throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk mengusulkan bagi hasil event ini.");
+    }
+    if (isDagoAdminParty && !isAdmin) {
+      throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat mengusulkan bagi hasil atas nama Dago.");
+    }
 
-  const newProposal: ProposedRevenueSplit = {
-    id: `split-prop-${Date.now()}`,
-    proposedBy,
-    organizerPercent,
-    platformPercent,
-    reason: sanitizeHtmlText(reason || "Usulan penyesuaian bagi hasil"),
-    status: "PENDING",
-    createdAt: new Date().toISOString(),
-    proposedAt: new Date().toISOString(),
-  };
+    const newProposal: ProposedRevenueSplit = {
+      id: `split-prop-${Date.now()}`,
+      proposedBy,
+      organizerPercent,
+      platformPercent,
+      reason: sanitizeHtmlText(reason || "Usulan penyesuaian bagi hasil"),
+      status: "PENDING",
+      createdAt: new Date().toISOString(),
+      proposedAt: new Date().toISOString(),
+    };
 
-  event.proposedRevenueSplit = newProposal;
-  event.updatedAt = new Date().toISOString();
+    event.proposedRevenueSplit = newProposal;
+    event.updatedAt = new Date().toISOString();
 
-  all[index] = event;
-  saveEventsToDisk(all);
+    all[index] = event;
+    await saveEventsToDisk(all);
 
-  return event;
+    return event;
+  });
 }
 
 /**
@@ -2499,98 +2536,101 @@ export async function respondToEventRevenueSplit(
   actorEmail?: string,
   isAdmin: boolean = false
 ): Promise<CommunityEvent> {
-  const all = loadEventsFromDisk();
-  const index = all.findIndex((e) => e.id === eventId);
-  if (index === -1) {
-    throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
-  }
-
-  const event = all[index];
-  const normalizedActorEmail = (actorEmail || "").trim().toLowerCase();
-  const normalizedOrganizerEmail = (event.organizerEmail || "").trim().toLowerCase();
-
-  const isDagoAdminParty = respondingParty === "DAGO_ADMIN" || (respondingParty as string) === "ADMIN";
-
-  if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
-    throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk merespons bagi hasil event ini.");
-  }
-  if (isDagoAdminParty && !isAdmin) {
-    throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat merespons kesepakatan atas nama Dago.");
-  }
-
-  const pendingProposal = event.proposedRevenueSplit;
-  if (!pendingProposal && decision !== "COUNTER") {
-    throw new Error("Tidak ada usulan bagi hasil yang sedang aktif untuk direspons.");
-  }
-
-  const now = new Date().toISOString();
-
-  if (decision === "ACCEPT" && pendingProposal) {
-    const isProposerSameParty =
-      (pendingProposal.proposedBy === "ORGANIZER" && respondingParty === "ORGANIZER") ||
-      ((pendingProposal.proposedBy === "DAGO_ADMIN" || (pendingProposal.proposedBy as string) === "ADMIN") && isDagoAdminParty);
-    if (isProposerSameParty) {
-      throw new Error("Pihak yang mengajukan usulan tidak dapat menyetujui usulannya sendiri. Menunggu tanggapan dari pihak lawan.");
+  return withEventLock(async () => {
+    await syncStorageFromDb("events.json").catch(() => {});
+    const all = loadEventsFromDisk();
+    const index = all.findIndex((e) => e.id === eventId);
+    if (index === -1) {
+      throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
     }
 
-    const prevOrganizerPercent = event.organizerFeePercent ?? 80;
-    const prevPlatformPercent = event.customPlatformFeePercent ?? 20;
+    const event = all[index];
+    const normalizedActorEmail = (actorEmail || "").trim().toLowerCase();
+    const normalizedOrganizerEmail = (event.organizerEmail || "").trim().toLowerCase();
 
-    const historyEntry: RevenueSplitAgreementHistory = {
-      id: `rev-hist-${Date.now()}`,
-      previousOrganizerPercent: prevOrganizerPercent,
-      previousPlatformPercent: prevPlatformPercent,
-      newOrganizerPercent: pendingProposal.organizerPercent,
-      newPlatformPercent: pendingProposal.platformPercent,
-      agreedOrganizerPercent: pendingProposal.organizerPercent,
-      agreedPlatformPercent: pendingProposal.platformPercent,
-      proposedBy: pendingProposal.proposedBy,
-      reason: pendingProposal.reason || "Kesepakatan bagi hasil disetujui",
-      approvedBy: actorName || (isDagoAdminParty ? "Admin Dago" : event.organizerName),
-      approvedAt: now,
-      agreedBy: actorName || (isDagoAdminParty ? "Admin Dago" : event.organizerName),
-      agreedAt: now,
-      effectiveDate: now,
-      notes: pendingProposal.reason || `Disetujui oleh ${isDagoAdminParty ? "Admin Dago" : "Penyelenggara"}`,
-    };
+    const isDagoAdminParty = respondingParty === "DAGO_ADMIN" || (respondingParty as string) === "ADMIN";
 
-    event.revenueSplitHistory = [historyEntry, ...(event.revenueSplitHistory || [])];
-    event.organizerFeePercent = pendingProposal.organizerPercent;
-    event.customPlatformFeePercent = pendingProposal.platformPercent;
-    event.proposedRevenueSplit = null;
-    event.updatedAt = now;
-  } else if (decision === "REJECT") {
-    // Rejection keeps active agreement intact
-    if (pendingProposal) {
-      pendingProposal.status = "REJECTED";
+    if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
+      throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk merespons bagi hasil event ini.");
+    }
+    if (isDagoAdminParty && !isAdmin) {
+      throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat merespons kesepakatan atas nama Dago.");
+    }
+
+    const pendingProposal = event.proposedRevenueSplit;
+    if (!pendingProposal && decision !== "COUNTER") {
+      throw new Error("Tidak ada usulan bagi hasil yang sedang aktif untuk direspons.");
+    }
+
+    const now = new Date().toISOString();
+
+    if (decision === "ACCEPT" && pendingProposal) {
+      const isProposerSameParty =
+        (pendingProposal.proposedBy === "ORGANIZER" && respondingParty === "ORGANIZER") ||
+        ((pendingProposal.proposedBy === "DAGO_ADMIN" || (pendingProposal.proposedBy as string) === "ADMIN") && isDagoAdminParty);
+      if (isProposerSameParty) {
+        throw new Error("Pihak yang mengajukan usulan tidak dapat menyetujui usulannya sendiri. Menunggu tanggapan dari pihak lawan.");
+      }
+
+      const prevOrganizerPercent = event.organizerFeePercent ?? 80;
+      const prevPlatformPercent = event.customPlatformFeePercent ?? 20;
+
+      const historyEntry: RevenueSplitAgreementHistory = {
+        id: `rev-hist-${Date.now()}`,
+        previousOrganizerPercent: prevOrganizerPercent,
+        previousPlatformPercent: prevPlatformPercent,
+        newOrganizerPercent: pendingProposal.organizerPercent,
+        newPlatformPercent: pendingProposal.platformPercent,
+        agreedOrganizerPercent: pendingProposal.organizerPercent,
+        agreedPlatformPercent: pendingProposal.platformPercent,
+        proposedBy: pendingProposal.proposedBy,
+        reason: pendingProposal.reason || "Kesepakatan bagi hasil disetujui",
+        approvedBy: actorName || (isDagoAdminParty ? "Admin Dago" : event.organizerName),
+        approvedAt: now,
+        agreedBy: actorName || (isDagoAdminParty ? "Admin Dago" : event.organizerName),
+        agreedAt: now,
+        effectiveDate: now,
+        notes: pendingProposal.reason || `Disetujui oleh ${isDagoAdminParty ? "Admin Dago" : "Penyelenggara"}`,
+      };
+
+      event.revenueSplitHistory = [historyEntry, ...(event.revenueSplitHistory || [])];
+      event.organizerFeePercent = pendingProposal.organizerPercent;
+      event.customPlatformFeePercent = pendingProposal.platformPercent;
       event.proposedRevenueSplit = null;
       event.updatedAt = now;
-    }
-  } else if (decision === "COUNTER") {
-    if (!counterOffer) {
-      throw new Error("Rincian penawaran tandingan wajib disertakan.");
-    }
-    if (counterOffer.organizerPercent + counterOffer.platformPercent !== 100) {
-      throw new Error("Total penawaran tandingan harus tepat 100%.");
+    } else if (decision === "REJECT") {
+      // Rejection keeps active agreement intact
+      if (pendingProposal) {
+        pendingProposal.status = "REJECTED";
+        event.proposedRevenueSplit = null;
+        event.updatedAt = now;
+      }
+    } else if (decision === "COUNTER") {
+      if (!counterOffer) {
+        throw new Error("Rincian penawaran tandingan wajib disertakan.");
+      }
+      if (counterOffer.organizerPercent + counterOffer.platformPercent !== 100) {
+        throw new Error("Total penawaran tandingan harus tepat 100%.");
+      }
+
+      event.proposedRevenueSplit = {
+        id: `split-counter-${Date.now()}`,
+        proposedBy: respondingParty,
+        organizerPercent: counterOffer.organizerPercent,
+        platformPercent: counterOffer.platformPercent,
+        reason: sanitizeHtmlText(counterOffer.reason || "Penawaran tandingan bagi hasil"),
+        status: "PENDING",
+        createdAt: now,
+        proposedAt: now,
+      };
+      event.updatedAt = now;
     }
 
-    event.proposedRevenueSplit = {
-      id: `split-counter-${Date.now()}`,
-      proposedBy: respondingParty,
-      organizerPercent: counterOffer.organizerPercent,
-      platformPercent: counterOffer.platformPercent,
-      reason: sanitizeHtmlText(counterOffer.reason || "Penawaran tandingan bagi hasil"),
-      status: "PENDING",
-      createdAt: now,
-      proposedAt: now,
-    };
-    event.updatedAt = now;
-  }
+    all[index] = event;
+    await saveEventsToDisk(all);
 
-  all[index] = event;
-  saveEventsToDisk(all);
-
-  return event;
+    return event;
+  });
 }
 
 /**
@@ -2679,7 +2719,7 @@ export async function requestOrganizerPayout(
     event.updatedAt = now;
 
     all[index] = event;
-    saveEventsToDisk(all);
+    await saveEventsToDisk(all);
 
     return { event, payout: newPayout };
   });
@@ -2759,7 +2799,7 @@ export async function processOrganizerPayout(
 
     event.updatedAt = now;
     all[index] = event;
-    saveEventsToDisk(all);
+    await saveEventsToDisk(all);
 
     return { event, payout };
   });

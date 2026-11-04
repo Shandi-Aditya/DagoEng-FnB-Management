@@ -437,24 +437,24 @@ export default function SubmitEventPage() {
           <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
             <Link
               href="/events"
-              className="inline-flex items-center justify-center w-8 h-8 rounded-lg sm:w-auto sm:h-auto sm:rounded-none bg-slate-100 dark:bg-slate-800 sm:bg-transparent text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors shrink-0 group"
+              className="inline-flex items-center justify-center h-8 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors shrink-0 group"
               title="Kembali ke Daftar Event"
             >
               <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
-              <span className="hidden sm:inline ml-1.5">Kembali ke Daftar Event</span>
+              <span className="ml-1.5 hidden xs:inline sm:inline">Daftar Event</span>
             </Link>
-            <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
+            <span className="text-slate-300 dark:text-slate-700">|</span>
             <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white truncate">
-              Buat Event Komunitas
+              Buat Event
             </span>
           </div>
 
           <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
             <ThemeToggle variant="pill" />
             <Link href="/events/portal">
-              <Button variant="ghost" size="sm" className="h-8 sm:h-9 px-2 sm:px-3 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-[#3B7A57] dark:hover:text-[#52B788] rounded-xl border border-slate-200/80 dark:border-slate-800 sm:border-transparent">
+              <Button variant="ghost" size="sm" className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-[#3B7A57] dark:hover:text-[#52B788] rounded-xl border border-slate-200/80 dark:border-slate-800 sm:border-transparent">
                 <span className="hidden sm:inline">Portal Penyelenggara</span>
-                <span className="sm:hidden font-bold">Portal</span>
+                <span className="sm:hidden">Portal</span>
               </Button>
             </Link>
           </div>
@@ -540,37 +540,47 @@ export default function SubmitEventPage() {
             </div>
 
             {/* Stepper Progress Bar (Eventbrite Wizard Pattern) */}
-            <div className="grid grid-cols-4 gap-2 pt-2">
-              {WIZARD_STEPS.map((s) => {
-                const isCompleted = currentStep > s.id;
-                const isActive = currentStep === s.id;
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between sm:hidden px-0.5">
+                <span className="text-xs font-bold text-[#3B7A57] dark:text-[#52B788]">
+                  Langkah {currentStep} dari 4: {WIZARD_STEPS[currentStep - 1]?.title}
+                </span>
+                <span className="text-[11px] font-semibold text-slate-400">
+                  {Math.round((currentStep / 4) * 100)}%
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {WIZARD_STEPS.map((s) => {
+                  const isCompleted = currentStep > s.id;
+                  const isActive = currentStep === s.id;
 
-                return (
-                  <div key={s.id} className="space-y-1.5">
-                    <div
-                      className={`h-1.5 rounded-full transition-all duration-300 ${
-                        isCompleted
-                          ? "bg-[#3B7A57]"
-                          : isActive
-                          ? "bg-[#3B7A57]"
-                          : "bg-slate-200 dark:bg-slate-800"
-                      }`}
-                    />
-                    <div className="hidden sm:block">
-                      <span className={`text-[10px] font-bold block leading-none ${
-                        isActive ? "text-[#3B7A57] dark:text-[#52B788]" : "text-slate-400"
-                      }`}>
-                        Langkah {s.id}
-                      </span>
-                      <span className={`text-xs font-semibold truncate block mt-0.5 ${
-                        isActive ? "text-slate-900 dark:text-white" : "text-slate-500 dark:text-slate-400"
-                      }`}>
-                        {s.title}
-                      </span>
+                  return (
+                    <div key={s.id} className="space-y-1.5">
+                      <div
+                        className={`h-1.5 rounded-full transition-all duration-300 ${
+                          isCompleted
+                            ? "bg-[#3B7A57]"
+                            : isActive
+                            ? "bg-[#3B7A57]"
+                            : "bg-slate-200 dark:bg-slate-800"
+                        }`}
+                      />
+                      <div className="hidden sm:block">
+                        <span className={`text-[10px] font-bold block leading-none ${
+                          isActive ? "text-[#3B7A57] dark:text-[#52B788]" : "text-slate-400"
+                        }`}>
+                          Langkah {s.id}
+                        </span>
+                        <span className={`text-xs font-semibold truncate block mt-0.5 ${
+                          isActive ? "text-slate-900 dark:text-white" : "text-slate-500 dark:text-slate-400"
+                        }`}>
+                          {s.title}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
 
             {/* Error alerts */}
@@ -1116,7 +1126,7 @@ export default function SubmitEventPage() {
                   )}
 
                   {/* Section: Usulan Bagi Hasil (Revenue Split Proposal) */}
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-4">
+                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                       <div>
                         <span className="text-xs font-bold text-slate-900 dark:text-white block">
@@ -1138,7 +1148,42 @@ export default function SubmitEventPage() {
                       </Badge>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Quick Preset Buttons */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <span className="text-[11px] text-slate-500 font-medium mr-1">Preset:</span>
+                      {[
+                        { org: 80, plat: 20, label: "80 : 20 (Standar)" },
+                        { org: 70, plat: 30, label: "70 : 30" },
+                        { org: 90, plat: 10, label: "90 : 10" },
+                        { org: 50, plat: 50, label: "50 : 50" },
+                      ].map((p) => {
+                        const isSelected =
+                          Number(formData.proposedOrganizerPercent ?? 80) === p.org &&
+                          Number(formData.proposedPlatformPercent ?? 20) === p.plat;
+                        return (
+                          <button
+                            key={p.label}
+                            type="button"
+                            onClick={() => {
+                              setFormData((prev) => ({
+                                ...prev,
+                                proposedOrganizerPercent: p.org,
+                                proposedPlatformPercent: p.plat,
+                              }));
+                            }}
+                            className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                              isSelected
+                                ? "bg-[#3B7A57] text-white shadow-xs font-bold"
+                                : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57]/60"
+                            }`}
+                          >
+                            {p.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                       <div>
                         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                           Bagian Penyelenggara (%)

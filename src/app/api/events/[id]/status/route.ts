@@ -73,6 +73,15 @@ export async function PATCH(
     });
   } catch (error: any) {
     console.error(`PATCH /api/events/${params.id}/status error:`, error);
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database cloud sedang mengalami gangguan. Perubahan status event belum dapat dikonfirmasi demi menjaga konsistensi data. Silakan coba beberapa saat lagi.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memperbarui status event." },
       { status: 500 }

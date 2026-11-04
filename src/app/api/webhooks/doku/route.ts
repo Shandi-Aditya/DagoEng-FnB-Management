@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
       };
 
       allBookings[bookingIndex] = updatedBooking;
-      saveBookingsToDisk(allBookings);
+      await saveBookingsToDisk(allBookings);
 
       if (wasCancelled) {
         console.warn(
@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
         paymentStatus: "CANCELLED",
         updatedAt: now,
       };
-      saveBookingsToDisk(allBookings);
+      await saveBookingsToDisk(allBookings);
 
       console.info(
         `[DOKU Webhook] Status pembayaran ${transactionStatus} diterima untuk invoice ${invoiceNumber}. Kuota tiket ${booking.ticketCode} resmi dibebaskan.`
@@ -166,6 +166,12 @@ export async function POST(req: NextRequest) {
     );
   } catch (err: any) {
     console.error("[DOKU Webhook] Terjadi kesalahan server:", err);
+    if (err?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        { error: "Database temporarily unavailable, retry scheduled by DOKU" },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

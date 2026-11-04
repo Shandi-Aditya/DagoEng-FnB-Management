@@ -52,18 +52,19 @@ export default function EventDetailPage() {
   const [isCopied, setIsCopied] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
 
-  // Close share modal on Escape key press
+  // Close all modals on Escape key press
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setIsShareModalOpen(false);
+        setIsBookingModalOpen(false);
+        setIsPaymentModalOpen(false);
+        setIsTicketModalOpen(false);
       }
     };
-    if (isShareModalOpen) {
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }
-  }, [isShareModalOpen]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Booking & Ticketing States
   const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -97,6 +98,18 @@ export default function EventDetailPage() {
   const [issuedTicket, setIssuedTicket] = useState<EventTicketOrder | null>(null);
   const [isTicketModalOpen, setIsTicketModalOpen] = useState(false);
   const [copiedTicketCode, setCopiedTicketCode] = useState(false);
+
+  // Lock body scroll whenever any modal is open
+  useEffect(() => {
+    const isAnyModalOpen = isBookingModalOpen || isPaymentModalOpen || isTicketModalOpen || isShareModalOpen;
+    if (isAnyModalOpen) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [isBookingModalOpen, isPaymentModalOpen, isTicketModalOpen, isShareModalOpen]);
 
   useEffect(() => {
     if (id) {
@@ -222,7 +235,7 @@ export default function EventDetailPage() {
         minute: "2-digit",
       });
 
-      return `${startDateStr} • ${startTimeStr} - ${endTimeStr} WIB`;
+      return `${startDateStr} • ${startTimeStr} - ${endTimeStr} WITA`;
     } catch {
       return `${startIso} - ${endIso}`;
     }
@@ -308,11 +321,48 @@ export default function EventDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] flex items-center justify-center">
-        <div className="flex flex-col items-center space-y-3">
-          <div className="w-8 h-8 border-4 border-[#3B7A57] border-t-transparent rounded-full animate-spin" />
-          <span className="text-xs text-slate-500 dark:text-slate-400">Memuat detail event...</span>
-        </div>
+      <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E2E8F0]">
+        <header className="sticky top-0 z-40 bg-white/90 dark:bg-[#0B1120]/90 border-b border-slate-200 dark:border-slate-800">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+            <div className="h-8 w-44 rounded-full bg-slate-200 dark:bg-slate-800 animate-pulse" />
+            <div className="flex items-center space-x-2">
+              <div className="h-8 w-24 rounded-xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
+              <div className="h-8 w-20 rounded-xl bg-slate-200 dark:bg-slate-800 animate-pulse" />
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8 animate-pulse">
+          {/* Poster Skeleton */}
+          <div className="rounded-3xl bg-slate-200/80 dark:bg-slate-800/80 aspect-[16/9] sm:aspect-[21/9] w-full" />
+
+          {/* 2-Column Skeleton Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <div className="lg:col-span-8 space-y-6">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-3 w-16 bg-slate-200 dark:bg-slate-800 rounded-sm" />
+                    <div className="h-4 w-24 bg-slate-200 dark:bg-slate-800 rounded-sm" />
+                  </div>
+                ))}
+              </div>
+              <div className="h-48 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 p-6 space-y-3">
+                <div className="h-5 w-40 bg-slate-200 dark:bg-slate-800 rounded-sm" />
+                <div className="h-3 w-full bg-slate-200 dark:bg-slate-800 rounded-sm" />
+                <div className="h-3 w-5/6 bg-slate-200 dark:bg-slate-800 rounded-sm" />
+                <div className="h-3 w-4/6 bg-slate-200 dark:bg-slate-800 rounded-sm" />
+              </div>
+            </div>
+            <div className="lg:col-span-4">
+              <div className="h-72 rounded-3xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 p-6 space-y-4">
+                <div className="h-8 w-32 bg-slate-200 dark:bg-slate-800 rounded-sm" />
+                <div className="h-20 bg-slate-100 dark:bg-slate-800/60 rounded-2xl" />
+                <div className="h-10 bg-slate-200 dark:bg-slate-800 rounded-2xl" />
+              </div>
+            </div>
+          </div>
+        </main>
       </div>
     );
   }
@@ -438,7 +488,9 @@ export default function EventDetailPage() {
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Waktu Acara</span>
                 <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
                   <Clock className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
-                  <span className="truncate">WIB</span>
+                  <span className="truncate">
+                    {new Date(event.startDate).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} - {new Date(event.endDate).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WITA
+                  </span>
                 </div>
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate">
                   {new Date(event.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
@@ -746,9 +798,14 @@ export default function EventDetailPage() {
       {/* 1. MODAL REGISTRASI TIKET GUEST */}
       {/* ===================================================================== */}
       {isBookingModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsBookingModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-150">
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2">
                 <div className="w-8 h-8 rounded-xl bg-[#3B7A57]/15 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
                   <Ticket className="w-4 h-4" />
@@ -761,13 +818,13 @@ export default function EventDetailPage() {
               <button
                 type="button"
                 onClick={() => setIsBookingModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleBookingSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleBookingSubmit} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
               {bookingError && (
                 <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl text-xs text-rose-700 dark:text-rose-400 flex items-center space-x-2">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -901,8 +958,13 @@ export default function EventDetailPage() {
       {/* 2. MODAL INSTRUKSI PEMBAYARAN TIKET BERBAYAR */}
       {/* ===================================================================== */}
       {isPaymentModalOpen && pendingTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsPaymentModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full p-5 sm:p-6 text-center space-y-4 shadow-2xl overflow-y-auto max-h-[90vh] animate-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Instruksi Pembayaran Tiket</span>
               <span className="text-[10px] font-mono bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">
@@ -1015,10 +1077,15 @@ export default function EventDetailPage() {
       {/* 3. MODAL DIGITAL E-TIKET RESMI (DATA LANGSUNG DARI SERVER) */}
       {/* ===================================================================== */}
       {isTicketModalOpen && issuedTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsTicketModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150"
+        >
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-150">
             {/* Header Voucher */}
-            <div className="bg-gradient-to-r from-[#3B7A57] to-[#2E6044] p-5 text-white flex items-center justify-between">
+            <div className="bg-gradient-to-r from-[#3B7A57] to-[#2E6044] p-5 text-white flex items-center justify-between shrink-0">
               <div>
                 <span className="text-[10px] uppercase font-black tracking-widest text-emerald-200 block">
                   E-Tiket Komunitas Resmi
@@ -1035,7 +1102,7 @@ export default function EventDetailPage() {
             </div>
 
             {/* Ticket Card Details */}
-            <div className="p-6 space-y-5">
+            <div className="p-5 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto flex-1">
               <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-200 dark:border-slate-800">
                 <span className="text-[11px] text-slate-400 font-medium">Kode Booking Tiket:</span>
                 <div className="flex items-center justify-center space-x-2">
@@ -1190,7 +1257,7 @@ export default function EventDetailPage() {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-in zoom-in-95 duration-200 cursor-default"
+            className="relative w-full max-w-md bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto max-h-[90vh] animate-in zoom-in-95 duration-200 cursor-default"
           >
             <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>

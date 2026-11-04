@@ -186,6 +186,15 @@ export async function PATCH(
     });
   } catch (error: any) {
     console.error(`PATCH /api/events/bookings/${params.id} error:`, error);
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database tiket sedang mengalami gangguan. Pembaruan tiket belum dapat dikonfirmasi demi menjaga konsistensi data. Silakan coba kembali.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memperbarui tiket peserta." },
       { status: 400 }

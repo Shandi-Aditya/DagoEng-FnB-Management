@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
       return b;
     });
 
-    saveBookingsToDisk(updatedBookings);
+    await saveBookingsToDisk(updatedBookings);
 
     return NextResponse.json({
       success: true,
@@ -217,6 +217,12 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err: any) {
+    if (err?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        { success: false, error: "Layanan database simulasi sedang mengalami gangguan. Silakan coba kembali." },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: err.message || "Gagal memproses simulasi webhook." },
       { status: 500 }
