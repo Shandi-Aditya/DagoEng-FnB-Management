@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { loadBookingsFromDisk, getAdminEvents, updateBookingPaymentProof } from "@/lib/events";
+import {
+  loadBookingsFromDisk,
+  getAdminEvents,
+  updateBookingPaymentProof,
+  resolveDestinationBankAccount,
+  resolveActiveTransferBankForBooking,
+  getEventBankAccounts,
+} from "@/lib/events";
 import { CommunityEvent } from "@/types/event";
 import fs from "fs";
 import path from "path";
@@ -90,6 +97,23 @@ export async function GET(
       checkInTime: booking.checkInTime,
       dokuInvoiceNumber: booking.dokuInvoiceNumber,
       dokuPaymentUrl: booking.dokuPaymentUrl,
+      destinationBankSnapshot:
+        booking.destinationBankSnapshot ||
+        (matchingEvent ? resolveDestinationBankAccount(matchingEvent) : null),
+      activeDestinationBank: resolveActiveTransferBankForBooking(booking, matchingEvent).activeBank,
+      isOriginalBankDeactivated: resolveActiveTransferBankForBooking(booking, matchingEvent).isSnapshotDeactivated,
+      activeBankAccounts: getEventBankAccounts()
+        .filter((b) => b.isActive)
+        .map((b) => ({
+          bankId: b.id,
+          label: b.label,
+          bankName: b.bankName,
+          accountNumber: b.accountNumber,
+          accountHolder: b.accountHolder,
+          branch: b.branch,
+          badge: b.badge,
+          accountType: b.accountType,
+        })),
       paidAt: booking.paidAt,
       createdAt: booking.createdAt,
       eventDetails: matchingEvent

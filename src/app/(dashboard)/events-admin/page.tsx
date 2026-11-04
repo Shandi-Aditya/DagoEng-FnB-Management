@@ -42,6 +42,8 @@ import {
   CreditCard,
   Wallet,
   Copy,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -59,6 +61,7 @@ import {
 const STATUS_TABS: { key: string; label: string; status?: EventStatus }[] = [
   { key: "ALL", label: "Semua Pengajuan" },
   { key: "PENDING", label: "Menunggu Review", status: "PENDING" },
+  { key: "REVENUE_SPLIT_PENDING", label: "Usulan Bagi Hasil" },
   { key: "APPROVED", label: "Disetujui", status: "APPROVED" },
   { key: "REVISION_REQUESTED", label: "Perlu Revisi", status: "REVISION_REQUESTED" },
   { key: "REJECTED", label: "Ditolak", status: "REJECTED" },
@@ -113,6 +116,16 @@ export default function AdminEventsPage() {
   const [attendeeSearchQuery, setAttendeeSearchQuery] = useState("");
   const [isUpdatingCheckIn, setIsUpdatingCheckIn] = useState<string | null>(null);
   const [selectedProofBooking, setSelectedProofBooking] = useState<EventTicketOrder | null>(null);
+  const [expandedBookingIds, setExpandedBookingIds] = useState<Set<string>>(new Set());
+
+  const toggleBookingExpand = (bookingId: string) => {
+    setExpandedBookingIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(bookingId)) next.delete(bookingId);
+      else next.add(bookingId);
+      return next;
+    });
+  };
 
   // Modals state
   const [selectedEvent, setSelectedEvent] = useState<CommunityEvent | null>(null);
@@ -197,6 +210,40 @@ export default function AdminEventsPage() {
     badge: "Utama",
     isDefault: false,
   });
+
+  // Lock body scroll whenever any modal is open
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(
+      isDetailModalOpen ||
+      isRevisionModalOpen ||
+      isRejectModalOpen ||
+      isEditModalOpen ||
+      isAttendeesModalOpen ||
+      selectedProofBooking ||
+      payoutPromptModalOpen ||
+      rejectPaymentTarget ||
+      isAddBankModalOpen ||
+      editingBank
+    );
+    if (isAnyModalOpen) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [
+    isDetailModalOpen,
+    isRevisionModalOpen,
+    isRejectModalOpen,
+    isEditModalOpen,
+    isAttendeesModalOpen,
+    selectedProofBooking,
+    payoutPromptModalOpen,
+    rejectPaymentTarget,
+    isAddBankModalOpen,
+    editingBank,
+  ]);
 
   const loadBusinessSettings = async () => {
     try {
@@ -837,7 +884,11 @@ export default function AdminEventsPage() {
   const filteredEvents = useMemo(() => {
     return events.filter((e) => {
       const matchStatus =
-        selectedStatusTab === "ALL" || e.status === selectedStatusTab;
+        selectedStatusTab === "ALL"
+          ? true
+          : selectedStatusTab === "REVENUE_SPLIT_PENDING"
+          ? e.proposedRevenueSplit?.status === "PENDING"
+          : e.status === selectedStatusTab;
       const matchSearch =
         searchQuery === "" ||
         e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1293,7 +1344,9 @@ export default function AdminEventsPage() {
                 {STATUS_TABS.map((tab) => {
                   const active = selectedStatusTab === tab.key;
                   const count =
-                    tab.status !== undefined
+                    tab.key === "REVENUE_SPLIT_PENDING"
+                      ? events.filter((e) => e.proposedRevenueSplit?.status === "PENDING").length
+                      : tab.status !== undefined
                       ? events.filter((e) => e.status === tab.status).length
                       : events.length;
 
@@ -2748,8 +2801,16 @@ export default function AdminEventsPage() {
 
       {/* DETAIL MODAL */}
       {isDetailModalOpen && selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-2xl bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 overflow-y-auto max-h-[90vh] space-y-5">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsDetailModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-2xl bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 overflow-y-auto max-h-[90vh] space-y-5 cursor-default"
+          >
             <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <span className="text-[11px] text-slate-400 font-mono">ID: {selectedEvent.id}</span>
@@ -3209,8 +3270,16 @@ export default function AdminEventsPage() {
 
       {/* REVISION MODAL */}
       {isRevisionModalOpen && selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-md bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsRevisionModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-md bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4 cursor-default"
+          >
             <h3 className="text-base font-bold text-slate-900 dark:text-white">
               Minta Revisi Pengajuan
             </h3>
@@ -3254,8 +3323,16 @@ export default function AdminEventsPage() {
 
       {/* REJECT MODAL */}
       {isRejectModalOpen && selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-md bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsRejectModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-md bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4 cursor-default"
+          >
             <h3 className="text-base font-bold text-slate-900 dark:text-white">
               Tolak Pengajuan Event
             </h3>
@@ -3299,8 +3376,16 @@ export default function AdminEventsPage() {
 
       {/* EDIT MODAL */}
       {isEditModalOpen && selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-2xl bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 overflow-y-auto max-h-[90vh] space-y-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsEditModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-2xl bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 overflow-y-auto max-h-[90vh] space-y-4 cursor-default"
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
                 Edit Informasi Event
@@ -3513,8 +3598,16 @@ export default function AdminEventsPage() {
         };
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-            <div className="relative w-full max-w-4xl bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 overflow-hidden flex flex-col max-h-[92vh]">
+          <div
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setIsAttendeesModalOpen(false);
+            }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-4xl bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 overflow-hidden flex flex-col max-h-[92vh] cursor-default"
+            >
               {/* Header */}
               <div className="flex items-start justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
                 <div>
@@ -3627,138 +3720,210 @@ export default function AdminEventsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {filteredAttendees.map((b) => (
-                        <tr key={b.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                          <td className="py-2.5 px-3 font-mono font-bold text-[#3B7A57] dark:text-[#52B788] whitespace-nowrap">
-                            {b.ticketCode}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <span className="font-semibold text-slate-900 dark:text-white block">
-                              {b.guestName}
-                            </span>
-                            {b.institution && (
-                              <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate max-w-[150px]">
-                                {b.institution}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 whitespace-nowrap text-[11px]">
-                            <a
-                              href={formatWhatsAppUrl(b.guestPhone)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-emerald-600 hover:underline block"
-                            >
-                              <Phone className="w-3 h-3 inline mr-1" />
-                              {b.guestPhone}
-                            </a>
-                            <span className="text-slate-400 text-[10px] block truncate max-w-[140px]">
-                              {b.guestEmail}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-center font-bold text-slate-700 dark:text-slate-300">
-                            {b.ticketCount}
-                          </td>
-                          <td className="py-2.5 px-3 whitespace-nowrap">
-                            <div className="flex items-center space-x-1.5">
-                              {b.paymentStatus === "PAID" ? (
-                                <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-[10px]">
-                                  LUNAS
-                                </Badge>
-                              ) : (
-                                <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 text-[10px]">
-                                  {b.paymentStatus}
-                                </Badge>
-                              )}
-                              {b.paymentProofUrl && (
-                                <button
-                                  type="button"
-                                  onClick={() => setSelectedProofBooking(b)}
-                                  className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-[10px] font-bold hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors cursor-pointer"
-                                  title="Lihat Bukti Transfer"
-                                >
-                                  <Eye className="w-2.5 h-2.5" />
-                                  <span>Bukti</span>
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                            {b.checkInStatus === "CHECKED_IN" ? (
-                              <span className="inline-flex flex-col items-center">
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                                  <Check className="w-3 h-3 mr-1" /> Hadir
+                      {filteredAttendees.map((b) => {
+                        const isExpanded = expandedBookingIds.has(b.id);
+                        return (
+                          <React.Fragment key={b.id}>
+                            <tr className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors ${
+                              isExpanded ? "bg-slate-50/60 dark:bg-slate-800/40" : ""
+                            }`}>
+                              <td className="py-2.5 px-3 whitespace-nowrap">
+                                <div className="font-mono font-bold text-[#3B7A57] dark:text-[#52B788]">
+                                  {b.ticketCode}
+                                </div>
+                                {b.ticketCount > 1 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleBookingExpand(b.id)}
+                                    className="inline-flex items-center space-x-1 mt-1 text-[10px] font-bold text-slate-500 hover:text-[#3B7A57] dark:hover:text-[#52B788] cursor-pointer"
+                                  >
+                                    <span>{isExpanded ? "Tutup Rincian" : `Lihat ${b.ticketCount} Tiket`}</span>
+                                    {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                  </button>
+                                ) : (
+                                  <span className="text-[9.5px] text-slate-400 block mt-0.5">1 Tiket</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <span className="font-semibold text-slate-900 dark:text-white block">
+                                  {b.guestName}
                                 </span>
-                                {b.checkInTime && (
-                                  <span className="text-[9px] text-slate-400 mt-0.5">
-                                    {new Date(b.checkInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                                {b.institution && (
+                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate max-w-[150px]">
+                                    {b.institution}
                                   </span>
                                 )}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                                Belum Hadir
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                            {b.paymentStatus === "PENDING" && (
-                              <div className="inline-flex items-center space-x-1 mr-1.5">
-                                {b.paymentProofUrl && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => setSelectedProofBooking(b)}
-                                    className="h-7 px-2 text-[10px] font-bold border-sky-300 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950/40 rounded-lg cursor-pointer"
-                                    title="Periksa Foto Bukti Transfer"
-                                  >
-                                    <Eye className="w-3 h-3 mr-1" />
-                                    <span>Bukti</span>
-                                  </Button>
+                              </td>
+                              <td className="py-2.5 px-3 whitespace-nowrap text-[11px]">
+                                <a
+                                  href={formatWhatsAppUrl(b.guestPhone)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-emerald-600 hover:underline block"
+                                >
+                                  <Phone className="w-3 h-3 inline mr-1" />
+                                  {b.guestPhone}
+                                </a>
+                                <span className="text-slate-400 text-[10px] block truncate max-w-[140px]">
+                                  {b.guestEmail}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-center font-bold text-slate-700 dark:text-slate-300">
+                                {b.ticketCount}
+                              </td>
+                              <td className="py-2.5 px-3 whitespace-nowrap">
+                                <div className="flex items-center space-x-1.5">
+                                  {b.paymentStatus === "PAID" ? (
+                                    <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-[10px]">
+                                      LUNAS
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 text-[10px]">
+                                      {b.paymentStatus}
+                                    </Badge>
+                                  )}
+                                  {b.paymentProofUrl && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedProofBooking(b)}
+                                      className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-[10px] font-bold hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors cursor-pointer"
+                                      title="Lihat Bukti Transfer"
+                                    >
+                                      <Eye className="w-2.5 h-2.5" />
+                                      <span>Bukti</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                                {b.checkInStatus === "CHECKED_IN" ? (
+                                  <span className="inline-flex flex-col items-center">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                      <Check className="w-3 h-3 mr-1" /> Hadir
+                                    </span>
+                                    {b.checkInTime && (
+                                      <span className="text-[9px] text-slate-400 mt-0.5">
+                                        {new Date(b.checkInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                    Belum Hadir
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                                {b.paymentStatus === "PENDING" && (
+                                  <div className="inline-flex items-center space-x-1 mr-1.5">
+                                    {b.paymentProofUrl && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => setSelectedProofBooking(b)}
+                                        className="h-7 px-2 text-[10px] font-bold border-sky-300 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950/40 rounded-lg cursor-pointer"
+                                        title="Periksa Foto Bukti Transfer"
+                                      >
+                                        <Eye className="w-3 h-3 mr-1" />
+                                        <span>Bukti</span>
+                                      </Button>
+                                    )}
+                                    <Button
+                                      size="sm"
+                                      disabled={isUpdatingCheckIn === b.id}
+                                      onClick={() => handleVerifyPayment(b)}
+                                      className="h-7 px-2 text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-xs cursor-pointer"
+                                      title="Verifikasi Pembayaran Lunas"
+                                    >
+                                      Verifikasi Lunas
+                                    </Button>
+                                  </div>
                                 )}
                                 <Button
                                   size="sm"
-                                  disabled={isUpdatingCheckIn === b.id}
-                                  onClick={() => handleVerifyPayment(b)}
-                                  className="h-7 px-2 text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-xs cursor-pointer"
-                                  title="Verifikasi Pembayaran Lunas"
+                                  disabled={isUpdatingCheckIn === b.id || b.paymentStatus === "CANCELLED"}
+                                  onClick={() => handleCheckInToggle(b)}
+                                  className={`h-7 px-2 text-[11px] font-semibold rounded-lg ${b.paymentStatus === "CANCELLED"
+                                      ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-800"
+                                      : b.checkInStatus === "CHECKED_IN"
+                                        ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                                        : "bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs cursor-pointer"
+                                    }`}
+                                  title={b.paymentStatus === "CANCELLED" ? "Tiket yang dibatalkan tidak dapat check-in" : undefined}
                                 >
-                                  Verifikasi Lunas
+                                  {isUpdatingCheckIn === b.id ? (
+                                    <RefreshCw className="w-3 h-3 animate-spin mr-1" />
+                                  ) : b.paymentStatus === "CANCELLED" ? (
+                                    <X className="w-3 h-3 mr-1" />
+                                  ) : b.checkInStatus === "CHECKED_IN" ? (
+                                    <RotateCcw className="w-3 h-3 mr-1" />
+                                  ) : (
+                                    <UserCheck className="w-3 h-3 mr-1" />
+                                  )}
+                                  <span>
+                                    {b.paymentStatus === "CANCELLED"
+                                      ? "Batal"
+                                      : b.checkInStatus === "CHECKED_IN"
+                                        ? "Batal"
+                                        : "Hadir"}
+                                  </span>
                                 </Button>
-                              </div>
+                              </td>
+                            </tr>
+
+                            {/* Sub-tickets Accordion */}
+                            {isExpanded && (
+                              <tr className="bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800">
+                                <td colSpan={7} className="p-3 sm:p-4">
+                                  <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2.5">
+                                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5 text-xs">
+                                      <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                        <Ticket className="w-3.5 h-3.5 text-[#3B7A57]" />
+                                        <span>Rincian {b.ticketCount} Tiket dalam Transaksi {b.ticketCode}</span>
+                                      </span>
+                                      <span className="text-[11px] text-slate-500">
+                                        Status Bayar: <strong>{b.paymentStatus}</strong>
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                                      {Array.from({ length: b.ticketCount }).map((_, idx) => {
+                                        const ticketIndex = idx + 1;
+                                        const subCode = `${b.ticketCode}-${String(ticketIndex).padStart(2, "0")}`;
+                                        const isSubHadir = (b.checkedInQty ?? (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0)) >= ticketIndex;
+
+                                        return (
+                                          <div
+                                            key={subCode}
+                                            className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-xs space-y-1"
+                                          >
+                                            <div className="flex items-center justify-between">
+                                              <span className="font-mono font-bold text-[#3B7A57] dark:text-[#52B788] text-[11px]">
+                                                {subCode}
+                                              </span>
+                                              <span
+                                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
+                                                  isSubHadir
+                                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                                    : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                                }`}
+                                              >
+                                                {isSubHadir ? "Hadir" : "Belum Hadir"}
+                                              </span>
+                                            </div>
+                                            <div className="text-[10.5px] text-slate-500 truncate">
+                                              {ticketIndex === 1 ? `${b.guestName} (Pemesan)` : `Tamu #${ticketIndex}`}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
                             )}
-                            <Button
-                              size="sm"
-                              disabled={isUpdatingCheckIn === b.id || b.paymentStatus === "CANCELLED"}
-                              onClick={() => handleCheckInToggle(b)}
-                              className={`h-7 px-2 text-[11px] font-semibold rounded-lg ${b.paymentStatus === "CANCELLED"
-                                  ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-800"
-                                  : b.checkInStatus === "CHECKED_IN"
-                                    ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
-                                    : "bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs cursor-pointer"
-                                }`}
-                              title={b.paymentStatus === "CANCELLED" ? "Tiket yang dibatalkan tidak dapat check-in" : undefined}
-                            >
-                              {isUpdatingCheckIn === b.id ? (
-                                <RefreshCw className="w-3 h-3 animate-spin mr-1" />
-                              ) : b.paymentStatus === "CANCELLED" ? (
-                                <X className="w-3 h-3 mr-1" />
-                              ) : b.checkInStatus === "CHECKED_IN" ? (
-                                <RotateCcw className="w-3 h-3 mr-1" />
-                              ) : (
-                                <UserCheck className="w-3 h-3 mr-1" />
-                              )}
-                              <span>
-                                {b.paymentStatus === "CANCELLED"
-                                  ? "Batal"
-                                  : b.checkInStatus === "CHECKED_IN"
-                                    ? "Batal"
-                                    : "Hadir"}
-                              </span>
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
+                          </React.Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -3785,8 +3950,16 @@ export default function AdminEventsPage() {
 
       {/* Modal Preview Bukti Transfer Pembayaran */}
       {selectedProofBooking && selectedProofBooking.paymentProofUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedProofBooking(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 cursor-default"
+          >
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div>
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Verifikasi Bukti Transfer</span>
@@ -3865,8 +4038,16 @@ export default function AdminEventsPage() {
 
       {/* Modal Prompt Status Payout (PAID atau REJECTED) */}
       {payoutPromptModalOpen && activePayoutTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPayoutPromptModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4 cursor-default"
+          >
             <h4 className="text-base font-bold text-slate-900 dark:text-white">
               {activePayoutTarget.status === "PAID"
                 ? "Konfirmasi Pencairan Selesai Ditransfer"
@@ -3982,8 +4163,16 @@ export default function AdminEventsPage() {
 
       {/* MODAL TOLAK BUKTI PEMBAYARAN */}
       {rejectPaymentTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setRejectPaymentTarget(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4 cursor-default"
+          >
             <div className="flex items-start justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <h4 className="text-base font-bold text-slate-900 dark:text-white">
@@ -4059,8 +4248,16 @@ export default function AdminEventsPage() {
 
       {/* MODAL TAMBAH REKENING BANK */}
       {isAddBankModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsAddBankModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4 cursor-default"
+          >
             <div className="flex items-start justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <h4 className="text-base font-bold text-slate-900 dark:text-white">
@@ -4202,8 +4399,16 @@ export default function AdminEventsPage() {
       )}
       {/* MODAL EDIT REKENING BANK */}
       {editingBank && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingBank(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4 cursor-default"
+          >
             <div className="flex items-start justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <h4 className="text-base font-bold text-slate-900 dark:text-white">

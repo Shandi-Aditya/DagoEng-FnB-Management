@@ -11,6 +11,7 @@ interface AuthContextType {
   activeOrgModules: BusinessModuleCode[];
   toggleOrgModule: (moduleCode: BusinessModuleCode) => void;
   isLoading: boolean;
+  isLoggingOut: boolean;
   login: (personaKey?: PersonaKey, customUser?: AuthenticatedUser) => Promise<boolean>;
   loginCustomer: (customerData: { name: string; phone: string; email?: string }) => Promise<AuthenticatedUser>;
   logout: () => Promise<void>;
@@ -482,7 +483,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("dagoeng_custom_customer");
     localStorage.setItem("dagoeng_is_logged_out", "true");
     syncPersonaCookie(null);
-    setIsLoggingOut(false);
+
+    // Keep smooth overlay alive during router navigation to prevent visual clashing
+    setTimeout(() => {
+      setIsLoggingOut(false);
+    }, 600);
   };
 
   const switchPersona = async (personaKey: PersonaKey) => {
@@ -503,6 +508,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         activeOrgModules,
         toggleOrgModule,
         isLoading,
+        isLoggingOut,
         login,
         loginCustomer,
         logout,

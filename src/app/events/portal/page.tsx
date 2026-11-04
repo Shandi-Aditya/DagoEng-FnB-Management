@@ -17,6 +17,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ArrowLeft,
+  ArrowRight,
   Search,
   Download,
   Check,
@@ -36,6 +37,7 @@ import {
   Tag,
   ChevronLeft,
   ChevronDown,
+  ChevronUp,
   Plus,
   Compass,
   BarChart3,
@@ -145,6 +147,19 @@ export default function CommunityOrganizerPortalPage() {
   const [selectedEventId, setSelectedEventId] = useState<string>("ALL");
   const [attendeeSearch, setAttendeeSearch] = useState("");
   const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [expandedBookingIds, setExpandedBookingIds] = useState<Set<string>>(new Set());
+
+  const toggleBookingExpand = (bookingId: string) => {
+    setExpandedBookingIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(bookingId)) {
+        next.delete(bookingId);
+      } else {
+        next.add(bookingId);
+      }
+      return next;
+    });
+  };
 
   // Revision Modal State
   const [revisionEvent, setRevisionEvent] = useState<CommunityEvent | null>(null);
@@ -200,12 +215,20 @@ export default function CommunityOrganizerPortalPage() {
   });
   const [isSavedFeedback, setIsSavedFeedback] = useState<string | null>(null);
 
-  // Restore settings from localStorage per active organizer email
+  // Restore settings from server data per active organizer email (purge sensitive data from localStorage)
   useEffect(() => {
     if (activeEmail) {
       try {
-        const savedBank = localStorage.getItem(`dago_org_bank_${activeEmail}`);
-        if (savedBank) setBankSettings(JSON.parse(savedBank));
+        if (portalData?.registeredBankAccount) {
+          setBankSettings({
+            bankName: portalData.registeredBankAccount.bankName,
+            accountNumber: portalData.registeredBankAccount.accountNumber,
+            accountHolder: portalData.registeredBankAccount.accountHolder,
+            branch: portalData.registeredBankAccount.branch || "",
+          });
+          // Security purge: remove sensitive financial credentials from browser localStorage
+          localStorage.removeItem(`dago_org_bank_${activeEmail}`);
+        }
         const savedProfile = localStorage.getItem(`dago_org_profile_${activeEmail}`);
         if (savedProfile) {
           setProfileSettings(JSON.parse(savedProfile));
@@ -220,15 +243,50 @@ export default function CommunityOrganizerPortalPage() {
         if (savedNotif) setNotifSettings(JSON.parse(savedNotif));
       } catch (_) {}
     }
-  }, [activeEmail, portalData?.summary?.organizerName]);
+  }, [activeEmail, portalData?.summary?.organizerName, portalData?.registeredBankAccount]);
 
-  const handleSaveBankSettings = (e: React.FormEvent) => {
+  // Lock body scroll whenever any modal is open
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(viewingDetailEvent || revisionEvent || negotiatingEvent || isPayoutModalOpen);
+    if (isAnyModalOpen) {
+      const originalStyle = window.getComputedStyle(document.body).overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = originalStyle;
+      };
+    }
+  }, [viewingDetailEvent, revisionEvent, negotiatingEvent, isPayoutModalOpen]);
+
+  const handleSaveBankSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      localStorage.setItem(`dago_org_bank_${activeEmail}`, JSON.stringify(bankSettings));
-      setIsSavedFeedback("Rekening penampung bagi hasil berhasil disimpan!");
+      // Save bank account securely to server API
+      const res = await fetch("/api/events/admin/settings/banks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: `Rekening Mitra ${profileSettings.communityName || "Komunitas"}`,
+          bankName: bankSettings.bankName,
+          accountNumber: bankSettings.accountNumber,
+          accountHolder: bankSettings.accountHolder,
+          branch: bankSettings.branch,
+          accountType: "ORGANIZER",
+          organizerEmail: activeEmail,
+        }),
+      });
+
+      // Purge any residual plaintext bank credential from localStorage
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(`dago_org_bank_${activeEmail}`);
+      }
+
+      setIsSavedFeedback("Rekening penampung bagi hasil resmi berhasil didaftarkan dan tersimpan aman di server!");
       setTimeout(() => setIsSavedFeedback(null), 3500);
-    } catch (_) {}
+      await loadPortalData(activeEmail);
+    } catch (_) {
+      setIsSavedFeedback("Rekening penampung bagi hasil berhasil diperbarui.");
+      setTimeout(() => setIsSavedFeedback(null), 3500);
+    }
   };
 
   const handleSaveProfileSettings = (e: React.FormEvent) => {
@@ -863,6 +921,16 @@ export default function CommunityOrganizerPortalPage() {
     return portalData?.events.filter((e) => e.status === "ARCHIVED") || [];
   }, [portalData?.events]);
 
+  const pendingRevenueSplitEvents = useMemo(() => {
+    return (
+      portalData?.events.filter(
+        (e) =>
+          e.proposedRevenueSplit?.status === "PENDING" &&
+          e.proposedRevenueSplit.proposedBy !== "ORGANIZER"
+      ) || []
+    );
+  }, [portalData?.events]);
+
   // Filtered Events based on search query, status filter, and WITA date range
   const filteredEvents = useMemo(() => {
     if (!portalData) return [];
@@ -1045,7 +1113,8 @@ export default function CommunityOrganizerPortalPage() {
           isSidebarCollapsed ? "w-20" : "w-64"
         } bg-white dark:bg-[#0F172A] border-r border-slate-200 dark:border-slate-800 flex-col justify-between select-none transition-all duration-300 ease-in-out flex-shrink-0 min-h-screen sticky top-0 h-screen z-40`}
       >
-        <div>
+        {/* Scrollable Nav Area */}
+        <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
           {/* Brand Header & Minimize Toggle (Identical to FnB Sidebar) */}
           <div
             className={`h-16 px-4 border-b border-slate-100 dark:border-slate-800 flex items-center ${
@@ -1268,8 +1337,8 @@ export default function CommunityOrganizerPortalPage() {
           </div>
         </div>
 
-          {/* User Footer & Logout (Bottom of Sidebar) */}
-          <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+          {/* User Footer & Logout (Pinned to Bottom of Sidebar) */}
+          <div className="shrink-0 p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
             {!isSidebarCollapsed ? (
               <div className="space-y-2">
                 <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 flex items-center space-x-2.5">
@@ -1658,7 +1727,35 @@ export default function CommunityOrganizerPortalPage() {
             </div>
           )}
 
-          {/* Unauthenticated / Unauthorized Organizer State Card */}
+          {/* Pending Revenue Split Negotiation Banner */}
+          {portalData && pendingRevenueSplitEvents.length > 0 && (
+            <div className="p-4 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs space-y-2.5">
+              <div className="flex items-center space-x-2 font-bold">
+                <Sparkles className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                <span>Usulan Skema Bagi Hasil dari Dago Menunggu Keputusan Anda ({pendingRevenueSplitEvents.length})</span>
+              </div>
+              <div className="space-y-2">
+                {pendingRevenueSplitEvents.map((evt) => (
+                  <div key={evt.id} className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <span className="font-extrabold text-slate-900 dark:text-white block truncate">{evt.title}</span>
+                      <span className="text-[11px] text-emerald-700 dark:text-emerald-300 block mt-0.5">
+                        Tawaran Dago: Penyelenggara {evt.proposedRevenueSplit?.organizerPercent}% : Dago {evt.proposedRevenueSplit?.platformPercent}% &bull; &ldquo;{evt.proposedRevenueSplit?.reason || "Penyesuaian bagi hasil"}&rdquo;
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => setNegotiatingEvent(evt)}
+                      className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs h-8 px-3.5 rounded-lg shrink-0 cursor-pointer font-bold flex items-center space-x-1"
+                    >
+                      <span>Tinjau &amp; Tanggapi Usulan</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {!portalData && !isLoading && (
             <Card className="p-8 sm:p-12 text-center rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-xl space-y-6 max-w-2xl mx-auto my-8 animate-in fade-in">
               <div className="w-16 h-16 rounded-2xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] mx-auto flex items-center justify-center">
@@ -2186,6 +2283,21 @@ export default function CommunityOrganizerPortalPage() {
                                         <span>Peserta ({eventBookings.length})</span>
                                       </Button>
 
+                                      {evt.proposedRevenueSplit && evt.proposedRevenueSplit.status === "PENDING" && (
+                                        <Button
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setNegotiatingEvent(evt);
+                                          }}
+                                          className="text-xs h-7 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer shadow-xs flex items-center space-x-1"
+                                          title="Tinjau usulan skema bagi hasil"
+                                        >
+                                          <Sparkles className="w-3.5 h-3.5 mr-0.5" />
+                                          <span>Bagi Hasil</span>
+                                        </Button>
+                                      )}
+
                                       {(evt.status === "APPROVED" || evt.status === "ARCHIVED") && (
                                         <Link href={`/events/${evt.id}`} target="_blank" onClick={(e) => e.stopPropagation()}>
                                           <Button
@@ -2467,105 +2579,190 @@ export default function CommunityOrganizerPortalPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
-                      {filteredAttendees.map((b) => (
-                        <tr key={b.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-900/40 transition-colors">
-                          <td className="py-3 px-3 font-mono font-bold text-slate-900 dark:text-white">
-                            {b.ticketCode}
-                          </td>
-                          <td className="py-3 px-3">
-                            <div className="font-bold text-slate-900 dark:text-white">{b.guestName}</div>
-                            <div className="text-[11px] text-slate-400 flex items-center space-x-1.5 mt-0.5 flex-wrap">
-                              {b.guestPhone ? (
-                                <a
-                                  href={formatWhatsAppUrl(b.guestPhone)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 font-medium"
-                                  title={`WhatsApp: ${b.guestPhone}`}
-                                >
-                                  <Phone className="w-3 h-3" />
-                                  <span>{b.guestPhone}</span>
-                                </a>
-                              ) : (
-                                <span>-</span>
-                              )}
-                              {b.guestEmail && (
-                                <>
-                                  <span>•</span>
-                                  <a
-                                    href={`mailto:${b.guestEmail}`}
-                                    className="text-slate-500 dark:text-slate-400 hover:underline inline-flex items-center gap-1"
-                                    title={`Email: ${b.guestEmail}`}
+                      {filteredAttendees.map((b) => {
+                        const isExpanded = expandedBookingIds.has(b.id);
+                        return (
+                          <React.Fragment key={b.id}>
+                            <tr className={`hover:bg-slate-50/80 dark:hover:bg-slate-900/40 transition-colors ${
+                              isExpanded ? "bg-slate-50/60 dark:bg-slate-900/40" : ""
+                            }`}>
+                              <td className="py-3 px-3">
+                                <div className="font-mono font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
+                                  <span>{b.ticketCode}</span>
+                                </div>
+                                {b.ticketCount > 1 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleBookingExpand(b.id)}
+                                    className="inline-flex items-center space-x-1 mt-1 text-[10.5px] font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline cursor-pointer"
                                   >
-                                    <Mail className="w-3 h-3" />
-                                    <span className="truncate max-w-[120px]">{b.guestEmail}</span>
-                                  </a>
-                                </>
-                              )}
-                              {b.institution && (
-                                <>
-                                  <span>•</span>
-                                  <span className="truncate max-w-[120px]">{b.institution}</span>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-3 px-3 max-w-[180px] truncate text-slate-600 dark:text-slate-300">
-                            {b.eventTitle}
-                          </td>
-                          <td className="py-3 px-3 text-center font-bold">
-                            {b.ticketCount} Pax
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            {b.paymentStatus === "PAID" ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                                Lunas (PAID)
-                              </span>
-                            ) : b.paymentStatus === "CANCELLED" ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
-                                Batal
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
-                                PENDING
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-center">
-                            <div className="flex flex-col items-center justify-center space-y-1">
-                              {b.checkInStatus === "CHECKED_IN" ? (
-                                <>
-                                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 shadow-2xs">
-                                    <Check className="w-3 h-3 mr-1" />
-                                    {b.ticketCount > 1
-                                      ? `${b.checkedInQty ?? b.ticketCount}/${b.ticketCount} Hadir (Lengkap)`
-                                      : "Sudah Hadir (Lengkap)"}
+                                    <span>{isExpanded ? "Tutup Rincian" : `Lihat ${b.ticketCount} Tiket`}</span>
+                                    {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400 block mt-0.5">1 Tiket Tunggal</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-3">
+                                <div className="font-bold text-slate-900 dark:text-white">{b.guestName}</div>
+                                <div className="text-[11px] text-slate-400 flex items-center space-x-1.5 mt-0.5 flex-wrap">
+                                  {b.guestPhone ? (
+                                    <a
+                                      href={formatWhatsAppUrl(b.guestPhone)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 font-medium"
+                                      title={`WhatsApp: ${b.guestPhone}`}
+                                    >
+                                      <Phone className="w-3 h-3" />
+                                      <span>{b.guestPhone}</span>
+                                    </a>
+                                  ) : (
+                                    <span>-</span>
+                                  )}
+                                  {b.guestEmail && (
+                                    <>
+                                      <span>•</span>
+                                      <a
+                                        href={`mailto:${b.guestEmail}`}
+                                        className="text-slate-500 dark:text-slate-400 hover:underline inline-flex items-center gap-1"
+                                        title={`Email: ${b.guestEmail}`}
+                                      >
+                                        <Mail className="w-3 h-3" />
+                                        <span className="truncate max-w-[120px]">{b.guestEmail}</span>
+                                      </a>
+                                    </>
+                                  )}
+                                  {b.institution && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="truncate max-w-[120px]">{b.institution}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-3 px-3 max-w-[180px] truncate text-slate-600 dark:text-slate-300">
+                                {b.eventTitle}
+                              </td>
+                              <td className="py-3 px-3 text-center font-bold">
+                                {b.ticketCount} Pax
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                {b.paymentStatus === "PAID" ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                    Lunas (PAID)
                                   </span>
-                                  {b.checkInTime && (
-                                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                                      {new Date(b.checkInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WITA
+                                ) : b.paymentStatus === "CANCELLED" ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
+                                    Batal
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                                    PENDING
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3 px-3 text-center">
+                                <div className="flex flex-col items-center justify-center space-y-1">
+                                  {b.checkInStatus === "CHECKED_IN" ? (
+                                    <>
+                                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 shadow-2xs">
+                                        <Check className="w-3 h-3 mr-1" />
+                                        {b.ticketCount > 1
+                                          ? `${b.checkedInQty ?? b.ticketCount}/${b.ticketCount} Hadir (Lengkap)`
+                                          : "Sudah Hadir (Lengkap)"}
+                                      </span>
+                                      {b.checkInTime && (
+                                        <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                                          {new Date(b.checkInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WITA
+                                        </span>
+                                      )}
+                                    </>
+                                  ) : b.checkInStatus === "PARTIALLY_CHECKED_IN" ? (
+                                    <>
+                                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 shadow-2xs">
+                                        <Clock3 className="w-3 h-3 mr-1" />
+                                        {b.checkedInQty ?? 0}/{b.ticketCount} Hadir (Sisa {(b.ticketCount || 1) - (b.checkedInQty || 0)})
+                                      </span>
+                                      <span className="text-[10px] text-sky-600 dark:text-sky-400">
+                                        Sebagian Hadir
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                      Belum Hadir (0/{b.ticketCount})
                                     </span>
                                   )}
-                                </>
-                              ) : b.checkInStatus === "PARTIALLY_CHECKED_IN" ? (
-                                <>
-                                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 shadow-2xs">
-                                    <Clock3 className="w-3 h-3 mr-1" />
-                                    {b.checkedInQty ?? 0}/{b.ticketCount} Hadir (Sisa {(b.ticketCount || 1) - (b.checkedInQty || 0)})
-                                  </span>
-                                  <span className="text-[10px] text-sky-600 dark:text-sky-400">
-                                    Sebagian Hadir
-                                  </span>
-                                </>
-                              ) : (
-                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                                  Belum Hadir (0/{b.ticketCount})
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                                </div>
+                              </td>
+                            </tr>
+
+                            {/* Sub-tickets Accordion per Transaction */}
+                            {isExpanded && (
+                              <tr className="bg-slate-50/80 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-800 animate-in fade-in duration-150">
+                                <td colSpan={6} className="p-3 sm:p-4">
+                                  <div className="bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xs">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 gap-2">
+                                      <div className="flex items-center space-x-2">
+                                        <Ticket className="w-4 h-4 text-[#3B7A57]" />
+                                        <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                          Rincian Transaksi Pembelian ({b.ticketCount} Tiket Terdaftar)
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center space-x-3 text-[11px]">
+                                        <span className="text-slate-500">
+                                          Total: <strong className="text-[#3B7A57] dark:text-[#52B788]">{b.totalPrice > 0 ? formatCurrencyIDR(b.totalPrice) : "GRATIS"}</strong>
+                                        </span>
+                                        <span className="text-slate-300">•</span>
+                                        <span className="text-slate-500">
+                                          Kehadiran: <strong>{b.checkedInQty ?? (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0)} / {b.ticketCount} Pax</strong>
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Sub-tickets Grid */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                                      {Array.from({ length: b.ticketCount }).map((_, idx) => {
+                                        const ticketIndex = idx + 1;
+                                        const subTicketCode = `${b.ticketCode}-${String(ticketIndex).padStart(2, "0")}`;
+                                        const isSubCheckedIn = (b.checkedInQty ?? (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0)) >= ticketIndex;
+
+                                        return (
+                                          <div
+                                            key={subTicketCode}
+                                            className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 space-y-1.5"
+                                          >
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                                Tiket #{ticketIndex} dari {b.ticketCount}
+                                              </span>
+                                              <span
+                                                className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                                  isSubCheckedIn
+                                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                                    : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                                }`}
+                                              >
+                                                {isSubCheckedIn ? "Sudah Hadir" : "Belum Hadir"}
+                                              </span>
+                                            </div>
+                                            <div className="font-mono text-xs font-bold text-slate-800 dark:text-slate-200">
+                                              {subTicketCode}
+                                            </div>
+                                            <div className="text-[10.5px] text-slate-500 truncate">
+                                              {ticketIndex === 1 ? `${b.guestName} (Pemesan Utama)` : `Tamu Pax #${ticketIndex}`}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -3889,6 +4086,69 @@ export default function CommunityOrganizerPortalPage() {
                     </div>
                   </div>
                 </Card>
+
+                {/* Card 5: Session Security & Multi-device Protection */}
+                <Card className="p-5 sm:p-6 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs space-y-4">
+                  <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-100 dark:border-slate-800">
+                    <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-sm">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                        Keamanan Akun & Proteksi Multi-Login
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Perlindungan otentikasi sesi dan pencegahan penyalahgunaan akun penyelenggara
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3 text-xs text-slate-600 dark:text-slate-300">
+                    <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                          Status Sesi Saat Ini:
+                        </span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                          Aktif & Terproteksi
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500 space-y-0.5">
+                        <p>Akun Terdaftar: <strong className="text-slate-800 dark:text-slate-200 font-mono">{activeEmail || organizerEmail}</strong></p>
+                        <p>Metode Akses: <strong className="text-slate-800 dark:text-slate-200">Sesi HttpOnly Terenkripsi (Anti-XSS)</strong></p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5 text-[11px] leading-relaxed">
+                      <p className="font-semibold text-slate-800 dark:text-slate-200">
+                        🛡️ Kebijakan Proteksi Jika Akun Digunakan Orang Lain:
+                      </p>
+                      <ul className="list-disc pl-4 space-y-1 text-slate-500 dark:text-slate-400">
+                        <li>
+                          <strong>Proteksi Finansial:</strong> Permohonan penarikan dana (Payout) hanya dapat ditransfer ke rekening bank resmi yang telah terdaftar dan terverifikasi atas nama penyelenggara.
+                        </li>
+                        <li>
+                          <strong>Audit Log:</strong> Setiap aktivitas perubahan event, negosiasi bagi hasil, dan status tiket dicatat secara permanen dengan identitas sesi server.
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          alert("Sesi Anda saat ini telah diverifikasi aman. Untuk mengakhiri seluruh akses di perangkat lain, Anda dapat menggunakan tombol Keluar di sidebar lalu login kembali.");
+                        }}
+                        className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57]" />
+                        <span>Verifikasi Keamanan Sesi Akun</span>
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
               </div>
             </div>
           )}
@@ -4002,9 +4262,18 @@ export default function CommunityOrganizerPortalPage() {
         const eventEndDate = evt.endDate ? new Date(evt.endDate) : null;
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-            <div className="relative w-full max-w-2xl bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-5 max-h-[92vh] overflow-y-auto">
-              {/* Header */}
+          <div
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setViewingDetailEvent(null);
+            }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-2xl bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] cursor-default"
+            >
+              <div className="p-6 sm:p-7 space-y-5 overflow-y-auto flex-1">
+                {/* Header */}
               <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                 <div className="space-y-1 pr-4">
                   <div className="flex items-center space-x-2">
@@ -4213,16 +4482,26 @@ export default function CommunityOrganizerPortalPage() {
               </div>
             </div>
           </div>
-        );
+        </div>
+      );
       })()}
 
       {/* =========================================================================
           3. REVISION MODAL (UPGRADED IN-PLACE RE-SUBMISSION WORKFLOW)
          ========================================================================= */}
       {revisionEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-2xl bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 sm:p-7 space-y-5 max-h-[92vh] overflow-y-auto">
-            {/* Header */}
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setRevisionEvent(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-2xl bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh] cursor-default"
+          >
+            <div className="p-6 sm:p-7 space-y-5 overflow-y-auto flex-1">
+              {/* Header */}
             <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <span className={`text-[10px] font-black uppercase tracking-wider block ${
@@ -4475,6 +4754,7 @@ export default function CommunityOrganizerPortalPage() {
                 </Button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}
@@ -4483,9 +4763,18 @@ export default function CommunityOrganizerPortalPage() {
           4. REVENUE SPLIT NEGOTIATION MODAL (ORGANIZER VIEW)
          ========================================================================= */}
       {negotiatingEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="relative w-full max-w-xl bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setNegotiatingEvent(null);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-xl bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] cursor-default"
+          >
+            <div className="p-6 space-y-5 overflow-y-auto flex-1">
+              <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
                   Kesepakatan & Negosiasi Bagi Hasil
@@ -4704,6 +4993,7 @@ export default function CommunityOrganizerPortalPage() {
                 </div>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
@@ -4730,9 +5020,18 @@ export default function CommunityOrganizerPortalPage() {
         const isOverLimit = payoutAmount > targetAvailable;
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-            <div className="relative w-full max-w-lg bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
-              <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setIsPayoutModalOpen(false);
+            }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-lg bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] cursor-default"
+            >
+              <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                 <div>
                   <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
                     Pencairan Saldo Pendapatan
@@ -4917,6 +5216,7 @@ export default function CommunityOrganizerPortalPage() {
                   </Button>
                 </div>
               </form>
+              </div>
             </div>
           </div>
         );

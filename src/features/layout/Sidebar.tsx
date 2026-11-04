@@ -154,8 +154,8 @@ export function Sidebar({
         isCollapsed ? "w-20" : "w-64"
       } flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between h-full select-none transition-all duration-300 ease-in-out`}
     >
-      {/* Brand Header & Minimize Toggle */}
-      <div>
+      {/* Brand Header & Scrollable Nav */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
         <div
           className={`p-4 border-b border-slate-100 dark:border-slate-800 flex items-center ${
             isCollapsed ? "justify-center" : "justify-between"
@@ -321,8 +321,8 @@ export function Sidebar({
         </nav>
       </div>
 
-      {/* User Footer & Logout */}
-      <div className={`p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 ${isCollapsed ? "flex flex-col items-center space-y-2" : ""}`}>
+      {/* User Footer & Logout (Pinned to bottom) */}
+      <div className={`shrink-0 p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 ${isCollapsed ? "flex flex-col items-center space-y-2" : ""}`}>
         {!isCollapsed ? (
           <>
             <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between mb-2">

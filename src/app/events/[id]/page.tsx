@@ -30,6 +30,7 @@ import {
   Mail,
   Lock,
   Users,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -468,9 +469,18 @@ export default function EventDetailPage() {
           </div>
 
           <div className="absolute bottom-4 left-4 right-4 z-30 text-white">
-            <div className="flex items-center space-x-2 mb-1.5 text-xs text-emerald-300 font-bold drop-shadow-xs">
-              <Users className="w-3.5 h-3.5" />
-              <span>Komunitas: {event.organizerName}</span>
+            <div className="flex flex-wrap items-center gap-2 mb-1.5 text-xs text-emerald-300 font-bold drop-shadow-xs">
+              <span className="flex items-center space-x-1.5">
+                <Users className="w-3.5 h-3.5" />
+                <span>Komunitas: {event.organizerName}</span>
+              </span>
+              <span>•</span>
+              <span className="flex items-center space-x-1.5 text-emerald-200 font-semibold">
+                <Clock className="w-3.5 h-3.5" />
+                <span>
+                  {new Date(event.startDate).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} - {new Date(event.endDate).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WITA
+                </span>
+              </span>
             </div>
             <h1 className="text-xl sm:text-3xl lg:text-4xl font-black tracking-tight leading-tight drop-shadow-md">
               {event.title}
@@ -542,38 +552,23 @@ export default function EventDetailPage() {
               </div>
             </Card>
 
-            {/* Guidelines Card */}
-            <Card className="p-6 sm:p-7 bg-white dark:bg-[#1E293B] border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-4 pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center space-x-2">
-                <ShieldCheck className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
-                <span>Panduan & Fasilitas Acara</span>
-              </h2>
-              <ul className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-3">
-                {event.guidelines && event.guidelines.length > 0 ? (
-                  event.guidelines.map((guide, idx) => (
+            {/* Guidelines Card (Hanya ditampilkan jika penyelenggara menyertakan panduan khusus) */}
+            {event.guidelines && event.guidelines.length > 0 && (
+              <Card className="p-6 sm:p-7 bg-white dark:bg-[#1E293B] border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-4 pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center space-x-2">
+                  <ShieldCheck className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                  <span>Panduan & Fasilitas Acara</span>
+                </h2>
+                <ul className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-3">
+                  {event.guidelines.map((guide, idx) => (
                     <li key={idx} className="flex items-start space-x-2.5">
                       <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
                       <span>{guide}</span>
                     </li>
-                  ))
-                ) : (
-                  <>
-                    <li className="flex items-start space-x-2.5">
-                      <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
-                      <span>Harap hadir 15 menit sebelum acara dimulai untuk registrasi ulang tiket QR di venue.</span>
-                    </li>
-                    <li className="flex items-start space-x-2.5">
-                      <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
-                      <span>Koneksi Wi-Fi publik berkecepatan tinggi gratis untuk seluruh peserta acara di area hub.</span>
-                    </li>
-                    <li className="flex items-start space-x-2.5">
-                      <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
-                      <span>Tersedia aneka pilihan kopi spesialti dan menu makanan dari tenant F&B di lokasi.</span>
-                    </li>
-                  </>
-                )}
-              </ul>
-            </Card>
+                  ))}
+                </ul>
+              </Card>
+            )}
 
             {/* Organizer Profile Card */}
             <Card className="p-6 bg-white dark:bg-[#1E293B] border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -699,9 +694,18 @@ export default function EventDetailPage() {
                   <MapPin className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold text-slate-800 dark:text-slate-200 block">Lokasi Acara</span>
-                    <span className="text-slate-500 dark:text-slate-400 text-[11px] leading-snug">
+                    <span className="text-slate-500 dark:text-slate-400 text-[11px] leading-snug block">
                       {event.location}
                     </span>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-1 text-[11px] text-[#3B7A57] dark:text-[#52B788] hover:underline font-bold mt-1"
+                    >
+                      <span>Buka di Google Maps</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
                   </div>
                 </div>
               </div>
@@ -745,6 +749,15 @@ export default function EventDetailPage() {
                 <div className="flex items-center space-x-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
                   <span>QR Code check-in resmi Dago Creative Hub</span>
+                </div>
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60 text-center">
+                  <Link
+                    href="/events/tickets/recovery"
+                    className="text-[11px] font-semibold text-[#3B7A57] dark:text-[#52B788] hover:underline inline-flex items-center space-x-1"
+                  >
+                    <Search className="w-3 h-3" />
+                    <span>Sudah pesan tiket? Lupa kode booking? Cek di sini &rarr;</span>
+                  </Link>
                 </div>
               </div>
             </Card>
@@ -964,8 +977,9 @@ export default function EventDetailPage() {
           }}
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150"
         >
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full p-5 sm:p-6 text-center space-y-4 shadow-2xl overflow-y-auto max-h-[90vh] animate-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-150">
+            <div className="p-5 sm:p-6 text-center space-y-4 overflow-y-auto flex-1">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Instruksi Pembayaran Tiket</span>
               <span className="text-[10px] font-mono bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">
                 MENUNGGU VERIFIKASI
@@ -992,56 +1006,87 @@ export default function EventDetailPage() {
               </span>
             </div>
 
-            {/* Rekening Tujuan Transfer Bank Manual */}
-            {(() => {
-              const bank = pendingTicket.destinationBankSnapshot || event.destinationBank;
-              if (bank) {
-                return (
-                  <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl text-left space-y-2">
-                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
-                      Rekening Resmi Tujuan Transfer:
-                    </span>
-                    <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                      <div>
-                        <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
-                          {bank.bankName} • {bank.accountNumber}
-                        </span>
-                        <span className="text-[10.5px] text-slate-400 block">a.n. {bank.accountHolder}</span>
-                        {bank.branch && <span className="text-[9.5px] text-slate-400 block">{bank.branch}</span>}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          if (typeof window !== "undefined") {
-                            navigator.clipboard.writeText(bank.accountNumber);
-                            alert(`Nomor rekening ${bank.bankName} (${bank.accountNumber}) berhasil disalin!`);
-                          }
-                        }}
-                        className="h-7 px-2.5 text-[10.5px] font-bold text-[#3B7A57] border-[#3B7A57]/30 hover:bg-[#3B7A57]/10 cursor-pointer"
-                      >
-                        Salin Rekening
-                      </Button>
-                    </div>
+            {/* Metode Pembayaran: DOKU Checkout vs Transfer Bank Manual */}
+            {pendingTicket.paymentMethod === "DOKU_CHECKOUT" && pendingTicket.dokuPaymentUrl ? (
+              <div className="space-y-3">
+                <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-left space-y-1.5">
+                  <div className="flex items-center space-x-1.5 text-emerald-800 dark:text-emerald-200 font-bold text-xs">
+                    <CreditCard className="w-4 h-4 text-[#3B7A57]" />
+                    <span>Metode Pembayaran: DOKU Online Gateway</span>
                   </div>
-                );
-              }
-              return (
-                <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-left text-xs text-rose-700 dark:text-rose-300">
-                  Belum ada rekening pembayaran aktif yang ditetapkan. Silakan hubungi admin platform.
+                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Selesaikan pembayaran tiket Anda secara instan menggunakan QRIS, Virtual Account, Kartu Kredit, atau E-Wallet melalui portal resmi DOKU.
+                  </p>
                 </div>
-              );
-            })()}
 
-            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/50 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 text-left leading-relaxed space-y-1">
-              <div className="flex items-center space-x-1.5 font-bold text-amber-900 dark:text-amber-100">
-                <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                <span>Instruksi Pembayaran & Verifikasi:</span>
+                <a
+                  href={
+                    pendingTicket.dokuPaymentUrl.includes("api-sandbox.doku.com/checkout-link-v2/")
+                      ? `/checkout-link-v2/${pendingTicket.dokuPaymentUrl.split("checkout-link-v2/")[1]}`
+                      : pendingTicket.dokuPaymentUrl
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center space-x-2 py-3 px-3 rounded-xl bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold transition-all shadow-md hover:scale-[1.01]"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Bayar Sekarang via DOKU Checkout &rarr;</span>
+                </a>
               </div>
-              <p>
-                Transfer sesuai nominal tepat, lalu buka halaman E-Tiket Anda untuk mengunggah foto bukti transfer. Panitia akan memvalidasi bukti Anda.
-              </p>
-            </div>
+            ) : (
+              <>
+                {/* Rekening Tujuan Transfer Bank Manual */}
+                {(() => {
+                  const bank = pendingTicket.destinationBankSnapshot || event.destinationBank;
+                  if (bank) {
+                    return (
+                      <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl text-left space-y-2">
+                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                          Rekening Resmi Tujuan Transfer:
+                        </span>
+                        <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                          <div>
+                            <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
+                              {bank.bankName} • {bank.accountNumber}
+                            </span>
+                            <span className="text-[10.5px] text-slate-400 block">a.n. {bank.accountHolder}</span>
+                            {bank.branch && <span className="text-[9.5px] text-slate-400 block">{bank.branch}</span>}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (typeof window !== "undefined") {
+                                navigator.clipboard.writeText(bank.accountNumber);
+                                alert(`Nomor rekening ${bank.bankName} (${bank.accountNumber}) berhasil disalin!`);
+                              }
+                            }}
+                            className="h-7 px-2.5 text-[10.5px] font-bold text-[#3B7A57] border-[#3B7A57]/30 hover:bg-[#3B7A57]/10 cursor-pointer"
+                          >
+                            Salin Rekening
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-left text-xs text-rose-700 dark:text-rose-300">
+                      Belum ada rekening pembayaran aktif yang ditetapkan. Silakan hubungi admin platform.
+                    </div>
+                  );
+                })()}
+
+                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/50 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 text-left leading-relaxed space-y-1">
+                  <div className="flex items-center space-x-1.5 font-bold text-amber-900 dark:text-amber-100">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>Instruksi Pembayaran &amp; Verifikasi:</span>
+                  </div>
+                  <p>
+                    Transfer sesuai nominal tepat, lalu buka halaman E-Tiket Anda untuk mengunggah foto bukti transfer. Panitia akan memvalidasi bukti Anda.
+                  </p>
+                </div>
+              </>
+            )}
 
             <div className="space-y-2 pt-1">
               {pendingTicket.guestToken && (
@@ -1071,6 +1116,7 @@ export default function EventDetailPage() {
             </div>
           </div>
         </div>
+      </div>
       )}
 
       {/* ===================================================================== */}
@@ -1253,13 +1299,14 @@ export default function EventDetailPage() {
       {isShareModalOpen && event && (
         <div
           onClick={() => setIsShareModalOpen(false)}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto max-h-[90vh] animate-in zoom-in-95 duration-200 cursor-default"
+            className="relative w-full max-w-md bg-white dark:bg-[#0F172A] rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200 cursor-default"
           >
-            <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+            <div className="p-5 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto flex-1">
+              <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
                 <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788] uppercase tracking-wider block">
                   Bagikan ke Teman & Komunitas
@@ -1366,6 +1413,7 @@ export default function EventDetailPage() {
             </div>
           </div>
         </div>
+      </div>
       )}
     </div>
   );

@@ -34,15 +34,37 @@ export async function POST(
     // Determine payment routing: Manual Bank Transfer vs DOKU Checkout
     let paymentUrl: string | null = null;
     const policy = getEventRevenuePolicy();
-    const isManualTransfer =
-      payload.paymentMethod === "TRANSFER" ||
-      payload.paymentMethod === "MANUAL_TRANSFER" ||
-      (policy.activePaymentMethod === "MANUAL_TRANSFER" && !process.env.DOKU_SIMULATION_MODE && payload.paymentMethod !== "DOKU_CHECKOUT");
+    const isExplicitGateway =
+      Boolean(payload.paymentMethod) &&
+      ["QRIS", "DOKU", "DOKU_CHECKOUT", "VA", "CREDIT_CARD", "EWALLET"].includes(
+        (payload.paymentMethod || "").toUpperCase()
+      );
+    const isExplicitManual =
+      payload.paymentMethod === "TRANSFER" || payload.paymentMethod === "MANUAL_TRANSFER";
+
+    const isManualTransfer = isExplicitManual
+      ? true
+      : isExplicitGateway
+      ? false
+      : (policy.activePaymentMethod === "MANUAL_TRANSFER" && !process.env.DOKU_SIMULATION_MODE);
 
     if (booking.totalPrice > 0) {
       if (isManualTransfer) {
         // Direct attendee to payment & ticket page with destination bank snapshot
         paymentUrl = `/events/tickets/${booking.guestToken}`;
+        const allBookings = loadBookingsFromDisk();
+        const idx = allBookings.findIndex((b) => b.id === booking.id);
+        if (idx !== -1) {
+          allBookings[idx] = {
+            ...allBookings[idx],
+            paymentMethod: "MANUAL_TRANSFER",
+            dokuInvoiceNumber: null,
+            dokuPaymentUrl: null,
+            updatedAt: new Date().toISOString(),
+          };
+          await saveBookingsToDisk(allBookings);
+          booking = allBookings[idx];
+        }
       } else {
         // Initiate DOKU Checkout session
         try {

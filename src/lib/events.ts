@@ -260,8 +260,11 @@ export function getMaxTicketsPerBooking(event?: CommunityEvent | null): number {
  * Priority 4: Approved active organizer account (if allowed)
  * Returns null if no valid active account is available.
  */
-export function resolveDestinationBankAccount(event?: CommunityEvent | null): EventBankAccountSnapshot | null {
-  const policy = getEventRevenuePolicy();
+export function resolveDestinationBankAccount(
+  event?: CommunityEvent | null,
+  policyOverride?: EventRevenueSharingPolicy
+): EventBankAccountSnapshot | null {
+  const policy = policyOverride || getEventRevenuePolicy();
   const bankAccounts = Array.isArray(policy.bankAccounts) ? policy.bankAccounts : DEFAULT_EVENT_BANK_ACCOUNTS;
 
   // Priority 1: Event-specific override account
@@ -343,6 +346,78 @@ export function resolveDestinationBankAccount(event?: CommunityEvent | null): Ev
   }
 
   return null;
+}
+
+/**
+ * Resolves the appropriate destination bank account for payment display and instructions.
+ *
+ * Business Logic & Deactivation Protection:
+ * 1. For PAID bookings:
+ *    Preserves the historical snapshot of where funds were actually transferred.
+ * 2. For PENDING (unpaid) bookings:
+ *    Verifies if the bank account recorded in destinationBankSnapshot is STILL active on the platform.
+ *    If deactivated or removed, flags `isSnapshotDeactivated = true` and resolves a currently ACTIVE
+ *    destination bank account so attendees are NEVER instructed to transfer money into inactive accounts.
+ *    The original historical snapshot is preserved in `historicalSnapshot` for audit trail purposes.
+ */
+export function resolveActiveTransferBankForBooking(
+  booking: EventTicketOrder,
+  event?: CommunityEvent | null,
+  policyOverride?: EventRevenueSharingPolicy
+): {
+  activeBank: EventBankAccountSnapshot | null;
+  isSnapshotDeactivated: boolean;
+  historicalSnapshot: EventBankAccountSnapshot | null;
+} {
+  const policy = policyOverride || getEventRevenuePolicy();
+  const bankAccounts = Array.isArray(policy.bankAccounts) ? policy.bankAccounts : DEFAULT_EVENT_BANK_ACCOUNTS;
+  const snapshot = booking.destinationBankSnapshot || null;
+
+  // If already paid, always present the snapshot of the account that was paid to
+  if (booking.paymentStatus === "PAID") {
+    return {
+      activeBank: snapshot,
+      isSnapshotDeactivated: false,
+      historicalSnapshot: snapshot,
+    };
+  }
+
+  // If no snapshot exists (e.g. legacy booking), resolve currently active bank
+  if (!snapshot) {
+    const fallbackActive = resolveDestinationBankAccount(event, policy);
+    return {
+      activeBank: fallbackActive,
+      isSnapshotDeactivated: false,
+      historicalSnapshot: null,
+    };
+  }
+
+  // For PENDING bookings, check whether the snapshot bank account is STILL active
+  const matchingConfiguredBank = bankAccounts.find(
+    (b) =>
+      (snapshot.bankId && b.id === snapshot.bankId) ||
+      (b.accountNumber === snapshot.accountNumber && b.bankName.toLowerCase() === snapshot.bankName.toLowerCase())
+  );
+
+  const isStillActive = Boolean(matchingConfiguredBank && matchingConfiguredBank.isActive);
+
+  if (isStillActive) {
+    return {
+      activeBank: snapshot,
+      isSnapshotDeactivated: false,
+      historicalSnapshot: snapshot,
+    };
+  }
+
+  // The original bank has been deactivated!
+  // Resolve a fresh active destination bank account for the attendee to transfer to
+  const newActiveBank = resolveDestinationBankAccount(event, policy);
+
+  return {
+    activeBank: newActiveBank,
+    isSnapshotDeactivated: true,
+    historicalSnapshot: snapshot,
+  };
 }
 
 /**
@@ -1271,31 +1346,6 @@ export async function updateEventStatus(
         phone: existing.organizerPhone,
         notes: `Penyelenggara aktif resmi dari event disetujui: ${existing.title}`,
       });
-
-      // If there was a pending proposal by organizer, approve it into revenueSplitHistory
-      if (existing.proposedRevenueSplit && existing.proposedRevenueSplit.status === "PENDING") {
-        const split = existing.proposedRevenueSplit;
-        updated.organizerFeePercent = split.organizerPercent;
-        updated.customPlatformFeePercent = split.platformPercent;
-        updated.proposedRevenueSplit = {
-          ...split,
-          status: "ACCEPTED",
-        };
-        const hist = existing.revenueSplitHistory || [];
-        hist.push({
-          id: `rev-split-${Date.now()}`,
-          previousOrganizerPercent: 80,
-          previousPlatformPercent: 20,
-          newOrganizerPercent: split.organizerPercent,
-          newPlatformPercent: split.platformPercent,
-          proposedBy: split.proposedBy,
-          reason: split.reason || "Disepakati bersama saat persetujuan event",
-          approvedBy: "Platform Curator Admin",
-          approvedAt: new Date().toISOString(),
-          effectiveDate: new Date().toISOString(),
-        });
-        updated.revenueSplitHistory = hist;
-      }
     }
 
     all[index] = updated;
@@ -1808,7 +1858,9 @@ export async function createEventBooking(
     const paymentStatus: TicketPaymentStatus = isFree ? "PAID" : "PENDING";
     const paymentMethod: TicketPaymentMethod = isFree
       ? "FREE"
-      : payload.paymentMethod || (policy.activePaymentMethod === "MANUAL_TRANSFER" ? "MANUAL_TRANSFER" : "TRANSFER");
+      : (policy.activePaymentMethod === "MANUAL_TRANSFER"
+          ? "MANUAL_TRANSFER"
+          : (payload.paymentMethod || "DOKU_CHECKOUT"));
 
     // Destination bank resolution & snapshot for paid bookings
     let destinationBankSnapshot: EventBankAccountSnapshot | undefined = undefined;
@@ -1914,7 +1966,7 @@ export async function updateBookingCheckIn(
       );
     }
 
-    // 2. Tolak check-in jika tiket berstatus CANCELLED atau EXPIRED
+    // 2. Tolak check-in jika tiket berstatus CANCELLED
     if (
       existing.paymentStatus === "CANCELLED" &&
       (status === "CHECKED_IN" ||
@@ -1923,6 +1975,8 @@ export async function updateBookingCheckIn(
     ) {
       throw new Error("Tiket dengan status CANCELLED tidak dapat digunakan untuk check-in.");
     }
+
+    // 3. Tolak check-in jika tiket berstatus EXPIRED
     if (
       existing.paymentStatus === "EXPIRED" &&
       (status === "CHECKED_IN" ||
@@ -1932,16 +1986,33 @@ export async function updateBookingCheckIn(
       throw new Error("Tiket dengan status EXPIRED tidak dapat digunakan untuk check-in.");
     }
 
-    // 3. Tolak check-in jika tiket berbayar belum diverifikasi lunas (status masih PENDING)
+    // 4. Tolak check-in jika tiket berstatus PENDING (tiket berbayar maupun tiket gratis yang belum disetujui)
+    if (
+      existing.paymentStatus === "PENDING" &&
+      (status === "CHECKED_IN" ||
+        status === "PARTIALLY_CHECKED_IN" ||
+        (options?.incrementQty ?? 0) > 0)
+    ) {
+      if (existing.totalPrice > 0) {
+        throw new Error(
+          "Tiket berbayar belum diverifikasi lunas (status pembayaran masih PENDING). Silakan verifikasi pembayaran terlebih dahulu sebelum check-in."
+        );
+      } else {
+        throw new Error(
+          "Tiket gratis belum dikonfirmasi (status pendaftaran masih PENDING). Reservasi harus terkonfirmasi sebelum check-in."
+        );
+      }
+    }
+
+    // 5. Validasi final: Hanya tiket dengan status pembayaran/reservasi PAID yang dapat check-in
     if (
       existing.paymentStatus !== "PAID" &&
-      existing.totalPrice > 0 &&
       (status === "CHECKED_IN" ||
         status === "PARTIALLY_CHECKED_IN" ||
         (options?.incrementQty ?? 0) > 0)
     ) {
       throw new Error(
-        "Tiket berbayar belum diverifikasi lunas (status pembayaran masih PENDING). Silakan verifikasi pembayaran terlebih dahulu sebelum check-in."
+        `Tiket dengan status pembayaran ${existing.paymentStatus} tidak dapat digunakan untuk check-in.`
       );
     }
 
@@ -2352,6 +2423,16 @@ export async function getOrganizerPortalData(
     },
     events: myEvents,
     bookings: myBookings,
+    registeredBankAccount: (() => {
+      const policy = getEventRevenuePolicy();
+      return (
+        (policy.bankAccounts || []).find(
+          (b) =>
+            b.accountType === "ORGANIZER" &&
+            (b.organizerEmail || "").toLowerCase() === normalizedEmail
+        ) || null
+      );
+    })(),
   };
 }
 

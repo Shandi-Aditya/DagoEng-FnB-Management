@@ -137,6 +137,9 @@ function LoginContent() {
         if (isCustomer && isRestrictedAdminRoute) {
           // Fallback to customer portal to prevent unauthorized access attempt
           targetDestination = "/customer";
+        } else if (!isCustomer && returnTo.startsWith("/customer")) {
+          // If a staff/admin/organizer logs in from the customer portal, route to their role's natural destination
+          targetDestination = data.redirectUrl || "/dashboard";
         } else {
           targetDestination = returnTo;
         }

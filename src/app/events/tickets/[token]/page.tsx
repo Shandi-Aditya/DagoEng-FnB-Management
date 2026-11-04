@@ -29,6 +29,8 @@ import {
   Building2,
   Eye,
   CheckCircle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -68,7 +70,29 @@ interface TicketDetails {
     accountNumber: string;
     accountHolder: string;
     branch?: string;
+    badge?: string;
   } | null;
+  activeDestinationBank?: {
+    bankId?: string;
+    label?: string;
+    bankName: string;
+    accountNumber: string;
+    accountHolder: string;
+    branch?: string;
+    badge?: string;
+    accountType?: string;
+  } | null;
+  isOriginalBankDeactivated?: boolean;
+  activeBankAccounts?: Array<{
+    bankId: string;
+    label?: string;
+    bankName: string;
+    accountNumber: string;
+    accountHolder: string;
+    branch?: string;
+    badge?: string;
+    accountType?: string;
+  }>;
   paymentRejectionReason?: string | null;
   paymentVerificationNote?: string | null;
   paymentVerifiedAt?: string | null;
@@ -87,29 +111,6 @@ interface TicketDetails {
   } | null;
 }
 
-const BANK_ACCOUNTS = [
-  {
-    bankName: "BCA (Bank Central Asia)",
-    accountNumber: "1420993821",
-    accountHolder: "PT DAGO CREATIVE HUB",
-    branch: "KCU Dago Bandung",
-    badge: "Utama / Rekomendasi",
-  },
-  {
-    bankName: "Bank Mandiri",
-    accountNumber: "1300098234120",
-    accountHolder: "PT DAGO CREATIVE HUB",
-    branch: "KC Bandung Surapati",
-    badge: "Bebas Biaya",
-  },
-  {
-    bankName: "Bank BRI",
-    accountNumber: "034101000928301",
-    accountHolder: "PT DAGO CREATIVE HUB",
-    branch: "KC Dago Bandung",
-    badge: "Nasional",
-  },
-];
 
 export default function PrivateTicketViewPage() {
   const params = useParams();
@@ -133,6 +134,7 @@ export default function PrivateTicketViewPage() {
   const [uploadErrorMessage, setUploadErrorMessage] = useState<string | null>(null);
   const [isReuploading, setIsReuploading] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [isSubTicketsOpen, setIsSubTicketsOpen] = useState(true);
 
   useEffect(() => {
     if (token) {
@@ -448,6 +450,15 @@ export default function PrivateTicketViewPage() {
                   <span className="font-semibold text-slate-800 dark:text-slate-200 leading-snug block">
                     {ticket.eventLocation}
                   </span>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ticket.eventLocation)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center space-x-1 text-[11px] text-[#3B7A57] dark:text-[#52B788] hover:underline font-bold mt-1"
+                  >
+                    <span>Buka Rute Google Maps</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
                 </div>
               </div>
             </div>
@@ -456,7 +467,7 @@ export default function PrivateTicketViewPage() {
             <div className="space-y-2">
               {isPaid ? (
                 isCheckedIn ? (
-                  <div className="p-6 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
+                  <div className="p-6 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2.5">
                     <div className="w-14 h-14 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md">
                       <Check className="w-8 h-8 stroke-[3]" />
                     </div>
@@ -466,6 +477,9 @@ export default function PrivateTicketViewPage() {
                     <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
                       Seluruh {ticket.ticketCount} tiket dalam pemesanan ini telah diverifikasi hadir oleh panitia di venue.
                     </p>
+                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200/60 dark:border-amber-800/60 text-[11px] text-amber-800 dark:text-amber-300 max-w-sm text-left">
+                      🛡️ <strong>Keamanan Tiket:</strong> Tiket ini sudah digunakan untuk akses masuk. Sistem gerbang resmi Dago Creative Hub secara otomatis menolak pemindaian ulang jika tautan atau QR code ini ditunjukkan kembali oleh pihak lain.
+                    </div>
                   </div>
                 ) : (
                   <div className="p-6 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-3">
@@ -548,63 +562,50 @@ export default function PrivateTicketViewPage() {
                   <div className="space-y-2 text-left">
                     <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
                       <Building2 className="w-3.5 h-3.5 text-[#3B7A57]" />
-                      <span>{ticket.destinationBankSnapshot ? "Rekening Resmi Tujuan Transfer Pesanan Ini:" : "Pilihan Rekening Tujuan Transfer Resmi:"}</span>
+                      <span>{isPaid ? "Rekening Tujuan Pembayaran Tiket Ini:" : "Rekening Resmi Tujuan Transfer Aktif:"}</span>
                     </span>
 
-                    <div className="space-y-2">
-                      {ticket.destinationBankSnapshot ? (
-                        <div
-                          key={ticket.destinationBankSnapshot.accountNumber}
-                          className="p-3.5 bg-white dark:bg-slate-800 rounded-xl border border-emerald-300/80 dark:border-emerald-700/80 flex items-center justify-between shadow-2xs hover:border-[#3B7A57] transition-colors"
-                        >
-                          <div className="space-y-0.5">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-xs font-bold text-slate-900 dark:text-white">
-                                {ticket.destinationBankSnapshot.bankName}
-                              </span>
-                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                {ticket.destinationBankSnapshot.label || "Rekening Resmi"}
-                              </span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <span className="font-mono font-bold text-sm text-[#3B7A57] dark:text-[#52B788]">
-                                {ticket.destinationBankSnapshot.accountNumber}
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                a.n. {ticket.destinationBankSnapshot.accountHolder}
-                              </span>
-                            </div>
-                            {ticket.destinationBankSnapshot.branch && (
-                              <span className="text-[9.5px] text-slate-400 block">
-                                Cabang: {ticket.destinationBankSnapshot.branch}
-                              </span>
-                            )}
-                          </div>
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleCopyAccount(ticket.destinationBankSnapshot!.accountNumber)}
-                            className="h-7 px-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-[#3B7A57] hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg cursor-pointer"
-                          >
-                            {copiedAccount === ticket.destinationBankSnapshot.accountNumber ? (
-                              <>
-                                <Check className="w-3 h-3 mr-1 text-emerald-600" />
-                                <span className="text-emerald-600">Disalin</span>
-                              </>
-                            ) : (
-                              <>
-                                <Copy className="w-3 h-3 mr-1" />
-                                <span>Salin</span>
-                              </>
-                            )}
-                          </Button>
+                    {ticket.isOriginalBankDeactivated && isPending && (
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex items-start space-x-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                        <div>
+                          <p className="font-bold text-[11px]">Pembaruan Rekening Pembayaran:</p>
+                          <p className="text-[10.5px] leading-snug">
+                            Rekening tujuan yang tertera saat pemesanan awal telah dinonaktifkan oleh administrator. Harap lakukan pembayaran ke rekening resmi yang sedang aktif di bawah ini.
+                          </p>
                         </div>
-                      ) : (
-                        BANK_ACCOUNTS.map((bank) => (
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      {(() => {
+                        let displayBanks: any[] = [];
+                        if (isPaid) {
+                          // Paid: Show historical destination where funds were sent
+                          displayBanks = ticket.destinationBankSnapshot ? [ticket.destinationBankSnapshot] : [];
+                        } else {
+                          // Pending: If original bank is deactivated, use activeDestinationBank; otherwise active snapshot or activeBankAccounts
+                          if (ticket.activeDestinationBank) {
+                            displayBanks = [ticket.activeDestinationBank];
+                          } else if (ticket.destinationBankSnapshot && !ticket.isOriginalBankDeactivated) {
+                            displayBanks = [ticket.destinationBankSnapshot];
+                          } else if (ticket.activeBankAccounts && ticket.activeBankAccounts.length > 0) {
+                            displayBanks = ticket.activeBankAccounts;
+                          }
+                        }
+
+                        if (displayBanks.length === 0) {
+                          return (
+                            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-200 text-center">
+                              Belum ada rekening bank pembayaran aktif yang ditetapkan pada sistem. Silakan hubungi admin platform.
+                            </div>
+                          );
+                        }
+
+                        return displayBanks.map((bank) => (
                           <div
                             key={bank.accountNumber}
-                            className="p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/90 dark:border-slate-700 flex items-center justify-between shadow-2xs hover:border-[#3B7A57]/60 transition-colors"
+                            className="p-3.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/90 dark:border-slate-700 flex items-center justify-between shadow-2xs hover:border-[#3B7A57] transition-colors"
                           >
                             <div className="space-y-0.5">
                               <div className="flex items-center space-x-2">
@@ -612,7 +613,7 @@ export default function PrivateTicketViewPage() {
                                   {bank.bankName}
                                 </span>
                                 <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                  {bank.badge}
+                                  {bank.label || bank.badge || "Rekening Resmi"}
                                 </span>
                               </div>
                               <div className="flex items-center space-x-2">
@@ -623,6 +624,11 @@ export default function PrivateTicketViewPage() {
                                   a.n. {bank.accountHolder}
                                 </span>
                               </div>
+                              {bank.branch && (
+                                <span className="text-[9.5px] text-slate-400 block">
+                                  Cabang: {bank.branch}
+                                </span>
+                              )}
                             </div>
 
                             <Button
@@ -644,8 +650,8 @@ export default function PrivateTicketViewPage() {
                               )}
                             </Button>
                           </div>
-                        ))
-                      )}
+                        ));
+                      })()}
                     </div>
                   </div>
 
@@ -936,6 +942,61 @@ export default function PrivateTicketViewPage() {
                 </span>
               </div>
             </div>
+
+            {/* Sub-tickets Breakdown for Multiple Tickets */}
+            {ticket.ticketCount > 1 && (
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setIsSubTicketsOpen(!isSubTicketsOpen)}
+                  className="w-full flex items-center justify-between font-bold text-slate-900 dark:text-white cursor-pointer"
+                >
+                  <span className="flex items-center space-x-1.5">
+                    <Ticket className="w-4 h-4 text-[#3B7A57]" />
+                    <span>
+                      Daftar {ticket.ticketCount} Tiket Anda ({ticket.checkedInQty || (isCheckedIn ? ticket.ticketCount : 0)}/{ticket.ticketCount} Hadir)
+                    </span>
+                  </span>
+                  {isSubTicketsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+
+                {isSubTicketsOpen && (
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 grid grid-cols-1 sm:grid-cols-2 gap-2 animate-in fade-in duration-150">
+                    {Array.from({ length: ticket.ticketCount }).map((_, idx) => {
+                      const ticketIndex = idx + 1;
+                      const subTicketCode = `${ticket.ticketCode}-${String(ticketIndex).padStart(2, "0")}`;
+                      const isSubCheckedIn = (ticket.checkedInQty ?? (isCheckedIn ? ticket.ticketCount : 0)) >= ticketIndex;
+
+                      return (
+                        <div
+                          key={subTicketCode}
+                          className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1"
+                        >
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-bold text-slate-400 uppercase">Tiket #{ticketIndex}</span>
+                            <span
+                              className={`font-bold px-1.5 py-0.2 rounded-full ${
+                                isSubCheckedIn
+                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                              }`}
+                            >
+                              {isSubCheckedIn ? "Hadir" : "Belum Hadir"}
+                            </span>
+                          </div>
+                          <div className="font-mono text-xs font-black text-slate-900 dark:text-white">
+                            {subTicketCode}
+                          </div>
+                          <span className="text-[10px] text-slate-500 block truncate">
+                            {ticketIndex === 1 ? `${ticket.guestName} (Pemesan Utama)` : `Tamu Pax #${ticketIndex}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Private Access Notice */}
             <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/30 rounded-xl border border-emerald-200/60 dark:border-emerald-800/50 flex items-start space-x-2 text-[11px] text-emerald-900 dark:text-emerald-200">

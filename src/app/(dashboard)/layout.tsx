@@ -12,7 +12,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, isLoggingOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -48,6 +48,10 @@ export default function DashboardLayout({
   }, [user, isLoading, router]);
 
   if (!user && !isLoading) {
+    if (isLoggingOut) {
+      // During active logout, let LogoutOverlay render smoothly without clashing with the fallback spinner
+      return null;
+    }
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white p-4">
         <div className="text-center space-y-3 animate-in fade-in">
@@ -63,7 +67,7 @@ export default function DashboardLayout({
       <div className="flex-1 flex overflow-hidden">
         {/* Desktop Sidebar (visible on large screens >= 1024px) */}
         <aside
-          className={`hidden lg:flex flex-shrink-0 transition-all duration-300 ease-in-out ${
+          className={`hidden lg:flex flex-shrink-0 sticky top-0 h-screen transition-all duration-300 ease-in-out ${
             isSidebarCollapsed ? "w-20" : "w-64"
           }`}
         >

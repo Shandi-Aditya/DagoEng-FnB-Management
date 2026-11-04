@@ -456,4 +456,5 @@ export interface OrganizerPortalData {
   organizerEmail?: string;
   isAdmin?: boolean;
   accessibleCommunities?: AccessibleCommunitySummary[];
+  registeredBankAccount?: EventBankAccount | null;
 }

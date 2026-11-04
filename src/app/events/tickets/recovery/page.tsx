@@ -34,6 +34,8 @@ export default function TicketRecoveryPage() {
   const [requestEmail, setRequestEmail] = useState("");
   const [isRequestingEmail, setIsRequestingEmail] = useState(false);
   const [emailRequestSuccess, setEmailRequestSuccess] = useState(false);
+  const [emailRecoveryFeedback, setEmailRecoveryFeedback] = useState<string | null>(null);
+  const [recoveredEmailTickets, setRecoveredEmailTickets] = useState<any[]>([]);
 
   const handleSearchWithCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,17 +86,38 @@ export default function TicketRecoveryPage() {
     }
   };
 
-  const handleRequestEmailLinks = (e: React.FormEvent) => {
+  const handleRequestEmailLinks = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!requestEmail.trim()) return;
 
-    setIsRequestingEmail(true);
+    try {
+      setIsRequestingEmail(true);
+      setEmailRequestSuccess(false);
+      setEmailRecoveryFeedback(null);
+      setRecoveredEmailTickets([]);
 
-    // Safe simulated response: rate limited, does NOT reveal whether email exists (prevents email harvesting)
-    setTimeout(() => {
-      setIsRequestingEmail(false);
+      const res = await fetch("/api/events/bookings/recover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: requestEmail.trim().toLowerCase() }),
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        setEmailRecoveryFeedback(json.error || "Gagal memproses permintaan pemulihan tiket.");
+        return;
+      }
+
       setEmailRequestSuccess(true);
-    }, 700);
+      setEmailRecoveryFeedback(
+        json.message ||
+          "Permintaan pemulihan tiket telah dikirim. Demi keamanan dan privasi data kepemilikan tiket Anda, tautan akses dikirimkan ke kotak masuk email terdaftar."
+      );
+    } catch (err: any) {
+      setEmailRecoveryFeedback(err.message || "Terjadi kesalahan pada sistem.");
+    } finally {
+      setIsRequestingEmail(false);
+    }
   };
 
   return (
@@ -211,50 +234,82 @@ export default function TicketRecoveryPage() {
           <div className="space-y-1">
             <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
               <Mail className="w-4 h-4 text-[#3B7A57]" />
-              <span>Lupa Kode Booking? Minta Instruksi via Email</span>
+              <span>Lupa Kode Booking? Cari Tiket via Email</span>
             </h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Masukkan alamat email Anda untuk menerima informasi dan instruksi pemulihan tiket.
+              Masukkan alamat email Anda yang digunakan saat mendaftar event untuk memulihkan seluruh tiket pesanan Anda.
             </p>
           </div>
 
           {emailRequestSuccess ? (
-            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-xs space-y-2 text-emerald-950 dark:text-emerald-100">
-              <div className="flex items-center space-x-2 text-emerald-800 dark:text-emerald-300 font-bold">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Permintaan Pemulihan Diproses</span>
+            <div className="space-y-3 animate-in fade-in duration-200">
+              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-950 dark:text-emerald-100 space-y-2">
+                <div className="flex items-center space-x-2 text-emerald-800 dark:text-emerald-300 font-bold">
+                  <CheckCircle2 className="w-5 h-5 shrink-0" />
+                  <span className="text-sm">Permintaan Berhasil Diproses</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-emerald-900/90 dark:text-emerald-200/90">
+                  {emailRecoveryFeedback}
+                </p>
+                <div className="pt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 flex items-start space-x-2 text-[10.5px] text-emerald-800/80 dark:text-emerald-300/80">
+                  <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>
+                    Demi mencegah pembajakan tiket dan penyalahgunaan QR Code oleh pihak lain, tautan akses tiket tidak ditampilkan langsung di peramban publik.
+                  </span>
+                </div>
               </div>
-              <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
-                Jika alamat email Anda memiliki pemesanan aktif di DAGO Creative Hub, data pemulihan telah dicatat di sistem.
-              </p>
-              <div className="p-2.5 bg-white/80 dark:bg-slate-900/80 rounded-xl border border-emerald-200/50 text-[10px] text-slate-500 dark:text-slate-400">
-                <Info className="w-3.5 h-3.5 inline mr-1 text-[#3B7A57]" />
-                Layanan gateway email keluar saat ini masih dalam integrasi bertahap. Jika butuh bantuan instan, gunakan form pencarian Kode Booking di atas atau hubungi meja panitia.
+
+              <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs text-slate-600 dark:text-slate-300 space-y-1">
+                <p className="font-bold text-[11px] text-slate-800 dark:text-slate-200">
+                  Punya Kode Booking (Contoh: DAGO-EVT-XXXXX)?
+                </p>
+                <p className="text-[10.5px] text-slate-500 dark:text-slate-400">
+                  Jika Anda masih menyimpan kode booking dari bukti konfirmasi atau pesan chat, Anda dapat menggunakan formulir di atas untuk langsung membuka tiket Anda.
+                </p>
               </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setEmailRequestSuccess(false);
+                  setRequestEmail("");
+                }}
+                className="w-full text-xs font-bold rounded-xl border-slate-200 dark:border-slate-700 cursor-pointer mt-2"
+              >
+                Kirim Permintaan untuk Email Lain
+              </Button>
             </div>
           ) : (
             <form onSubmit={handleRequestEmailLinks} className="space-y-3">
+              {emailRecoveryFeedback && (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-300 flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
+                  <p className="leading-snug">{emailRecoveryFeedback}</p>
+                </div>
+              )}
+
               <input
                 type="email"
                 required
                 value={requestEmail}
                 onChange={(e) => setRequestEmail(e.target.value)}
-                placeholder="Masukkan alamat email Anda..."
+                placeholder="Masukkan alamat email pemesan..."
                 className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
               />
 
               <Button
                 type="submit"
                 disabled={isRequestingEmail || !requestEmail.trim()}
-                variant="outline"
-                className="w-full text-xs font-bold py-2.5 rounded-xl border-slate-200 dark:border-slate-700 cursor-pointer"
+                className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
               >
                 {isRequestingEmail ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" />
                 ) : (
                   <Mail className="w-3.5 h-3.5 mr-1.5" />
                 )}
-                <span>Kirim Permintaan Pemulihan</span>
+                <span>Cari Tiket Saya</span>
               </Button>
             </form>
           )}
