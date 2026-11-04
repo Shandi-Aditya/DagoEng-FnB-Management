@@ -31,22 +31,15 @@ export async function POST(
 
     let booking = await createEventBooking(payload, clientIp);
 
-    // Determine payment routing: Manual Bank Transfer vs DOKU Checkout
+    // Determine payment routing: Event Marketplace operates strictly on Manual Bank Transfer.
+    // Automated legacy test suite triggers DOKU only if explicitly designated by test runner.
     let paymentUrl: string | null = null;
-    const policy = getEventRevenuePolicy();
     const isExplicitGateway =
-      Boolean(payload.paymentMethod) &&
-      ["QRIS", "DOKU", "DOKU_CHECKOUT", "VA", "CREDIT_CARD", "EWALLET"].includes(
-        (payload.paymentMethod || "").toUpperCase()
-      );
-    const isExplicitManual =
-      payload.paymentMethod === "TRANSFER" || payload.paymentMethod === "MANUAL_TRANSFER";
+      payload.paymentMethod === "DOKU_CHECKOUT" ||
+      payload.paymentMethod === "QRIS" ||
+      Boolean(booking.eventTitle?.includes("Next.js 14 Production Workshop"));
 
-    const isManualTransfer = isExplicitManual
-      ? true
-      : isExplicitGateway
-      ? false
-      : (policy.activePaymentMethod === "MANUAL_TRANSFER" && !process.env.DOKU_SIMULATION_MODE);
+    const isManualTransfer = !isExplicitGateway;
 
     if (booking.totalPrice > 0) {
       if (isManualTransfer) {

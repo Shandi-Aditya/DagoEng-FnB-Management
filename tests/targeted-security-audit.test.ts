@@ -351,6 +351,44 @@ describe("TARGETED SECURITY AUDIT — UNIVERSAL LOGIN, AUTO-ROUTING & EVENT CHEC
       expect(result.authorized).toBe(true);
       expect(result.role).toBe("OWNER");
     });
+
+    it("MENU CHECKIN DIHAPUS: Hub OWNER dan SUPER_ADMIN tidak melihat menu Check-in Event di sidebar", () => {
+      const hubOwnerUser: AuthenticatedUser = {
+        id: "user-owner-dago",
+        email: "owner@dagoeng.com",
+        name: "Hendra Wijaya",
+        phone: "08123456789",
+        role: { id: "role-owner", slug: "OWNER", name: "Hub Owner" },
+        scopeLevel: "ORGANIZATION",
+        allowedModules: ["CORE", "FNB", "CO_WORKING"],
+        organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
+        tenant: null,
+        outlet: null,
+        permissions: ["*"],
+      };
+
+      const superAdminUser: AuthenticatedUser = {
+        id: "user-super-admin",
+        email: "admin@dagoeng.com",
+        name: "Super Admin",
+        phone: "08123456780",
+        role: { id: "role-super-admin", slug: "SUPER_ADMIN", name: "Super Admin" },
+        scopeLevel: "PLATFORM",
+        allowedModules: ["CORE", "FNB", "CO_WORKING"],
+        organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
+        tenant: null,
+        outlet: null,
+        permissions: ["*"],
+      };
+
+      const ownerNav = getAuthorizedNavItems(hubOwnerUser);
+      expect(ownerNav.some((item) => item.href === "/events/checkin")).toBe(false);
+      expect(ownerNav.some((item) => item.href === "/events-admin")).toBe(true);
+
+      const adminNav = getAuthorizedNavItems(superAdminUser);
+      expect(adminNav.some((item) => item.href === "/events/checkin")).toBe(false);
+      expect(adminNav.some((item) => item.href === "/events-admin")).toBe(true);
+    });
   });
 
   describe("7. Open Redirect & Restricted Route Sanitization", () => {
@@ -417,6 +455,88 @@ describe("TARGETED SECURITY AUDIT — UNIVERSAL LOGIN, AUTO-ROUTING & EVENT CHEC
 
         expect(destination).toBe("/customer");
       }
+    });
+  });
+
+  describe("8. Dashboard Notifications, Unified Review Filter & Compact Date Range", () => {
+    it("UNIFIKASI REVIEW: 'Menunggu Review' mencakup event PENDING dan usulan bagi hasil PENDING", () => {
+      const mockEvents = [
+        { id: "evt-1", status: "PENDING", proposedRevenueSplit: null },
+        { id: "evt-2", status: "APPROVED", proposedRevenueSplit: { status: "PENDING", organizerPercent: 85, platformPercent: 15 } },
+        { id: "evt-3", status: "APPROVED", proposedRevenueSplit: { status: "APPROVED", organizerPercent: 80, platformPercent: 20 } },
+        { id: "evt-4", status: "REJECTED", proposedRevenueSplit: null },
+        { id: "evt-5", status: "PENDING", proposedRevenueSplit: { status: "PENDING", organizerPercent: 70, platformPercent: 30 } },
+      ];
+
+      // Filter Menunggu Review (Unified)
+      const reviewQueue = mockEvents.filter(
+        (e) => e.status === "PENDING" || e.proposedRevenueSplit?.status === "PENDING"
+      );
+
+      // evt-1 (pending event), evt-2 (approved event tapi usulan bagi hasil pending), evt-5 (keduanya pending)
+      expect(reviewQueue.length).toBe(3);
+      expect(reviewQueue.map((e) => e.id)).toEqual(["evt-1", "evt-2", "evt-5"]);
+
+      // Sub-kategori: Moderasi Event Baru
+      const newEventModeration = mockEvents.filter((e) => e.status === "PENDING");
+      expect(newEventModeration.length).toBe(2);
+      expect(newEventModeration.map((e) => e.id)).toEqual(["evt-1", "evt-5"]);
+
+      // Sub-kategori: Usulan Bagi Hasil
+      const splitProposals = mockEvents.filter((e) => e.proposedRevenueSplit?.status === "PENDING");
+      expect(splitProposals.length).toBe(2);
+      expect(splitProposals.map((e) => e.id)).toEqual(["evt-2", "evt-5"]);
+    });
+
+    it("EXECUTIVE ACTION CENTER: Menghitung total tindakan pending di dashboard admin", () => {
+      const pendingModeration = 3;
+      const pendingRevenueSplits = 5;
+      const pendingPayouts = 1;
+      const pendingManualPayments = 0;
+
+      const totalPendingActions =
+        pendingModeration + pendingPayouts + pendingRevenueSplits + pendingManualPayments;
+
+      expect(totalPendingActions).toBe(9);
+      expect(totalPendingActions > 0).toBe(true);
+    });
+
+    it("EVENT EXPIRY & LIFECYCLE: Event yang telah melewati batas waktu otomatis masuk ke Telah Berlalu", () => {
+      const nowMs = new Date("2026-11-04T12:00:00Z").getTime();
+      const testEvents = [
+        // Event lewat (selesai 1 Nov)
+        { id: "evt-past-1", title: "Past Event 1", startDate: "2026-10-31T17:00:00Z", endDate: "2026-11-01T15:59:59Z" },
+        // Event lewat (selesai 2 Nov)
+        { id: "evt-past-2", title: "Past Event 2", startDate: "2026-11-02T07:00:00Z", endDate: "2026-11-02T11:00:00Z" },
+        // Event mendatang (mulai 6 Nov)
+        { id: "evt-future-1", title: "Future Event 1", startDate: "2026-11-06T08:30:00Z", endDate: "2026-11-06T12:00:00Z" },
+        // Event sedang berlangsung (mulai 3 Nov, selesai 10 Nov)
+        { id: "evt-ongoing-1", title: "Ongoing Event 1", startDate: "2026-11-03T08:00:00Z", endDate: "2026-11-10T12:00:00Z" },
+      ];
+
+      const upcoming: typeof testEvents = [];
+      const past: typeof testEvents = [];
+
+      testEvents.forEach((e) => {
+        const end = new Date(e.endDate).getTime();
+        if (end < nowMs) {
+          past.push(e);
+        } else {
+          upcoming.push(e);
+        }
+      });
+
+      // Past events: evt-past-1 dan evt-past-2
+      expect(past.length).toBe(2);
+      expect(past.map((e) => e.id)).toEqual(["evt-past-1", "evt-past-2"]);
+
+      // Upcoming & Ongoing: evt-future-1 dan evt-ongoing-1
+      expect(upcoming.length).toBe(2);
+      expect(upcoming.map((e) => e.id)).toEqual(["evt-future-1", "evt-ongoing-1"]);
+
+      // Deteksi ongoing vs pure future
+      const ongoing = upcoming.filter((e) => new Date(e.startDate).getTime() <= nowMs);
+      expect(ongoing.map((e) => e.id)).toEqual(["evt-ongoing-1"]);
     });
   });
 });

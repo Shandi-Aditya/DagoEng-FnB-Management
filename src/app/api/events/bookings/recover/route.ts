@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
         emailConfigured: false,
         emailDispatched: false,
         message:
-          "Layanan pengiriman email otomatis belum diaktifkan pada server ini. Untuk membuka tiket Anda secara mandiri, silakan gunakan formulir pencarian menggunakan Kode Booking dan Email di atas, atau hubungi admin acara.",
+          "Layanan pengiriman email otomatis belum diaktifkan pada server ini. Silakan hubungi admin acara via WhatsApp melalui tombol bantuan di bawah atau masuk menggunakan akun DagoEng.",
       });
     }
 

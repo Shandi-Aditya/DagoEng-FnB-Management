@@ -470,7 +470,10 @@ export default function EventsListingPage() {
           <div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {paginatedEvents.map((evt) => {
-                const isPast = new Date(evt.endDate).getTime() < now;
+                const startMs = new Date(evt.startDate).getTime();
+                const endMs = new Date(evt.endDate).getTime();
+                const isPast = endMs < now;
+                const isOngoing = startMs <= now && now <= endMs;
                 const dateParts = parseDateParts(evt.startDate);
 
                 return (
@@ -494,15 +497,20 @@ export default function EventsListingPage() {
                         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
                         {/* Top Badges */}
-                        <div className="absolute top-3 left-3 flex items-center space-x-1.5">
+                        <div className="absolute top-3 left-3 flex items-center space-x-1.5 flex-wrap gap-1">
                           <Badge className="bg-slate-950/80 backdrop-blur-md text-white border-0 text-[10px] font-bold px-2.5 py-0.5">
                             {evt.category}
                           </Badge>
-                          {isPast && (
+                          {isPast ? (
                             <Badge variant="outline" className="bg-rose-950/80 text-rose-300 border-rose-800 text-[10px] px-2 py-0.5">
                               Selesai
                             </Badge>
-                          )}
+                          ) : isOngoing ? (
+                            <Badge className="bg-emerald-600 text-white border-0 text-[10px] font-bold px-2.5 py-0.5 shadow-xs flex items-center gap-1 animate-pulse">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                              Sedang Berlangsung
+                            </Badge>
+                          ) : null}
                         </div>
 
                         {/* Pricing Tag Overlay */}
@@ -546,7 +554,11 @@ export default function EventsListingPage() {
                           <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
                             <div className="flex items-center space-x-1.5">
                               <Clock className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
-                              <span className="truncate">{dateParts.weekday}, {dateParts.time} WITA</span>
+                              <span className="truncate">
+                                {isOngoing
+                                  ? `Berlangsung s/d ${new Date(evt.endDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}`
+                                  : `${dateParts.weekday}, ${dateParts.time} WITA`}
+                              </span>
                             </div>
                             <div className="flex items-center space-x-1.5">
                               <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />

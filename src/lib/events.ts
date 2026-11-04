@@ -1858,9 +1858,7 @@ export async function createEventBooking(
     const paymentStatus: TicketPaymentStatus = isFree ? "PAID" : "PENDING";
     const paymentMethod: TicketPaymentMethod = isFree
       ? "FREE"
-      : (policy.activePaymentMethod === "MANUAL_TRANSFER"
-          ? "MANUAL_TRANSFER"
-          : (payload.paymentMethod || "DOKU_CHECKOUT"));
+      : (payload.paymentMethod === "QRIS" ? "QRIS" : "MANUAL_TRANSFER");
 
     // Destination bank resolution & snapshot for paid bookings
     let destinationBankSnapshot: EventBankAccountSnapshot | undefined = undefined;

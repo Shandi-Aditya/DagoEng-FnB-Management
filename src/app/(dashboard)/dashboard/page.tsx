@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useDateFilter } from "@/contexts/DateFilterContext";
@@ -24,6 +25,13 @@ import {
   Layers,
   CheckCircle2,
   Calendar,
+  Bell,
+  ArrowRight,
+  Wallet,
+  CreditCard,
+  AlertTriangle,
+  Clock,
+  Sparkles,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -39,6 +47,18 @@ export default function DashboardPage() {
     platformRevenue: number;
   }>({ totalRevenue: 0, paidBookingsCount: 0, platformRevenue: 0 });
 
+  const [adminActionAlerts, setAdminActionAlerts] = React.useState<{
+    pendingModerationCount: number;
+    pendingPayoutCount: number;
+    pendingRevenueSplitCount: number;
+    pendingManualPaymentsCount: number;
+  }>({
+    pendingModerationCount: 0,
+    pendingPayoutCount: 0,
+    pendingRevenueSplitCount: 0,
+    pendingManualPaymentsCount: 0,
+  });
+
   React.useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -49,15 +69,56 @@ export default function DashboardPage() {
 
   React.useEffect(() => {
     if (isDagoOwner) {
-      fetch("/api/events/bookings?includeStats=true")
+      // 1. Fetch bookings & payment stats
+      fetch("/api/events/bookings?includeStats=true&unmasked=true")
         .then((res) => res.json())
         .then((json) => {
-          if (json.success && json.stats) {
-            setEventStats({
-              totalRevenue: json.stats.totalTicketRevenue || 0,
-              paidBookingsCount: json.stats.totalTicketsSold || 0,
-              platformRevenue: json.stats.platformCommissionRevenue || 0,
+          if (json.success) {
+            if (json.stats) {
+              setEventStats({
+                totalRevenue: json.stats.totalTicketRevenue || 0,
+                paidBookingsCount: json.stats.totalTicketsSold || 0,
+                platformRevenue: json.stats.platformCommissionRevenue || 0,
+              });
+            }
+            if (Array.isArray(json.data)) {
+              const pendingManual = json.data.filter(
+                (b: any) =>
+                  b.totalPrice > 0 &&
+                  b.paymentStatus === "PENDING" &&
+                  (b.paymentMethod === "MANUAL_TRANSFER" || Boolean(b.paymentProofUrl))
+              ).length;
+              setAdminActionAlerts((prev) => ({
+                ...prev,
+                pendingManualPaymentsCount: pendingManual,
+              }));
+            }
+          }
+        })
+        .catch(() => {});
+
+      // 2. Fetch admin events for pending moderation, revenue split, and payout requests
+      fetch("/api/events/admin")
+        .then((res) => res.json())
+        .then((json) => {
+          if (json.success && Array.isArray(json.data)) {
+            const evts = json.data;
+            const pendingMod = evts.filter((e: any) => e.status === "PENDING").length;
+            const pendingSplit = evts.filter((e: any) => e.proposedRevenueSplit?.status === "PENDING").length;
+
+            let pendingPayouts = 0;
+            evts.forEach((e: any) => {
+              if (Array.isArray(e.payoutHistory)) {
+                pendingPayouts += e.payoutHistory.filter((p: any) => p.status === "REQUESTED").length;
+              }
             });
+
+            setAdminActionAlerts((prev) => ({
+              ...prev,
+              pendingModerationCount: pendingMod,
+              pendingRevenueSplitCount: pendingSplit,
+              pendingPayoutCount: pendingPayouts,
+            }));
           }
         })
         .catch(() => {});
@@ -88,6 +149,12 @@ export default function DashboardPage() {
     totalOrdersCount > 0 ? Math.round(totalRevenue / totalOrdersCount) : 0;
   const completedOrdersCount =
     scopedOrders.filter((o) => o.status === "COMPLETED" || o.status === "SERVED").length;
+
+  const totalPendingActions =
+    adminActionAlerts.pendingModerationCount +
+    adminActionAlerts.pendingPayoutCount +
+    adminActionAlerts.pendingRevenueSplitCount +
+    adminActionAlerts.pendingManualPaymentsCount;
 
   // Multi-Business Breakdown for Dago Organization Owner
   const fnbRevenue = totalRevenue;
@@ -180,7 +247,164 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* 2. Ringkasan Statistik Utama (4 KPI Cards) */}
+      {/* 2. Pusat Pemberitahuan & Perlu Penanganan (Executive Action Center) */}
+      {isDagoOwner && totalPendingActions > 0 && (
+        <div className="bg-amber-500/10 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-700/60 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-amber-200/60 dark:border-amber-800/60">
+            <div className="flex items-center space-x-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs shrink-0 animate-pulse">
+                <Bell className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <span>Pemberitahuan & Perlu Penanganan Segera</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500 text-white">
+                    {totalPendingActions} Tindakan
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  Pengajuan operasional dan transaksi yang memerlukan verifikasi atau tindak lanjut admin:
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href="/events-admin"
+              className="text-xs font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-1 self-start sm:self-auto"
+            >
+              <span>Buka Event Hub</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+            {adminActionAlerts.pendingModerationCount > 0 && (
+              <Link
+                href="/events-admin?section=MODERATION&tab=PENDING"
+                className="group flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 hover:border-amber-400 dark:hover:border-amber-500 transition-all shadow-2xs cursor-pointer hover:shadow-xs"
+              >
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
+                    <Calendar className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors truncate">
+                      Moderasi Event
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {adminActionAlerts.pendingModerationCount} event baru
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center text-xs font-bold text-amber-600 dark:text-amber-400 group-hover:translate-x-0.5 transition-transform shrink-0 ml-2">
+                  <span className="hidden sm:inline mr-1 text-[11px]">Tinjau</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </div>
+              </Link>
+            )}
+
+            {adminActionAlerts.pendingPayoutCount > 0 && (
+              <Link
+                href="/events-admin?section=PAYOUTS"
+                className="group flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 hover:border-emerald-400 dark:hover:border-emerald-500 transition-all shadow-2xs cursor-pointer hover:shadow-xs"
+              >
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                    <Wallet className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate">
+                      Pencairan (Payout)
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {adminActionAlerts.pendingPayoutCount} permintaan saldo
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center text-xs font-bold text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform shrink-0 ml-2">
+                  <span className="hidden sm:inline mr-1 text-[11px]">Proses</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </div>
+              </Link>
+            )}
+
+            {adminActionAlerts.pendingRevenueSplitCount > 0 && (
+              <Link
+                href="/events-admin?section=MODERATION&tab=PENDING"
+                className="group flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-900/60 hover:border-purple-400 dark:hover:border-purple-500 transition-all shadow-2xs cursor-pointer hover:shadow-xs"
+              >
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-400 flex items-center justify-center shrink-0">
+                    <TrendingUp className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors truncate">
+                      Usulan Bagi Hasil
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {adminActionAlerts.pendingRevenueSplitCount} proposal menunggu
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center text-xs font-bold text-purple-600 dark:text-purple-400 group-hover:translate-x-0.5 transition-transform shrink-0 ml-2">
+                  <span className="hidden sm:inline mr-1 text-[11px]">Tinjau</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </div>
+              </Link>
+            )}
+
+            {adminActionAlerts.pendingManualPaymentsCount > 0 && (
+              <Link
+                href="/events-admin?section=PAYMENTS"
+                className="group flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 hover:border-rose-400 dark:hover:border-rose-500 transition-all shadow-2xs cursor-pointer hover:shadow-xs"
+              >
+                <div className="flex items-center space-x-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-lg bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 flex items-center justify-center shrink-0">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-rose-600 dark:group-hover:text-rose-400 transition-colors truncate">
+                      Verifikasi Tiket
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      {adminActionAlerts.pendingManualPaymentsCount} bukti transfer
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center text-xs font-bold text-rose-600 dark:text-rose-400 group-hover:translate-x-0.5 transition-transform shrink-0 ml-2">
+                  <span className="hidden sm:inline mr-1 text-[11px]">Cek</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </div>
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tenant Alert if active tenant orders need attention */}
+      {isTenantOwner && scopedOrders.filter((o) => o.status === "COOKING" || o.status === "KITCHEN_RECEIVED").length > 0 && (
+        <div className="bg-sky-500/10 border border-sky-300 dark:border-sky-800 rounded-2xl p-4 shadow-xs flex items-center justify-between animate-in fade-in">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-xl bg-sky-500 text-white flex items-center justify-center font-bold">
+              <Coffee className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-xs font-bold text-slate-900 dark:text-white">
+                {scopedOrders.filter((o) => o.status === "COOKING" || o.status === "KITCHEN_RECEIVED").length} Pesanan Sedang Dipersiapkan
+              </h2>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Dapur sedang memproses pesanan aktif tenant Anda.
+              </p>
+            </div>
+          </div>
+          <Link href="/orders" className="text-xs font-bold text-sky-600 hover:underline flex items-center gap-1">
+            <span>Lihat Pesanan</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      )}
+
+      {/* 3. Ringkasan Statistik Utama (4 KPI Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           title={isDagoOwner ? "Total Pendapatan Konsolidasi" : "Total Pendapatan"}

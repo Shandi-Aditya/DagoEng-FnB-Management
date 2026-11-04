@@ -280,15 +280,6 @@ export default function PrivateTicketViewPage() {
     }
   };
 
-  const resolveCheckoutUrl = (url?: string | null) => {
-    if (!url) return "#";
-    if (url.includes("api-sandbox.doku.com/checkout-link-v2/")) {
-      const parts = url.split("checkout-link-v2/");
-      return `/checkout-link-v2/${parts[1]}`;
-    }
-    return url;
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B1120] flex items-center justify-center p-4">
@@ -929,12 +920,6 @@ export default function PrivateTicketViewPage() {
                 <span className="text-slate-500 dark:text-slate-400">Jumlah Tiket:</span>
                 <span className="font-bold text-slate-900 dark:text-white">{ticket.ticketCount} Tiket</span>
               </div>
-              {ticket.dokuInvoiceNumber && (
-                <div className="flex justify-between">
-                  <span className="text-slate-500 dark:text-slate-400">No. Invoice DOKU:</span>
-                  <span className="font-mono text-slate-700 dark:text-slate-300">{ticket.dokuInvoiceNumber}</span>
-                </div>
-              )}
               <div className="flex justify-between pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
                 <span className="font-bold text-slate-700 dark:text-slate-300">Total Nominal:</span>
                 <span className="font-black text-[#3B7A57] dark:text-[#52B788] text-sm">

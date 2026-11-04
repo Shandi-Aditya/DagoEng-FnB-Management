@@ -61,7 +61,6 @@ import {
 const STATUS_TABS: { key: string; label: string; status?: EventStatus }[] = [
   { key: "ALL", label: "Semua Pengajuan" },
   { key: "PENDING", label: "Menunggu Review", status: "PENDING" },
-  { key: "REVENUE_SPLIT_PENDING", label: "Usulan Bagi Hasil" },
   { key: "APPROVED", label: "Disetujui", status: "APPROVED" },
   { key: "REVISION_REQUESTED", label: "Perlu Revisi", status: "REVISION_REQUESTED" },
   { key: "REJECTED", label: "Ditolak", status: "REJECTED" },
@@ -485,6 +484,20 @@ export default function AdminEventsPage() {
   }, [actionSuccessMessage]);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const sec = params.get("section");
+      const tab = params.get("tab");
+      if (sec === "MODERATION" || sec === "PAYMENTS" || sec === "PAYOUTS" || sec === "SETTINGS") {
+        setAdminSection(sec as any);
+      }
+      if (tab) {
+        setSelectedStatusTab(tab);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     if (isAuthorized) {
       loadAdminEvents();
       loadBusinessSettings();
@@ -874,21 +887,25 @@ export default function AdminEventsPage() {
     setIsEditModalOpen(true);
   };
 
-  // Status counts for badges
+  // Status counts for badges (includes both event moderation and revenue split review)
   const pendingCount = useMemo(
-    () => events.filter((e) => e.status === "PENDING").length,
+    () => events.filter((e) => e.status === "PENDING" || e.proposedRevenueSplit?.status === "PENDING").length,
     [events]
   );
 
   // Filtered events
   const filteredEvents = useMemo(() => {
     return events.filter((e) => {
-      const matchStatus =
-        selectedStatusTab === "ALL"
-          ? true
-          : selectedStatusTab === "REVENUE_SPLIT_PENDING"
-          ? e.proposedRevenueSplit?.status === "PENDING"
-          : e.status === selectedStatusTab;
+      let matchStatus = true;
+      if (selectedStatusTab === "ALL") {
+        matchStatus = true;
+      } else if (selectedStatusTab === "PENDING") {
+        // Unified Menunggu Review: covers both pending event moderation & revenue split proposals
+        matchStatus = e.status === "PENDING" || e.proposedRevenueSplit?.status === "PENDING";
+      } else {
+        matchStatus = e.status === selectedStatusTab;
+      }
+
       const matchSearch =
         searchQuery === "" ||
         e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1259,9 +1276,9 @@ export default function AdminEventsPage() {
               </div>
               <div>
                 <div className="text-base sm:text-xl font-black text-amber-600 dark:text-amber-400 leading-tight">
-                  {events.filter((e) => e.status === "PENDING" || e.status === "REVISION_REQUESTED").length} <span className="text-xs font-normal text-slate-400">Antrean</span>
+                  {events.filter((e) => e.status === "PENDING" || e.proposedRevenueSplit?.status === "PENDING").length} <span className="text-xs font-normal text-slate-400">Antrean</span>
                 </div>
-                <span className="text-[10px] text-slate-400 truncate block mt-0.5">Perlu kurasi admin</span>
+                <span className="text-[10px] text-slate-400 truncate block mt-0.5">Perlu verifikasi admin</span>
               </div>
             </Card>
 
@@ -1328,72 +1345,75 @@ export default function AdminEventsPage() {
             </div>
           )}
 
-          {/* Date Range Filter for Event Execution */}
-          <div className="pb-2">
-            <EventDateRangeFilter
-              onApplyFilter={(range) => setDateRange(range)}
-              initialRange={dateRange}
-              label="Filter Rentang Tanggal Pelaksanaan Event (WITA)"
-            />
-          </div>
+          {/* Filter Tabs & Toolbar Controls (Compact Date Range Dropdown, Page Size & Search) */}
+          <div className="space-y-2.5 pb-2">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              {/* Status Tabs */}
+              <div className="relative overflow-hidden">
+                <div className="flex items-center space-x-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none pr-6">
+                  {STATUS_TABS.map((tab) => {
+                    const active = selectedStatusTab === tab.key;
+                    const count =
+                      tab.key === "PENDING"
+                        ? events.filter((e) => e.status === "PENDING" || e.proposedRevenueSplit?.status === "PENDING").length
+                        : tab.status !== undefined
+                        ? events.filter((e) => e.status === tab.status).length
+                        : events.length;
 
-          {/* Filter Tabs & Search Bar with Page Size Selector */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2">
-            <div className="relative overflow-hidden">
-              <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none pr-6">
-                {STATUS_TABS.map((tab) => {
-                  const active = selectedStatusTab === tab.key;
-                  const count =
-                    tab.key === "REVENUE_SPLIT_PENDING"
-                      ? events.filter((e) => e.proposedRevenueSplit?.status === "PENDING").length
-                      : tab.status !== undefined
-                      ? events.filter((e) => e.status === tab.status).length
-                      : events.length;
-
-                  return (
-                    <button
-                      key={tab.key}
-                      onClick={() => setSelectedStatusTab(tab.key)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center space-x-1.5 cursor-pointer ${active
-                          ? "bg-[#3B7A57] text-white shadow-sm"
-                          : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
+                    return (
+                      <button
+                        key={tab.key}
+                        onClick={() => setSelectedStatusTab(tab.key)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all flex items-center space-x-1 cursor-pointer ${
+                          active
+                            ? "bg-[#3B7A57] text-white shadow-xs font-bold"
+                            : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
                         }`}
-                    >
-                      <span>{tab.label}</span>
-                      <span
-                        className={`px-1.5 py-0.2 rounded-full text-[10px] ${active
-                            ? "bg-white/20 text-white"
-                            : "bg-slate-100 dark:bg-slate-800 text-slate-500"
-                          }`}
                       >
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
+                        <span>{tab.label}</span>
+                        <span
+                          className={`px-1.5 py-0.2 rounded-full text-[9.5px] ${
+                            active
+                              ? "bg-white/20 text-white font-bold"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold"
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="absolute right-0 top-0 bottom-1 w-6 pointer-events-none bg-gradient-to-l from-white dark:from-[#0B1120] to-transparent sm:hidden" />
               </div>
-              <div className="absolute right-0 top-0 bottom-1 w-6 pointer-events-none bg-gradient-to-l from-white dark:from-[#0B1120] to-transparent sm:hidden" />
-            </div>
 
-            <div className="flex items-center justify-between sm:justify-end gap-2.5">
-              <TablePageSizeSelector
-                pageSize={eventPageSize}
-                onPageSizeChange={(sz) => {
-                  setEventPageSize(sz);
-                  setEventPage(1);
-                }}
-                label="records"
-              />
-
-              <div className="relative min-w-[200px] sm:min-w-[240px]">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari nama event..."
-                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+              {/* Controls: Compact Date Range Dropdown, Table Page Size, Search */}
+              <div className="flex flex-wrap items-center justify-start lg:justify-end gap-2">
+                <EventDateRangeFilter
+                  onApplyFilter={(range) => setDateRange(range)}
+                  initialRange={dateRange}
+                  label="Filter Rentang Tanggal (WITA)"
                 />
+
+                <TablePageSizeSelector
+                  pageSize={eventPageSize}
+                  onPageSizeChange={(sz) => {
+                    setEventPageSize(sz);
+                    setEventPage(1);
+                  }}
+                  label="records"
+                />
+
+                <div className="relative flex-1 sm:flex-none min-w-[180px] sm:min-w-[220px]">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Cari nama event..."
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -1444,6 +1464,11 @@ export default function AdminEventsPage() {
                                 {evt.category}
                               </Badge>
                               {renderStatusBadge(evt.status)}
+                              {evt.proposedRevenueSplit?.status === "PENDING" && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                  Bagi Hasil {evt.proposedRevenueSplit.organizerPercent}/{evt.proposedRevenueSplit.platformPercent}
+                                </span>
+                              )}
                             </div>
                             <h4 className="font-bold text-slate-900 dark:text-white text-sm line-clamp-2 leading-tight">
                               {evt.title}
@@ -1661,7 +1686,14 @@ export default function AdminEventsPage() {
 
                           {/* Status Badge */}
                           <td className="py-3.5 px-4 whitespace-nowrap">
-                            {renderStatusBadge(evt.status)}
+                            <div className="space-y-1">
+                              {renderStatusBadge(evt.status)}
+                              {evt.proposedRevenueSplit?.status === "PENDING" && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 block w-fit">
+                                  Bagi Hasil: {evt.proposedRevenueSplit.organizerPercent}/{evt.proposedRevenueSplit.platformPercent}
+                                </span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Actions */}
@@ -2513,14 +2545,11 @@ export default function AdminEventsPage() {
                       Metode Pembayaran Aktif
                     </label>
                     <select
-                      value={businessPolicy.activePaymentMethod || "MANUAL_TRANSFER"}
-                      onChange={(e) =>
-                        setBusinessPolicy({ ...businessPolicy, activePaymentMethod: e.target.value })
-                      }
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
+                      value="MANUAL_TRANSFER"
+                      disabled
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900/60 text-slate-800 dark:text-slate-200 cursor-not-allowed"
                     >
                       <option value="MANUAL_TRANSFER">Transfer Bank Manual (Aktif Resmi)</option>
-                      <option value="DOKU_CHECKOUT">DOKU Checkout Gateway</option>
                     </select>
                     <span className="text-[10px] text-slate-400 block">
                       Transfer Bank Manual mengarahkan checkout ke rekening resmi dan menu verifikasi bukti transfer.

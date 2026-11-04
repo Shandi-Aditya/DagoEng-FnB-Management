@@ -59,6 +59,7 @@ import {
   Phone,
   Save,
   Menu,
+  Bell,
 } from "lucide-react";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
@@ -3212,24 +3213,142 @@ export default function CommunityOrganizerPortalPage() {
                     Selamat datang kembali, {portalData?.summary.organizerName || "Komunitas"}. Berikut rangkuman performa event Anda.
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveNav("EVENTS")}
-                  className="text-xs font-semibold text-[#3B7A57] dark:text-[#52B788] hover:underline flex items-center space-x-1 cursor-pointer self-start sm:self-auto"
-                >
-                  <span>Lihat Semua Event</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                  <EventDateRangeFilter
+                    onApplyFilter={(range) => setDateRange(range)}
+                    initialRange={dateRange}
+                    label="Filter Rentang Analitik (WITA)"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setActiveNav("EVENTS")}
+                    className="text-xs font-semibold text-[#3B7A57] dark:text-[#52B788] hover:underline flex items-center space-x-1 cursor-pointer"
+                  >
+                    <span>Lihat Semua Event</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
-              {/* Date Range Filter for Analytics KPI */}
-              <div className="bg-slate-50/70 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-                <EventDateRangeFilter
-                  onApplyFilter={(range) => setDateRange(range)}
-                  initialRange={dateRange}
-                  label="Filter Rentang Analitik"
-                />
-              </div>
+              {/* Pusat Pemberitahuan & Status Event Penyelenggara */}
+              {(revisionEvents.length > 0 ||
+                pendingRevenueSplitEvents.length > 0 ||
+                (portalData?.events.filter((e) => e.status === "PENDING").length || 0) > 0 ||
+                (summary?.availablePayoutAmount ?? summary?.organizerPayoutAmount ?? 0) > 0) && (
+                <div className="bg-amber-500/10 dark:bg-amber-500/15 border border-amber-300 dark:border-amber-700/60 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3 animate-in fade-in">
+                  <div className="flex items-center space-x-2.5 pb-2 border-b border-amber-200/60 dark:border-amber-800/60">
+                    <div className="w-7 h-7 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold shadow-xs shrink-0 animate-pulse">
+                      <Bell className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100">
+                        Pemberitahuan & Perhatian Komunitas
+                      </h3>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                        Status moderasi dan informasi operasional penting untuk akun penyelenggara Anda:
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+                    {revisionEvents.length > 0 && (
+                      <div
+                        onClick={() => {
+                          setEventFilterStatus("REVISION_REQUESTED");
+                          setActiveNav("EVENTS");
+                        }}
+                        className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-sky-300 dark:border-sky-800 hover:border-sky-500 transition-all shadow-2xs cursor-pointer group"
+                      >
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-sky-100 dark:bg-sky-950/60 text-sky-600 flex items-center justify-center shrink-0">
+                            <FileEdit className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-sky-600 transition-colors truncate">
+                              Perlu Revisi ({revisionEvents.length})
+                            </div>
+                            <div className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate">
+                              Perbaiki detail event
+                            </div>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-sky-600 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                      </div>
+                    )}
+
+                    {pendingRevenueSplitEvents.length > 0 && (
+                      <div
+                        onClick={() => {
+                          setActiveNav("EVENTS");
+                        }}
+                        className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-800 hover:border-purple-500 transition-all shadow-2xs cursor-pointer group"
+                      >
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-600 flex items-center justify-center shrink-0">
+                            <TrendingUp className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-purple-600 transition-colors truncate">
+                              Usulan Bagi Hasil ({pendingRevenueSplitEvents.length})
+                            </div>
+                            <div className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate">
+                              Menunggu review Hub Admin
+                            </div>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-purple-600 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                      </div>
+                    )}
+
+                    {(portalData?.events.filter((e) => e.status === "PENDING").length || 0) > 0 && (
+                      <div
+                        onClick={() => {
+                          setEventFilterStatus("PENDING");
+                          setActiveNav("EVENTS");
+                        }}
+                        className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 hover:border-amber-500 transition-all shadow-2xs cursor-pointer group"
+                      >
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-600 flex items-center justify-center shrink-0">
+                            <Clock3 className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-amber-600 transition-colors truncate">
+                              Menunggu Moderasi ({portalData?.events.filter((e) => e.status === "PENDING").length})
+                            </div>
+                            <div className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate">
+                              Dalam antrean kurasi admin
+                            </div>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-amber-600 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                      </div>
+                    )}
+
+                    {(summary?.availablePayoutAmount ?? summary?.organizerPayoutAmount ?? 0) > 0 && (
+                      <div
+                        onClick={() => setActiveNav("FINANCE")}
+                        className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-800 hover:border-emerald-500 transition-all shadow-2xs cursor-pointer group"
+                      >
+                        <div className="flex items-center space-x-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center shrink-0">
+                            <Wallet className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition-colors truncate">
+                              Saldo Siap Tarik
+                            </div>
+                            <div className="text-[10.5px] font-bold text-[#3B7A57] dark:text-[#52B788] truncate">
+                              Rp {(summary?.availablePayoutAmount ?? summary?.organizerPayoutAmount ?? 0).toLocaleString("id-ID")}
+                            </div>
+                          </div>
+                        </div>
+                        <ArrowRight className="w-3.5 h-3.5 text-emerald-600 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* KPI 4 Grid */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">

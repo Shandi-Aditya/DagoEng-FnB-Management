@@ -94,7 +94,7 @@
       "details": "Inisialisasi rekening bank default BCA (PT DAGO CREATIVE HUB - 1420993821)"
     }
   ],
-  "effectiveDate": "2026-01-01T00:00:00.000Z",
+  "effectiveDate": "2026-11-04T16:40:13.808Z",
   "policyNotes": "Kebijakan komisi standar platform DAGO Creative Hub (20% Platform / 80% Penyelenggara Komunitas).",
   "history": [
     {
@@ -105,5 +105,7 @@
       "newPlatformFeePercent": 20,
       "reason": "Inisialisasi kebijakan bagi hasil awal Dago Creative Hub."
     }
-  ]
+  ],
+  "updatedAt": "2026-11-04T16:40:13.808Z",
+  "updatedBy": "Hendra Wijaya (Owner Dago Hub)"
 }

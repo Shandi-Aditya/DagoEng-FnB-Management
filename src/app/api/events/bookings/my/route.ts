@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     const auth = await getRequestAuthUser(req);
     const { searchParams } = new URL(req.url);
     const queryEmail = searchParams.get("email")?.toLowerCase().trim();
+    const queryPhone = searchParams.get("phone")?.trim();
     const guestToken = searchParams.get("guestToken") || searchParams.get("token");
     const guestTokensParam = searchParams.get("tokens");
     const ticketCode = searchParams.get("ticketCode")?.trim();
@@ -118,6 +119,68 @@ export async function GET(req: NextRequest) {
         success: true,
         count: safeMatch ? 1 : 0,
         data: safeMatch ? [safeMatch] : [],
+      });
+    }
+
+    // 3.5. Guest Lookup by Registered Email + Phone Number (when Booking Code is forgotten)
+    // Requires both factors matching the booking data and applies rate limiting to mitigate enumeration.
+    if (queryEmail && queryPhone) {
+      const allowed = checkRateLimit(`my-phone-lookup-${clientIp}`, 10, 60000);
+      if (!allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Terlalu banyak percobaan pencarian tiket. Harap tunggu 1 menit sebelum mencoba kembali.",
+          },
+          { status: 429 }
+        );
+      }
+
+      const normalizePhone = (p: string) => {
+        const digits = p.replace(/\D/g, "");
+        if (digits.startsWith("62")) return "0" + digits.slice(2);
+        return digits;
+      };
+
+      const normalizedQueryPhone = normalizePhone(queryPhone);
+      if (normalizedQueryPhone.length < 8) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Nomor WhatsApp/telepon harus minimal 8 digit angka yang valid.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const matchingBookings = allBookings.filter(
+        (b) =>
+          b.guestEmail.toLowerCase().trim() === queryEmail &&
+          normalizePhone(b.guestPhone || "") === normalizedQueryPhone
+      );
+
+      const safeMatches = matchingBookings.map((match) => ({
+        id: match.id,
+        ticketCode: match.ticketCode,
+        eventId: match.eventId,
+        eventTitle: match.eventTitle,
+        eventDate: match.eventDate,
+        eventLocation: match.eventLocation,
+        guestName: match.guestName,
+        guestEmail: match.guestEmail,
+        ticketCount: match.ticketCount,
+        unitPrice: match.unitPrice,
+        totalPrice: match.totalPrice,
+        paymentStatus: match.paymentStatus,
+        checkInStatus: match.checkInStatus,
+        guestToken: match.guestToken,
+        createdAt: match.createdAt,
+      }));
+
+      return NextResponse.json({
+        success: true,
+        count: safeMatches.length,
+        data: safeMatches,
       });
     }
 

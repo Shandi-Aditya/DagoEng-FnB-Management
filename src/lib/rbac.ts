@@ -187,7 +187,7 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     href: "/events/checkin",
     icon: "UserCheck",
     module: "CORE",
-    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "WAITER", "CASHIER"],
+    allowedRoles: ["WAITER", "CASHIER"],
   },
 
   // 5. Governance, Reports & Master Data
@@ -290,7 +290,8 @@ export function getAuthorizedNavItems(
   if (!user) return [];
   const roleSlug = getRoleSlug(user);
   if (!roleSlug) return [];
-  if (roleSlug === "SUPER_ADMIN") return ALL_NAV_ITEMS;
+  // Super Admin receives all items, except field-only operational door check-in
+  if (roleSlug === "SUPER_ADMIN") return ALL_NAV_ITEMS.filter((item) => item.href !== "/events/checkin");
 
   return ALL_NAV_ITEMS.filter((item) => {
     // 1. Role must match

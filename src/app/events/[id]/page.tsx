@@ -1006,87 +1006,56 @@ export default function EventDetailPage() {
               </span>
             </div>
 
-            {/* Metode Pembayaran: DOKU Checkout vs Transfer Bank Manual */}
-            {pendingTicket.paymentMethod === "DOKU_CHECKOUT" && pendingTicket.dokuPaymentUrl ? (
-              <div className="space-y-3">
-                <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-left space-y-1.5">
-                  <div className="flex items-center space-x-1.5 text-emerald-800 dark:text-emerald-200 font-bold text-xs">
-                    <CreditCard className="w-4 h-4 text-[#3B7A57]" />
-                    <span>Metode Pembayaran: DOKU Online Gateway</span>
-                  </div>
-                  <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Selesaikan pembayaran tiket Anda secara instan menggunakan QRIS, Virtual Account, Kartu Kredit, atau E-Wallet melalui portal resmi DOKU.
-                  </p>
-                </div>
-
-                <a
-                  href={
-                    pendingTicket.dokuPaymentUrl.includes("api-sandbox.doku.com/checkout-link-v2/")
-                      ? `/checkout-link-v2/${pendingTicket.dokuPaymentUrl.split("checkout-link-v2/")[1]}`
-                      : pendingTicket.dokuPaymentUrl
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full inline-flex items-center justify-center space-x-2 py-3 px-3 rounded-xl bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold transition-all shadow-md hover:scale-[1.01]"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Bayar Sekarang via DOKU Checkout &rarr;</span>
-                </a>
-              </div>
-            ) : (
-              <>
-                {/* Rekening Tujuan Transfer Bank Manual */}
-                {(() => {
-                  const bank = pendingTicket.destinationBankSnapshot || event.destinationBank;
-                  if (bank) {
-                    return (
-                      <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl text-left space-y-2">
-                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
-                          Rekening Resmi Tujuan Transfer:
+            {/* Rekening Tujuan Transfer Bank Manual */}
+            {(() => {
+              const bank = pendingTicket.destinationBankSnapshot || event.destinationBank;
+              if (bank) {
+                return (
+                  <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-2xl text-left space-y-2">
+                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
+                      Rekening Resmi Tujuan Transfer:
+                    </span>
+                    <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                      <div>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
+                          {bank.bankName} • {bank.accountNumber}
                         </span>
-                        <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                          <div>
-                            <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
-                              {bank.bankName} • {bank.accountNumber}
-                            </span>
-                            <span className="text-[10.5px] text-slate-400 block">a.n. {bank.accountHolder}</span>
-                            {bank.branch && <span className="text-[9.5px] text-slate-400 block">{bank.branch}</span>}
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              if (typeof window !== "undefined") {
-                                navigator.clipboard.writeText(bank.accountNumber);
-                                alert(`Nomor rekening ${bank.bankName} (${bank.accountNumber}) berhasil disalin!`);
-                              }
-                            }}
-                            className="h-7 px-2.5 text-[10.5px] font-bold text-[#3B7A57] border-[#3B7A57]/30 hover:bg-[#3B7A57]/10 cursor-pointer"
-                          >
-                            Salin Rekening
-                          </Button>
-                        </div>
+                        <span className="text-[10.5px] text-slate-400 block">a.n. {bank.accountHolder}</span>
+                        {bank.branch && <span className="text-[9.5px] text-slate-400 block">{bank.branch}</span>}
                       </div>
-                    );
-                  }
-                  return (
-                    <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-left text-xs text-rose-700 dark:text-rose-300">
-                      Belum ada rekening pembayaran aktif yang ditetapkan. Silakan hubungi admin platform.
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (typeof window !== "undefined") {
+                            navigator.clipboard.writeText(bank.accountNumber);
+                            alert(`Nomor rekening ${bank.bankName} (${bank.accountNumber}) berhasil disalin!`);
+                          }
+                        }}
+                        className="h-7 px-2.5 text-[10.5px] font-bold text-[#3B7A57] border-[#3B7A57]/30 hover:bg-[#3B7A57]/10 cursor-pointer"
+                      >
+                        Salin Rekening
+                      </Button>
                     </div>
-                  );
-                })()}
-
-                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/50 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 text-left leading-relaxed space-y-1">
-                  <div className="flex items-center space-x-1.5 font-bold text-amber-900 dark:text-amber-100">
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <span>Instruksi Pembayaran &amp; Verifikasi:</span>
                   </div>
-                  <p>
-                    Transfer sesuai nominal tepat, lalu buka halaman E-Tiket Anda untuk mengunggah foto bukti transfer. Panitia akan memvalidasi bukti Anda.
-                  </p>
+                );
+              }
+              return (
+                <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl text-left text-xs text-rose-700 dark:text-rose-300">
+                  Belum ada rekening pembayaran aktif yang ditetapkan. Silakan hubungi admin platform.
                 </div>
-              </>
-            )}
+              );
+            })()}
+
+            <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-800/50 rounded-xl text-[11px] text-amber-800 dark:text-amber-200 text-left leading-relaxed space-y-1">
+              <div className="flex items-center space-x-1.5 font-bold text-amber-900 dark:text-amber-100">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>Instruksi Pembayaran &amp; Verifikasi:</span>
+              </div>
+              <p>
+                Transfer sesuai nominal tepat, lalu buka halaman E-Tiket Anda untuk mengunggah foto bukti transfer. Panitia akan memvalidasi bukti Anda.
+              </p>
+            </div>
 
             <div className="space-y-2 pt-1">
               {pendingTicket.guestToken && (
@@ -1224,23 +1193,6 @@ export default function EventDetailPage() {
                     Tiket berstatus <span className="font-semibold underline">Menunggu Verifikasi Pembayaran</span>. Selesaikan pembayaran sebelum acara agar diverifikasi lunas dan dapat digunakan untuk check-in.
                   </div>
                 </div>
-              )}
-
-              {issuedTicket.paymentStatus === "PENDING" && issuedTicket.dokuPaymentUrl && (
-                <a
-                  href={
-                    issuedTicket.dokuPaymentUrl.includes("api-sandbox.doku.com/checkout-link-v2/")
-                      ? `/checkout-link-v2/${issuedTicket.dokuPaymentUrl.split("checkout-link-v2/")[1]}`
-                      : issuedTicket.dokuPaymentUrl
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center space-x-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Bayar Sekarang via DOKU Checkout</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
               )}
 
               {/* Action Buttons */}
