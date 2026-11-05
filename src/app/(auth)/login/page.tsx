@@ -74,8 +74,8 @@ function LoginContent() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // In production, demo login simulator is strictly disabled to prevent unauthorized account access
-      if (process.env.NODE_ENV === "production") {
+      // In production, demo login simulator is disabled unless UAT demo mode is enabled
+      if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_UAT !== "true") {
         setIsDemoAllowed(false);
       } else {
         const params = new URLSearchParams(window.location.search);

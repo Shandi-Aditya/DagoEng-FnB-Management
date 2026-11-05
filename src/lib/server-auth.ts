@@ -43,6 +43,11 @@ export function isDemoLoginAllowed(personaKey: string): { allowed: boolean; reas
     };
   }
 
+  // Allow UAT / internal team review login for all demo personas when ALLOW_DEMO_UAT is enabled
+  if (process.env.ALLOW_DEMO_UAT === "true") {
+    return { allowed: true };
+  }
+
   const isProduction =
     process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
 
