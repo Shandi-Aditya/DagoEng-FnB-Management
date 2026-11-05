@@ -1977,18 +1977,6 @@ export default function CommunityOrganizerPortalPage() {
                 );
               })()}
 
-              {/* Filter Rentang Tanggal Pelaksanaan Event (WITA) */}
-              <div className="bg-slate-50/70 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-                <EventDateRangeFilter
-                  onApplyFilter={(range) => {
-                    setDateRange(range);
-                    setEventPage(1);
-                  }}
-                  initialRange={dateRange}
-                  label="Filter Rentang Tanggal Pelaksanaan Event (WITA)"
-                />
-              </div>
-
               {/* Filter Tabs & Search Bar with Page Size Selector */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-1">
                 <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
@@ -2041,6 +2029,17 @@ export default function CommunityOrganizerPortalPage() {
                 </div>
 
                 <div className="flex items-center justify-between sm:justify-end gap-2 flex-wrap sm:flex-nowrap">
+                  {/* Filter Rentang Tanggal Pelaksanaan Event (WITA) */}
+                  <EventDateRangeFilter
+                    onApplyFilter={(range) => {
+                      setDateRange(range);
+                      setEventPage(1);
+                    }}
+                    initialRange={dateRange}
+                    label="Filter Jadwal Event (WITA)"
+                    align="right"
+                  />
+
                   <TablePageSizeSelector
                     pageSize={eventPageSize}
                     onPageSizeChange={(sz) => {
@@ -2836,7 +2835,14 @@ export default function CommunityOrganizerPortalPage() {
                       Transparansi pembagian revenue tiket, saldo tersedia, dan riwayat transfer dana ke rekening komunitas.
                     </p>
                   </div>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                    {/* Date Filter on Finance Tab */}
+                    <EventDateRangeFilter
+                      onApplyFilter={(range) => setDateRange(range)}
+                      initialRange={dateRange}
+                      label="Filter Periode Finansial"
+                      align="right"
+                    />
                     <Button
                       onClick={handleOpenPayout}
                       className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs flex items-center space-x-1.5 cursor-pointer transition-all hover:scale-[1.02]"
@@ -2845,15 +2851,6 @@ export default function CommunityOrganizerPortalPage() {
                       <span>Ajukan Pencairan Saldo</span>
                     </Button>
                   </div>
-                </div>
-
-                {/* Date Filter on Finance Tab */}
-                <div className="bg-slate-50/70 dark:bg-slate-900/40 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800">
-                  <EventDateRangeFilter
-                    onApplyFilter={(range) => setDateRange(range)}
-                    initialRange={dateRange}
-                    label="Filter Periode Finansial Transaksi"
-                  />
                 </div>
 
                 {/* Section 1: Hero Wallet Card & 80:20 Revenue Split Visualizer (Grid 3:2) */}
