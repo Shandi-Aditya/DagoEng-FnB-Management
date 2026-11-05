@@ -441,20 +441,29 @@ describe("Check-in Validation Engine (updateBookingCheckIn)", () => {
       id: "tkt-concurrent-single",
       ticketCode: "DAGO-EVT-CONC",
       eventId: "evt-1",
+      eventTitle: "Concurrent Event",
+      eventDate: new Date().toISOString(),
+      eventLocation: "Main Hall",
+      unitPrice: 50000,
       ticketCount: 1,
       checkedInQty: 0,
       totalPrice: 50000,
-      paymentStatus: "PAID",
-      checkInStatus: "REGISTERED",
+      platformFeePercent: 20,
+      platformFeeAmount: 10000,
+      organizerRevenueAmount: 40000,
+      paymentMethod: "MANUAL_TRANSFER" as const,
+      paymentStatus: "PAID" as const,
+      checkInStatus: "REGISTERED" as const,
       guestName: "Concurrent Attendee",
       guestEmail: "conc@example.com",
       guestPhone: "08123456788",
+      guestToken: "tok-concurrent-single",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     const current = eventsLib.loadBookingsFromDisk();
-    eventsLib.saveBookingsToDisk([...current, singleBooking]);
+    eventsLib.saveBookingsToDisk([...current, singleBooking as any]);
 
     // Fire 2 concurrent check-in promises
     const [res1, res2] = await Promise.allSettled([
