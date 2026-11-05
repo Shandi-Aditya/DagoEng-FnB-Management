@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { organizerCheckInAttendee } from "@/lib/events";
-import { assertOrganizerAuth } from "@/lib/server-auth";
+import { assertOrganizerAuth, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
 import { AttendeeCheckInStatus } from "@/types/event";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, bookingId, ticketCode, checkInStatus, incrementQty, targetQty, reset } = body;
+    const { email, bookingId, ticketCode, checkInStatus, incrementQty, targetQty, reset, eventId } = body;
     const identifier = (bookingId || ticketCode || "").trim();
 
     const auth = await assertOrganizerAuth(req, email);
@@ -56,7 +56,12 @@ export async function PATCH(req: NextRequest) {
       auth.email,
       identifier,
       checkInStatus as AttendeeCheckInStatus,
-      { incrementQty, targetQty, reset }
+      {
+        incrementQty,
+        targetQty,
+        reset,
+        expectedEventId: typeof eventId === "string" && eventId.trim() ? eventId.trim() : undefined,
+      }
     );
 
     const message =
@@ -66,10 +71,17 @@ export async function PATCH(req: NextRequest) {
         ? `Kehadiran parsial tercatat: ${updated.checkedInQty} dari ${updated.ticketCount} tiket telah hadir.`
         : "Status kehadiran peserta berhasil dibatalkan.";
 
+    const { guestToken: _token, ...sanitized } = updated;
+    const maskedUpdated = {
+      ...sanitized,
+      guestEmail: maskEmail(updated.guestEmail),
+      guestPhone: maskPhoneNumber(updated.guestPhone),
+    };
+
     return NextResponse.json({
       success: true,
       message,
-      data: updated,
+      data: maskedUpdated,
     });
   } catch (err: any) {
     if (err?.name === "DatabasePersistenceError") {

@@ -31,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" suppressHydrationWarning>
+    <html lang="id" className="bg-[#F8FAFC] dark:bg-[#0F172A] m-0 p-0 border-0" suppressHydrationWarning>
       <head>
         <link rel="icon" href="/logo-dago.png" type="image/png" />
         <link rel="shortcut icon" href="/logo-dago.png" type="image/png" />

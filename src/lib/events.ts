@@ -78,7 +78,13 @@ export function saveEventSettingsToDisk(policy: EventRevenueSharingPolicy): void
     const settingsFile = getEventSettingsFile();
     const dir = path.dirname(settingsFile);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(settingsFile, JSON.stringify(policy, null, 2), "utf-8");
+    const content = JSON.stringify(policy, null, 2);
+    fs.writeFileSync(settingsFile, content, "utf-8");
+    if (process.env.NODE_ENV !== "test") {
+      persistStorageToDb("event_settings.json", content).catch((err) => {
+        console.warn("[events] Background persist event_settings.json to DB warning:", err);
+      });
+    }
   } catch (err) {
     console.error("Failed to write event settings to disk", err);
   }
@@ -639,7 +645,7 @@ export const INITIAL_COMMUNITY_EVENTS: CommunityEvent[] = [
     guidelines: [
       "Bawa apron dan milk pitcher favorit Anda (opsional, pitcher cadangan disediakan).",
       "Koneksi Wi-Fi publik dan sertifikat partisipasi workshop disediakan gratis.",
-      "Sesi cupping dan kalibrasi sensoris dimulai tepat waktu pukul 14:00 WIB.",
+      "Sesi cupping dan kalibrasi sensoris dimulai tepat waktu pukul 14:00 WITA.",
     ],
     createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -994,7 +1000,13 @@ export function getEventTicketAvailability(eventId: string): EventTicketAvailabi
     return true;
   });
 
-  const ticketsReserved = activeBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+  const ticketsReserved = activeBookings.reduce((sum, b) => {
+    const count =
+      typeof b.ticketCount === "number" && b.ticketCount > 0
+        ? b.ticketCount
+        : parseInt(String(b.ticketCount || 1), 10) || 1;
+    return sum + count;
+  }, 0);
   const ticketsRemaining = Math.max(0, totalCapacity - ticketsReserved);
   const occupancyRate =
     totalCapacity > 0 ? Math.min(100, Math.round((ticketsReserved / totalCapacity) * 100)) : 0;
@@ -1194,6 +1206,23 @@ export function checkRateLimit(clientIp: string, maxRequests = 5, windowMs = 600
 }
 
 /**
+ * Safely parses datetime input into ISO string with strict WITA (Asia/Makassar, UTC+8) offset.
+ * Standardizes datetime-local inputs (which lack explicit offset) to prevent 8-hour timezone drift.
+ */
+export function parseToWITAISO(dateInput: string): string {
+  if (!dateInput) return "";
+  const trimmed = dateInput.trim();
+  if (trimmed.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(trimmed)) {
+    return new Date(trimmed).toISOString();
+  }
+  if (trimmed.includes("T")) {
+    const withSec = trimmed.length === 16 ? `${trimmed}:00` : trimmed;
+    return new Date(`${withSec}+08:00`).toISOString();
+  }
+  return new Date(`${trimmed}T00:00:00+08:00`).toISOString();
+}
+
+/**
  * Create a new event submission.
  * Always sets status to PENDING.
  * Enforces duplicate submission prevention and input HTML sanitization.
@@ -1239,8 +1268,8 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
       title: sanitizeHtmlText(payload.title),
       category: payload.category,
       description: sanitizeHtmlText(payload.description),
-      startDate: new Date(payload.startDate).toISOString(),
-      endDate: new Date(payload.endDate).toISOString(),
+      startDate: parseToWITAISO(payload.startDate),
+      endDate: parseToWITAISO(payload.endDate),
       location: sanitizeHtmlText(payload.location),
       maxCapacity:
         typeof payload.maxCapacity === "number" &&
@@ -1276,9 +1305,9 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
         : null,
       collaborationNotes: payload.collaborationNotes ? sanitizeHtmlText(payload.collaborationNotes) : null,
 
-      // Revenue sharing proposal
-      organizerFeePercent: orgPct,
-      customPlatformFeePercent: pltPct,
+      // Revenue sharing proposal: active agreement remains at platform default 80:20 until mutually agreed
+      organizerFeePercent: 80,
+      customPlatformFeePercent: 20,
       proposedRevenueSplit:
         payload.proposedOrganizerPercent !== undefined
           ? {
@@ -1715,7 +1744,18 @@ export async function getEventBookings(eventId?: string): Promise<EventTicketOrd
 export async function getBookingById(id: string): Promise<EventTicketOrder | null> {
   await syncStorageFromDb("event_bookings.json").catch(() => {});
   const all = loadBookingsFromDisk();
-  return all.find((b) => b.id === id) || null;
+  const normalized = (id || "").trim().toUpperCase();
+  const matchSub = normalized.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
+  const baseCode = matchSub ? matchSub[1] : normalized;
+  return (
+    all.find(
+      (b) =>
+        b.id === id ||
+        (b.ticketCode &&
+          (b.ticketCode.trim().toUpperCase() === normalized ||
+           b.ticketCode.trim().toUpperCase() === baseCode))
+    ) || null
+  );
 }
 
 /**
@@ -1914,6 +1954,8 @@ export interface CheckInOptions {
   incrementQty?: number;
   targetQty?: number;
   reset?: boolean;
+  expectedEventId?: string;
+  enforceDateWindow?: boolean;
 }
 
 let checkInLockPromise: Promise<void> = Promise.resolve();
@@ -1936,10 +1978,19 @@ export async function updateBookingCheckIn(
 
   try {
     await currentLock;
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
     const allBookings = loadBookingsFromDisk();
     const normalizedIdentifier = (bookingId || "").trim().toUpperCase();
+    const matchSub = normalizedIdentifier.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
+    const baseCode = matchSub ? matchSub[1] : normalizedIdentifier;
+    const requestedSeat = matchSub ? parseInt(matchSub[2], 10) : undefined;
+
     const index = allBookings.findIndex(
-      (b) => b.id === bookingId || (b.ticketCode && b.ticketCode.trim().toUpperCase() === normalizedIdentifier)
+      (b) =>
+        b.id === bookingId ||
+        (b.ticketCode &&
+          (b.ticketCode.trim().toUpperCase() === normalizedIdentifier ||
+           b.ticketCode.trim().toUpperCase() === baseCode))
     );
     if (index === -1) {
       throw new Error(`Pemesanan tiket dengan ID atau kode ${bookingId} tidak ditemukan.`);
@@ -2016,11 +2067,27 @@ export async function updateBookingCheckIn(
 
     let newCheckedInQty = currentCheckedInQty;
     let newStatus: AttendeeCheckInStatus = status;
+    let newCheckedInSeats: number[] = Array.isArray(existing.checkedInSeats)
+      ? [...existing.checkedInSeats]
+      : Array.from({ length: currentCheckedInQty }, (_, i) => i + 1);
 
     // Skenario A: Reset atau Batalkan Kehadiran
     if (status === "REGISTERED" || options?.reset) {
       newCheckedInQty = 0;
       newStatus = "REGISTERED";
+      newCheckedInSeats = [];
+
+      // Clean up PostgreSQL atomic check-in tokens if DB is reachable
+      if (process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
+        try {
+          const { db } = await import("./db");
+          await db.systemSetting.deleteMany({
+            where: {
+              key: { startsWith: `CHECKIN_${existing.id}_SEAT_` },
+            },
+          }).catch(() => {});
+        } catch {}
+      }
     } else {
       // Skenario B: Check-In (Increment atau Target)
       if (currentCheckedInQty >= ticketCount) {
@@ -2029,33 +2096,78 @@ export async function updateBookingCheckIn(
         );
       }
 
-      let increment = 1;
-      if (options?.incrementQty !== undefined) {
-        increment = options.incrementQty;
-      } else if (options?.targetQty !== undefined) {
-        increment = options.targetQty - currentCheckedInQty;
-      } else if (status === "CHECKED_IN") {
-        // Direct CHECKED_IN call without options checks in all remaining tickets
-        increment = ticketCount - currentCheckedInQty;
-      }
+      if (requestedSeat !== undefined) {
+        if (requestedSeat < 1 || requestedSeat > ticketCount) {
+          throw new Error(
+            `Nomor tiket #${requestedSeat} tidak valid untuk pemesanan ini (total ${ticketCount} tiket).`
+          );
+        }
+        if (newCheckedInSeats.includes(requestedSeat)) {
+          throw new Error(
+            `Tiket #${requestedSeat} (${normalizedIdentifier}) sudah digunakan untuk check-in sebelumnya.`
+          );
+        }
 
-      if (increment <= 0) {
-        throw new Error("Kuantitas check-in yang ditambahkan harus lebih besar dari 0.");
-      }
+        // Multi-Instance PostgreSQL ACID Atomicity Barrier:
+        // Leverages native UNIQUE constraint on SystemSetting.key across serverless lambdas
+        if (process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
+          try {
+            const { db } = await import("./db");
+            const lockKey = `CHECKIN_${existing.id}_SEAT_${requestedSeat}`;
+            await db.systemSetting.create({
+              data: {
+                key: lockKey,
+                value: new Date().toISOString(),
+                description: `Atomic check-in token for booking ${existing.id} seat ${requestedSeat}`,
+              },
+            });
+          } catch (dbErr: any) {
+            if (dbErr?.code === "P2002" || String(dbErr?.message || "").includes("Unique constraint")) {
+              throw new Error(
+                `Tiket #${requestedSeat} (${normalizedIdentifier}) sudah digunakan untuk check-in sebelumnya.`
+              );
+            }
+          }
+        }
 
-      if (currentCheckedInQty + increment > ticketCount) {
-        throw new Error(
-          `Jumlah check-in melebihi total tiket pemesanan (${ticketCount}). Sisa tiket belum check-in: ${
-            ticketCount - currentCheckedInQty
-          }.`
-        );
-      }
-
-      newCheckedInQty = currentCheckedInQty + increment;
-      if (newCheckedInQty === ticketCount) {
-        newStatus = "CHECKED_IN";
+        newCheckedInSeats.push(requestedSeat);
+        newCheckedInQty = newCheckedInSeats.length;
+        newStatus = newCheckedInQty === ticketCount ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN";
       } else {
-        newStatus = "PARTIALLY_CHECKED_IN";
+        let increment = 1;
+        if (options?.incrementQty !== undefined) {
+          increment = options.incrementQty;
+        } else if (options?.targetQty !== undefined) {
+          increment = options.targetQty - currentCheckedInQty;
+        } else if (status === "CHECKED_IN") {
+          // Direct CHECKED_IN call without options checks in all remaining tickets
+          increment = ticketCount - currentCheckedInQty;
+        }
+
+        if (increment <= 0) {
+          throw new Error("Kuantitas check-in yang ditambahkan harus lebih besar dari 0.");
+        }
+
+        if (currentCheckedInQty + increment > ticketCount) {
+          throw new Error(
+            `Jumlah check-in melebihi total tiket pemesanan (${ticketCount}). Sisa tiket belum check-in: ${
+              ticketCount - currentCheckedInQty
+            }.`
+          );
+        }
+
+        newCheckedInQty = currentCheckedInQty + increment;
+        if (newCheckedInQty === ticketCount) {
+          newStatus = "CHECKED_IN";
+        } else {
+          newStatus = "PARTIALLY_CHECKED_IN";
+        }
+
+        for (let s = 1; s <= ticketCount && newCheckedInSeats.length < newCheckedInQty; s++) {
+          if (!newCheckedInSeats.includes(s)) {
+            newCheckedInSeats.push(s);
+          }
+        }
       }
     }
 
@@ -2063,6 +2175,7 @@ export async function updateBookingCheckIn(
       ...existing,
       ticketCount,
       checkedInQty: newCheckedInQty,
+      checkedInSeats: newCheckedInSeats,
       checkInStatus: newStatus,
       checkInTime: newCheckedInQty > 0 ? existing.checkInTime || new Date().toISOString() : null,
       updatedAt: new Date().toISOString(),
@@ -2132,25 +2245,11 @@ export async function updateBookingPaymentStatus(
  */
 export const MANUAL_TRANSFER_BANK_ACCOUNTS = [
   {
-    bankName: "BCA (Bank Central Asia)",
-    accountNumber: "1420993821",
-    accountHolder: "PT DAGO CREATIVE HUB",
-    branch: "KCU Dago Bandung",
-    badge: "Utama / Rekomendasi",
-  },
-  {
-    bankName: "Bank Mandiri",
-    accountNumber: "1300098234120",
-    accountHolder: "PT DAGO CREATIVE HUB",
-    branch: "KC Bandung Surapati",
-    badge: "Bebas Biaya Admin",
-  },
-  {
     bankName: "Bank BRI",
     accountNumber: "034101000928301",
     accountHolder: "PT DAGO CREATIVE HUB",
-    branch: "KC Dago Bandung",
-    badge: "Jaringan Luas",
+    branch: "KC Singaraja",
+    badge: "Rekening Operasional",
   },
 ];
 
@@ -2447,9 +2546,16 @@ export async function organizerCheckInAttendee(
 ): Promise<EventTicketOrder> {
   const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
   const normalizedIdentifier = (bookingId || "").trim().toUpperCase();
+  const matchSub = normalizedIdentifier.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
+  const baseCode = matchSub ? matchSub[1] : normalizedIdentifier;
+
   const allBookings = loadBookingsFromDisk();
   const booking = allBookings.find(
-    (b) => b.id === bookingId || (b.ticketCode && b.ticketCode.trim().toUpperCase() === normalizedIdentifier)
+    (b) =>
+      b.id === bookingId ||
+      (b.ticketCode &&
+        (b.ticketCode.trim().toUpperCase() === normalizedIdentifier ||
+         b.ticketCode.trim().toUpperCase() === baseCode))
   );
   if (!booking) {
     throw new Error(`Pemesanan tiket dengan ID atau kode ${bookingId} tidak ditemukan.`);
@@ -2461,9 +2567,32 @@ export async function organizerCheckInAttendee(
     throw new Error(`Event terkait tidak ditemukan.`);
   }
 
+  // Cross-event isolation: if expectedEventId is provided, reject if booking belongs to a different event
+  if (options?.expectedEventId && booking.eventId !== options.expectedEventId) {
+    throw new Error(
+      `Tiket [${normalizedIdentifier}] terdaftar pada event lain (${booking.eventTitle || booking.eventId}), bukan event ini.`
+    );
+  }
+
   // Cross-community authorization barrier
   if ((event.organizerEmail || "").toLowerCase() !== normalizedEmail) {
     throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk mengelola peserta event milik komunitas lain.");
+  }
+
+  // Event operational date window verification (if enforced)
+  if (options?.enforceDateWindow && event.startDate) {
+    const now = Date.now();
+    const startMs = new Date(event.startDate).getTime();
+    const endMs = event.endDate ? new Date(event.endDate).getTime() : startMs + 24 * 60 * 60 * 1000;
+    // Allow check-in starting 6 hours before start until 12 hours after end
+    const bufferBeforeMs = 6 * 60 * 60 * 1000;
+    const bufferAfterMs = 12 * 60 * 60 * 1000;
+    if (now < startMs - bufferBeforeMs) {
+      throw new Error(`Pintu check-in belum dibuka untuk event "${event.title}". Registrasi dibuka pada hari H.`);
+    }
+    if (now > endMs + bufferAfterMs) {
+      throw new Error(`Pintu check-in telah ditutup karena waktu operasional event "${event.title}" telah selesai.`);
+    }
   }
 
   return updateBookingCheckIn(bookingId, checkInStatus, options);

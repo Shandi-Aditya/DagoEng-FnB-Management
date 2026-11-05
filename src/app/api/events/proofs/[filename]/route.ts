@@ -108,6 +108,23 @@ export async function GET(
     // 3. Locate the file strictly on private storage (never read from public directory)
     const targetFilePath = getProofFilePath(sanitizedFilename);
 
+    // Distributed fallback: If not found on local disk (new serverless instance), recover from PostgreSQL
+    if (!fs.existsSync(targetFilePath) && process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
+      try {
+        const { db } = await import("@/lib/db");
+        const proofKey = `PROOF_${sanitizedFilename}`;
+        const record = await db.systemSetting.findUnique({ where: { key: proofKey } });
+        if (record && record.value) {
+          const recoveredBuffer = Buffer.from(record.value, "base64");
+          const targetDir = path.dirname(targetFilePath);
+          if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+          fs.writeFileSync(targetFilePath, recoveredBuffer);
+        }
+      } catch (recoveryErr) {
+        console.warn(`[proof-recovery] Failed to recover ${sanitizedFilename} from database:`, recoveryErr);
+      }
+    }
+
     if (!fs.existsSync(targetFilePath)) {
       return NextResponse.json(
         { success: false, error: "File fisik bukti pembayaran tidak ditemukan pada penyimpanan server." },

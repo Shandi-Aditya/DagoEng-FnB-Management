@@ -253,6 +253,7 @@ export interface EventTicketOrder {
   institution?: string | null;
   ticketCount: number;
   checkedInQty?: number; // Jumlah tiket yang sudah check-in (0 <= checkedInQty <= ticketCount)
+  checkedInSeats?: number[]; // Daftar nomor index tiket (1..ticketCount) yang sudah check-in
   unitPrice: number;
   totalPrice: number;
   platformFeePercent: number; // e.g. 20%
@@ -375,7 +376,7 @@ export const DEFAULT_EVENT_BANK_ACCOUNTS: EventBankAccount[] = [
     bankName: "Bank BRI",
     accountNumber: "034101000928301",
     accountHolder: "PT DAGO CREATIVE HUB",
-    branch: "KC Dago Bandung",
+    branch: "KC Singaraja",
     badge: "Jaringan Luas",
     isDefault: false,
     isActive: true,

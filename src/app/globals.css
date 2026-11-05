@@ -96,6 +96,15 @@
     --warning: 38 92% 50%;
     --info: 199 89% 56%;
   }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background-color: var(--bg-main);
+    color: var(--text-main);
+  }
 }
 
 /* ========================================================
@@ -107,8 +116,13 @@
    Eliminates blinding white card leaks & random bright accents.
    ======================================================== */
 
+html.dark,
+body.dark,
 .dark,
 .dark body {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
   background-color: #0F172A !important;
   color: #E2E8F0 !important;
 }

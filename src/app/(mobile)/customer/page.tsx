@@ -21,7 +21,6 @@ import {
   isTenantAcceptingOrders,
   isServiceWithinHours,
 } from "@/lib/operating-hours";
-import { DEMO_PERSONAS } from "@/contexts/AuthContext";
 import { calculateOrderPricing, checkPromoValidity, isPromoEligibleForItem, PromoConfig, validateVoucherCode, calculateCoworkingPricing, getPromoRemainingQuota } from "@/lib/promo";
 import { LOYALTY_VOUCHERS } from "@/features/pos/mock-data";
 import { MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
@@ -33,6 +32,7 @@ import { CoworkingSpaceItem, CoworkingMembershipPlan } from "@/types/coworking";
 import { PublicCommunityEvent, EventTicketOrder } from "@/types/event";
 import { AnimatedCounter } from "@/components/ui/animated-counter";
 import { QRCodeSVG } from "qrcode.react";
+import { downloadTicketAsImage } from "@/lib/ticket-download";
 import { isTenantActive, getTenantStatus, getAllFnbTenants, getTenantName } from "@/lib/tenant";
 import {
   Home,
@@ -72,6 +72,7 @@ import {
   Crown,
   LogOut,
   Printer,
+  Download,
   Ticket,
   Copy,
   ExternalLink,
@@ -335,19 +336,47 @@ function CustomerPortalContent() {
     }
   };
 
+  const [isDownloadingTicket, setIsDownloadingTicket] = useState(false);
+
+  const handleDownloadTicketModal = async (ticketModal: EventTicketOrder | null) => {
+    if (!ticketModal) return;
+    setIsDownloadingTicket(true);
+    try {
+      const qrElement = document.querySelector("#customer-ticket-qr-container svg") as SVGElement | null;
+      await downloadTicketAsImage(
+        {
+          ticketCode: ticketModal.ticketCode,
+          eventTitle: ticketModal.eventTitle,
+          guestName: ticketModal.guestName,
+          guestEmail: ticketModal.guestEmail,
+          ticketCount: ticketModal.ticketCount,
+          totalPrice: ticketModal.totalPrice,
+          paymentMethod: ticketModal.paymentMethod,
+          paymentStatus: ticketModal.paymentStatus,
+          eventLocation: ticketModal.eventLocation,
+          eventDate: ticketModal.eventDate,
+        },
+        qrElement
+      );
+    } finally {
+      setIsDownloadingTicket(false);
+    }
+  };
+
   const parseTicketDate = (isoStr: string) => {
     try {
       const d = new Date(isoStr);
-      const month = d.toLocaleDateString("id-ID", { month: "short" }).toUpperCase();
-      const day = d.getDate().toString();
-      const weekday = d.toLocaleDateString("id-ID", { weekday: "short" });
+      const month = d.toLocaleDateString("id-ID", { month: "short", timeZone: "Asia/Makassar" }).toUpperCase();
+      const day = d.toLocaleDateString("id-ID", { day: "numeric", timeZone: "Asia/Makassar" });
+      const weekday = d.toLocaleDateString("id-ID", { weekday: "short", timeZone: "Asia/Makassar" });
       const fullDate = d.toLocaleDateString("id-ID", {
         weekday: "short",
         day: "numeric",
         month: "short",
         year: "numeric",
+        timeZone: "Asia/Makassar",
       });
-      const time = d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WIB";
+      const time = d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Makassar" }) + " WITA";
       return { month, day, weekday, fullDate, time };
     } catch {
       return { month: "EVT", day: "--", weekday: "", fullDate: isoStr, time: "" };
@@ -519,6 +548,7 @@ function CustomerPortalContent() {
         month: "short",
         hour: "2-digit",
         minute: "2-digit",
+        timeZone: "Asia/Makassar",
       });
     } catch {
       return isoStr;
@@ -2249,7 +2279,7 @@ function CustomerPortalContent() {
                               <div className="pt-2 space-y-1 text-[10px] text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800">
                                 <div className="flex items-center space-x-1.5">
                                   <Clock className="w-3 h-3 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
-                                  <span className="truncate">{formatPortalEventDate(evt.startDate)} WIB</span>
+                                  <span className="truncate">{formatPortalEventDate(evt.startDate)} WITA</span>
                                 </div>
                                 <div className="flex items-center space-x-1.5">
                                   <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
@@ -5058,17 +5088,19 @@ function CustomerPortalContent() {
                 </div>
 
                 {/* Section: Status Penyelenggara Event Komunitas (Organizer Integration) */}
-                <Card className="border-slate-200/90 bg-gradient-to-br from-white to-slate-50 shadow-xs p-6 rounded-3xl">
+                <Card className="border-slate-200/90 dark:border-slate-800 bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-800/90 shadow-xs p-6 rounded-3xl">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-start space-x-3.5">
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-xl ${
-                        isOrganizerAccount ? "bg-[#3B7A57]/15 text-[#3B7A57]" : "bg-emerald-100 text-emerald-700"
+                        isOrganizerAccount
+                          ? "bg-[#3B7A57]/15 dark:bg-[#3B7A57]/30 text-[#3B7A57] dark:text-[#52B788]"
+                          : "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400"
                       }`}>
                         <Calendar className="w-6 h-6" />
                       </div>
                       <div>
                         <div className="flex items-center space-x-2">
-                          <h4 className="font-bold text-base text-slate-900">
+                          <h4 className="font-bold text-base text-slate-900 dark:text-white">
                             {isOrganizerAccount
                               ? `Penyelenggara Event: ${organizerProfileName}`
                               : "Ingin Mengadakan Acara Sendiri di Dago Hub?"}
@@ -5079,7 +5111,7 @@ function CustomerPortalContent() {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-xs text-slate-500 max-w-xl mt-1 leading-relaxed">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl mt-1 leading-relaxed">
                           {isOrganizerAccount
                             ? "Akun Anda terhubung dengan Portal Penyelenggara Dago Creative Hub. Kelola draft, penjualan tiket, meja check-in, dan hak bagi hasil dari dashboard mandiri."
                             : "Aktifkan profil penyelenggara event komunitas menggunakan akun DagoEng yang sama tanpa registrasi akun kedua. Buat draft acara dan publikasikan agenda komunitasmu!"}
@@ -5486,276 +5518,6 @@ function CustomerPortalContent() {
                   </div>
                 )}
 
-                {/* MODAL: VIEW E-TICKET DIGITAL PASS & QR CODE */}
-                {viewingTicketModal && (() => {
-                  const matchingEvent = allCommunityEvents.find((e) => e.id === viewingTicketModal.eventId);
-                  const dateInfo = parseTicketDate(viewingTicketModal.eventDate);
-                  const isPaid = viewingTicketModal.paymentStatus === "PAID";
-                  const isPending = viewingTicketModal.paymentStatus === "PENDING";
-                  const isCancelled = viewingTicketModal.paymentStatus === "CANCELLED";
-                  const isCheckedIn = viewingTicketModal.checkInStatus === "CHECKED_IN";
-                  const isPartiallyCheckedIn = viewingTicketModal.checkInStatus === "PARTIALLY_CHECKED_IN";
-
-                  return (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
-                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 my-6">
-                        {/* Top Tear-off Header */}
-                        <div className="bg-gradient-to-r from-[#3B7A57] to-[#2E6044] p-5 text-white flex items-center justify-between">
-                          <div className="flex items-center space-x-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
-                              <Ticket className="w-4 h-4 text-white" />
-                            </div>
-                            <div>
-                              <span className="text-[10px] uppercase font-black tracking-widest text-emerald-200 block">
-                                E-Tiket Komunitas Resmi
-                              </span>
-                              <h3 className="text-sm font-black">DAGO Creative Hub</h3>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center space-x-2">
-                            <Badge className={`border-0 text-[10px] font-black tracking-wide ${
-                              isPaid
-                                ? "bg-emerald-400 text-slate-950"
-                                : isPending
-                                ? "bg-amber-400 text-slate-950 animate-pulse"
-                                : "bg-rose-400 text-white"
-                            }`}>
-                              {isPaid
-                                ? "TERKONFIRMASI (LUNAS)"
-                                : isPending
-                                ? "MENUNGGU PEMBAYARAN"
-                                : "DIBATALKAN"}
-                            </Badge>
-
-                            <button
-                              type="button"
-                              onClick={() => setViewingTicketModal(null)}
-                              className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Modal Body */}
-                        <div className="p-6 space-y-5">
-                          {/* Booking Code with Copy */}
-                          <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-200 dark:border-slate-800">
-                            <span className="text-[11px] text-slate-400 font-medium">Kode Booking Registrasi:</span>
-                            <div className="flex items-center justify-center space-x-2">
-                              <span className="text-2xl font-mono font-black text-slate-900 dark:text-white tracking-wider">
-                                {viewingTicketModal.ticketCode}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyTicketCode(viewingTicketModal.ticketCode)}
-                                className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                                title="Salin Kode Tiket"
-                              >
-                                {copiedTicketCode === viewingTicketModal.ticketCode ? (
-                                  <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
-                                    <Check className="w-3.5 h-3.5" /> Tersalin!
-                                  </span>
-                                ) : (
-                                  <Copy className="w-4 h-4" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* QR Code Presentation with Verification Enforcement */}
-                          <div className="space-y-2">
-                            {isPaid ? (
-                              isCheckedIn ? (
-                                <div className="p-5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
-                                  <div className="relative">
-                                    <QrCode className="w-32 h-32 text-slate-400 opacity-30" />
-                                    <div className="absolute inset-0 flex items-center justify-center">
-                                      <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
-                                        <Check className="w-7 h-7 stroke-[3]" />
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <Badge className="bg-slate-800 text-white dark:bg-slate-700 text-xs font-bold">
-                                    SELESAI CHECK-IN (SUDAH DIGUNAKAN)
-                                  </Badge>
-                                  <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs">
-                                    Seluruh {viewingTicketModal.ticketCount} tiket dalam pemesanan ini telah diverifikasi hadir oleh panitia di venue.
-                                  </p>
-                                </div>
-                              ) : (
-                                <div className="p-5 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
-                                  <div className="p-3 bg-white rounded-xl shadow-xs border border-slate-100 flex items-center justify-center">
-                                    <QRCodeSVG
-                                      value={JSON.stringify({
-                                        ticketCode: viewingTicketModal.ticketCode,
-                                        eventId: viewingTicketModal.eventId,
-                                      })}
-                                      size={150}
-                                      level="M"
-                                      includeMargin
-                                    />
-                                  </div>
-                                  {isPartiallyCheckedIn && (
-                                    <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[11px] font-bold">
-                                      Check-in Sebagian: {viewingTicketModal.checkedInQty || 1} dari {viewingTicketModal.ticketCount} Tiket
-                                    </Badge>
-                                  )}
-                                  <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-semibold leading-tight pt-1">
-                                    Tunjukkan QR code ini kepada panitia acara di venue saat registrasi ulang.
-                                  </p>
-                                </div>
-                              )
-                            ) : isPending ? (
-                              <div className="p-5 bg-amber-50/70 dark:bg-amber-950/30 rounded-2xl border border-amber-200/80 dark:border-amber-800/60 flex flex-col items-center justify-center text-center space-y-3">
-                                <div className="relative p-3 bg-white/70 dark:bg-slate-900/70 rounded-xl border border-amber-200/60 flex items-center justify-center">
-                                  <QrCode className="w-32 h-32 text-amber-500 opacity-20" />
-                                  <div className="absolute inset-0 flex flex-col items-center justify-center space-y-1">
-                                    <Lock className="w-9 h-9 text-amber-600 dark:text-amber-400" />
-                                    <span className="text-[10px] font-black uppercase text-amber-800 dark:text-amber-200 tracking-wider">
-                                      QR Terkunci
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div className="space-y-1">
-                                  <h5 className="font-bold text-xs text-amber-900 dark:text-amber-200">
-                                    Menunggu Verifikasi Pembayaran
-                                  </h5>
-                                  <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 max-w-xs leading-relaxed">
-                                    Kode QR check-in resmi akan aktif otomatis setelah pembayaran lunas diverifikasi oleh sistem.
-                                  </p>
-                                </div>
-
-                                {viewingTicketModal.paymentMethod === "DOKU_CHECKOUT" && viewingTicketModal.dokuPaymentUrl ? (
-                                  <a
-                                    href={
-                                      viewingTicketModal.dokuPaymentUrl.includes("api-sandbox.doku.com/checkout-link-v2/")
-                                        ? `/checkout-link-v2/${viewingTicketModal.dokuPaymentUrl.split("checkout-link-v2/")[1]}`
-                                        : viewingTicketModal.dokuPaymentUrl
-                                    }
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="w-full flex items-center justify-center space-x-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
-                                  >
-                                    <CreditCard className="w-4 h-4" />
-                                    <span>Bayar Sekarang via DOKU Checkout</span>
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                  </a>
-                                ) : (
-                                  <Link
-                                    href={`/events/tickets/${viewingTicketModal.guestToken}`}
-                                    className="w-full flex items-center justify-center space-x-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
-                                  >
-                                    <Upload className="w-4 h-4" />
-                                    <span>Transfer Bank &amp; Unggah Bukti Pembayaran</span>
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                  </Link>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="p-4 bg-rose-50 dark:bg-rose-950/40 rounded-2xl border border-rose-200 dark:border-rose-800 text-center space-y-1">
-                                <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
-                                <h5 className="font-bold text-xs text-rose-900 dark:text-rose-200">Tiket Dibatalkan / Kedaluwarsa</h5>
-                                <p className="text-[11px] text-rose-700 dark:text-rose-300">
-                                  Pemesanan tiket ini tidak lagi aktif dan tidak dapat digunakan untuk registrasi.
-                                </p>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Event & Ticket Details Table */}
-                          <div className="space-y-2.5 text-xs pt-1">
-                            <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-1.5">
-                              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                                Acara & Penyelenggara
-                              </span>
-                              <p className="font-black text-sm text-slate-900 dark:text-white leading-snug">
-                                {viewingTicketModal.eventTitle}
-                              </p>
-                              {matchingEvent?.organizerName && (
-                                <p className="text-[11px] text-[#3B7A57] dark:text-[#52B788] font-bold">
-                                  Penyelenggara: {matchingEvent.organizerName}
-                                </p>
-                              )}
-                              <div className="flex items-center space-x-1.5 text-slate-600 dark:text-slate-300 pt-1">
-                                <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <span>{dateInfo.fullDate} • {dateInfo.time}</span>
-                              </div>
-                              <div className="flex items-center space-x-1.5 text-slate-600 dark:text-slate-300">
-                                <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                <span className="truncate">{viewingTicketModal.eventLocation}</span>
-                              </div>
-                            </div>
-
-                            {/* Attendee Details */}
-                            <div className="grid grid-cols-2 gap-2 text-[11px]">
-                              <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-0.5">
-                                <span className="text-[10px] text-slate-400 font-semibold block">Nama Pemesan:</span>
-                                <span className="font-bold text-slate-800 dark:text-slate-200 block truncate">
-                                  {viewingTicketModal.guestName}
-                                </span>
-                                <span className="text-slate-500 dark:text-slate-400 text-[10px] block truncate">
-                                  {viewingTicketModal.guestEmail}
-                                </span>
-                              </div>
-
-                              <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-0.5">
-                                <span className="text-[10px] text-slate-400 font-semibold block">Jumlah & Biaya:</span>
-                                <span className="font-bold text-[#3B7A57] dark:text-[#52B788] block">
-                                  {viewingTicketModal.ticketCount} Tiket
-                                </span>
-                                <span className="font-black text-slate-900 dark:text-white text-xs block">
-                                  {viewingTicketModal.totalPrice > 0
-                                    ? formatCurrencyIDR(viewingTicketModal.totalPrice)
-                                    : "GRATIS"}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Modal Action Buttons */}
-                          <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={() => window.print()}
-                                className="flex-1 text-xs font-bold border-slate-200 dark:border-slate-700 rounded-xl h-10"
-                              >
-                                <Printer className="w-3.5 h-3.5 mr-1.5" />
-                                <span>Cetak Tiket</span>
-                              </Button>
-
-                              <Link
-                                href={`/events/${viewingTicketModal.eventId}`}
-                                className="flex-1"
-                              >
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 text-[#3B7A57] dark:text-[#52B788] rounded-xl h-10"
-                                >
-                                  <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                                  <span>Info Acara</span>
-                                </Button>
-                              </Link>
-                            </div>
-
-                            <Button
-                              onClick={() => setViewingTicketModal(null)}
-                              className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs h-10 rounded-xl"
-                            >
-                              Tutup E-Ticket
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
               </div>
             )}
           </>
@@ -5781,6 +5543,260 @@ function CustomerPortalContent() {
             </Button>
           </div>
         )}
+
+        {/* MODAL: VIEW E-TICKET DIGITAL PASS & QR CODE (Universal for Orders tab and Profile tab) */}
+        {viewingTicketModal && (() => {
+          const matchingEvent = allCommunityEvents.find((e) => e.id === viewingTicketModal.eventId);
+          const dateInfo = parseTicketDate(viewingTicketModal.eventDate);
+          const isPaid = viewingTicketModal.paymentStatus === "PAID";
+          const isPending = viewingTicketModal.paymentStatus === "PENDING";
+          const isCancelled = viewingTicketModal.paymentStatus === "CANCELLED";
+          const isCheckedIn = viewingTicketModal.checkInStatus === "CHECKED_IN";
+          const isPartiallyCheckedIn = viewingTicketModal.checkInStatus === "PARTIALLY_CHECKED_IN";
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 my-6">
+                {/* Top Tear-off Header */}
+                <div className="bg-gradient-to-r from-[#3B7A57] to-[#2E6044] p-5 text-white flex items-center justify-between">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
+                      <Ticket className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-black tracking-widest text-emerald-200 block">
+                        E-Tiket Komunitas Resmi
+                      </span>
+                      <h3 className="text-sm font-black">DAGO Creative Hub</h3>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <Badge className={`border-0 text-[10px] font-black tracking-wide ${
+                      isPaid
+                        ? "bg-emerald-400 text-slate-950"
+                        : isPending
+                        ? "bg-amber-400 text-slate-950 animate-pulse"
+                        : "bg-rose-400 text-white"
+                    }`}>
+                      {isPaid
+                        ? "TERKONFIRMASI (LUNAS)"
+                        : isPending
+                        ? "MENUNGGU PEMBAYARAN"
+                        : "DIBATALKAN"}
+                    </Badge>
+
+                    <button
+                      type="button"
+                      onClick={() => setViewingTicketModal(null)}
+                      className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Modal Body */}
+                <div className="p-6 space-y-5">
+                  {/* Booking Code with Copy */}
+                  <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-200 dark:border-slate-800">
+                    <span className="text-[11px] text-slate-400 font-medium">Kode Booking Registrasi:</span>
+                    <div className="flex items-center justify-center space-x-2">
+                      <span className="text-2xl font-mono font-black text-slate-900 dark:text-white tracking-wider">
+                        {viewingTicketModal.ticketCode}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyTicketCode(viewingTicketModal.ticketCode)}
+                        className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        title="Salin Kode Tiket"
+                      >
+                        {copiedTicketCode === viewingTicketModal.ticketCode ? (
+                          <span className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5" /> Tersalin!
+                          </span>
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* QR Code Presentation with Verification Enforcement */}
+                  <div className="space-y-2">
+                    {isPaid ? (
+                      isCheckedIn ? (
+                        <div className="p-5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
+                          <div className="relative">
+                            <QrCode className="w-32 h-32 text-slate-400 opacity-30" />
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
+                                <Check className="w-7 h-7 stroke-[3]" />
+                              </div>
+                            </div>
+                          </div>
+                          <Badge className="bg-slate-800 text-white dark:bg-slate-700 text-xs font-bold">
+                            SELESAI CHECK-IN (SUDAH DIGUNAKAN)
+                          </Badge>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs">
+                            Seluruh {viewingTicketModal.ticketCount} tiket dalam pemesanan ini telah diverifikasi hadir oleh panitia di venue.
+                          </p>
+                        </div>
+                      ) : (
+                        <div id="customer-ticket-qr-container" className="p-5 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
+                          <div className="p-3 bg-white rounded-xl shadow-xs border border-slate-100 flex items-center justify-center">
+                            <QRCodeSVG
+                              value={JSON.stringify({
+                                ticketCode: viewingTicketModal.ticketCode,
+                                eventId: viewingTicketModal.eventId,
+                              })}
+                              size={150}
+                              level="M"
+                              includeMargin
+                            />
+                          </div>
+                          {isPartiallyCheckedIn && (
+                            <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[11px] font-bold">
+                              Check-in Sebagian: {viewingTicketModal.checkedInQty || 1} dari {viewingTicketModal.ticketCount} Tiket
+                            </Badge>
+                          )}
+                          <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-semibold leading-tight pt-1">
+                            Tunjukkan QR code ini kepada panitia acara di venue saat registrasi ulang.
+                          </p>
+                        </div>
+                      )
+                    ) : isPending ? (
+                      <div className="p-5 bg-amber-50/70 dark:bg-amber-950/30 rounded-2xl border border-amber-200/80 dark:border-amber-800/60 flex flex-col items-center justify-center text-center space-y-3">
+                        <div className="relative p-3 bg-white/70 dark:bg-slate-900/70 rounded-xl border border-amber-200/60 flex items-center justify-center">
+                          <QrCode className="w-32 h-32 text-amber-500 opacity-20" />
+                          <div className="absolute inset-0 flex flex-col items-center justify-center space-y-1">
+                            <Lock className="w-9 h-9 text-amber-600 dark:text-amber-400" />
+                            <span className="text-[10px] font-black uppercase text-amber-800 dark:text-amber-200 tracking-wider">
+                              QR Terkunci
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <h5 className="font-bold text-xs text-amber-900 dark:text-amber-200">
+                            Menunggu Verifikasi Pembayaran
+                          </h5>
+                          <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 max-w-xs leading-relaxed">
+                            Kode QR check-in resmi akan aktif otomatis setelah pembayaran lunas diverifikasi oleh sistem.
+                          </p>
+                        </div>
+
+                        <Link
+                          href={`/events/tickets/${viewingTicketModal.guestToken}`}
+                          className="w-full flex items-center justify-center space-x-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
+                        >
+                          <Upload className="w-4 h-4" />
+                          <span>Transfer Bank &amp; Unggah Bukti Pembayaran</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-rose-50 dark:bg-rose-950/40 rounded-2xl border border-rose-200 dark:border-rose-800 text-center space-y-1">
+                        <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
+                        <h5 className="font-bold text-xs text-rose-900 dark:text-rose-200">Tiket Dibatalkan / Kedaluwarsa</h5>
+                        <p className="text-[11px] text-rose-700 dark:text-rose-300">
+                          Pemesanan tiket ini tidak lagi aktif dan tidak dapat digunakan untuk registrasi.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Event & Ticket Details Table */}
+                  <div className="space-y-2.5 text-xs pt-1">
+                    <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-1.5">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                        Acara & Penyelenggara
+                      </span>
+                      <p className="font-black text-sm text-slate-900 dark:text-white leading-snug">
+                        {viewingTicketModal.eventTitle}
+                      </p>
+                      {matchingEvent?.organizerName && (
+                        <p className="text-[11px] text-[#3B7A57] dark:text-[#52B788] font-bold">
+                          Penyelenggara: {matchingEvent.organizerName}
+                        </p>
+                      )}
+                      <div className="flex items-center space-x-1.5 text-slate-600 dark:text-slate-300 pt-1">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{dateInfo.fullDate} • {dateInfo.time}</span>
+                      </div>
+                      <div className="flex items-center space-x-1.5 text-slate-600 dark:text-slate-300">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span className="truncate">{viewingTicketModal.eventLocation}</span>
+                      </div>
+                    </div>
+
+                    {/* Attendee Details */}
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-0.5">
+                        <span className="text-[10px] text-slate-400 font-semibold block">Nama Pemesan:</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200 block truncate">
+                          {viewingTicketModal.guestName}
+                        </span>
+                        <span className="text-slate-500 dark:text-slate-400 text-[10px] block truncate">
+                          {viewingTicketModal.guestEmail}
+                        </span>
+                      </div>
+
+                      <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-0.5">
+                        <span className="text-[10px] text-slate-400 font-semibold block">Jumlah & Biaya:</span>
+                        <span className="font-bold text-[#3B7A57] dark:text-[#52B788] block">
+                          {viewingTicketModal.ticketCount} Tiket
+                        </span>
+                        <span className="font-black text-slate-900 dark:text-white text-xs block">
+                          {viewingTicketModal.totalPrice > 0
+                            ? formatCurrencyIDR(viewingTicketModal.totalPrice)
+                            : "GRATIS"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Modal Action Buttons */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handleDownloadTicketModal(viewingTicketModal)}
+                        disabled={isDownloadingTicket}
+                        className="flex-1 text-xs font-bold border-slate-200 dark:border-slate-700 rounded-xl h-10 cursor-pointer"
+                      >
+                        <Download className="w-3.5 h-3.5 mr-1.5" />
+                        <span>{isDownloadingTicket ? "Mengunduh..." : "Download Tiket"}</span>
+                      </Button>
+
+                      <Link
+                        href={`/events/${viewingTicketModal.eventId}`}
+                        className="flex-1"
+                      >
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 text-[#3B7A57] dark:text-[#52B788] rounded-xl h-10"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                          <span>Info Acara</span>
+                        </Button>
+                      </Link>
+                    </div>
+
+                    <Button
+                      onClick={() => setViewingTicketModal(null)}
+                      className="w-full bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-bold text-xs h-10 rounded-xl"
+                    >
+                      Tutup E-Ticket
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
       </main>
 
@@ -5923,15 +5939,15 @@ function CustomerPortalContent() {
                 >
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-700">Nama Lengkap</label>
-                    <Input name="modalName" placeholder="Contoh: I Putu Agus" defaultValue="I Putu Agus" required className="h-10 text-xs" />
+                    <Input name="modalName" placeholder="Contoh: I Putu Agus" required className="h-10 text-xs" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-700">Nomor WhatsApp / HP</label>
-                    <Input name="modalPhone" type="tel" placeholder="+62 812-xxxx-xxxx" defaultValue="+62 812-3344-5566" required className="h-10 text-xs" />
+                    <Input name="modalPhone" type="tel" placeholder="+62 812-xxxx-xxxx" required className="h-10 text-xs" />
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-slate-700">Email (Opsional)</label>
-                    <Input name="modalEmail" type="email" placeholder="nama@email.com" defaultValue="agus@gmail.com" className="h-10 text-xs" />
+                    <Input name="modalEmail" type="email" placeholder="nama@email.com" className="h-10 text-xs" />
                   </div>
 
                   <Button type="submit" className="w-full h-11 bg-brand-orange hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-md">
@@ -5943,41 +5959,14 @@ function CustomerPortalContent() {
                 </form>
               ) : (
                 <div className="space-y-3">
-                  <p className="text-xs text-slate-500">Pilih akun demo atau gunakan data tersimpan:</p>
-                  <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        await login("CUSTOMER_DEMO");
-                        const demoCustomer = DEMO_PERSONAS.CUSTOMER_DEMO;
-                        showToast("Masuk sebagai Ketut Dian (Silver Member).");
-                        handleAuthSuccess({
-                          name: demoCustomer.name,
-                          phone: demoCustomer.phone || undefined,
-                          email: demoCustomer.email || undefined,
-                        });
-                      }}
-                      className="w-full p-3 rounded-2xl border border-slate-200 hover:border-brand-orange hover:bg-orange-50/50 flex items-center justify-between text-left transition-all group"
-                    >
-                      <div className="flex items-center space-x-2.5">
-                        <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-black">
-                          KD
-                        </div>
-                        <div>
-                          <span className="font-bold text-xs text-slate-900 group-hover:text-brand-orange block">Ketut Dian</span>
-                          <span className="text-[10px] text-slate-500">Silver Member • 840 Poin</span>
-                        </div>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-brand-orange" />
-                    </button>
-                  </div>
-
+                  <p className="text-xs text-slate-500">Masuk ke akun DagoEng Anda untuk melanjutkan:</p>
+                  
                   <div className="pt-2 text-center">
                     <Link
                       href={`/login?returnTo=${encodeURIComponent(`/customer?tab=${activeTab}`)}&mode=customer`}
-                      className="text-xs font-bold text-brand-orange hover:underline inline-flex items-center"
+                      className="w-full py-2.5 px-4 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-sm inline-flex items-center justify-center space-x-1.5 transition-colors"
                     >
-                      <span>Buka Halaman Login Lengkap</span>
+                      <span>Masuk ke Akun Resmi</span>
                       <ArrowRight className="w-3.5 h-3.5 ml-1" />
                     </Link>
                   </div>

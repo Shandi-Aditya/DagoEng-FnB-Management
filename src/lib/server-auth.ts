@@ -32,9 +32,8 @@ const AUTHORIZED_MODERATION_SCOPES: ScopeLevel[] = ["PLATFORM", "ORGANIZATION"];
  * Security enforcement:
  * - Permitted in automated test suites (NODE_ENV === "test") and local dev (NODE_ENV === "development").
  * - In production:
- *   - Completely blocked by default if ENABLE_ROLE_SIMULATOR !== "true".
- *   - Even if ENABLE_ROLE_SIMULATOR === "true" (e.g. in staging/QA sandbox), privileged administrative
- *     personas (SUPER_ADMIN, OWNER, MANAGER) are STRICTLY BLOCKED from static passwords to prevent platform takeover.
+ *   - Strictly disabled by default. URL parameters (?demo=true, ?demo=1) NEVER enable demo access.
+ *   - Static public passwords for privileged roles (SUPER_ADMIN, OWNER, MANAGER) are completely FORBIDDEN.
  */
 export function isDemoLoginAllowed(personaKey: string): { allowed: boolean; reason?: string } {
   if (process.env.DISABLE_DEMO_LOGIN === "true") {
@@ -44,20 +43,16 @@ export function isDemoLoginAllowed(personaKey: string): { allowed: boolean; reas
     };
   }
 
-  // Pitch Deck / Client Demo flag or Vercel cloud deployment
-  const isVercelDemo =
-    Boolean(process.env.VERCEL || process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.VERCEL_ENV) ||
-    process.env.ALLOW_DEMO_LOGIN === "true" ||
-    process.env.NEXT_PUBLIC_ALLOW_DEMO_LOGIN === "true" ||
-    process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+  const isProduction =
+    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
 
-  if (isVercelDemo) {
-    return { allowed: true };
-  }
+  if (isProduction) {
+    const isExplicitDemo =
+      process.env.ENABLE_DEMO_LOGIN === "true" ||
+      process.env.ALLOW_DEMO_LOGIN === "true" ||
+      process.env.ENABLE_ROLE_SIMULATOR === "true";
 
-  if (process.env.NODE_ENV === "production") {
-    const simulatorEnabled = process.env.ENABLE_ROLE_SIMULATOR === "true";
-    if (!simulatorEnabled) {
+    if (!isExplicitDemo) {
       return {
         allowed: false,
         reason: "FORBIDDEN: Akun demo dan password statis dinonaktifkan di environment production. Gunakan kredensial resmi terdaftar.",
@@ -355,8 +350,8 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
           (primaryRole?.outlet
             ? "OUTLET"
             : primaryRole?.organization
-            ? "ORGANIZATION"
-            : "PLATFORM");
+              ? "ORGANIZATION"
+              : "PLATFORM");
 
         return {
           isAuthenticated: true,
@@ -567,7 +562,7 @@ export async function assertOrganizerAuth(
           );
         }
       }
-    } catch {}
+    } catch { }
 
     if (hasSubmittedProposal) {
       return {
@@ -738,7 +733,7 @@ export async function assertCheckInAuth(
           }
         }
       }
-    } catch {}
+    } catch { }
   }
 
   // 1. Hub Management Oversight (SUPER_ADMIN with PLATFORM scope, or Hub OWNER/MANAGER with ORGANIZATION scope)

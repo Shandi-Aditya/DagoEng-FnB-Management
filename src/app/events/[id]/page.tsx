@@ -22,6 +22,7 @@ import {
   Ticket,
   QrCode,
   Printer,
+  Download,
   ShieldCheck,
   X,
   CreditCard,
@@ -40,6 +41,7 @@ import { formatCurrencyIDR } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { QRCodeSVG } from "qrcode.react";
+import { downloadTicketAsImage } from "@/lib/ticket-download";
 
 export default function EventDetailPage() {
   const params = useParams();
@@ -320,6 +322,32 @@ export default function EventDetailPage() {
     }
   };
 
+  const [isDownloadingTicket, setIsDownloadingTicket] = useState(false);
+
+  const handleDownloadTicket = async () => {
+    if (!issuedTicket) return;
+    setIsDownloadingTicket(true);
+    try {
+      const qrElement = document.querySelector("#issued-ticket-qr-container svg") as SVGElement | null;
+      await downloadTicketAsImage(
+        {
+          ticketCode: issuedTicket.ticketCode,
+          eventTitle: issuedTicket.eventTitle,
+          guestName: issuedTicket.guestName,
+          guestEmail: issuedTicket.guestEmail,
+          ticketCount: issuedTicket.ticketCount,
+          totalPrice: issuedTicket.totalPrice,
+          paymentMethod: issuedTicket.paymentMethod,
+          paymentStatus: issuedTicket.paymentStatus,
+          eventLocation: issuedTicket.eventLocation,
+        },
+        qrElement
+      );
+    } finally {
+      setIsDownloadingTicket(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E2E8F0]">
@@ -514,7 +542,9 @@ export default function EventDetailPage() {
                   <span className="truncate">{event.location.split(",")[0] || event.location}</span>
                 </div>
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate">
-                  Dago Creative Hub
+                  {event.location.toLowerCase().includes("dago") || event.location.toLowerCase().includes("amphitheater")
+                    ? "Kawasan Dago Creative Hub"
+                    : "Venue Eksternal / Mitra"}
                 </span>
               </div>
 
@@ -744,7 +774,11 @@ export default function EventDetailPage() {
               <div className="pt-2 text-[10.5px] text-slate-500 dark:text-slate-400 space-y-1.5 border-t border-slate-100 dark:border-slate-800/60">
                 <div className="flex items-center space-x-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
-                  <span>Konfirmasi instan & penerbitan e-tiket otomatis</span>
+                  <span>
+                    {event.isPaid
+                      ? "Verifikasi pembayaran manual oleh tim Dago Creative Hub sebelum QR check-in aktif"
+                      : "Konfirmasi instan & penerbitan e-tiket otomatis"}
+                  </span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
@@ -1165,10 +1199,16 @@ export default function EventDetailPage() {
 
               {/* QR Code Bar with Status Enforcement */}
               {issuedTicket.paymentStatus === "PAID" ? (
-                <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 flex flex-col items-center justify-center space-y-3 text-center">
+                <div
+                  id="issued-ticket-qr-container"
+                  className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800 flex flex-col items-center justify-center space-y-3 text-center"
+                >
                   <div className="p-3 bg-white rounded-xl shadow-xs border border-emerald-100 dark:border-emerald-900 flex items-center justify-center">
                     <QRCodeSVG
-                      value={JSON.stringify({ ticketCode: issuedTicket.ticketCode, eventId: issuedTicket.eventId })}
+                      value={JSON.stringify({
+                        ticketCode: issuedTicket.ticketCount > 1 ? `${issuedTicket.ticketCode}-01` : issuedTicket.ticketCode,
+                        eventId: issuedTicket.eventId,
+                      })}
                       size={160}
                       level="M"
                       includeMargin
@@ -1177,6 +1217,11 @@ export default function EventDetailPage() {
                   <div className="text-[11px] text-emerald-900 dark:text-emerald-200 leading-snug space-y-1">
                     <span className="font-bold block text-emerald-800 dark:text-emerald-300 text-xs">QR Check-in Aktif & Valid</span>
                     <p>Tunjukkan QR Code ini kepada panitia acara di venue saat registrasi ulang.</p>
+                    {issuedTicket.ticketCount > 1 && (
+                      <p className="text-[10px] text-emerald-800 dark:text-emerald-300 font-semibold bg-emerald-100/80 dark:bg-emerald-900/60 rounded-md py-1 px-2">
+                        💡 Pesanan ini berisi {issuedTicket.ticketCount} tiket terpisah. Buka tautan tiket di bawah untuk melihat &amp; mengunduh QR unik masing-masing tiket.
+                      </p>
+                    )}
                     <p className="text-[10px] text-slate-500 dark:text-slate-400">Kode Booking Fallback: <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{issuedTicket.ticketCode}</span></p>
                   </div>
                 </div>
@@ -1199,12 +1244,13 @@ export default function EventDetailPage() {
               <div className="flex items-center space-x-3 pt-2">
                 <Button
                   type="button"
-                  onClick={() => window.print()}
+                  onClick={handleDownloadTicket}
+                  disabled={isDownloadingTicket}
                   variant="outline"
                   className="flex-1 text-xs font-bold border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer"
                 >
-                  <Printer className="w-3.5 h-3.5 mr-1.5" />
-                  <span>Cetak Tiket</span>
+                  <Download className="w-3.5 h-3.5 mr-1.5" />
+                  <span>{isDownloadingTicket ? "Mengunduh..." : "Download Tiket"}</span>
                 </Button>
                 <Button
                   type="button"
@@ -1222,7 +1268,11 @@ export default function EventDetailPage() {
                     className="w-full inline-flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 text-[#3B7A57] dark:text-[#52B788] text-xs font-bold transition-colors"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Lihat Tiket Pesanan</span>
+                    <span>
+                      {issuedTicket.ticketCount > 1
+                        ? `Buka Halaman Lengkap & Unduh Semua ${issuedTicket.ticketCount} Tiket`
+                        : "Lihat Tiket Pesanan"}
+                    </span>
                   </Link>
                 </div>
               )}

@@ -54,8 +54,8 @@ export default function TicketRecoveryPage() {
   const [phoneSearchError, setPhoneSearchError] = useState<string | null>(null);
   const [phoneRecoveredList, setPhoneRecoveredList] = useState<RecoveredBooking[]>([]);
 
-  // CS WhatsApp Contact
-  const CS_WHATSAPP_NUMBER = "6285737654572";
+  // CS WhatsApp Contact (configurable via NEXT_PUBLIC_CS_WHATSAPP)
+  const CS_WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_CS_WHATSAPP || "6285737654572";
   const getWhatsAppLink = (customEmail?: string) => {
     const em = customEmail || email || "";
     const msg = em
@@ -87,6 +87,12 @@ export default function TicketRecoveryPage() {
       const json = await res.json();
 
       if (!res.ok || !json.success || !json.data || json.data.length === 0) {
+        if (res.status === 403) {
+          setCodeSearchError(
+            json.error || "Akses ditolak: Anda saat ini masuk dengan sesi akun yang berbeda. Silakan logout terlebih dahulu untuk memulihkan tiket guest ini."
+          );
+          return;
+        }
         setCodeSearchError(
           "Tiket dengan kombinasi kode booking dan email tersebut tidak ditemukan. Periksa kembali ejaan Anda atau gunakan tombol 'Lupa kode booking?' di atas."
         );
@@ -136,6 +142,12 @@ export default function TicketRecoveryPage() {
       const json = await res.json();
 
       if (!res.ok || !json.success) {
+        if (res.status === 403) {
+          setPhoneSearchError(
+            json.error || "Akses ditolak: Anda saat ini masuk dengan sesi akun yang berbeda. Silakan logout terlebih dahulu untuk memulihkan tiket guest ini."
+          );
+          return;
+        }
         setPhoneSearchError(
           json.error || "Gagal melakukan pencarian tiket. Harap periksa koneksi Anda."
         );

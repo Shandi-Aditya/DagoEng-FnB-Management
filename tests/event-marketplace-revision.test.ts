@@ -64,8 +64,9 @@ describe("Event Marketplace Revision, Negotiation & Payout Integrity Test Suite"
     });
 
     expect(sub.status).toBe("PENDING");
-    expect(sub.organizerFeePercent).toBe(85);
-    expect(sub.customPlatformFeePercent).toBe(15);
+    // Under MVP 1 QA Finding 1.2: Active fee remains platform default (80:20) while proposal is PENDING
+    expect(sub.organizerFeePercent).toBe(80);
+    expect(sub.customPlatformFeePercent).toBe(20);
     expect(sub.collaborationFacilities).toContain("Sound System & Mic Wireless");
     expect(sub.proposedRevenueSplit).not.toBeNull();
     expect(sub.proposedRevenueSplit?.organizerPercent).toBe(85);

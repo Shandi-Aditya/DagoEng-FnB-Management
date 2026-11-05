@@ -812,6 +812,12 @@ export default function CommunityOrganizerPortalPage() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Gagal merespons usulan bagi hasil.");
       }
+      if (data.data) {
+        setNegotiatingEvent(data.data);
+        if (viewingDetailEvent?.id === data.data.id) {
+          setViewingDetailEvent(data.data);
+        }
+      }
       setSuccessMessage(data.message || "Respons bagi hasil berhasil disimpan.");
       await loadPortalData(activeEmail);
     } catch (err: any) {
@@ -2190,11 +2196,12 @@ export default function CommunityOrganizerPortalPage() {
                                             day: "numeric",
                                             month: "short",
                                             year: "numeric",
+                                            timeZone: "Asia/Makassar",
                                           })}
                                         </span>
                                         <span className="text-slate-400">•</span>
                                         <span className="text-[11px] text-slate-500">
-                                          {eventDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB
+                                          {eventDate.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Makassar" })} WITA
                                         </span>
                                       </div>
                                       <div className="flex items-center space-x-1.5 text-slate-400 text-[11px] max-w-[220px] truncate">
@@ -2584,25 +2591,21 @@ export default function CommunityOrganizerPortalPage() {
                         const isExpanded = expandedBookingIds.has(b.id);
                         return (
                           <React.Fragment key={b.id}>
-                            <tr className={`hover:bg-slate-50/80 dark:hover:bg-slate-900/40 transition-colors ${
-                              isExpanded ? "bg-slate-50/60 dark:bg-slate-900/40" : ""
-                            }`}>
+                            <tr
+                              onClick={() => toggleBookingExpand(b.id)}
+                              className={`cursor-pointer hover:bg-slate-50/80 dark:hover:bg-slate-900/60 transition-colors select-none ${
+                                isExpanded ? "bg-slate-50/60 dark:bg-slate-900/40" : ""
+                              }`}
+                              title="Klik baris untuk melihat rincian tiket"
+                            >
                               <td className="py-3 px-3">
                                 <div className="font-mono font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
                                   <span>{b.ticketCode}</span>
                                 </div>
-                                {b.ticketCount > 1 ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleBookingExpand(b.id)}
-                                    className="inline-flex items-center space-x-1 mt-1 text-[10.5px] font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline cursor-pointer"
-                                  >
-                                    <span>{isExpanded ? "Tutup Rincian" : `Lihat ${b.ticketCount} Tiket`}</span>
-                                    {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                                  </button>
-                                ) : (
-                                  <span className="text-[10px] text-slate-400 block mt-0.5">1 Tiket Tunggal</span>
-                                )}
+                                <div className="inline-flex items-center space-x-1 mt-1 text-[10.5px] font-bold text-[#3B7A57] dark:text-[#52B788]">
+                                  <span>{isExpanded ? "Tutup Rincian" : (b.ticketCount > 1 ? `Lihat ${b.ticketCount} Tiket` : "Lihat Rincian")}</span>
+                                  {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                </div>
                               </td>
                               <td className="py-3 px-3">
                                 <div className="font-bold text-slate-900 dark:text-white">{b.guestName}</div>
@@ -2612,6 +2615,7 @@ export default function CommunityOrganizerPortalPage() {
                                       href={formatWhatsAppUrl(b.guestPhone)}
                                       target="_blank"
                                       rel="noopener noreferrer"
+                                      onClick={(e) => e.stopPropagation()}
                                       className="text-emerald-600 dark:text-emerald-400 hover:underline inline-flex items-center gap-1 font-medium"
                                       title={`WhatsApp: ${b.guestPhone}`}
                                     >
@@ -2626,6 +2630,7 @@ export default function CommunityOrganizerPortalPage() {
                                       <span>•</span>
                                       <a
                                         href={`mailto:${b.guestEmail}`}
+                                        onClick={(e) => e.stopPropagation()}
                                         className="text-slate-500 dark:text-slate-400 hover:underline inline-flex items-center gap-1"
                                         title={`Email: ${b.guestEmail}`}
                                       >
@@ -2726,7 +2731,9 @@ export default function CommunityOrganizerPortalPage() {
                                       {Array.from({ length: b.ticketCount }).map((_, idx) => {
                                         const ticketIndex = idx + 1;
                                         const subTicketCode = `${b.ticketCode}-${String(ticketIndex).padStart(2, "0")}`;
-                                        const isSubCheckedIn = (b.checkedInQty ?? (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0)) >= ticketIndex;
+                                        const isSubCheckedIn = Array.isArray(b.checkedInSeats)
+                                          ? b.checkedInSeats.includes(ticketIndex)
+                                          : (b.checkedInQty ?? (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0)) >= ticketIndex;
 
                                         return (
                                           <div

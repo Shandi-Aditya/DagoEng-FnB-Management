@@ -62,12 +62,29 @@ function LoginContent() {
   // Form Mode: Universal Login (default) or Register
   const [isRegisterMode, setIsRegisterMode] = useState(false);
 
-  // Universal Login Credentials
-  const [email, setEmail] = useState("owner.dago@dagoeng.com");
-  const [password, setPassword] = useState("Password123!");
+  // Universal Login Credentials (Empty by default in production)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Demo auto-login access: STRICTLY disabled in production. URL parameters (?demo=true, ?demo=1) cannot enable demo mode in production.
+  const [isDemoAllowed, setIsDemoAllowed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // In production, demo login simulator is strictly disabled to prevent unauthorized account access
+      if (process.env.NODE_ENV === "production") {
+        setIsDemoAllowed(false);
+      } else {
+        const params = new URLSearchParams(window.location.search);
+        const demoParam = params.get("demo");
+        // Enabled in dev/test by default unless explicitly disabled with ?demo=false
+        setIsDemoAllowed(demoParam !== "false");
+      }
+    }
+  }, []);
 
   // Customer Register Form States
   const [regName, setRegName] = useState("");
@@ -217,9 +234,15 @@ function LoginContent() {
   };
 
   /**
-   * Quick Testing Demo Handler (executes official backend authentication for verification)
+   * Quick Testing Demo Handler (Development testing suite only)
+   * Strictly blocks privileged administrative personas (SUPER_ADMIN, DAGO_OWNER) from auto-login.
    */
   const handleQuickLogin = async (personaKey: PersonaKey) => {
+    if (personaKey === "DAGO_OWNER" || personaKey === "SUPER_ADMIN") {
+      setErrorMessage("Akun administratif (Owner, Super Admin) wajib masuk menggunakan kredensial resmi melalui formulir login.");
+      return;
+    }
+
     const target = DEMO_PERSONAS[personaKey];
     if (target) {
       setErrorMessage(null);
@@ -543,8 +566,9 @@ function LoginContent() {
               </form>
             )}
 
-            {/* Quick Testing Demo Collapsible Section (QA & Evaluator Testing Suite) */}
-            <details className="group pt-3 border-t border-slate-200 dark:border-white/10">
+            {/* Quick Testing Demo Collapsible Section (QA & Evaluator Testing Suite - only shown in non-prod or with ?demo=true) */}
+            {isDemoAllowed && (
+              <details className="group pt-3 border-t border-slate-200 dark:border-white/10">
               <summary className="flex items-center justify-between cursor-pointer list-none py-1 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">
                 <div className="flex items-center space-x-1.5 text-[11px] font-bold uppercase tracking-wider text-[#3B7A57] dark:text-[#52B788]">
                   <Zap className="w-3.5 h-3.5 shrink-0" />
@@ -561,19 +585,19 @@ function LoginContent() {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <button
                     type="button"
-                    onClick={() => handleQuickLogin("DAGO_OWNER")}
+                    onClick={() => handleQuickLogin("CUSTOMER_DEMO")}
                     className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
                   >
-                    <div className="font-bold group-hover:text-white">🏢 Owner Dago Hub</div>
-                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /dashboard</div>
+                    <div className="font-bold group-hover:text-white">👤 Member Tamu (Customer)</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /customer</div>
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleQuickLogin("SUPER_ADMIN")}
+                    onClick={() => handleQuickLogin("COMMUNITY_BARISTA")}
                     className="p-2.5 text-left bg-slate-50 dark:bg-white/5 hover:bg-[#3B7A57] hover:text-white border border-slate-200 dark:border-white/10 rounded-xl font-medium text-[11px] text-slate-700 dark:text-slate-300 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-2xs cursor-pointer group"
                   >
-                    <div className="font-bold group-hover:text-white">🛡️ Super Admin</div>
-                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /dashboard</div>
+                    <div className="font-bold group-hover:text-white">🎟️ Mitra Komunitas (Organizer)</div>
+                    <div className="text-[9px] text-slate-400 group-hover:text-white/80">→ /events/portal</div>
                   </button>
                   <button
                     type="button"
@@ -650,6 +674,7 @@ function LoginContent() {
                 </div>
               </div>
             </details>
+            )}
 
           </div>
         </div>

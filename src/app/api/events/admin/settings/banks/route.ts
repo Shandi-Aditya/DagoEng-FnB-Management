@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertEventAdmin } from "@/lib/server-auth";
+import { syncStorageFromDb } from "@/lib/data-storage";
 import {
   getEventBankAccounts,
   createEventBankAccount,
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    await syncStorageFromDb("event_settings.json").catch(() => {});
     const policy = getEventRevenuePolicy();
     const accounts = getEventBankAccounts();
 

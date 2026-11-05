@@ -597,3 +597,37 @@ describe("Self-Service Recovery via Registered Email + Phone Number (/api/events
   });
 });
 
+describe("Multi-Ticket Individual Sub-Ticket QR & Gate Check-in", () => {
+  it("should resolve booking and sub-ticket index from sub-ticket code and handle seat check-in", async () => {
+    const booking = await eventsLib.createEventBooking({
+      eventId: "evt-latte-art-2026",
+      guestName: "Dewi Subticket Test",
+      guestEmail: "dewi.subticket@example.com",
+      guestPhone: "081234567899",
+      ticketCount: 3,
+      paymentMethod: "QRIS",
+    });
+    await eventsLib.updateBookingPaymentStatus(booking.id, "PAID");
+
+    const resolved = await eventsLib.getBookingById(`${booking.ticketCode}-02`);
+    expect(resolved).not.toBeNull();
+    expect(resolved?.id).toBe(booking.id);
+
+    // Check in seat 2
+    const result1 = await eventsLib.updateBookingCheckIn(`${booking.ticketCode}-02`, "PARTIALLY_CHECKED_IN", { incrementQty: 1 });
+    expect(result1.checkedInQty).toBe(1);
+    expect(result1.checkInStatus).toBe("PARTIALLY_CHECKED_IN");
+
+    // Attempt double check in on seat 2
+    await expect(
+      eventsLib.updateBookingCheckIn(`${booking.ticketCode}-02`, "PARTIALLY_CHECKED_IN", { incrementQty: 1 })
+    ).rejects.toThrow("sudah digunakan");
+
+    // Check in remaining seats
+    await eventsLib.updateBookingCheckIn(`${booking.ticketCode}-01`, "PARTIALLY_CHECKED_IN", { incrementQty: 1 });
+    const resultFinal = await eventsLib.updateBookingCheckIn(`${booking.ticketCode}-03`, "CHECKED_IN", { incrementQty: 1 });
+    expect(resultFinal.checkedInQty).toBe(3);
+    expect(resultFinal.checkInStatus).toBe("CHECKED_IN");
+  });
+});
+

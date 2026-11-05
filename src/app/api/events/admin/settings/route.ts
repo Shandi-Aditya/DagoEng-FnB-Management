@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertEventAdmin } from "@/lib/server-auth";
+import { syncStorageFromDb } from "@/lib/data-storage";
 import { getEventRevenuePolicy, updateEventRevenuePolicy } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    await syncStorageFromDb("event_settings.json").catch(() => {});
     const policy = getEventRevenuePolicy();
     return NextResponse.json({
       success: true,

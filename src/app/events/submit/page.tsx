@@ -119,6 +119,9 @@ export default function SubmitEventPage() {
     revenueSplitReason: "",
   });
 
+  const [isBarter, setIsBarter] = useState<boolean>(false);
+  const [barterDescription, setBarterDescription] = useState<string>("");
+
   // Auto-prefill authenticated user profile if available
   React.useEffect(() => {
     const savedEmail = typeof window !== "undefined" ? localStorage.getItem("dago_organizer_email") : null;
@@ -371,6 +374,13 @@ export default function SubmitEventPage() {
   // Final Submission Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Guard: Prevent premature submission when Enter is pressed or Step < 4
+    if (currentStep < 4) {
+      handleNextStep();
+      return;
+    }
+
     setGeneralError(null);
 
     // Validate all steps
@@ -382,11 +392,30 @@ export default function SubmitEventPage() {
     setIsSubmitting(true);
 
     try {
+      // Ensure datetime-local strings are properly treated as WITA (+08:00)
+      const toWITAISO = (dt: string) => {
+        if (!dt) return "";
+        const trimmed = dt.trim();
+        if (trimmed.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(trimmed)) return trimmed;
+        if (trimmed.includes("T")) {
+          const withSec = trimmed.length === 16 ? `${trimmed}:00` : trimmed;
+          return `${withSec}+08:00`;
+        }
+        return `${trimmed}T00:00:00+08:00`;
+      };
+
+      const finalCollaborationNotes = isBarter && barterDescription.trim()
+        ? `[SKEMA BARTER KOMUNITAS]: ${barterDescription.trim()}${formData.collaborationNotes ? `\n\nCatatan Tambahan: ${formData.collaborationNotes}` : ""}`
+        : formData.collaborationNotes;
+
       const res = await fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
+          startDate: toWITAISO(formData.startDate),
+          endDate: toWITAISO(formData.endDate),
+          collaborationNotes: finalCollaborationNotes,
           password: formData.password ? formData.password.trim() : undefined,
           collaborationFacilities: isDagoVenue ? formData.collaborationFacilities : [],
           externalRegistrationUrl: null,
@@ -1125,141 +1154,206 @@ export default function SubmitEventPage() {
                     </div>
                   )}
 
-                  {/* Section: Usulan Bagi Hasil (Revenue Split Proposal) */}
-                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3.5">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div>
-                        <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                          Usulan Pembagian Hasil (Revenue Split)
-                        </span>
-                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Standar default platform: 80% Penyelenggara : 20% Dago Hub (Total tepat 100%).
-                        </span>
-                      </div>
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] font-bold self-start sm:self-auto ${
-                          Number(formData.proposedOrganizerPercent ?? 80) + Number(formData.proposedPlatformPercent ?? 20) === 100
-                            ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
-                            : "border-rose-500 text-rose-600 dark:text-rose-400"
-                        }`}
-                      >
-                        Total: {Number(formData.proposedOrganizerPercent ?? 80) + Number(formData.proposedPlatformPercent ?? 20)}%
-                      </Badge>
-                    </div>
-
-                    {/* Quick Preset Buttons */}
-                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                      <span className="text-[11px] text-slate-500 font-medium mr-1">Preset:</span>
-                      {[
-                        { org: 80, plat: 20, label: "80 : 20 (Standar)" },
-                        { org: 70, plat: 30, label: "70 : 30" },
-                        { org: 90, plat: 10, label: "90 : 10" },
-                        { org: 50, plat: 50, label: "50 : 50" },
-                      ].map((p) => {
-                        const isSelected =
-                          Number(formData.proposedOrganizerPercent ?? 80) === p.org &&
-                          Number(formData.proposedPlatformPercent ?? 20) === p.plat;
-                        return (
-                          <button
-                            key={p.label}
-                            type="button"
-                            onClick={() => {
-                              setFormData((prev) => ({
-                                ...prev,
-                                proposedOrganizerPercent: p.org,
-                                proposedPlatformPercent: p.plat,
-                              }));
-                            }}
-                            className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-                              isSelected
-                                ? "bg-[#3B7A57] text-white shadow-xs font-bold"
-                                : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57]/60"
-                            }`}
-                          >
-                            {p.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Bagian Penyelenggara (%)
-                        </label>
-                        <input
-                          type="number"
-                          name="proposedOrganizerPercent"
-                          min="0"
-                          max="100"
-                          value={formData.proposedOrganizerPercent ?? 80}
-                          onChange={(e) => {
-                            const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-                            setFormData((prev) => ({
-                              ...prev,
-                              proposedOrganizerPercent: val,
-                              proposedPlatformPercent: 100 - val,
-                            }));
-                          }}
-                          className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-[#3B7A57] dark:text-[#52B788]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Bagian Dago Hub (%)
-                        </label>
-                        <input
-                          type="number"
-                          name="proposedPlatformPercent"
-                          min="0"
-                          max="100"
-                          value={formData.proposedPlatformPercent ?? 20}
-                          onChange={(e) => {
-                            const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-                            setFormData((prev) => ({
-                              ...prev,
-                              proposedPlatformPercent: val,
-                              proposedOrganizerPercent: 100 - val,
-                            }));
-                          }}
-                          className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-200"
-                        />
-                      </div>
-                    </div>
-
-                    {formData.isPaid && formData.price && formData.price > 0 ? (
-                      <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 text-[11px] space-y-1">
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Estimasi hak per tiket untuk Anda:</span>
-                          <strong className="text-[#3B7A57] dark:text-[#52B788]">
-                            {formatCurrencyIDR(Math.round(Number(formData.price) * (Number(formData.proposedOrganizerPercent ?? 80) / 100)))}
-                          </strong>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">Estimasi bagian platform Dago:</span>
-                          <span className="text-slate-700 dark:text-slate-300 font-medium">
-                            {formatCurrencyIDR(Math.round(Number(formData.price) * (Number(formData.proposedPlatformPercent ?? 20) / 100)))}
+                  {/* Section: Usulan Bagi Hasil (Revenue Split Proposal) atau Skema Barter Komunitas */}
+                  {formData.isPaid ? (
+                    <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                            Usulan Pembagian Hasil (Revenue Split)
+                          </span>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Standar default platform: 80% Penyelenggara : 20% Dago Hub (Total tepat 100%).
                           </span>
                         </div>
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] font-bold self-start sm:self-auto ${
+                            Number(formData.proposedOrganizerPercent ?? 80) + Number(formData.proposedPlatformPercent ?? 20) === 100
+                              ? "border-emerald-500 text-emerald-600 dark:text-emerald-400"
+                              : "border-rose-500 text-rose-600 dark:text-rose-400"
+                          }`}
+                        >
+                          Total: {Number(formData.proposedOrganizerPercent ?? 80) + Number(formData.proposedPlatformPercent ?? 20)}%
+                        </Badge>
                       </div>
-                    ) : null}
 
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Alasan atau Skema Khusus Usulan Bagi Hasil (Opsional)
-                      </label>
-                      <input
-                        type="text"
-                        name="revenueSplitReason"
-                        value={formData.revenueSplitReason || ""}
-                        onChange={handleInputChange}
-                        placeholder="Contoh: Skema non-profit komunitas edukasi / membawa sound engineer sendiri"
-                        className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                      />
+                      {/* Quick Preset Buttons */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        <span className="text-[11px] text-slate-500 font-medium mr-1">Preset:</span>
+                        {[
+                          { org: 80, plat: 20, label: "80 : 20 (Standar)" },
+                          { org: 70, plat: 30, label: "70 : 30" },
+                          { org: 90, plat: 10, label: "90 : 10" },
+                          { org: 50, plat: 50, label: "50 : 50" },
+                        ].map((p) => {
+                          const isSelected =
+                            Number(formData.proposedOrganizerPercent ?? 80) === p.org &&
+                            Number(formData.proposedPlatformPercent ?? 20) === p.plat;
+                          return (
+                            <button
+                              key={p.label}
+                              type="button"
+                              onClick={() => {
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  proposedOrganizerPercent: p.org,
+                                  proposedPlatformPercent: p.plat,
+                                }));
+                              }}
+                              className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                                isSelected
+                                  ? "bg-[#3B7A57] text-white shadow-xs font-bold"
+                                  : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57]/60"
+                              }`}
+                            >
+                              {p.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Bagian Penyelenggara (%)
+                          </label>
+                          <input
+                            type="number"
+                            name="proposedOrganizerPercent"
+                            min="0"
+                            max="100"
+                            value={formData.proposedOrganizerPercent ?? 80}
+                            onChange={(e) => {
+                              const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                              setFormData((prev) => ({
+                                ...prev,
+                                proposedOrganizerPercent: val,
+                                proposedPlatformPercent: 100 - val,
+                              }));
+                            }}
+                            className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-[#3B7A57] dark:text-[#52B788]"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            Bagian Dago Hub (%)
+                          </label>
+                          <input
+                            type="number"
+                            name="proposedPlatformPercent"
+                            min="0"
+                            max="100"
+                            value={formData.proposedPlatformPercent ?? 20}
+                            onChange={(e) => {
+                              const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
+                              setFormData((prev) => ({
+                                ...prev,
+                                proposedPlatformPercent: val,
+                                proposedOrganizerPercent: 100 - val,
+                              }));
+                            }}
+                            className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-slate-800 dark:text-slate-200"
+                          />
+                        </div>
+                      </div>
+
+                      {formData.price && formData.price > 0 ? (
+                        <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 text-[11px] space-y-1">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Estimasi hak per tiket untuk Anda:</span>
+                            <strong className="text-[#3B7A57] dark:text-[#52B788]">
+                              {formatCurrencyIDR(Math.round(Number(formData.price) * (Number(formData.proposedOrganizerPercent ?? 80) / 100)))}
+                            </strong>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Estimasi bagian platform Dago:</span>
+                            <span className="text-slate-700 dark:text-slate-300 font-medium">
+                              {formatCurrencyIDR(Math.round(Number(formData.price) * (Number(formData.proposedPlatformPercent ?? 20) / 100)))}
+                            </span>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Alasan atau Skema Khusus Usulan Bagi Hasil (Opsional)
+                        </label>
+                        <input
+                          type="text"
+                          name="revenueSplitReason"
+                          value={formData.revenueSplitReason || ""}
+                          onChange={handleInputChange}
+                          placeholder="Contoh: Skema non-profit komunitas edukasi / membawa sound engineer sendiri"
+                          className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="p-4 sm:p-5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3.5">
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                          Skema Kemitraan Komunitas & Barter
+                        </span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Untuk event gratis (RSVP), bagi hasil moneter tidak berlaku. Anda dapat memilih kemitraan murni tanpa biaya atau skema barter non-moneter.
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setIsBarter(false)}
+                          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            !isBarter
+                              ? "bg-white dark:bg-slate-800 border-[#3B7A57] ring-2 ring-[#3B7A57]/20 shadow-xs"
+                              : "bg-white/60 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="font-bold text-xs text-slate-900 dark:text-white mb-0.5">
+                            RSVP Bebas Biaya (Murni Komunitas)
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Acara gratis untuk warga tanpa kewajiban barter maupun kompensasi timbal-balik.
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsBarter(true)}
+                          className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
+                            isBarter
+                              ? "bg-white dark:bg-slate-800 border-[#3B7A57] ring-2 ring-[#3B7A57]/20 shadow-xs"
+                              : "bg-white/60 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="font-bold text-xs text-[#3B7A57] dark:text-[#52B788] mb-0.5 flex items-center gap-1.5">
+                            <span>Skema Barter / Non-Moneter</span>
+                            <Badge variant="outline" className="text-[9px] border-[#3B7A57]/40 text-[#3B7A57] dark:text-[#52B788]">Opsi</Badge>
+                          </div>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Pertukaran manfaat seperti publikasi silang, co-branding poster, liputan media, atau dukungan relawan.
+                          </div>
+                        </button>
+                      </div>
+
+                      {isBarter && (
+                        <div className="space-y-1.5 pt-1 animate-in fade-in">
+                          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                            Bentuk Barter yang Ditawarkan kepada Dago Hub <span className="text-rose-500">*</span>
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={barterDescription}
+                            onChange={(e) => setBarterDescription(e.target.value)}
+                            placeholder="Contoh: Menampilkan logo Dago Creative Hub di backdrop & ID card, slot promosi 5 menit, dan cross-post feed IG ke 10k followers kami."
+                            className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Section: Kebutuhan Kolaborasi Fasilitas Venue (Hanya tampil jika memilih ruangan di Dago Hub) */}
                   {isDagoVenue && (
@@ -1440,7 +1534,21 @@ export default function SubmitEventPage() {
                           <div>
                             <span className="text-slate-400 font-semibold block">Waktu Mulai:</span>
                             <span className="font-bold text-slate-800 dark:text-slate-200">
-                              {formData.startDate ? new Date(formData.startDate).toLocaleString("id-ID") : "-"}
+                              {formData.startDate
+                                ? new Intl.DateTimeFormat("id-ID", {
+                                    dateStyle: "medium",
+                                    timeStyle: "short",
+                                    timeZone: "Asia/Makassar",
+                                  }).format(
+                                    new Date(
+                                      formData.startDate.includes("T") &&
+                                      !formData.startDate.endsWith("Z") &&
+                                      !/[+-]\d{2}:\d{2}$/.test(formData.startDate)
+                                        ? `${formData.startDate}:00+08:00`
+                                        : formData.startDate
+                                    )
+                                  ) + " WITA"
+                                : "-"}
                             </span>
                           </div>
                           <div>
@@ -1465,12 +1573,27 @@ export default function SubmitEventPage() {
 
                         {/* Usulan Bagi Hasil & Kolaborasi Summary */}
                         <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 text-[11px] space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-slate-400">Usulan Bagi Hasil:</span>
-                            <span className="font-bold text-[#3B7A57] dark:text-[#52B788]">
-                              {formData.proposedOrganizerPercent ?? 80}% Penyelenggara : {formData.proposedPlatformPercent ?? 20}% Dago
-                            </span>
-                          </div>
+                          {formData.isPaid ? (
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Usulan Bagi Hasil:</span>
+                              <span className="font-bold text-[#3B7A57] dark:text-[#52B788]">
+                                {formData.proposedOrganizerPercent ?? 80}% Penyelenggara : {formData.proposedPlatformPercent ?? 20}% Dago
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex justify-between items-start">
+                              <span className="text-slate-400">Skema Kerjasama:</span>
+                              <span className="font-bold text-[#3B7A57] dark:text-[#52B788] text-right">
+                                {isBarter ? `Skema Barter Komunitas` : "RSVP Komunitas Bebas Biaya"}
+                              </span>
+                            </div>
+                          )}
+                          {isBarter && barterDescription && (
+                            <div className="text-[10px] text-slate-600 dark:text-slate-400 bg-slate-100/70 dark:bg-slate-800/60 p-2 rounded-lg">
+                              <span className="font-semibold block text-slate-700 dark:text-slate-300">Penawaran Barter:</span>
+                              {barterDescription}
+                            </div>
+                          )}
                           {isDagoVenue && Array.isArray(formData.collaborationFacilities) && formData.collaborationFacilities.length > 0 && (
                             <div>
                               <span className="text-slate-400 block">Fasilitas Diminta:</span>

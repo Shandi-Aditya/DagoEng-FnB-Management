@@ -161,6 +161,7 @@ export function OrganizerQRScannerModal({
           body: JSON.stringify({
             email: organizerEmail,
             ticketCode,
+            eventId,
             checkInStatus: "CHECKED_IN",
             incrementQty: 1,
           }),

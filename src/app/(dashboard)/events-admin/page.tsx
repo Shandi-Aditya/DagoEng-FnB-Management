@@ -2834,7 +2834,7 @@ export default function AdminEventsPage() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsDetailModalOpen(false);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 animate-in fade-in cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -2868,6 +2868,44 @@ export default function AdminEventsPage() {
                 <Badge className="bg-slate-900/80 text-white text-[10px]">
                   {selectedEvent.category}
                 </Badge>
+              </div>
+            </div>
+
+            {/* Event Key Info: Schedule, Price, Venue & Destination Bank */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Jadwal Acara:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+                  {selectedEvent.startDate
+                    ? new Intl.DateTimeFormat("id-ID", {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                        timeZone: "Asia/Makassar",
+                      }).format(new Date(selectedEvent.startDate)) + " WITA"
+                    : "-"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Harga Tiket:</span>
+                <span className="font-bold text-[#3B7A57] dark:text-[#52B788] block">
+                  {selectedEvent.isPaid && selectedEvent.price
+                    ? formatCurrencyIDR(selectedEvent.price)
+                    : "GRATIS (RSVP)"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Ruangan / Venue:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate">
+                  {selectedEvent.location}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase block">Rekening Tujuan:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate">
+                  {selectedEvent.isPaid
+                    ? (bankAccountsList.find((b) => b.id === selectedEvent.destinationBankId)?.bankName || "Rekening Platform (BRI)")
+                    : "Tidak Perlu (Gratis)"}
+                </span>
               </div>
             </div>
 
@@ -3303,7 +3341,7 @@ export default function AdminEventsPage() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsRevisionModalOpen(false);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -3356,7 +3394,7 @@ export default function AdminEventsPage() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsRejectModalOpen(false);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -3409,7 +3447,7 @@ export default function AdminEventsPage() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsEditModalOpen(false);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 animate-in fade-in cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -3631,7 +3669,7 @@ export default function AdminEventsPage() {
             onClick={(e) => {
               if (e.target === e.currentTarget) setIsAttendeesModalOpen(false);
             }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 animate-in fade-in cursor-pointer"
           >
             <div
               onClick={(e) => e.stopPropagation()}
@@ -3753,25 +3791,21 @@ export default function AdminEventsPage() {
                         const isExpanded = expandedBookingIds.has(b.id);
                         return (
                           <React.Fragment key={b.id}>
-                            <tr className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors ${
-                              isExpanded ? "bg-slate-50/60 dark:bg-slate-800/40" : ""
-                            }`}>
+                            <tr
+                              onClick={() => toggleBookingExpand(b.id)}
+                              className={`cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors select-none ${
+                                isExpanded ? "bg-slate-50/80 dark:bg-slate-800/50" : ""
+                              }`}
+                              title="Klik baris untuk melihat rincian tiket"
+                            >
                               <td className="py-2.5 px-3 whitespace-nowrap">
                                 <div className="font-mono font-bold text-[#3B7A57] dark:text-[#52B788]">
                                   {b.ticketCode}
                                 </div>
-                                {b.ticketCount > 1 ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleBookingExpand(b.id)}
-                                    className="inline-flex items-center space-x-1 mt-1 text-[10px] font-bold text-slate-500 hover:text-[#3B7A57] dark:hover:text-[#52B788] cursor-pointer"
-                                  >
-                                    <span>{isExpanded ? "Tutup Rincian" : `Lihat ${b.ticketCount} Tiket`}</span>
-                                    {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                                  </button>
-                                ) : (
-                                  <span className="text-[9.5px] text-slate-400 block mt-0.5">1 Tiket</span>
-                                )}
+                                <div className="inline-flex items-center space-x-1 mt-1 text-[10px] font-bold text-slate-500 hover:text-[#3B7A57] dark:hover:text-[#52B788]">
+                                  <span>{isExpanded ? "Tutup Rincian" : (b.ticketCount > 1 ? `Lihat ${b.ticketCount} Tiket` : "Lihat Rincian")}</span>
+                                  {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                </div>
                               </td>
                               <td className="py-2.5 px-3">
                                 <span className="font-semibold text-slate-900 dark:text-white block">
@@ -3788,6 +3822,7 @@ export default function AdminEventsPage() {
                                   href={formatWhatsAppUrl(b.guestPhone)}
                                   target="_blank"
                                   rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
                                   className="text-emerald-600 hover:underline block"
                                 >
                                   <Phone className="w-3 h-3 inline mr-1" />
@@ -3814,7 +3849,10 @@ export default function AdminEventsPage() {
                                   {b.paymentProofUrl && (
                                     <button
                                       type="button"
-                                      onClick={() => setSelectedProofBooking(b)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedProofBooking(b);
+                                      }}
                                       className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-[10px] font-bold hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors cursor-pointer"
                                       title="Lihat Bukti Transfer"
                                     >
@@ -3918,7 +3956,9 @@ export default function AdminEventsPage() {
                                       {Array.from({ length: b.ticketCount }).map((_, idx) => {
                                         const ticketIndex = idx + 1;
                                         const subCode = `${b.ticketCode}-${String(ticketIndex).padStart(2, "0")}`;
-                                        const isSubHadir = (b.checkedInQty ?? (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0)) >= ticketIndex;
+                                        const isSubHadir = Array.isArray(b.checkedInSeats)
+                                          ? b.checkedInSeats.includes(ticketIndex)
+                                          : (b.checkedInQty ?? (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0)) >= ticketIndex;
 
                                         return (
                                           <div
@@ -3983,7 +4023,7 @@ export default function AdminEventsPage() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedProofBooking(null);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-in fade-in cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -4071,7 +4111,7 @@ export default function AdminEventsPage() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setPayoutPromptModalOpen(false);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -4196,7 +4236,7 @@ export default function AdminEventsPage() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setRejectPaymentTarget(null);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -4281,7 +4321,7 @@ export default function AdminEventsPage() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsAddBankModalOpen(false);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -4432,7 +4472,7 @@ export default function AdminEventsPage() {
           onClick={(e) => {
             if (e.target === e.currentTarget) setEditingBank(null);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
         >
           <div
             onClick={(e) => e.stopPropagation()}

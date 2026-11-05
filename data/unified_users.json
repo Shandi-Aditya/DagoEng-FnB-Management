@@ -1,5 +1,16 @@
 [
   {
+    "id": "user-cust-mw346pcz-c12z",
+    "email": "komunitas@contoh.com",
+    "name": "Komunitas Lari Singaraja",
+    "phone": "08123456789",
+    "passwordHash": "$2a$10$ys.66jTZlL5SB0QfvYVSt.HuFzTLY.v8z2NmpCVE/iO.yq.swfwJm",
+    "role": "CUSTOMER",
+    "organizerProfileId": null,
+    "createdAt": "2026-11-05T05:37:54.659Z",
+    "updatedAt": "2026-11-05T05:37:54.659Z"
+  },
+  {
     "id": "user-cust-mvzf52b4-lwgi",
     "email": "shandi@student.undiksha.ac.id",
     "name": "Sanz Comunity",

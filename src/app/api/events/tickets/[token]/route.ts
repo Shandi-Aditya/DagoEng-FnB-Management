@@ -242,6 +242,24 @@ export async function POST(
 
       fs.writeFileSync(path.join(uploadDir, filename), buffer);
       proofUrl = `/api/events/proofs/${filename}`;
+
+      // Distributed Persistence to PostgreSQL:
+      // Guarantees proof recovery across multi-instance serverless deployments where local disk is ephemeral
+      if (process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
+        try {
+          const { db } = await import("@/lib/db");
+          const proofKey = `PROOF_${filename}`;
+          await db.systemSetting.upsert({
+            where: { key: proofKey },
+            update: { value: buffer.toString("base64") },
+            create: {
+              key: proofKey,
+              value: buffer.toString("base64"),
+              description: `Payment proof binary for ${booking.ticketCode}`,
+            },
+          }).catch(() => {});
+        } catch {}
+      }
     } else {
       const body = await req.json();
       proofUrl = body.paymentProofUrl;

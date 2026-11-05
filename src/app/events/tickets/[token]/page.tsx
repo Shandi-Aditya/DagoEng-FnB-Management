@@ -14,6 +14,7 @@ import {
   Check,
   Ticket,
   Printer,
+  Download,
   ShieldCheck,
   CreditCard,
   ExternalLink,
@@ -38,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { QRCodeSVG } from "qrcode.react";
+import { downloadTicketAsImage } from "@/lib/ticket-download";
 
 interface TicketDetails {
   id: string;
@@ -60,6 +62,7 @@ interface TicketDetails {
   paymentProofNote?: string | null;
   checkInStatus: "REGISTERED" | "PARTIALLY_CHECKED_IN" | "CHECKED_IN";
   checkedInQty?: number;
+  checkedInSeats?: number[];
   checkInTime?: string | null;
   dokuInvoiceNumber?: string | null;
   dokuPaymentUrl?: string | null;
@@ -135,6 +138,34 @@ export default function PrivateTicketViewPage() {
   const [isReuploading, setIsReuploading] = useState(false);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [isSubTicketsOpen, setIsSubTicketsOpen] = useState(true);
+  const [selectedTicketIndex, setSelectedTicketIndex] = useState<number>(1);
+
+  // 60-Minute Payment Deadline Countdown Timer
+  const [timeLeft, setTimeLeft] = useState<{ minutes: number; seconds: number; isExpired: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!ticket || ticket.paymentStatus !== "PENDING" || !ticket.createdAt) return;
+
+    const calculateTimeLeft = () => {
+      const created = new Date(ticket.createdAt).getTime();
+      const deadlineMs = created + 60 * 60 * 1000;
+      const diff = deadlineMs - Date.now();
+
+      if (diff <= 0) {
+        setTimeLeft({ minutes: 0, seconds: 0, isExpired: true });
+        return;
+      }
+
+      const totalSec = Math.floor(diff / 1000);
+      const minutes = Math.floor(totalSec / 60);
+      const seconds = totalSec % 60;
+      setTimeLeft({ minutes, seconds, isExpired: false });
+    };
+
+    calculateTimeLeft();
+    const timer = setInterval(calculateTimeLeft, 1000);
+    return () => clearInterval(timer);
+  }, [ticket?.paymentStatus, ticket?.createdAt]);
 
   useEffect(() => {
     if (token) {
@@ -197,6 +228,74 @@ export default function PrivateTicketViewPage() {
     navigator.clipboard.writeText(amount.toString());
     setIsCopiedTotal(true);
     setTimeout(() => setIsCopiedTotal(false), 2000);
+  };
+
+  const [isDownloadingTicket, setIsDownloadingTicket] = useState(false);
+
+  const isSeatCheckedIn = (seatNum: number) => {
+    if (!ticket) return false;
+    if (Array.isArray(ticket.checkedInSeats)) {
+      return ticket.checkedInSeats.includes(seatNum);
+    }
+    return (ticket.checkedInQty ?? (ticket.checkInStatus === "CHECKED_IN" ? ticket.ticketCount : 0)) >= seatNum;
+  };
+
+  const handleDownloadSubTicket = async (index: number) => {
+    if (!ticket) return;
+    setIsDownloadingTicket(true);
+    try {
+      const isMulti = (ticket.ticketCount || 1) > 1;
+      const subCode = isMulti ? `${ticket.ticketCode}-${String(index).padStart(2, "0")}` : ticket.ticketCode;
+      const isSubDone = isMulti ? isSeatCheckedIn(index) : ticket.checkInStatus === "CHECKED_IN";
+      const subLabel = isMulti && index > 1 ? `Tamu Pax #${index}` : `${ticket.guestName} (Pemesan Utama)`;
+      const svgEl =
+        (document.querySelector(`#sub-qr-svg-${index} svg`) as SVGElement | null) ||
+        (document.querySelector("#ticket-qr-container svg") as SVGElement | null);
+
+      await downloadTicketAsImage(
+        {
+          ticketCode: ticket.ticketCode,
+          eventTitle: ticket.eventTitle,
+          guestName: ticket.guestName,
+          guestEmail: ticket.guestEmail,
+          ticketCount: ticket.ticketCount,
+          totalPrice: ticket.totalPrice,
+          paymentMethod: ticket.paymentMethod,
+          paymentStatus: ticket.paymentStatus,
+          eventLocation: ticket.eventLocation,
+          eventDate: ticket.eventDate,
+          subTicketIndex: isMulti ? index : undefined,
+          subTicketCode: subCode,
+          subGuestLabel: subLabel,
+          subCheckedIn: isSubDone,
+        },
+        svgEl
+      );
+    } finally {
+      setIsDownloadingTicket(false);
+    }
+  };
+
+  const handleDownloadActiveTicket = async () => {
+    if (!ticket) return;
+    await handleDownloadSubTicket(selectedTicketIndex);
+  };
+
+  const handleDownloadAllTickets = async () => {
+    if (!ticket) return;
+    setIsDownloadingTicket(true);
+    try {
+      if ((ticket.ticketCount || 1) <= 1) {
+        await handleDownloadSubTicket(1);
+        return;
+      }
+      for (let i = 1; i <= ticket.ticketCount; i++) {
+        await handleDownloadSubTicket(i);
+        await new Promise((res) => setTimeout(res, 350));
+      }
+    } finally {
+      setIsDownloadingTicket(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -334,6 +433,22 @@ export default function PrivateTicketViewPage() {
   const isCheckedIn = ticket.checkInStatus === "CHECKED_IN";
   const isPartiallyCheckedIn = ticket.checkInStatus === "PARTIALLY_CHECKED_IN";
 
+  const isMultiTicket = (ticket.ticketCount || 1) > 1;
+  const activeSubIndex = isMultiTicket ? selectedTicketIndex : 1;
+  const activeSubCode = isMultiTicket
+    ? `${ticket.ticketCode}-${String(activeSubIndex).padStart(2, "0")}`
+    : ticket.ticketCode;
+  const isCurrentSubDone = isMultiTicket ? isSeatCheckedIn(activeSubIndex) : isCheckedIn;
+  const activeGuestLabel =
+    isMultiTicket && activeSubIndex > 1
+      ? `Tamu Pax #${activeSubIndex}`
+      : `${ticket.guestName} (Pemesan Utama)`;
+  const activeQrPayload = JSON.stringify({
+    ticketCode: activeSubCode,
+    eventId: ticket.eventId,
+    seat: activeSubIndex,
+  });
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B1120] text-slate-900 dark:text-slate-100 py-6 px-4 sm:px-6">
       {/* Top Header Navigation */}
@@ -370,7 +485,7 @@ export default function PrivateTicketViewPage() {
       </div>
 
       {/* Main E-Ticket Container */}
-      <div className="max-w-xl w-full mx-auto my-6 space-y-4">
+      <div className="max-w-xl w-full mx-auto my-6 pb-12 space-y-4">
         {/* Ticket Header Voucher Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-xl overflow-hidden">
           {/* Top Banner Ribbon */}
@@ -401,7 +516,7 @@ export default function PrivateTicketViewPage() {
           </div>
 
           {/* Ticket Body Content */}
-          <div className="p-5 sm:p-7 space-y-5">
+          <div className="p-5 sm:p-7 pb-8 sm:pb-12 space-y-5">
             {/* Event Overview */}
             <div className="space-y-1">
               {ticket.eventDetails?.category && (
@@ -454,29 +569,74 @@ export default function PrivateTicketViewPage() {
               </div>
             </div>
 
+            {/* Multi-Ticket Selector Tabs */}
+            {isPaid && isMultiTicket && (
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
+                    <Ticket className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                    <span>Pilih QR Tiket ({activeSubIndex} dari {ticket.ticketCount}):</span>
+                  </span>
+                  <span className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">
+                    Kehadiran: <strong>{ticket.checkedInQty || (isCheckedIn ? ticket.ticketCount : 0)}/{ticket.ticketCount}</strong>
+                  </span>
+                </div>
+
+                <div className="flex items-center space-x-2 overflow-x-auto pb-1">
+                  {Array.from({ length: ticket.ticketCount }).map((_, idx) => {
+                    const seatNum = idx + 1;
+                    const isSelected = activeSubIndex === seatNum;
+                    const isDone = isSeatCheckedIn(seatNum);
+                    return (
+                      <button
+                        key={seatNum}
+                        type="button"
+                        onClick={() => setSelectedTicketIndex(seatNum)}
+                        className={`flex-1 min-w-[95px] py-2 px-2.5 rounded-xl text-xs font-bold transition-all text-center border cursor-pointer ${
+                          isSelected
+                            ? "bg-[#3B7A57] text-white border-[#3B7A57] shadow-sm scale-[1.02]"
+                            : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#3B7A57]/50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-center space-x-1">
+                          <span>Tiket #${seatNum}</span>
+                          {isDone && <Check className="w-3 h-3 text-emerald-400 inline" />}
+                        </div>
+                        <span className={`text-[9.5px] block truncate font-normal ${isSelected ? "text-emerald-100" : "text-slate-400"}`}>
+                          {seatNum === 1 ? "Pemesan" : `Tamu #${seatNum}`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* QR Code Presentation Section */}
             <div className="space-y-2">
               {isPaid ? (
-                isCheckedIn ? (
+                isCurrentSubDone ? (
                   <div className="p-6 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2.5">
                     <div className="w-14 h-14 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md">
                       <Check className="w-8 h-8 stroke-[3]" />
                     </div>
                     <Badge className="bg-slate-800 text-white dark:bg-slate-700 text-xs font-bold">
-                      SELESAI CHECK-IN (SUDAH DIGUNAKAN)
+                      {isMultiTicket ? `TIKET #${activeSubIndex} SELESAI CHECK-IN` : "SELESAI CHECK-IN (SUDAH DIGUNAKAN)"}
                     </Badge>
                     <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
-                      Seluruh {ticket.ticketCount} tiket dalam pemesanan ini telah diverifikasi hadir oleh panitia di venue.
+                      {isMultiTicket
+                        ? `Tiket #${activeSubIndex} (${activeSubCode}) milik ${activeGuestLabel} telah diverifikasi hadir di venue.`
+                        : `Seluruh ${ticket.ticketCount} tiket dalam pemesanan ini telah diverifikasi hadir oleh panitia di venue.`}
                     </p>
                     <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200/60 dark:border-amber-800/60 text-[11px] text-amber-800 dark:text-amber-300 max-w-sm text-left">
                       🛡️ <strong>Keamanan Tiket:</strong> Tiket ini sudah digunakan untuk akses masuk. Sistem gerbang resmi Dago Creative Hub secara otomatis menolak pemindaian ulang jika tautan atau QR code ini ditunjukkan kembali oleh pihak lain.
                     </div>
                   </div>
                 ) : (
-                  <div className="p-6 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-3">
+                  <div id="ticket-qr-container" className="p-6 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-3">
                     <div className="p-3.5 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center">
                       <QRCodeSVG
-                        value={JSON.stringify({ ticketCode: ticket.ticketCode, eventId: ticket.eventId })}
+                        value={activeQrPayload}
                         size={170}
                         level="M"
                         includeMargin
@@ -485,22 +645,29 @@ export default function PrivateTicketViewPage() {
 
                     {isPartiallyCheckedIn && (
                       <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-xs font-bold">
-                        Check-in Sebagian: {ticket.checkedInQty || 1} dari {ticket.ticketCount} Tiket
+                        Check-in Sebagian: {ticket.checkedInQty || 1} dari {ticket.ticketCount} Tiket Hadir
                       </Badge>
                     )}
 
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
                       <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 block">
-                        QR Check-in Aktif & Valid
+                        {isMultiTicket
+                          ? `QR Check-in Tiket #${activeSubIndex} (${activeGuestLabel}) Aktif`
+                          : "QR Check-in Aktif & Valid"}
                       </span>
+                      <div className="font-mono font-black text-sm text-slate-900 dark:text-white tracking-wider">
+                        {activeSubCode}
+                      </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed">
-                        Tunjukkan QR Code ini kepada panitia saat registrasi ulang di venue acara.
+                        {isMultiTicket
+                          ? `Tunjukkan QR Code ini kepada panitia saat Tiket #${activeSubIndex} masuk ke lokasi acara.`
+                          : "Tunjukkan QR Code ini kepada panitia saat registrasi ulang di venue acara."}
                       </p>
                     </div>
                   </div>
                 )
               ) : isPending ? (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {/* Lock Warning */}
                   <div className="p-4 bg-amber-50/80 dark:bg-amber-950/30 rounded-2xl border border-amber-200/80 dark:border-amber-800/60 flex items-start space-x-3 text-left">
                     <div className="p-2 bg-amber-100 dark:bg-amber-900/40 rounded-xl text-amber-700 dark:text-amber-300 shrink-0">
@@ -515,6 +682,228 @@ export default function PrivateTicketViewPage() {
                       </p>
                     </div>
                   </div>
+
+                  {/* 60-Minute Payment Deadline Countdown */}
+                  {timeLeft && (
+                    <div
+                      className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
+                        timeLeft.isExpired
+                          ? "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-200"
+                          : "bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2.5">
+                        <Clock
+                          className={`w-5 h-5 shrink-0 ${
+                            timeLeft.isExpired ? "text-rose-500" : "text-[#3B7A57] dark:text-[#52B788] animate-pulse"
+                          }`}
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider block text-slate-500 dark:text-slate-400">
+                            Batas Waktu Pembayaran (Tenggat 60 Menit)
+                          </span>
+                          <span className="text-xs font-semibold">
+                            {timeLeft.isExpired
+                              ? "Tenggat waktu transfer 60 menit telah berakhir."
+                              : `Selesaikan pembayaran sebelum pukul ${new Intl.DateTimeFormat("id-ID", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  timeZone: "Asia/Makassar",
+                                }).format(new Date(new Date(ticket.createdAt).getTime() + 60 * 60 * 1000))} WITA`}
+                          </span>
+                        </div>
+                      </div>
+                      {!timeLeft.isExpired && (
+                        <div className="font-mono font-black text-base sm:text-lg text-[#3B7A57] dark:text-[#52B788] bg-white dark:bg-slate-900 px-3 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800/80 shadow-2xs shrink-0">
+                          {String(timeLeft.minutes).padStart(2, "0")}:{String(timeLeft.seconds).padStart(2, "0")}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-6 bg-rose-50 dark:bg-rose-950/40 rounded-2xl border border-rose-200 dark:border-rose-800 text-center space-y-1.5">
+                  <AlertCircle className="w-10 h-10 text-rose-500 mx-auto" />
+                  <h5 className="font-bold text-sm text-rose-900 dark:text-rose-200">Tiket Dibatalkan</h5>
+                  <p className="text-xs text-rose-700 dark:text-rose-300 max-w-xs mx-auto">
+                    Pemesanan tiket ini telah dibatalkan atau kedaluwarsa, sehingga hak hadir tidak berlaku.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Booking Code Banner */}
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                  Kode Booking Manual
+                </span>
+                <span className="font-mono font-black text-base text-slate-900 dark:text-white">
+                  {ticket.ticketCode}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleCopyTicketCode}
+                className="text-xs h-8 px-2.5 rounded-xl border-slate-200 dark:border-slate-700 cursor-pointer"
+              >
+                {isCopiedCode ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                    <span>Disalin!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                    <span>Salin</span>
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Order Details Breakdown */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2 text-xs">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block border-b border-slate-200/60 dark:border-slate-700/60 pb-1.5">
+                Rincian Pesanan
+              </span>
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">Nama Pemesan:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{ticket.guestName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">Email Pemesan:</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{ticket.guestEmail}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500 dark:text-slate-400">Jumlah Tiket:</span>
+                <span className="font-bold text-slate-900 dark:text-white">{ticket.ticketCount} Tiket</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                <span className="font-bold text-slate-700 dark:text-slate-300">Total Nominal:</span>
+                <span className="font-black text-[#3B7A57] dark:text-[#52B788] text-sm">
+                  {ticket.totalPrice > 0 ? formatCurrencyIDR(ticket.totalPrice) : "Gratis (RSVP)"}
+                </span>
+              </div>
+            </div>
+
+            {/* Sub-tickets Breakdown for Multiple Tickets */}
+            {ticket.ticketCount > 1 && (
+              <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setIsSubTicketsOpen(!isSubTicketsOpen)}
+                  className="w-full flex items-center justify-between font-bold text-slate-900 dark:text-white cursor-pointer"
+                >
+                  <span className="flex items-center space-x-1.5">
+                    <Ticket className="w-4 h-4 text-[#3B7A57]" />
+                    <span>
+                      Daftar {ticket.ticketCount} Tiket Anda ({ticket.checkedInQty || (isCheckedIn ? ticket.ticketCount : 0)}/{ticket.ticketCount} Hadir)
+                    </span>
+                  </span>
+                  {isSubTicketsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+
+                {isSubTicketsOpen && (
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in duration-150">
+                    {Array.from({ length: ticket.ticketCount }).map((_, idx) => {
+                      const ticketIndex = idx + 1;
+                      const subTicketCode = `${ticket.ticketCode}-${String(ticketIndex).padStart(2, "0")}`;
+                      const isSubCheckedIn = isSeatCheckedIn(ticketIndex);
+                      const isCurrentlySelected = activeSubIndex === ticketIndex;
+                      const subQrData = JSON.stringify({
+                        ticketCode: subTicketCode,
+                        eventId: ticket.eventId,
+                        seat: ticketIndex,
+                      });
+
+                      return (
+                        <div
+                          key={subTicketCode}
+                          className={`p-3.5 rounded-2xl border transition-all ${
+                            isCurrentlySelected
+                              ? "bg-emerald-50/70 dark:bg-emerald-950/40 border-[#3B7A57] ring-1 ring-[#3B7A57]"
+                              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-1 flex-1">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="font-bold text-[10px] text-slate-400 uppercase">Tiket #${ticketIndex}</span>
+                                <span
+                                  className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-full ${
+                                    isSubCheckedIn
+                                      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                      : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                  }`}
+                                >
+                                  {isSubCheckedIn ? "Hadir" : "Belum Hadir"}
+                                </span>
+                              </div>
+                              <div className="font-mono text-xs font-black text-slate-900 dark:text-white">
+                                {subTicketCode}
+                              </div>
+                              <span className="text-[10.5px] text-slate-600 dark:text-slate-400 block truncate">
+                                {ticketIndex === 1 ? `${ticket.guestName} (Pemesan Utama)` : `Tamu Pax #${ticketIndex}`}
+                              </span>
+                            </div>
+
+                            {/* Mini QR code for quick glance */}
+                            {isPaid && (
+                              <div
+                                id={`sub-qr-svg-${ticketIndex}`}
+                                className="p-1 bg-white rounded-lg shadow-2xs border border-slate-200 shrink-0"
+                                title={`QR Tiket #${ticketIndex}`}
+                              >
+                                <QRCodeSVG
+                                  value={subQrData}
+                                  size={64}
+                                  level="M"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Quick Actions for this sub-ticket */}
+                          <div className="flex items-center space-x-2 pt-2.5 mt-2 border-t border-slate-100 dark:border-slate-800">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedTicketIndex(ticketIndex);
+                                if (typeof window !== "undefined") {
+                                  window.scrollTo({ top: 380, behavior: "smooth" });
+                                }
+                              }}
+                              className={`flex-1 py-1 px-2 rounded-lg text-[10.5px] font-bold transition-colors cursor-pointer text-center ${
+                                isCurrentlySelected
+                                  ? "bg-[#3B7A57] text-white"
+                                  : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
+                              }`}
+                            >
+                              {isCurrentlySelected ? "QR Sedang Tampil" : "Tampilkan QR"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadSubTicket(ticketIndex)}
+                              disabled={isDownloadingTicket}
+                              className="py-1 px-2 rounded-lg text-[10.5px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 cursor-pointer flex items-center space-x-1"
+                              title="Download e-tiket PNG untuk tiket ini"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>Unduh PNG</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Payment Transfer & Proof Upload Section */}
+            {isPending && (
+              <div className="space-y-4 pt-1">
 
                   {/* Transfer Amount Card */}
                   <div className="p-4 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-slate-50 dark:to-slate-800/40 rounded-2xl border border-emerald-500/20 text-left space-y-2">
@@ -861,125 +1250,6 @@ export default function PrivateTicketViewPage() {
                       </form>
                     )}
                   </div>
-                </div>
-              ) : (
-                <div className="p-6 bg-rose-50 dark:bg-rose-950/40 rounded-2xl border border-rose-200 dark:border-rose-800 text-center space-y-1.5">
-                  <AlertCircle className="w-10 h-10 text-rose-500 mx-auto" />
-                  <h5 className="font-bold text-sm text-rose-900 dark:text-rose-200">Tiket Dibatalkan</h5>
-                  <p className="text-xs text-rose-700 dark:text-rose-300 max-w-xs mx-auto">
-                    Pemesanan tiket ini telah dibatalkan atau kedaluwarsa, sehingga hak hadir tidak berlaku.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Booking Code Banner */}
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                  Kode Booking Manual
-                </span>
-                <span className="font-mono font-black text-base text-slate-900 dark:text-white">
-                  {ticket.ticketCode}
-                </span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleCopyTicketCode}
-                className="text-xs h-8 px-2.5 rounded-xl border-slate-200 dark:border-slate-700 cursor-pointer"
-              >
-                {isCopiedCode ? (
-                  <>
-                    <Check className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                    <span>Disalin!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5 mr-1 text-slate-400" />
-                    <span>Salin</span>
-                  </>
-                )}
-              </Button>
-            </div>
-
-            {/* Order Details Breakdown */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2 text-xs">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block border-b border-slate-200/60 dark:border-slate-700/60 pb-1.5">
-                Rincian Pesanan
-              </span>
-              <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Nama Pemesan:</span>
-                <span className="font-bold text-slate-900 dark:text-white">{ticket.guestName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Email Pemesan:</span>
-                <span className="font-semibold text-slate-700 dark:text-slate-300">{ticket.guestEmail}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Jumlah Tiket:</span>
-                <span className="font-bold text-slate-900 dark:text-white">{ticket.ticketCount} Tiket</span>
-              </div>
-              <div className="flex justify-between pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
-                <span className="font-bold text-slate-700 dark:text-slate-300">Total Nominal:</span>
-                <span className="font-black text-[#3B7A57] dark:text-[#52B788] text-sm">
-                  {ticket.totalPrice > 0 ? formatCurrencyIDR(ticket.totalPrice) : "Gratis (RSVP)"}
-                </span>
-              </div>
-            </div>
-
-            {/* Sub-tickets Breakdown for Multiple Tickets */}
-            {ticket.ticketCount > 1 && (
-              <div className="p-4 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setIsSubTicketsOpen(!isSubTicketsOpen)}
-                  className="w-full flex items-center justify-between font-bold text-slate-900 dark:text-white cursor-pointer"
-                >
-                  <span className="flex items-center space-x-1.5">
-                    <Ticket className="w-4 h-4 text-[#3B7A57]" />
-                    <span>
-                      Daftar {ticket.ticketCount} Tiket Anda ({ticket.checkedInQty || (isCheckedIn ? ticket.ticketCount : 0)}/{ticket.ticketCount} Hadir)
-                    </span>
-                  </span>
-                  {isSubTicketsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                </button>
-
-                {isSubTicketsOpen && (
-                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 grid grid-cols-1 sm:grid-cols-2 gap-2 animate-in fade-in duration-150">
-                    {Array.from({ length: ticket.ticketCount }).map((_, idx) => {
-                      const ticketIndex = idx + 1;
-                      const subTicketCode = `${ticket.ticketCode}-${String(ticketIndex).padStart(2, "0")}`;
-                      const isSubCheckedIn = (ticket.checkedInQty ?? (isCheckedIn ? ticket.ticketCount : 0)) >= ticketIndex;
-
-                      return (
-                        <div
-                          key={subTicketCode}
-                          className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1"
-                        >
-                          <div className="flex items-center justify-between text-[10px]">
-                            <span className="font-bold text-slate-400 uppercase">Tiket #{ticketIndex}</span>
-                            <span
-                              className={`font-bold px-1.5 py-0.2 rounded-full ${
-                                isSubCheckedIn
-                                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                  : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                              }`}
-                            >
-                              {isSubCheckedIn ? "Hadir" : "Belum Hadir"}
-                            </span>
-                          </div>
-                          <div className="font-mono text-xs font-black text-slate-900 dark:text-white">
-                            {subTicketCode}
-                          </div>
-                          <span className="text-[10px] text-slate-500 block truncate">
-                            {ticketIndex === 1 ? `${ticket.guestName} (Pemesan Utama)` : `Tamu Pax #${ticketIndex}`}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             )}
 
@@ -992,19 +1262,45 @@ export default function PrivateTicketViewPage() {
             </div>
 
             {/* Action Buttons */}
-            <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
-              <Button
-                type="button"
-                onClick={() => window.print()}
-                variant="outline"
-                className="flex-1 text-xs font-bold border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer py-2.5"
-              >
-                <Printer className="w-3.5 h-3.5 mr-1.5" />
-                <span>Cetak E-Tiket</span>
-              </Button>
+            <div className="pt-4 pb-6 space-y-3">
+              {isPaid && (
+                <div className={`grid ${isMultiTicket ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"} gap-2.5`}>
+                  <Button
+                    type="button"
+                    onClick={handleDownloadActiveTicket}
+                    disabled={isDownloadingTicket}
+                    variant="outline"
+                    className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer h-10 py-2.5"
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                    <span>
+                      {isDownloadingTicket
+                        ? "Mengunduh..."
+                        : isMultiTicket
+                        ? `Download Tiket #${activeSubIndex} (PNG)`
+                        : "Download Tiket"}
+                    </span>
+                  </Button>
 
-              <Link href="/events" className="flex-1">
-                <Button className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl py-2.5 cursor-pointer shadow-xs">
+                  {isMultiTicket && (
+                    <Button
+                      type="button"
+                      onClick={handleDownloadAllTickets}
+                      disabled={isDownloadingTicket}
+                      className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl h-10 py-2.5 cursor-pointer shadow-xs"
+                    >
+                      <Download className="w-3.5 h-3.5 mr-1.5" />
+                      <span>Download Semua ({ticket.ticketCount} Tiket)</span>
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              <Link href="/events" className="block w-full">
+                <Button
+                  variant="outline"
+                  className="w-full text-xs font-bold rounded-xl h-10 py-2.5 cursor-pointer border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                >
                   <span>Kembali ke Daftar Event</span>
                 </Button>
               </Link>
