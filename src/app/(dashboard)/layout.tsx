@@ -63,11 +63,11 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8FAFC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E2E8F0] transition-colors duration-200">
-      <div className="flex-1 flex overflow-hidden">
+    <div className="h-screen max-h-screen overflow-hidden flex flex-col bg-[#F8FAFC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E2E8F0] transition-colors duration-200">
+      <div className="flex-1 flex overflow-hidden h-full">
         {/* Desktop Sidebar (visible on large screens >= 1024px) */}
         <aside
-          className={`hidden lg:flex flex-shrink-0 sticky top-0 h-screen transition-all duration-300 ease-in-out ${
+          className={`hidden lg:flex flex-shrink-0 h-full transition-all duration-300 ease-in-out ${
             isSidebarCollapsed ? "w-20" : "w-64"
           }`}
         >
@@ -103,7 +103,7 @@ export default function DashboardLayout({
         )}
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto">
           <Header
             onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
             isSidebarCollapsed={isSidebarCollapsed}
