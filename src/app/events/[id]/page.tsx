@@ -1040,6 +1040,19 @@ export default function EventDetailPage() {
               </span>
             </div>
 
+            {/* Batas Waktu Pembayaran (Tenggat 60 Menit) */}
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800 text-left flex items-start space-x-2.5">
+              <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="text-[11px] font-bold text-amber-900 dark:text-amber-200 block">
+                  Batas Waktu Pembayaran (Tenggat 60 Menit)
+                </span>
+                <span className="text-[10.5px] text-amber-700 dark:text-amber-300 block">
+                  Selesaikan transfer dan unggah bukti pembayaran dalam 60 menit setelah pemesanan agar tiket tidak dibatalkan otomatis oleh sistem.
+                </span>
+              </div>
+            </div>
+
             {/* Rekening Tujuan Transfer Bank Manual */}
             {(() => {
               const bank = pendingTicket.destinationBankSnapshot || event.destinationBank;

@@ -294,4 +294,54 @@ describe("Release Verification & Security Regression Audit", () => {
       ).rejects.toThrow(/Pintu check-in belum dibuka/i);
     });
   });
+
+  describe("6. Capacity Re-Verification on Reviving Expired Bookings", () => {
+    it("Strictly blocks reviving an EXPIRED booking to PAID if event quota is already filled", async () => {
+      const orgEmail = `capacity-test-${Date.now()}@dagoeng.id`;
+      const event = await createEventSubmission({
+        organizerName: "Cap Test Org",
+        organizerEmail: orgEmail,
+        organizerPhone: "081234567800",
+        title: "Intimate Concert (Cap 2)",
+        category: "CREATIVE",
+        description: "Strict capacity test.",
+        startDate: "2026-11-25T19:00:00+08:00",
+        endDate: "2026-11-25T22:00:00+08:00",
+        location: "VIP Lounge",
+        maxCapacity: 2,
+        isPaid: true,
+        price: 100000,
+        posterUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4",
+      });
+
+      await updateEventStatus(event.id, "APPROVED");
+
+      // Booking 1: 1 ticket -> Expired
+      const booking1 = await createEventBooking({
+        eventId: event.id,
+        guestName: "Late Attendee",
+        guestEmail: "late@example.com",
+        guestPhone: "081234567801",
+        ticketCount: 1,
+        paymentMethod: "MANUAL_TRANSFER",
+      });
+      await updateBookingPaymentStatus(booking1.id, "EXPIRED");
+
+      // Booking 2: 2 tickets -> Takes entire capacity of 2
+      const booking2 = await createEventBooking({
+        eventId: event.id,
+        guestName: "Quick Attendee",
+        guestEmail: "quick@example.com",
+        guestPhone: "081234567802",
+        ticketCount: 2,
+        paymentMethod: "MANUAL_TRANSFER",
+      });
+      await updateBookingPaymentStatus(booking2.id, "PAID");
+
+      // Now, try to revive booking 1 (1 ticket) to PAID -> Event is already 2/2 full!
+      await expect(
+        updateBookingPaymentStatus(booking1.id, "PAID")
+      ).rejects.toThrow(/Kapasitas event .* telah penuh/i);
+    });
+  });
 });

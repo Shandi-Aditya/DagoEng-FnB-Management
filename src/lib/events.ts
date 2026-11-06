@@ -1912,10 +1912,25 @@ export async function createEventBooking(
       destinationBankSnapshot = resolvedBank;
     }
 
-    // Generate unique human-readable ticket code e.g. DAGO-EVT-92812
-    const randomSuffix = Math.floor(10000 + Math.random() * 90000);
-    const ticketCode = `DAGO-EVT-${randomSuffix}`;
-    const guestToken = crypto.randomBytes(24).toString("hex");
+    // Generate unique human-readable ticket code e.g. DAGO-EVT-92812 (with collision guard)
+    let ticketCode = "";
+    let codeAttempts = 0;
+    do {
+      codeAttempts++;
+      const randomSuffix = Math.floor(10000 + Math.random() * 90000);
+      if (codeAttempts > 50) {
+        // High-density collision fallback: append 4 random hex characters
+        const hex = crypto.randomBytes(2).toString("hex").toUpperCase();
+        ticketCode = `DAGO-EVT-${randomSuffix}-${hex}`;
+      } else {
+        ticketCode = `DAGO-EVT-${randomSuffix}`;
+      }
+    } while (allBookings.some((b) => b.ticketCode === ticketCode));
+
+    let guestToken = crypto.randomBytes(24).toString("hex");
+    while (allBookings.some((b) => b.guestToken === guestToken)) {
+      guestToken = crypto.randomBytes(24).toString("hex");
+    }
 
     const newBooking: EventTicketOrder = {
       id: `tkt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -2219,6 +2234,27 @@ export async function updateBookingPaymentStatus(
       throw new Error(
         "Tiket sudah digunakan untuk check-in. Batalkan status kehadiran terlebih dahulu sebelum membatalkan pembayaran."
       );
+    }
+
+    // Capacity Re-Verification Guard:
+    // Mencegah overbooking saat menyetujui tiket yang sebelumnya EXPIRED atau CANCELLED
+    if (status === "PAID" && (existing.paymentStatus === "EXPIRED" || existing.paymentStatus === "CANCELLED")) {
+      const allEvents = loadEventsFromDisk();
+      const event = allEvents.find((e) => e.id === existing.eventId);
+      if (event) {
+        const activeBookings = allBookings.filter(
+          (b) => b.eventId === event.id && b.id !== existing.id && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
+        );
+        const maxCap = getEventCapacity(event);
+        const currentlyBooked = activeBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+        const remaining = maxCap - currentlyBooked;
+        const requiredCount = existing.ticketCount || 1;
+        if (requiredCount > remaining) {
+          throw new Error(
+            `Kapasitas event "${event.title}" telah penuh (sisa kuota: ${Math.max(0, remaining)}). Tiket yang kedaluwarsa ini tidak dapat disetujui karena kuota telah dialokasikan ke peserta lain.`
+          );
+        }
+      }
     }
 
     const now = new Date().toISOString();
