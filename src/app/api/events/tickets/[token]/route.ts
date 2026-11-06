@@ -6,6 +6,7 @@ import {
   resolveDestinationBankAccount,
   resolveActiveTransferBankForBooking,
   getEventBankAccounts,
+  expirePendingBookings,
 } from "@/lib/events";
 import { CommunityEvent } from "@/types/event";
 import fs from "fs";
@@ -43,6 +44,7 @@ export async function GET(
     }
 
     const token = rawToken.trim();
+    await expirePendingBookings().catch(() => {});
     const allBookings = loadBookingsFromDisk();
     const booking = allBookings.find((b) => b.guestToken === token);
 
@@ -163,6 +165,7 @@ export async function POST(
     }
 
     const token = rawToken.trim();
+    await expirePendingBookings().catch(() => {});
     const allBookings = loadBookingsFromDisk();
     const booking = allBookings.find((b) => b.guestToken === token);
 
@@ -170,6 +173,27 @@ export async function POST(
       return NextResponse.json(
         { success: false, error: "Tiket tidak ditemukan." },
         { status: 404 }
+      );
+    }
+
+    if (booking.paymentStatus === "EXPIRED") {
+      return NextResponse.json(
+        { success: false, error: "Batas waktu pembayaran telah berakhir (kedaluwarsa). Bukti transfer tidak dapat diunggah." },
+        { status: 400 }
+      );
+    }
+
+    if (booking.paymentStatus === "CANCELLED") {
+      return NextResponse.json(
+        { success: false, error: "Pemesanan tiket telah dibatalkan. Bukti transfer tidak dapat diunggah." },
+        { status: 400 }
+      );
+    }
+
+    if (booking.paymentStatus === "PAID") {
+      return NextResponse.json(
+        { success: false, error: "Pemesanan tiket ini telah lunas terverifikasi." },
+        { status: 400 }
       );
     }
 
