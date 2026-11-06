@@ -1066,6 +1066,11 @@ export default function EventDetailPage() {
                     <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
                       Rekening Resmi Tujuan Transfer:
                     </span>
+                    {String(bank.accountHolder || "").includes("DEMO") && (
+                      <div className="p-2.5 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 rounded-xl text-[10.5px] text-amber-800 dark:text-amber-300 font-bold leading-relaxed">
+                        ⚠️ PERHATIAN (MODE PENGUJIAN/DEMO): Rekening ini adalah placeholder demo sistem. Jangan lakukan transfer uang sungguhan ke rekening ini.
+                      </div>
+                    )}
                     <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
                       <div>
                         <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
