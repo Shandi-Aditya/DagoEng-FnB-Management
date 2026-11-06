@@ -251,4 +251,47 @@ describe("Release Verification & Security Regression Audit", () => {
       expect(sub.proposedRevenueSplit?.platformPercent).toBe(10);
     });
   });
+
+  describe("5. Operational Date Window (Hari H) Enforcement", () => {
+    it("Strictly blocks check-in attempted 45 days in advance when date window is enforced", async () => {
+      const orgEmail = `advance-checkin-${Date.now()}@dagoeng.id`;
+      const futureStartDate = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString();
+      const futureEndDate = new Date(Date.now() + 45 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000).toISOString();
+
+      const futureEvent = await createEventSubmission({
+        organizerName: "Future Event Organizer",
+        organizerEmail: orgEmail,
+        organizerPhone: "081234567800",
+        title: "Future Summit 2027",
+        category: "TECH",
+        description: "Event far in the future.",
+        startDate: futureStartDate,
+        endDate: futureEndDate,
+        location: "Hall A",
+        isPaid: true,
+        price: 25000,
+        posterUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4",
+      });
+
+      await updateEventStatus(futureEvent.id, "APPROVED");
+
+      const booking = await createEventBooking({
+        eventId: futureEvent.id,
+        guestName: "Early Bird Attendee",
+        guestEmail: "early@example.com",
+        guestPhone: "081234567899",
+        ticketCount: 1,
+        paymentMethod: "MANUAL_TRANSFER",
+      });
+
+      await updateBookingPaymentStatus(booking.id, "PAID");
+
+      // Attempt check-in with enforceDateWindow: true -> MUST THROW
+      await expect(
+        organizerCheckInAttendee(orgEmail, booking.ticketCode, "CHECKED_IN", {
+          enforceDateWindow: true,
+        })
+      ).rejects.toThrow(/Pintu check-in belum dibuka/i);
+    });
+  });
 });

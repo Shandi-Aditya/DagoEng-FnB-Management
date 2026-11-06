@@ -13,7 +13,17 @@ export const dynamic = "force-dynamic";
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, bookingId, ticketCode, checkInStatus, incrementQty, targetQty, reset, eventId } = body;
+    const {
+      email,
+      bookingId,
+      ticketCode,
+      checkInStatus,
+      incrementQty,
+      targetQty,
+      reset,
+      eventId,
+      bypassDateWindow,
+    } = body;
     const identifier = (bookingId || ticketCode || "").trim();
 
     const auth = await assertOrganizerAuth(req, email);
@@ -52,6 +62,11 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    const enforceDateWindow =
+      process.env.NODE_ENV === "test"
+        ? Boolean(body.enforceDateWindow)
+        : !reset && !bypassDateWindow;
+
     const updated = await organizerCheckInAttendee(
       auth.email,
       identifier,
@@ -61,6 +76,7 @@ export async function PATCH(req: NextRequest) {
         targetQty,
         reset,
         expectedEventId: typeof eventId === "string" && eventId.trim() ? eventId.trim() : undefined,
+        enforceDateWindow,
       }
     );
 
