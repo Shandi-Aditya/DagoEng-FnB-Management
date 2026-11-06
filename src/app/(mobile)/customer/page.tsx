@@ -327,6 +327,7 @@ function CustomerPortalContent() {
   const [isOnboardingSubmitting, setIsOnboardingSubmitting] = useState(false);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [viewingTicketModal, setViewingTicketModal] = useState<EventTicketOrder | null>(null);
+  const [modalSubSeat, setModalSubSeat] = useState<number>(1);
 
   const handleCopyTicketCode = (code: string) => {
     if (typeof window !== "undefined") {
@@ -465,10 +466,22 @@ function CustomerPortalContent() {
         }
       }
 
-      const mergedMap = new Map<string, EventTicketOrder>();
-      for (const t of localTickets) mergedMap.set(t.id, t);
-      for (const t of serverTickets) mergedMap.set(t.id, t);
-      setMyEventTickets(Array.from(mergedMap.values()));
+      let finalTickets: EventTicketOrder[] = [];
+      if (user?.email) {
+        // Authenticated user: Server database is the authoritative single source of truth
+        finalTickets = serverTickets;
+        if (typeof window !== "undefined") {
+          try {
+            localStorage.setItem("dago_my_event_tickets", JSON.stringify(serverTickets));
+          } catch {}
+        }
+      } else {
+        // Guest mode: Merge active server tickets with valid local tokens
+        const serverMap = new Map<string, EventTicketOrder>();
+        for (const t of serverTickets) serverMap.set(t.id, t);
+        finalTickets = serverTickets.length > 0 ? serverTickets : localTickets;
+      }
+      setMyEventTickets(finalTickets);
 
       // 2. Check organizer status
       const portalRes = await fetch(`/api/events/portal${emailParam}`);
@@ -4010,7 +4023,10 @@ function CustomerPortalContent() {
                                 <div className="flex items-center space-x-1.5">
                                   <Button
                                     size="sm"
-                                    onClick={() => setViewingTicketModal(ticket)}
+                                    onClick={() => {
+                                      setModalSubSeat(1);
+                                      setViewingTicketModal(ticket);
+                                    }}
                                     className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-8 px-3 rounded-xl shadow-xs flex items-center space-x-1 cursor-pointer"
                                   >
                                     <QrCode className="w-3.5 h-3.5" />
@@ -5622,50 +5638,101 @@ function CustomerPortalContent() {
                     </div>
                   </div>
 
+                  {/* Multi-Ticket Pax Tabs */}
+                  {viewingTicketModal.ticketCount > 1 && (
+                    <div className="space-y-1.5 pb-2 border-b border-slate-100 dark:border-slate-800">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
+                        <span>Pilih Tiket Peserta:</span>
+                        <span>{viewingTicketModal.checkedInQty || 0} dari {viewingTicketModal.ticketCount} Hadir</span>
+                      </div>
+                      <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
+                        {Array.from({ length: viewingTicketModal.ticketCount }).map((_, idx) => {
+                          const seatNum = idx + 1;
+                          const isDone = Array.isArray(viewingTicketModal.checkedInSeats)
+                            ? viewingTicketModal.checkedInSeats.includes(seatNum)
+                            : (viewingTicketModal.checkedInQty ?? 0) >= seatNum;
+                          return (
+                            <button
+                              key={seatNum}
+                              type="button"
+                              onClick={() => setModalSubSeat(seatNum)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center space-x-1.5 ${
+                                modalSubSeat === seatNum
+                                  ? "bg-[#3B7A57] text-white shadow-xs"
+                                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
+                              }`}
+                            >
+                              <span>Pax #{seatNum}</span>
+                              {isDone && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" title="Sudah Hadir" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* QR Code Presentation with Verification Enforcement */}
-                  <div className="space-y-2">
-                    {isPaid ? (
-                      isCheckedIn ? (
-                        <div className="p-5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
-                          <div className="relative">
-                            <QrCode className="w-32 h-32 text-slate-400 opacity-30" />
-                            <div className="absolute inset-0 flex items-center justify-center">
-                              <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
-                                <Check className="w-7 h-7 stroke-[3]" />
+                  {(() => {
+                    const activeSeat = viewingTicketModal.ticketCount > 1 ? modalSubSeat : 1;
+                    const activeSubCode = viewingTicketModal.ticketCount > 1
+                      ? `${viewingTicketModal.ticketCode}-${String(activeSeat).padStart(2, "0")}`
+                      : viewingTicketModal.ticketCode;
+                    const isSeatDone = Array.isArray(viewingTicketModal.checkedInSeats)
+                      ? viewingTicketModal.checkedInSeats.includes(activeSeat)
+                      : (viewingTicketModal.checkedInQty ?? 0) >= activeSeat;
+                    const activeQrData = JSON.stringify({
+                      ticketCode: activeSubCode,
+                      eventId: viewingTicketModal.eventId,
+                      seat: activeSeat,
+                    });
+
+                    return (
+                      <div className="space-y-2">
+                        {isPaid ? (
+                          isSeatDone ? (
+                            <div className="p-5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
+                              <div className="relative">
+                                <QrCode className="w-32 h-32 text-slate-400 opacity-30" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
+                                    <Check className="w-7 h-7 stroke-[3]" />
+                                  </div>
+                                </div>
                               </div>
+                              <Badge className="bg-slate-800 text-white dark:bg-slate-700 text-xs font-bold">
+                                SELESAI CHECK-IN (TIKET #{activeSeat} SUDAH HADIR)
+                              </Badge>
+                              <span className="font-mono text-xs font-bold text-slate-600 dark:text-slate-300">
+                                {activeSubCode}
+                              </span>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs">
+                                Tiket #{activeSeat} telah diverifikasi oleh panitia di venue.
+                              </p>
                             </div>
-                          </div>
-                          <Badge className="bg-slate-800 text-white dark:bg-slate-700 text-xs font-bold">
-                            SELESAI CHECK-IN (SUDAH DIGUNAKAN)
-                          </Badge>
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400 max-w-xs">
-                            Seluruh {viewingTicketModal.ticketCount} tiket dalam pemesanan ini telah diverifikasi hadir oleh panitia di venue.
-                          </p>
-                        </div>
-                      ) : (
-                        <div id="customer-ticket-qr-container" className="p-5 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
-                          <div className="p-3 bg-white rounded-xl shadow-xs border border-slate-100 flex items-center justify-center">
-                            <QRCodeSVG
-                              value={JSON.stringify({
-                                ticketCode: viewingTicketModal.ticketCode,
-                                eventId: viewingTicketModal.eventId,
-                              })}
-                              size={150}
-                              level="M"
-                              includeMargin
-                            />
-                          </div>
-                          {isPartiallyCheckedIn && (
-                            <Badge className="bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 text-[11px] font-bold">
-                              Check-in Sebagian: {viewingTicketModal.checkedInQty || 1} dari {viewingTicketModal.ticketCount} Tiket
-                            </Badge>
-                          )}
-                          <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-semibold leading-tight pt-1">
-                            Tunjukkan QR code ini kepada panitia acara di venue saat registrasi ulang.
-                          </p>
-                        </div>
-                      )
-                    ) : isPending ? (
+                          ) : (
+                            <div id="customer-ticket-qr-container" className="p-5 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2">
+                              <div className="p-3 bg-white rounded-xl shadow-xs border border-slate-100 flex items-center justify-center">
+                                <QRCodeSVG
+                                  value={activeQrData}
+                                  size={150}
+                                  level="M"
+                                  includeMargin
+                                />
+                              </div>
+                              <span className="font-mono text-xs font-bold text-slate-700 dark:text-slate-200">
+                                {activeSubCode}
+                              </span>
+                              <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[11px] font-bold">
+                                Tiket #{activeSeat} dari {viewingTicketModal.ticketCount} Pax (Siap Check-in)
+                              </Badge>
+                              <p className="text-[11px] text-emerald-800 dark:text-emerald-300 font-semibold leading-tight pt-1">
+                                Tunjukkan QR code ini kepada panitia acara di venue saat registrasi ulang.
+                              </p>
+                            </div>
+                          )
+                        ) : isPending ? (
                       <div className="p-5 bg-amber-50/70 dark:bg-amber-950/30 rounded-2xl border border-amber-200/80 dark:border-amber-800/60 flex flex-col items-center justify-center text-center space-y-3">
                         <div className="relative p-3 bg-white/70 dark:bg-slate-900/70 rounded-xl border border-amber-200/60 flex items-center justify-center">
                           <QrCode className="w-32 h-32 text-amber-500 opacity-20" />
@@ -5705,6 +5772,8 @@ function CustomerPortalContent() {
                       </div>
                     )}
                   </div>
+                    );
+                  })()}
 
                   {/* Event & Ticket Details Table */}
                   <div className="space-y-2.5 text-xs pt-1">

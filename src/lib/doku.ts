@@ -10,6 +10,65 @@ export interface DokuConfig {
 }
 
 /**
+ * DOKU Official Hostname Allowlists
+ * Explicit hostname validation to prevent fail-open vulnerabilities in simulation guards.
+ * Only official backend API endpoints are allowed (portal web pages excluded).
+ */
+export const DOKU_SANDBOX_HOSTNAMES = new Set([
+  "api-sandbox.doku.com",
+]);
+
+export const DOKU_LIVE_HOSTNAMES = new Set([
+  "api.doku.com",
+]);
+
+/**
+ * Validates whether the provided DOKU configuration strictly points to a verified Sandbox gateway.
+ * Enforces fail-closed evaluation:
+ * - Protocol MUST be strictly HTTPS.
+ * - Hostname MUST match official sandbox allowlist (api-sandbox.doku.com).
+ * - Live hostnames or unknown hostnames are rejected immediately.
+ * - Client ID must contain test identifiers.
+ * - Any malformed URL or inconsistent/mixed configuration fails closed.
+ */
+export function isStrictlySandboxGateway(config: DokuConfig): boolean {
+  if (!config || !config.apiUrl || typeof config.apiUrl !== "string") {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(config.apiUrl);
+
+    // Protocol must strictly be HTTPS
+    if (parsed.protocol !== "https:") {
+      return false;
+    }
+
+    const hostname = parsed.hostname.toLowerCase();
+
+    // 1. Explicit allowlist check
+    const isSandboxHost = DOKU_SANDBOX_HOSTNAMES.has(hostname);
+    const isLiveHost = DOKU_LIVE_HOSTNAMES.has(hostname);
+
+    // Fail-closed: If live host or not in sandbox allowlist, return false
+    if (isLiveHost || !isSandboxHost) {
+      return false;
+    }
+
+    // 2. Client ID validation: Live merchants must not be evaluated as sandbox
+    const clientId = (config.clientId || "").toUpperCase();
+    if (!clientId.includes("TEST")) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    // Malformed URL must fail-closed
+    return false;
+  }
+}
+
+/**
  * Retrieves DOKU configuration from environment variables.
  * Falls back to sandbox URL if not explicitly set.
  */
@@ -211,11 +270,36 @@ export async function createDokuCheckoutSession(
     secretKey: config.secretKey,
   });
 
-  // Check if simulated / offline mode is needed (when no production network is available)
+  // Production Lockdown & Fail-Fast Check:
+  // In production, test credentials, simulation mode, and non-live endpoints are strictly forbidden.
+  if (process.env.NODE_ENV === "production") {
+    let isLiveGateway = false;
+    try {
+      const parsed = new URL(config.apiUrl);
+      isLiveGateway = parsed.protocol === "https:" && DOKU_LIVE_HOSTNAMES.has(parsed.hostname.toLowerCase());
+    } catch {
+      isLiveGateway = false;
+    }
+
+    const hasTestClientId = config.clientId.toUpperCase().includes("TEST");
+    const hasDefaultSecret = config.secretKey.toUpperCase().includes("SK-DAGOENG-SECRET-2026") || config.secretKey.toUpperCase().includes("TEST");
+    const isSimMode = process.env.DOKU_SIMULATION_MODE === "true";
+
+    if (!isLiveGateway || hasTestClientId || hasDefaultSecret || isSimMode) {
+      throw new DokuCheckoutError(
+        "DOKU_CONFIGURATION_ERROR: Live DOKU gateway credentials (https://api.doku.com) must be configured in production. Simulation mode and test credentials are strictly rejected.",
+        true,
+        500
+      );
+    }
+  }
+
+  // Check if simulated / offline mode is needed (ONLY in non-production environments)
   const isSimulationMode =
-    process.env.DOKU_SIMULATION_MODE === "true" ||
-    config.clientId.includes("TEST") ||
-    process.env.NODE_ENV === "test";
+    process.env.NODE_ENV !== "production" &&
+    (process.env.DOKU_SIMULATION_MODE === "true" ||
+      config.clientId.includes("TEST") ||
+      process.env.NODE_ENV === "test");
 
   if (isSimulationMode) {
     // In test or simulation environment without live DOKU network
@@ -276,3 +360,5 @@ export async function createDokuCheckoutSession(
     expiredDate: responseData.response.payment?.expired_date,
   };
 }
+
+export const initiateDokuCheckout = createDokuCheckoutSession;

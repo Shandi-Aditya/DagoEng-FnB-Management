@@ -520,6 +520,14 @@ export default function AdminEventsPage() {
         return;
       }
       setEvents(eventsJson.data || []);
+      setSelectedEvent((current) => {
+        if (!current) return null;
+        return (eventsJson.data || []).find((e: CommunityEvent) => e.id === current.id) || current;
+      });
+      setSelectedEventForAttendees((current) => {
+        if (!current) return null;
+        return (eventsJson.data || []).find((e: CommunityEvent) => e.id === current.id) || current;
+      });
 
       const bookingsJson = await bookingsRes.json();
       if (bookingsRes.ok && bookingsJson.success) {
@@ -4382,7 +4390,7 @@ export default function AdminEventsPage() {
                     required
                     value={newBankForm.accountNumber}
                     onChange={(e) => setNewBankForm({ ...newBankForm, accountNumber: e.target.value })}
-                    placeholder="Contoh: 1420993821"
+                    placeholder="Contoh: 000012345678"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
                   />
                 </div>
@@ -4534,7 +4542,7 @@ export default function AdminEventsPage() {
                     required
                     value={editBankForm.accountNumber}
                     onChange={(e) => setEditBankForm({ ...editBankForm, accountNumber: e.target.value })}
-                    placeholder="Contoh: 1420993821"
+                    placeholder="Contoh: 000012345678"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
                   />
                 </div>

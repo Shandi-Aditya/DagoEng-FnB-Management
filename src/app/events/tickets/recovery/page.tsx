@@ -55,7 +55,7 @@ export default function TicketRecoveryPage() {
   const [phoneRecoveredList, setPhoneRecoveredList] = useState<RecoveredBooking[]>([]);
 
   // CS WhatsApp Contact (configurable via NEXT_PUBLIC_CS_WHATSAPP)
-  const CS_WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_CS_WHATSAPP || "6285737654572";
+  const CS_WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_CS_WHATSAPP || "6281234567890";
   const getWhatsAppLink = (customEmail?: string) => {
     const em = customEmail || email || "";
     const msg = em

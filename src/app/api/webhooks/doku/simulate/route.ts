@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDokuConfig, generateDokuSignature } from "@/lib/doku";
+import { getDokuConfig, generateDokuSignature, isStrictlySandboxGateway } from "@/lib/doku";
 import { loadBookingsFromDisk, saveBookingsToDisk } from "@/lib/events";
 import { EventTicketOrder } from "@/types/event";
 
@@ -11,12 +11,25 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   try {
-    // Production Security Guard: Reject simulation lookup in production without simulation mode
-    if (process.env.NODE_ENV === "production" && process.env.DOKU_SIMULATION_MODE !== "true") {
+    // Production Security Guard (Absolute Lockdown):
+    // Endpoint simulasi DITOLAK SECARA MUTLAK pada environment production
+    if (process.env.NODE_ENV === "production") {
       return NextResponse.json(
         {
           success: false,
-          error: "FORBIDDEN: Simulator pembayaran dinonaktifkan di environment production.",
+          error: "FORBIDDEN: Simulator pembayaran dinonaktifkan secara mutlak di environment production.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // Explicit Sandbox Gateway Allowlist Guard (Fail-Closed)
+    const config = getDokuConfig();
+    if (!isStrictlySandboxGateway(config)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "FORBIDDEN: Simulator pembayaran hanya diizinkan untuk gateway sandbox terverifikasi.",
         },
         { status: 403 }
       );
@@ -82,17 +95,26 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    // Layer 1: Production Security Isolation Guard
-    const isProd = process.env.NODE_ENV === "production";
-    const simAllowed = process.env.DOKU_SIMULATION_MODE === "true";
-    const config = getDokuConfig();
-    const isLiveGateway = !config.apiUrl.includes("sandbox") && !config.clientId.includes("TEST");
-
-    if (isProd && (!simAllowed || isLiveGateway)) {
+    // Layer 1: Production Security Isolation Guard (Absolute Lockdown)
+    // Endpoint simulasi DITOLAK SECARA MUTLAK pada environment production
+    if (process.env.NODE_ENV === "production") {
       return NextResponse.json(
         {
           success: false,
-          error: "FORBIDDEN: Endpoint simulasi pembayaran dinonaktifkan di environment production.",
+          error: "FORBIDDEN: Endpoint simulasi pembayaran dinonaktifkan secara mutlak di environment production.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // Layer 2: Explicit Sandbox Gateway Allowlist Guard (Fail-Closed)
+    // Menolak live gateway, URL tidak dikenal, maupun konfigurasi campuran
+    const config = getDokuConfig();
+    if (!isStrictlySandboxGateway(config)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "FORBIDDEN: Endpoint simulasi pembayaran hanya diizinkan untuk gateway sandbox terverifikasi.",
         },
         { status: 403 }
       );

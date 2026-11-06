@@ -1015,8 +1015,12 @@ export default function EventDetailPage() {
             <div className="p-5 sm:p-6 text-center space-y-4 overflow-y-auto flex-1">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Instruksi Pembayaran Tiket</span>
-              <span className="text-[10px] font-mono bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 px-2 py-0.5 rounded-full font-bold">
-                MENUNGGU VERIFIKASI
+              <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
+                pendingTicket.paymentProofUrl
+                  ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                  : "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+              }`}>
+                {pendingTicket.paymentProofUrl ? "MENUNGGU VERIFIKASI" : "MENUNGGU PEMBAYARAN"}
               </span>
             </div>
 
@@ -1062,6 +1066,11 @@ export default function EventDetailPage() {
                     <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block">
                       Rekening Resmi Tujuan Transfer:
                     </span>
+                    {String(bank.accountHolder || "").includes("DEMO") && (
+                      <div className="p-2.5 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 rounded-xl text-[10.5px] text-amber-800 dark:text-amber-300 font-bold leading-relaxed">
+                        ⚠️ PERHATIAN (MODE PENGUJIAN/DEMO): Rekening ini adalah placeholder demo sistem. Jangan lakukan transfer uang sungguhan ke rekening ini.
+                      </div>
+                    )}
                     <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
                       <div>
                         <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
@@ -1157,9 +1166,11 @@ export default function EventDetailPage() {
               <Badge className={`border-0 text-[10px] font-black tracking-wide ${
                 issuedTicket.paymentStatus === "PAID"
                   ? "bg-emerald-400 text-slate-900"
-                  : "bg-amber-400 text-slate-900"
+                  : (issuedTicket.paymentProofUrl ? "bg-amber-400 text-slate-900" : "bg-blue-400 text-slate-900")
               }`}>
-                {issuedTicket.paymentStatus === "PAID" ? "TERKONFIRMASI (LUNAS)" : "MENUNGGU VERIFIKASI PEMBAYARAN"}
+                {issuedTicket.paymentStatus === "PAID"
+                  ? "TERKONFIRMASI (LUNAS)"
+                  : (issuedTicket.paymentProofUrl ? "MENUNGGU VERIFIKASI PEMBAYARAN" : "MENUNGGU PEMBAYARAN")}
               </Badge>
             </div>
 

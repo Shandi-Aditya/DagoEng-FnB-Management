@@ -254,6 +254,7 @@ export interface EventTicketOrder {
   ticketCount: number;
   checkedInQty?: number; // Jumlah tiket yang sudah check-in (0 <= checkedInQty <= ticketCount)
   checkedInSeats?: number[]; // Daftar nomor index tiket (1..ticketCount) yang sudah check-in
+  seatCheckInTimes?: Record<string, string>; // Catatan timestamp waktu check-in per sub-tiket (key: seat number "1", "2")
   unitPrice: number;
   totalPrice: number;
   platformFeePercent: number; // e.g. 20%
@@ -346,9 +347,9 @@ export const DEFAULT_EVENT_BANK_ACCOUNTS: EventBankAccount[] = [
     id: "bank-bca-plat",
     label: "BCA Platform Utama",
     bankName: "BCA (Bank Central Asia)",
-    accountNumber: "1420993821",
-    accountHolder: "PT DAGO CREATIVE HUB",
-    branch: "KCU Dago Bandung",
+    accountNumber: "000012345678",
+    accountHolder: "PT DAGO CREATIVE HUB (DEMO)",
+    branch: "KCU Singaraja",
     badge: "Utama / Rekomendasi",
     isDefault: true,
     isActive: true,
@@ -360,9 +361,9 @@ export const DEFAULT_EVENT_BANK_ACCOUNTS: EventBankAccount[] = [
     id: "bank-mandiri-plat",
     label: "Mandiri Platform",
     bankName: "Bank Mandiri",
-    accountNumber: "1300098234120",
-    accountHolder: "PT DAGO CREATIVE HUB",
-    branch: "KC Bandung Surapati",
+    accountNumber: "000098765432",
+    accountHolder: "PT DAGO CREATIVE HUB (DEMO)",
+    branch: "KC Singaraja",
     badge: "Bebas Biaya Admin",
     isDefault: false,
     isActive: true,
@@ -374,8 +375,8 @@ export const DEFAULT_EVENT_BANK_ACCOUNTS: EventBankAccount[] = [
     id: "bank-bri-plat",
     label: "BRI Platform",
     bankName: "Bank BRI",
-    accountNumber: "034101000928301",
-    accountHolder: "PT DAGO CREATIVE HUB",
+    accountNumber: "000011223344",
+    accountHolder: "PT DAGO CREATIVE HUB (DEMO)",
     branch: "KC Singaraja",
     badge: "Jaringan Luas",
     isDefault: false,
@@ -407,7 +408,7 @@ export const DEFAULT_EVENT_POLICY: EventRevenueSharingPolicy = {
       changedBy: "Platform Super Admin",
       action: "SET_DEFAULT",
       bankId: "bank-bca-plat",
-      details: "Inisialisasi rekening bank default BCA (PT DAGO CREATIVE HUB - 1420993821)",
+      details: "Inisialisasi rekening bank default BCA (PT DAGO CREATIVE HUB - 000012345678)",
     },
   ],
   effectiveDate: "2026-01-01T00:00:00.000Z",

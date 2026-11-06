@@ -982,55 +982,66 @@ export default function PrivateTicketViewPage() {
                           );
                         }
 
-                        return displayBanks.map((bank) => (
-                          <div
-                            key={bank.accountNumber}
-                            className="p-3.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/90 dark:border-slate-700 flex items-center justify-between shadow-2xs hover:border-[#3B7A57] transition-colors"
-                          >
-                            <div className="space-y-0.5">
-                              <div className="flex items-center space-x-2">
-                                <span className="text-xs font-bold text-slate-900 dark:text-white">
-                                  {bank.bankName}
-                                </span>
-                                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                                  {bank.label || bank.badge || "Rekening Resmi"}
-                                </span>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <span className="font-mono font-bold text-sm text-[#3B7A57] dark:text-[#52B788]">
-                                  {bank.accountNumber}
-                                </span>
-                                <span className="text-[10px] text-slate-400">
-                                  a.n. {bank.accountHolder}
-                                </span>
-                              </div>
-                              {bank.branch && (
-                                <span className="text-[9.5px] text-slate-400 block">
-                                  Cabang: {bank.branch}
-                                </span>
-                              )}
-                            </div>
+                        const hasDemoBank = displayBanks.some((b) => String(b.accountHolder || "").includes("DEMO"));
 
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleCopyAccount(bank.accountNumber)}
-                              className="h-7 px-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-[#3B7A57] hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg cursor-pointer"
-                            >
-                              {copiedAccount === bank.accountNumber ? (
-                                <>
-                                  <Check className="w-3 h-3 mr-1 text-emerald-600" />
-                                  <span className="text-emerald-600">Disalin</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Copy className="w-3 h-3 mr-1" />
-                                  <span>Salin</span>
-                                </>
-                              )}
-                            </Button>
+                        return (
+                          <div className="space-y-3">
+                            {hasDemoBank && (
+                              <div className="p-2.5 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 rounded-xl text-[10.5px] text-amber-800 dark:text-amber-300 font-bold leading-relaxed">
+                                ⚠️ PERHATIAN (MODE PENGUJIAN/DEMO): Rekening berikut adalah placeholder demo sistem. Jangan lakukan transfer uang sungguhan.
+                              </div>
+                            )}
+                            {displayBanks.map((bank) => (
+                              <div
+                                key={bank.accountNumber}
+                                className="p-3.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/90 dark:border-slate-700 flex items-center justify-between shadow-2xs hover:border-[#3B7A57] transition-colors"
+                              >
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-xs font-bold text-slate-900 dark:text-white">
+                                      {bank.bankName}
+                                    </span>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                      {bank.label || bank.badge || "Rekening Resmi"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-mono font-bold text-sm text-[#3B7A57] dark:text-[#52B788]">
+                                      {bank.accountNumber}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">
+                                      a.n. {bank.accountHolder}
+                                    </span>
+                                  </div>
+                                  {bank.branch && (
+                                    <span className="text-[9.5px] text-slate-400 block">
+                                      Cabang: {bank.branch}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleCopyAccount(bank.accountNumber)}
+                                  className="h-7 px-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-[#3B7A57] hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg cursor-pointer"
+                                >
+                                  {copiedAccount === bank.accountNumber ? (
+                                    <>
+                                      <Check className="w-3 h-3 mr-1 text-emerald-600" />
+                                      <span className="text-emerald-600">Disalin</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3 mr-1" />
+                                      <span>Salin</span>
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                            ))}
                           </div>
-                        ));
+                        );
                       })()}
                     </div>
                   </div>

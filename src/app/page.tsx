@@ -1124,7 +1124,7 @@ export default function PublicLandingPage() {
                   <span>@dagocreativehub</span>
                 </a>
                 <a
-                  href={`https://wa.me/${process.env.NEXT_PUBLIC_CS_WHATSAPP || "6285737654572"}`}
+                  href={`https://wa.me/${process.env.NEXT_PUBLIC_CS_WHATSAPP || "6281234567890"}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-[#52B788] hover:bg-white/10 text-slate-200 transition-colors"

@@ -12,7 +12,7 @@ import { CommunityEvent } from "@/types/event";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { getProofsDirectory, getProofFilePath } from "@/lib/data-storage";
+import { getProofsDirectory, getProofFilePath, syncStorageFromDb } from "@/lib/data-storage";
 import {
   validateMagicBytes,
   ALLOWED_PROOF_EXTENSIONS,
@@ -44,6 +44,7 @@ export async function GET(
     }
 
     const token = rawToken.trim();
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
     await expirePendingBookings().catch(() => {});
     const allBookings = loadBookingsFromDisk();
     const booking = allBookings.find((b) => b.guestToken === token);
@@ -165,6 +166,7 @@ export async function POST(
     }
 
     const token = rawToken.trim();
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
     await expirePendingBookings().catch(() => {});
     const allBookings = loadBookingsFromDisk();
     const booking = allBookings.find((b) => b.guestToken === token);

@@ -1701,7 +1701,9 @@ export async function expirePendingBookings(
   for (let i = 0; i < allBookings.length; i++) {
     const b = allBookings[i];
     // Strict invariant: PAID tickets MUST NEVER expire! Only unpaid PENDING bookings can expire.
-    if (b.paymentStatus === "PENDING" && b.totalPrice > 0) {
+    // Protection: If customer already uploaded payment proof (paymentProofUrl), FREEZE expiry!
+    // Do NOT auto-cancel bookings whose transfer proof is waiting for admin verification!
+    if (b.paymentStatus === "PENDING" && b.totalPrice > 0 && !b.paymentProofUrl) {
       const createdMs = new Date(b.createdAt).getTime();
       const expiresAtMs = b.expiresAt ? new Date(b.expiresAt).getTime() : NaN;
       const isExpiredByTimestamp = !isNaN(expiresAtMs) && now > expiresAtMs;
@@ -1953,6 +1955,9 @@ export async function createEventBooking(
       paymentMethod,
       paymentStatus,
       checkInStatus: "REGISTERED",
+      checkedInQty: 0,
+      checkedInSeats: [],
+      seatCheckInTimes: {},
       destinationBankSnapshot,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -1971,6 +1976,7 @@ export interface CheckInOptions {
   reset?: boolean;
   expectedEventId?: string;
   enforceDateWindow?: boolean;
+  bypassWindow?: boolean;
 }
 
 let checkInLockPromise: Promise<void> = Promise.resolve();
@@ -2080,17 +2086,35 @@ export async function updateBookingCheckIn(
       );
     }
 
+    // 6. Validasi Jendela Waktu Check-in (Mulai H-2 Jam sebelum Acara)
+    if (!options?.reset && !options?.bypassWindow && process.env.NODE_ENV !== "test") {
+      const allEvents = loadEventsFromDisk();
+      const event = allEvents.find((e) => e.id === existing.eventId);
+      if (event && event.startDate) {
+        const now = Date.now();
+        const startMs = new Date(event.startDate).getTime();
+        const twoHoursBefore = startMs - 2 * 60 * 60 * 1000;
+        if (now < twoHoursBefore) {
+          throw new Error(
+            `Meja check-in belum dibuka untuk event "${event.title}". Check-in baru dibuka 2 jam sebelum acara dimulai.`
+          );
+        }
+      }
+    }
+
     let newCheckedInQty = currentCheckedInQty;
     let newStatus: AttendeeCheckInStatus = status;
     let newCheckedInSeats: number[] = Array.isArray(existing.checkedInSeats)
       ? [...existing.checkedInSeats]
       : Array.from({ length: currentCheckedInQty }, (_, i) => i + 1);
+    let newSeatTimes: Record<string, string> = { ...(existing.seatCheckInTimes || {}) };
 
     // Skenario A: Reset atau Batalkan Kehadiran
     if (status === "REGISTERED" || options?.reset) {
       newCheckedInQty = 0;
       newStatus = "REGISTERED";
       newCheckedInSeats = [];
+      newSeatTimes = {};
 
       // Clean up PostgreSQL atomic check-in tokens if DB is reachable
       if (process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
@@ -2118,8 +2142,16 @@ export async function updateBookingCheckIn(
           );
         }
         if (newCheckedInSeats.includes(requestedSeat)) {
+          const priorTime = existing.seatCheckInTimes?.[String(requestedSeat)] || existing.checkInTime;
+          const timeFormatted = priorTime
+            ? new Date(priorTime).toLocaleTimeString("id-ID", {
+                hour: "2-digit",
+                minute: "2-digit",
+                timeZone: "Asia/Makassar",
+              }) + " WITA"
+            : "";
           throw new Error(
-            `Tiket #${requestedSeat} (${normalizedIdentifier}) sudah digunakan untuk check-in sebelumnya.`
+            `Tiket #${requestedSeat} (${normalizedIdentifier}) sudah digunakan (check-in${timeFormatted ? ` pada pukul ${timeFormatted}` : ""}).`
           );
         }
 
@@ -2138,14 +2170,24 @@ export async function updateBookingCheckIn(
             });
           } catch (dbErr: any) {
             if (dbErr?.code === "P2002" || String(dbErr?.message || "").includes("Unique constraint")) {
+              const priorTime = existing.seatCheckInTimes?.[String(requestedSeat)] || existing.checkInTime;
+              const timeFormatted = priorTime
+                ? new Date(priorTime).toLocaleTimeString("id-ID", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: "Asia/Makassar",
+                  }) + " WITA"
+                : "";
               throw new Error(
-                `Tiket #${requestedSeat} (${normalizedIdentifier}) sudah digunakan untuk check-in sebelumnya.`
+                `Tiket #${requestedSeat} (${normalizedIdentifier}) sudah digunakan (check-in${timeFormatted ? ` pada pukul ${timeFormatted}` : ""}).`
               );
             }
           }
         }
 
+        const nowIso = new Date().toISOString();
         newCheckedInSeats.push(requestedSeat);
+        newSeatTimes[String(requestedSeat)] = nowIso;
         newCheckedInQty = newCheckedInSeats.length;
         newStatus = newCheckedInQty === ticketCount ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN";
       } else {
@@ -2155,7 +2197,6 @@ export async function updateBookingCheckIn(
         } else if (options?.targetQty !== undefined) {
           increment = options.targetQty - currentCheckedInQty;
         } else if (status === "CHECKED_IN") {
-          // Direct CHECKED_IN call without options checks in all remaining tickets
           increment = ticketCount - currentCheckedInQty;
         }
 
@@ -2165,24 +2206,19 @@ export async function updateBookingCheckIn(
 
         if (currentCheckedInQty + increment > ticketCount) {
           throw new Error(
-            `Jumlah check-in melebihi total tiket pemesanan (${ticketCount}). Sisa tiket belum check-in: ${
-              ticketCount - currentCheckedInQty
-            }.`
+            `Jumlah check-in melebihi total tiket (tersisa ${ticketCount - currentCheckedInQty} dari ${ticketCount} tiket).`
           );
         }
 
-        newCheckedInQty = currentCheckedInQty + increment;
-        if (newCheckedInQty === ticketCount) {
-          newStatus = "CHECKED_IN";
-        } else {
-          newStatus = "PARTIALLY_CHECKED_IN";
-        }
-
-        for (let s = 1; s <= ticketCount && newCheckedInSeats.length < newCheckedInQty; s++) {
+        const nowIso = new Date().toISOString();
+        for (let s = 1; s <= ticketCount && newCheckedInSeats.length < currentCheckedInQty + increment; s++) {
           if (!newCheckedInSeats.includes(s)) {
             newCheckedInSeats.push(s);
+            newSeatTimes[String(s)] = nowIso;
           }
         }
+        newCheckedInQty = newCheckedInSeats.length;
+        newStatus = newCheckedInQty === ticketCount ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN";
       }
     }
 
@@ -2191,6 +2227,7 @@ export async function updateBookingCheckIn(
       ticketCount,
       checkedInQty: newCheckedInQty,
       checkedInSeats: newCheckedInSeats,
+      seatCheckInTimes: newSeatTimes,
       checkInStatus: newStatus,
       checkInTime: newCheckedInQty > 0 ? existing.checkInTime || new Date().toISOString() : null,
       updatedAt: new Date().toISOString(),
@@ -2282,8 +2319,8 @@ export async function updateBookingPaymentStatus(
 export const MANUAL_TRANSFER_BANK_ACCOUNTS = [
   {
     bankName: "Bank BRI",
-    accountNumber: "034101000928301",
-    accountHolder: "PT DAGO CREATIVE HUB",
+    accountNumber: "000011223344",
+    accountHolder: "PT DAGO CREATIVE HUB (DEMO)",
     branch: "KC Singaraja",
     badge: "Rekening Operasional",
   },
@@ -2620,11 +2657,11 @@ export async function organizerCheckInAttendee(
     const now = Date.now();
     const startMs = new Date(event.startDate).getTime();
     const endMs = event.endDate ? new Date(event.endDate).getTime() : startMs + 24 * 60 * 60 * 1000;
-    // Allow check-in starting 6 hours before start until 12 hours after end
-    const bufferBeforeMs = 6 * 60 * 60 * 1000;
+    // Allow check-in starting 2 hours before start until 12 hours after end
+    const bufferBeforeMs = 2 * 60 * 60 * 1000;
     const bufferAfterMs = 12 * 60 * 60 * 1000;
     if (now < startMs - bufferBeforeMs) {
-      throw new Error(`Pintu check-in belum dibuka untuk event "${event.title}". Registrasi dibuka pada hari H.`);
+      throw new Error(`Pintu check-in belum dibuka untuk event "${event.title}". Check-in baru dibuka 2 jam sebelum acara dimulai.`);
     }
     if (now > endMs + bufferAfterMs) {
       throw new Error(`Pintu check-in telah ditutup karena waktu operasional event "${event.title}" telah selesai.`);

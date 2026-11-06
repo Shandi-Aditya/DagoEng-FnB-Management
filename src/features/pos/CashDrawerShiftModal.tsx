@@ -41,7 +41,7 @@ export function CashDrawerShiftModal({
   isTaxEnabled = true,
   taxRatePercent = 10,
   tenantName = "Kopi Senja (Mitra Utama)",
-  tenantPhone = "085737654572",
+  tenantPhone = "081234567890",
   onConfirmClose,
 }: CashDrawerShiftModalProps) {
   const router = useRouter();

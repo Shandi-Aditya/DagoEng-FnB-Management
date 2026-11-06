@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { loadBookingsFromDisk, getAdminEvents } from "@/lib/events";
-import { getProofsDirectory, getProofFilePath } from "@/lib/data-storage";
+import { getProofsDirectory, getProofFilePath, syncStorageFromDb } from "@/lib/data-storage";
 import { sanitizeProofFilename, MIME_BY_EXTENSION } from "@/lib/file-security";
 import { assertEventAdmin, getRequestAuthUser } from "@/lib/server-auth";
 import { CommunityEvent } from "@/types/event";
@@ -38,6 +38,7 @@ export async function GET(
     }
 
     // 1. Locate the booking associated with this proof filename
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
     const allBookings = loadBookingsFromDisk();
     const matchingBooking = allBookings.find((b) => {
       if (!b.paymentProofUrl) return false;
