@@ -60,6 +60,7 @@ export function OrganizerQRScannerModal({
   const [feedback, setFeedback] = useState<ScanResultFeedback | null>(null);
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const manualInputRef = useRef<HTMLInputElement | null>(null);
   const isStoppingRef = useRef(false);
   const lastScannedRef = useRef<{ code: string; timestamp: number } | null>(null);
 
@@ -153,6 +154,9 @@ export function OrganizerQRScannerModal({
       const targetEvent = events.find((e) => e.id === eventId);
       const eventTitle = targetEvent?.title || "Event Komunitas";
 
+      const matchSeat = ticketCode.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
+      const seatNumber = matchSeat ? parseInt(matchSeat[2], 10) : undefined;
+
       try {
         setIsProcessing(true);
         const res = await fetch("/api/events/portal/check-in", {
@@ -164,6 +168,7 @@ export function OrganizerQRScannerModal({
             eventId,
             checkInStatus: "CHECKED_IN",
             incrementQty: 1,
+            seatNumber,
           }),
         });
 
@@ -396,9 +401,14 @@ export function OrganizerQRScannerModal({
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualCode.trim()) return;
-    processCheckIn(manualCode.trim().toUpperCase());
+    const clean = manualCode.trim().toUpperCase();
     setManualCode("");
+    if (!clean) {
+      manualInputRef.current?.focus();
+      return;
+    }
+    processCheckIn(clean);
+    setTimeout(() => manualInputRef.current?.focus(), 50);
   };
 
   if (!isOpen) return null;
@@ -611,10 +621,18 @@ export function OrganizerQRScannerModal({
               <div className="relative flex-1">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
+                  ref={manualInputRef}
                   type="text"
                   value={manualCode}
                   onChange={(e) => setManualCode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === "Tab") {
+                      e.preventDefault();
+                      handleManualSubmit(e);
+                    }
+                  }}
                   placeholder="Ketik kode (mis: DAGO-EVT-...)"
+                  disabled={isProcessing}
                   className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 uppercase placeholder:normal-case focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
                 />
               </div>

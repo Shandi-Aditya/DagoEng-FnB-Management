@@ -732,7 +732,7 @@ let cachedEvents: CommunityEvent[] | null = null;
 // In-process write lock queue to serialize concurrent write operations
 let writeQueue = Promise.resolve();
 
-function loadEventsFromDisk(): CommunityEvent[] {
+export function loadEventsFromDisk(): CommunityEvent[] {
   try {
     const eventsFile = getEventsFile();
     if (!fs.existsSync(eventsFile)) {
@@ -1977,6 +1977,9 @@ export interface CheckInOptions {
   expectedEventId?: string;
   enforceDateWindow?: boolean;
   bypassWindow?: boolean;
+  ticketCode?: string;
+  seatNumber?: number;
+  currentTimestamp?: number | string;
 }
 
 let checkInLockPromise: Promise<void> = Promise.resolve();
@@ -1999,177 +2002,217 @@ export async function updateBookingCheckIn(
 
   try {
     await currentLock;
-    await syncStorageFromDb("event_bookings.json").catch(() => {});
-    const allBookings = loadBookingsFromDisk();
-    const normalizedIdentifier = (bookingId || "").trim().toUpperCase();
-    const matchSub = normalizedIdentifier.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
-    const baseCode = matchSub ? matchSub[1] : normalizedIdentifier;
-    const requestedSeat = matchSub ? parseInt(matchSub[2], 10) : undefined;
 
-    const index = allBookings.findIndex(
-      (b) =>
-        b.id === bookingId ||
-        (b.ticketCode &&
-          (b.ticketCode.trim().toUpperCase() === normalizedIdentifier ||
-           b.ticketCode.trim().toUpperCase() === baseCode))
-    );
-    if (index === -1) {
-      throw new Error(`Pemesanan tiket dengan ID atau kode ${bookingId} tidak ditemukan.`);
-    }
+    const maxRetries = 3;
+    let attempt = 0;
 
-    const existing = allBookings[index];
-    const ticketCount =
-      typeof existing.ticketCount === "number" && existing.ticketCount > 0
-        ? existing.ticketCount
-        : 1;
-    const currentCheckedInQty =
-      typeof existing.checkedInQty === "number"
-        ? existing.checkedInQty
-        : existing.checkInStatus === "CHECKED_IN"
-        ? ticketCount
-        : 0;
+    while (attempt < maxRetries) {
+      attempt++;
+      let acquiredLockKeys: string[] = [];
 
-    // 1. Validasi status: hanya CHECKED_IN, PARTIALLY_CHECKED_IN, atau REGISTERED yang sah
-    if (status !== "CHECKED_IN" && status !== "PARTIALLY_CHECKED_IN" && status !== "REGISTERED") {
-      throw new Error(
-        "Status check-in tidak valid (harus CHECKED_IN, PARTIALLY_CHECKED_IN, atau REGISTERED)."
-      );
-    }
+      try {
+        await syncStorageFromDb("event_bookings.json").catch(() => {});
+        const allBookings = loadBookingsFromDisk();
+        const effectiveIdentifier = (options?.ticketCode || bookingId || "").trim().toUpperCase();
+        const matchSub = effectiveIdentifier.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
+        const baseCode = matchSub ? matchSub[1] : effectiveIdentifier;
 
-    // 2. Tolak check-in jika tiket berstatus CANCELLED
-    if (
-      existing.paymentStatus === "CANCELLED" &&
-      (status === "CHECKED_IN" ||
-        status === "PARTIALLY_CHECKED_IN" ||
-        (options?.incrementQty ?? 0) > 0)
-    ) {
-      throw new Error("Tiket dengan status CANCELLED tidak dapat digunakan untuk check-in.");
-    }
-
-    // 3. Tolak check-in jika tiket berstatus EXPIRED
-    if (
-      existing.paymentStatus === "EXPIRED" &&
-      (status === "CHECKED_IN" ||
-        status === "PARTIALLY_CHECKED_IN" ||
-        (options?.incrementQty ?? 0) > 0)
-    ) {
-      throw new Error("Tiket dengan status EXPIRED tidak dapat digunakan untuk check-in.");
-    }
-
-    // 4. Tolak check-in jika tiket berstatus PENDING (tiket berbayar maupun tiket gratis yang belum disetujui)
-    if (
-      existing.paymentStatus === "PENDING" &&
-      (status === "CHECKED_IN" ||
-        status === "PARTIALLY_CHECKED_IN" ||
-        (options?.incrementQty ?? 0) > 0)
-    ) {
-      if (existing.totalPrice > 0) {
-        throw new Error(
-          "Tiket berbayar belum diverifikasi lunas (status pembayaran masih PENDING). Silakan verifikasi pembayaran terlebih dahulu sebelum check-in."
+        const index = allBookings.findIndex(
+          (b) =>
+            b.id === bookingId ||
+            b.id === baseCode ||
+            (b.ticketCode &&
+              (b.ticketCode.trim().toUpperCase() === effectiveIdentifier ||
+               b.ticketCode.trim().toUpperCase() === baseCode))
         );
-      } else {
-        throw new Error(
-          "Tiket gratis belum dikonfirmasi (status pendaftaran masih PENDING). Reservasi harus terkonfirmasi sebelum check-in."
-        );
-      }
-    }
-
-    // 5. Validasi final: Hanya tiket dengan status pembayaran/reservasi PAID yang dapat check-in
-    if (
-      existing.paymentStatus !== "PAID" &&
-      (status === "CHECKED_IN" ||
-        status === "PARTIALLY_CHECKED_IN" ||
-        (options?.incrementQty ?? 0) > 0)
-    ) {
-      throw new Error(
-        `Tiket dengan status pembayaran ${existing.paymentStatus} tidak dapat digunakan untuk check-in.`
-      );
-    }
-
-    // 6. Validasi Jendela Waktu Check-in (Mulai H-2 Jam sebelum Acara)
-    if (!options?.reset && !options?.bypassWindow && process.env.NODE_ENV !== "test") {
-      const allEvents = loadEventsFromDisk();
-      const event = allEvents.find((e) => e.id === existing.eventId);
-      if (event && event.startDate) {
-        const now = Date.now();
-        const startMs = new Date(event.startDate).getTime();
-        const twoHoursBefore = startMs - 2 * 60 * 60 * 1000;
-        if (now < twoHoursBefore) {
-          throw new Error(
-            `Meja check-in belum dibuka untuk event "${event.title}". Check-in baru dibuka 2 jam sebelum acara dimulai.`
-          );
+        if (index === -1) {
+          throw new Error(`Pemesanan tiket dengan ID atau kode ${bookingId} tidak ditemukan.`);
         }
-      }
-    }
 
-    let newCheckedInQty = currentCheckedInQty;
-    let newStatus: AttendeeCheckInStatus = status;
-    let newCheckedInSeats: number[] = Array.isArray(existing.checkedInSeats)
-      ? [...existing.checkedInSeats]
-      : Array.from({ length: currentCheckedInQty }, (_, i) => i + 1);
-    let newSeatTimes: Record<string, string> = { ...(existing.seatCheckInTimes || {}) };
+        const existing = allBookings[index];
+        const ticketCount =
+          typeof existing.ticketCount === "number" && existing.ticketCount > 0
+            ? existing.ticketCount
+            : 1;
+        const currentCheckedInQty =
+          typeof existing.checkedInQty === "number"
+            ? existing.checkedInQty
+            : existing.checkInStatus === "CHECKED_IN"
+            ? ticketCount
+            : 0;
 
-    // Skenario A: Reset atau Batalkan Kehadiran
-    if (status === "REGISTERED" || options?.reset) {
-      newCheckedInQty = 0;
-      newStatus = "REGISTERED";
-      newCheckedInSeats = [];
-      newSeatTimes = {};
+        let requestedSeat =
+          options?.seatNumber !== undefined
+            ? options.seatNumber
+            : matchSub
+            ? parseInt(matchSub[2], 10)
+            : undefined;
 
-      // Clean up PostgreSQL atomic check-in tokens if DB is reachable
-      if (process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
-        try {
-          const { db } = await import("./db");
-          await db.systemSetting.deleteMany({
-            where: {
-              key: { startsWith: `CHECKIN_${existing.id}_SEAT_` },
-            },
-          }).catch(() => {});
-        } catch {}
-      }
-    } else {
-      // Skenario B: Check-In (Increment atau Target)
-      if (currentCheckedInQty >= ticketCount) {
-        throw new Error(
-          "Tiket sudah digunakan untuk check-in sebelumnya (semua tiket dalam pemesanan ini sudah selesai check-in)."
-        );
-      }
-
-      if (requestedSeat !== undefined) {
-        if (requestedSeat < 1 || requestedSeat > ticketCount) {
-          throw new Error(
-            `Nomor tiket #${requestedSeat} tidak valid untuk pemesanan ini (total ${ticketCount} tiket).`
-          );
+        // Normalisasi backward-compatibility:
+        // Tiket tunggal (ticketCount === 1) tanpa suffix otomatis memiliki identitas seat 1
+        if (requestedSeat === undefined && ticketCount === 1) {
+          requestedSeat = 1;
         }
-        if (newCheckedInSeats.includes(requestedSeat)) {
-          const priorTime = existing.seatCheckInTimes?.[String(requestedSeat)] || existing.checkInTime;
-          const timeFormatted = priorTime
-            ? new Date(priorTime).toLocaleTimeString("id-ID", {
-                hour: "2-digit",
-                minute: "2-digit",
-                timeZone: "Asia/Makassar",
-              }) + " WITA"
-            : "";
+
+        // 1. Validasi status: hanya CHECKED_IN, PARTIALLY_CHECKED_IN, atau REGISTERED yang sah
+        if (status !== "CHECKED_IN" && status !== "PARTIALLY_CHECKED_IN" && status !== "REGISTERED") {
           throw new Error(
-            `Tiket #${requestedSeat} (${normalizedIdentifier}) sudah digunakan (check-in${timeFormatted ? ` pada pukul ${timeFormatted}` : ""}).`
+            "Status check-in tidak valid (harus CHECKED_IN, PARTIALLY_CHECKED_IN, atau REGISTERED)."
           );
         }
 
-        // Multi-Instance PostgreSQL ACID Atomicity Barrier:
-        // Leverages native UNIQUE constraint on SystemSetting.key across serverless lambdas
-        if (process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
-          try {
-            const { db } = await import("./db");
-            const lockKey = `CHECKIN_${existing.id}_SEAT_${requestedSeat}`;
-            await db.systemSetting.create({
-              data: {
-                key: lockKey,
-                value: new Date().toISOString(),
-                description: `Atomic check-in token for booking ${existing.id} seat ${requestedSeat}`,
-              },
-            });
-          } catch (dbErr: any) {
-            if (dbErr?.code === "P2002" || String(dbErr?.message || "").includes("Unique constraint")) {
+        // 2. Tolak check-in jika tiket berstatus CANCELLED
+        if (
+          existing.paymentStatus === "CANCELLED" &&
+          (status === "CHECKED_IN" ||
+            status === "PARTIALLY_CHECKED_IN" ||
+            (options?.incrementQty ?? 0) > 0)
+        ) {
+          throw new Error("Tiket dengan status CANCELLED tidak dapat digunakan untuk check-in.");
+        }
+
+        // 3. Tolak check-in jika tiket berstatus EXPIRED
+        if (
+          existing.paymentStatus === "EXPIRED" &&
+          (status === "CHECKED_IN" ||
+            status === "PARTIALLY_CHECKED_IN" ||
+            (options?.incrementQty ?? 0) > 0)
+        ) {
+          throw new Error("Tiket dengan status EXPIRED tidak dapat digunakan untuk check-in.");
+        }
+
+        // 4. Tolak check-in jika tiket berstatus PENDING
+        if (
+          existing.paymentStatus === "PENDING" &&
+          (status === "CHECKED_IN" ||
+            status === "PARTIALLY_CHECKED_IN" ||
+            (options?.incrementQty ?? 0) > 0)
+        ) {
+          if (existing.totalPrice > 0) {
+            throw new Error(
+              "Tiket berbayar belum diverifikasi lunas (status pembayaran masih PENDING). Silakan verifikasi pembayaran terlebih dahulu sebelum check-in."
+            );
+          } else {
+            throw new Error(
+              "Tiket gratis belum dikonfirmasi (status pendaftaran masih PENDING). Reservasi harus terkonfirmasi sebelum check-in."
+            );
+          }
+        }
+
+        // 5. Validasi final: Hanya tiket dengan status pembayaran/reservasi PAID yang dapat check-in
+        if (
+          existing.paymentStatus !== "PAID" &&
+          (status === "CHECKED_IN" ||
+            status === "PARTIALLY_CHECKED_IN" ||
+            (options?.incrementQty ?? 0) > 0)
+        ) {
+          throw new Error(
+            `Tiket dengan status pembayaran ${existing.paymentStatus} tidak dapat digunakan untuk check-in.`
+          );
+        }
+
+        // 6. Validasi Pembatalan Event & Jendela Waktu Check-in (Mulai 2 Jam sebelum Acara s.d. 12 Jam setelah Acara)
+        const shouldCheckDateWindow =
+          !options?.reset &&
+          !options?.bypassWindow &&
+          (options?.enforceDateWindow !== undefined
+            ? options.enforceDateWindow
+            : (process.env.NODE_ENV !== "test" || Boolean(options?.currentTimestamp)));
+
+        if (!options?.reset) {
+          const allEvents = loadEventsFromDisk();
+          const event = allEvents.find((e) => e.id === existing.eventId);
+          const eventTitle = event?.title || existing.eventTitle || "Event";
+
+          // 6.1. Tolak jika event telah dibatalkan atau ditolak
+          if (
+            event &&
+            (event.status === ("CANCELLED" as EventStatus) ||
+              event.status === "REJECTED" ||
+              event.status === "ARCHIVED")
+          ) {
+            throw new Error(
+              `Event "${eventTitle}" telah dibatalkan atau ditolak. Tiket tidak dapat digunakan untuk check-in.`
+            );
+          }
+
+          // 6.2. Validasi waktu operasional check-in (Asia/Makassar WITA)
+          if (shouldCheckDateWindow) {
+            const eventStartDate = event?.startDate || existing.eventDate;
+            if (eventStartDate) {
+              const now = options?.currentTimestamp
+                ? new Date(options.currentTimestamp).getTime()
+                : Date.now();
+              const startMs = new Date(eventStartDate).getTime();
+              const twoHoursBefore = startMs - 2 * 60 * 60 * 1000;
+              const endMs = event?.endDate
+                ? new Date(event.endDate).getTime()
+                : startMs + 24 * 60 * 60 * 1000;
+              const twelveHoursAfter = endMs + 12 * 60 * 60 * 1000;
+
+              if (now < twoHoursBefore) {
+                const openDateWITA = new Intl.DateTimeFormat("id-ID", {
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  timeZone: "Asia/Makassar",
+                }).format(new Date(twoHoursBefore)) + " WITA";
+                throw new Error(
+                  `Meja check-in belum dibuka untuk event "${eventTitle}". Check-in baru dibuka 2 jam sebelum acara dimulai (${openDateWITA}).`
+                );
+              }
+
+              if (now > twelveHoursAfter) {
+                throw new Error(
+                  `Pintu check-in telah ditutup karena waktu operasional event "${eventTitle}" telah selesai.`
+                );
+              }
+            }
+          }
+        }
+
+        let newCheckedInQty = currentCheckedInQty;
+        let newStatus: AttendeeCheckInStatus = status;
+        let newCheckedInSeats: number[] = Array.isArray(existing.checkedInSeats)
+          ? [...existing.checkedInSeats]
+          : Array.from({ length: currentCheckedInQty }, (_, i) => i + 1);
+        let newSeatTimes: Record<string, string> = { ...(existing.seatCheckInTimes || {}) };
+
+        // Skenario A: Reset atau Batalkan Kehadiran
+        if (status === "REGISTERED" || options?.reset) {
+          newCheckedInQty = 0;
+          newStatus = "REGISTERED";
+          newCheckedInSeats = [];
+          newSeatTimes = {};
+
+          // Clean up PostgreSQL atomic check-in tokens if DB is reachable
+          if (process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
+            try {
+              const { db } = await import("./db");
+              await db.systemSetting.deleteMany({
+                where: {
+                  key: { startsWith: `CHECKIN_${existing.id}_SEAT_` },
+                },
+              }).catch(() => {});
+            } catch {}
+          }
+        } else {
+          // Skenario B: Check-In (Increment atau Target)
+          if (currentCheckedInQty >= ticketCount) {
+            throw new Error(
+              "Tiket sudah digunakan untuk check-in sebelumnya (semua tiket dalam pemesanan ini sudah selesai check-in)."
+            );
+          }
+
+          if (requestedSeat !== undefined) {
+            if (requestedSeat < 1 || requestedSeat > ticketCount) {
+              throw new Error(
+                `Nomor tiket #${requestedSeat} tidak valid untuk pemesanan ini (total ${ticketCount} tiket).`
+              );
+            }
+            if (newCheckedInSeats.includes(requestedSeat)) {
               const priorTime = existing.seatCheckInTimes?.[String(requestedSeat)] || existing.checkInTime;
               const timeFormatted = priorTime
                 ? new Date(priorTime).toLocaleTimeString("id-ID", {
@@ -2179,64 +2222,143 @@ export async function updateBookingCheckIn(
                   }) + " WITA"
                 : "";
               throw new Error(
-                `Tiket #${requestedSeat} (${normalizedIdentifier}) sudah digunakan (check-in${timeFormatted ? ` pada pukul ${timeFormatted}` : ""}).`
+                `Tiket #${requestedSeat} (${effectiveIdentifier}) sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pada pukul ${timeFormatted})` : ""}.`
               );
             }
+
+            // Multi-Instance PostgreSQL ACID Atomicity Barrier:
+            // Leverages native UNIQUE constraint on SystemSetting.key across serverless lambdas
+            if (process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
+              try {
+                const { db } = await import("./db");
+                const lockKey = `CHECKIN_${existing.id}_SEAT_${requestedSeat}`;
+                await db.systemSetting.create({
+                  data: {
+                    key: lockKey,
+                    value: new Date().toISOString(),
+                    description: `Atomic check-in token for booking ${existing.id} seat ${requestedSeat}`,
+                  },
+                });
+                acquiredLockKeys.push(lockKey);
+              } catch (dbErr: any) {
+                if (dbErr?.code === "P2002" || String(dbErr?.message || "").includes("Unique constraint")) {
+                  const priorTime = existing.seatCheckInTimes?.[String(requestedSeat)] || existing.checkInTime;
+                  const timeFormatted = priorTime
+                    ? new Date(priorTime).toLocaleTimeString("id-ID", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        timeZone: "Asia/Makassar",
+                      }) + " WITA"
+                    : "";
+                  throw new Error(
+                    `Tiket #${requestedSeat} (${effectiveIdentifier}) sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pada pukul ${timeFormatted})` : ""}.`
+                  );
+                }
+              }
+            }
+
+            const nowIso = new Date().toISOString();
+            newCheckedInSeats.push(requestedSeat);
+            newSeatTimes[String(requestedSeat)] = nowIso;
+            newCheckedInQty = newCheckedInSeats.length;
+            newStatus = newCheckedInQty === ticketCount ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN";
+          } else {
+            let increment = 1;
+            if (options?.incrementQty !== undefined) {
+              increment = options.incrementQty;
+            } else if (options?.targetQty !== undefined) {
+              increment = options.targetQty - currentCheckedInQty;
+            } else if (status === "CHECKED_IN") {
+              increment = ticketCount - currentCheckedInQty;
+            }
+
+            if (increment <= 0) {
+              throw new Error("Kuantitas check-in yang ditambahkan harus lebih besar dari 0.");
+            }
+
+            if (currentCheckedInQty + increment > ticketCount) {
+              throw new Error(
+                `Jumlah check-in melebihi total tiket (tersisa ${ticketCount - currentCheckedInQty} dari ${ticketCount} tiket).`
+              );
+            }
+
+            const nowIso = new Date().toISOString();
+            for (let s = 1; s <= ticketCount && newCheckedInSeats.length < currentCheckedInQty + increment; s++) {
+              if (!newCheckedInSeats.includes(s)) {
+                if (process.env.DATABASE_URL && process.env.NODE_ENV !== "test") {
+                  try {
+                    const { db } = await import("./db");
+                    const lockKey = `CHECKIN_${existing.id}_SEAT_${s}`;
+                    await db.systemSetting.create({
+                      data: {
+                        key: lockKey,
+                        value: nowIso,
+                        description: `Atomic check-in token for booking ${existing.id} seat ${s}`,
+                      },
+                    });
+                    acquiredLockKeys.push(lockKey);
+                  } catch (dbErr: any) {
+                    if (dbErr?.code === "P2002" || String(dbErr?.message || "").includes("Unique constraint")) {
+                      throw new Error(`Tiket #${s} sudah digunakan untuk check-in sebelumnya.`);
+                    }
+                  }
+                }
+                newCheckedInSeats.push(s);
+                newSeatTimes[String(s)] = nowIso;
+              }
+            }
+            newCheckedInQty = newCheckedInSeats.length;
+            newStatus = newCheckedInQty === ticketCount ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN";
           }
         }
 
-        const nowIso = new Date().toISOString();
-        newCheckedInSeats.push(requestedSeat);
-        newSeatTimes[String(requestedSeat)] = nowIso;
-        newCheckedInQty = newCheckedInSeats.length;
-        newStatus = newCheckedInQty === ticketCount ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN";
-      } else {
-        let increment = 1;
-        if (options?.incrementQty !== undefined) {
-          increment = options.incrementQty;
-        } else if (options?.targetQty !== undefined) {
-          increment = options.targetQty - currentCheckedInQty;
-        } else if (status === "CHECKED_IN") {
-          increment = ticketCount - currentCheckedInQty;
+        const updated: EventTicketOrder = {
+          ...existing,
+          ticketCount,
+          checkedInQty: newCheckedInQty,
+          checkedInSeats: newCheckedInSeats,
+          seatCheckInTimes: newSeatTimes,
+          checkInStatus: newStatus,
+          checkInTime: newCheckedInQty > 0 ? existing.checkInTime || new Date().toISOString() : null,
+          updatedAt: new Date().toISOString(),
+        };
+
+        allBookings[index] = updated;
+        await saveBookingsToDisk(allBookings);
+
+        return updated;
+      } catch (err: any) {
+        // Rollback any atomic lock tokens acquired during this failed attempt:
+        if (acquiredLockKeys.length > 0 && process.env.DATABASE_URL) {
+          try {
+            const { db } = await import("./db");
+            await db.systemSetting.deleteMany({
+              where: { key: { in: acquiredLockKeys } },
+            }).catch(() => {});
+          } catch {}
         }
 
-        if (increment <= 0) {
-          throw new Error("Kuantitas check-in yang ditambahkan harus lebih besar dari 0.");
+        const isConflict =
+          String(err?.message || "").includes("LOST_UPDATE_PREVENTED") ||
+          String(err?.message || "").includes("CONCURRENT_CREATE_CONFLICT");
+
+        if (isConflict && attempt < maxRetries) {
+          const backoffMs = 50 * attempt + Math.floor(Math.random() * 50);
+          await new Promise((res) => setTimeout(res, backoffMs));
+          continue;
         }
 
-        if (currentCheckedInQty + increment > ticketCount) {
+        if (isConflict) {
           throw new Error(
-            `Jumlah check-in melebihi total tiket (tersisa ${ticketCount - currentCheckedInQty} dari ${ticketCount} tiket).`
+            "Gagal menyimpan data check-in karena konflik konkurensi data (LOST_UPDATE). Silakan lakukan scan ulang."
           );
         }
 
-        const nowIso = new Date().toISOString();
-        for (let s = 1; s <= ticketCount && newCheckedInSeats.length < currentCheckedInQty + increment; s++) {
-          if (!newCheckedInSeats.includes(s)) {
-            newCheckedInSeats.push(s);
-            newSeatTimes[String(s)] = nowIso;
-          }
-        }
-        newCheckedInQty = newCheckedInSeats.length;
-        newStatus = newCheckedInQty === ticketCount ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN";
+        throw err;
       }
     }
 
-    const updated: EventTicketOrder = {
-      ...existing,
-      ticketCount,
-      checkedInQty: newCheckedInQty,
-      checkedInSeats: newCheckedInSeats,
-      seatCheckInTimes: newSeatTimes,
-      checkInStatus: newStatus,
-      checkInTime: newCheckedInQty > 0 ? existing.checkInTime || new Date().toISOString() : null,
-      updatedAt: new Date().toISOString(),
-    };
-
-    allBookings[index] = updated;
-    await saveBookingsToDisk(allBookings);
-
-    return updated;
+    throw new Error("Gagal memproses check-in setelah batas percobaan terlampaui.");
   } finally {
     release();
   }
@@ -2668,7 +2790,10 @@ export async function organizerCheckInAttendee(
     }
   }
 
-  return updateBookingCheckIn(bookingId, checkInStatus, options);
+  return updateBookingCheckIn(bookingId, checkInStatus, {
+    ...options,
+    ticketCode: options?.ticketCode || normalizedIdentifier,
+  });
 }
 
 /**

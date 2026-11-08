@@ -14,6 +14,8 @@ import {
   updateBookingCheckIn,
   organizerCheckInAttendee,
   updateBookingPaymentStatus,
+  loadEventsFromDisk,
+  saveEventsToDisk,
 } from "@/lib/events";
 import { POST as handleDokuWebhook } from "@/app/api/webhooks/doku/route";
 import { GET as handleGetMyBookings } from "@/app/api/events/bookings/my/route";
@@ -731,6 +733,15 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
     });
 
     it("5.5. Endpoint PATCH /api/events/portal/check-in menerima ticketCode dari scanner kamera", async () => {
+      // Ensure event is currently open for check-in:
+      const evs = loadEventsFromDisk();
+      const currentEv = evs.find((e) => e.id === testEventId);
+      if (currentEv) {
+        currentEv.startDate = new Date(Date.now() - 3600000).toISOString();
+        currentEv.endDate = new Date(Date.now() + 7200000).toISOString();
+        await saveEventsToDisk(evs);
+      }
+
       const booking = await createEventBooking({
         eventId: testEventId,
         guestName: "Peserta API Scanner",

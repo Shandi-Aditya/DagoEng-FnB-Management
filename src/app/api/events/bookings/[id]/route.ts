@@ -44,6 +44,8 @@ export async function PATCH(
       incrementQty,
       targetQty,
       reset,
+      ticketCode,
+      seatNumber,
     } = body;
 
     // Strict role and permission validation on server:
@@ -141,6 +143,9 @@ export async function PATCH(
         incrementQty,
         targetQty,
         reset,
+        ticketCode: ticketCode || id,
+        seatNumber,
+        enforceDateWindow: !reset,
       });
     }
 

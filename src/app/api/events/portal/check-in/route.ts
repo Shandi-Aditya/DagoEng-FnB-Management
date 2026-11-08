@@ -22,7 +22,6 @@ export async function PATCH(req: NextRequest) {
       targetQty,
       reset,
       eventId,
-      bypassDateWindow,
     } = body;
     const identifier = (bookingId || ticketCode || "").trim();
 
@@ -62,10 +61,8 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const enforceDateWindow =
-      process.env.NODE_ENV === "test"
-        ? Boolean(body.enforceDateWindow)
-        : !reset && !bypassDateWindow;
+    // Server-enforced check-in time window: never allow client manipulation via body params
+    const enforceDateWindow = !reset;
 
     const updated = await organizerCheckInAttendee(
       auth.email,
@@ -77,6 +74,8 @@ export async function PATCH(req: NextRequest) {
         reset,
         expectedEventId: typeof eventId === "string" && eventId.trim() ? eventId.trim() : undefined,
         enforceDateWindow,
+        ticketCode: identifier,
+        seatNumber: typeof body.seatNumber === "number" ? body.seatNumber : undefined,
       }
     );
 
