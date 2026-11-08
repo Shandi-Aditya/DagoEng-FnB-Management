@@ -49,6 +49,9 @@ export default function EventCheckInDashboardPage() {
   const [ticketSearch, setTicketSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"UNCHECKED" | "CHECKED" | "ALL">("UNCHECKED");
   const [quickBarcodeInput, setQuickBarcodeInput] = useState("");
+  const [isQuickScanning, setIsQuickScanning] = useState(false);
+  const barcodeInputRef = React.useRef<HTMLInputElement>(null);
+  const lastScanRef = React.useRef<{ code: string; timestamp: number } | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [viewQRBooking, setViewQRBooking] = useState<EventTicketOrder | null>(null);
   const [groupCheckInBooking, setGroupCheckInBooking] = useState<EventTicketOrder | null>(null);
@@ -229,7 +232,13 @@ export default function EventCheckInDashboardPage() {
   const handleCheckIn = async (
     booking: EventTicketOrder,
     newStatus: AttendeeCheckInStatus,
-    options?: { incrementQty?: number; targetQty?: number; reset?: boolean }
+    options?: {
+      incrementQty?: number;
+      targetQty?: number;
+      reset?: boolean;
+      ticketCode?: string;
+      seatNumber?: number;
+    }
   ) => {
     setIsProcessingId(booking.id);
     setStatusMessage(null);
@@ -243,6 +252,8 @@ export default function EventCheckInDashboardPage() {
           reset: options?.reset || newStatus === "REGISTERED",
           incrementQty: options?.incrementQty,
           targetQty: options?.targetQty,
+          ticketCode: options?.ticketCode,
+          seatNumber: options?.seatNumber,
         }),
       });
 
@@ -268,6 +279,8 @@ export default function EventCheckInDashboardPage() {
         text:
           newStatus === "REGISTERED" || options?.reset
             ? `Status kehadiran [${booking.ticketCode}] (${booking.guestName}) berhasil direset ke 0.`
+            : options?.seatNumber !== undefined
+            ? `Tiket #${options.seatNumber} [${options.ticketCode || booking.ticketCode}] (${booking.guestName}): Berhasil check-in! (${count}/${updated.ticketCount} hadir)`
             : updated.ticketCount > 1
             ? `Tiket grup [${booking.ticketCode}] (${booking.guestName}): ${count}/${updated.ticketCount} tiket hadir ${
                 isComplete
@@ -283,75 +296,140 @@ export default function EventCheckInDashboardPage() {
     }
   };
 
+  // Quick Barcode Gun / Manual Input Check-in Submission (BUG 1 & BUG 2 Protected)
+  const handleQuickBarcodeSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (isQuickScanning) return;
 
-
-  // Quick Barcode Gun / Manual Input Check-in Submission
-  const handleQuickBarcodeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
     const cleanCode = quickBarcodeInput.trim().toUpperCase();
-    if (!cleanCode) return;
+    // Immediately clear input buffer so fast consecutive scans cannot concatenate strings
+    setQuickBarcodeInput("");
 
-    // Support both sub-ticket code (DAGO-EVT-FIT02-2) or base ticket code (DAGO-EVT-FIT02)
-    const baseCode = cleanCode.replace(/-\d+$/, "");
-    const booking = eventTickets.find(
-      (b) => b.ticketCode.toUpperCase() === cleanCode || b.ticketCode.toUpperCase() === baseCode
-    );
+    if (!cleanCode) {
+      barcodeInputRef.current?.focus();
+      return;
+    }
 
-    if (!booking) {
-      const anyBooking = bookings.find(
+    // Hardware Scanner deduplication guard against duplicate Enter/Tab events fired within 1200ms
+    const now = Date.now();
+    if (
+      lastScanRef.current &&
+      lastScanRef.current.code === cleanCode &&
+      now - lastScanRef.current.timestamp < 1200
+    ) {
+      barcodeInputRef.current?.focus();
+      return;
+    }
+    lastScanRef.current = { code: cleanCode, timestamp: now };
+
+    setIsQuickScanning(true);
+    setStatusMessage(null);
+
+    try {
+      // Support both sub-ticket code (DAGO-EVT-96354-01) or base ticket code (DAGO-EVT-96354)
+      const matchSeat = cleanCode.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
+      const baseCode = matchSeat ? matchSeat[1] : cleanCode;
+      const requestedSeat = matchSeat ? parseInt(matchSeat[2], 10) : undefined;
+
+      const booking = eventTickets.find(
         (b) => b.ticketCode.toUpperCase() === cleanCode || b.ticketCode.toUpperCase() === baseCode
       );
-      if (anyBooking) {
+
+      if (!booking) {
+        const anyBooking = bookings.find(
+          (b) => b.ticketCode.toUpperCase() === cleanCode || b.ticketCode.toUpperCase() === baseCode
+        );
+        if (anyBooking) {
+          setStatusMessage({
+            type: "error",
+            text: `Tiket [${cleanCode}] (${anyBooking.guestName}) terdaftar pada "${anyBooking.eventTitle || "event lain"}", bukan event ini!`,
+          });
+        } else {
+          setStatusMessage({
+            type: "error",
+            text: `Tiket dengan kode [${cleanCode}] tidak ditemukan pada sistem data pemesanan.`,
+          });
+        }
+        return;
+      }
+
+      if (booking.paymentStatus !== "PAID") {
         setStatusMessage({
           type: "error",
-          text: `Tiket [${cleanCode}] (${anyBooking.guestName}) terdaftar pada "${anyBooking.eventTitle || "event lain"}", bukan event ini!`,
+          text: `Tiket [${cleanCode}] (${booking.guestName}) belum berstatus Lunas (Status: ${booking.paymentStatus}).`,
+        });
+        return;
+      }
+
+      const ticketCount = booking.ticketCount || 1;
+      const currentCheckedSeats: number[] = Array.isArray(booking.checkedInSeats)
+        ? [...booking.checkedInSeats]
+        : Array.from({ length: booking.checkedInQty || 0 }, (_, i) => i + 1);
+
+      // Check if specific sub-ticket code has already checked in
+      if (requestedSeat !== undefined) {
+        if (requestedSeat < 1 || requestedSeat > ticketCount) {
+          setStatusMessage({
+            type: "error",
+            text: `Nomor tiket #${requestedSeat} tidak valid untuk pemesanan ini (total ${ticketCount} tiket).`,
+          });
+          return;
+        }
+
+        if (currentCheckedSeats.includes(requestedSeat)) {
+          const priorTime = booking.seatCheckInTimes?.[String(requestedSeat)] || booking.checkInTime;
+          const timeFormatted = priorTime
+            ? new Date(priorTime).toLocaleTimeString("id-ID", {
+                hour: "2-digit",
+                minute: "2-digit",
+                timeZone: "Asia/Makassar",
+              }) + " WITA"
+            : "";
+          setStatusMessage({
+            type: "error",
+            text: `Tiket #${requestedSeat} [${cleanCode}] (${booking.guestName}) sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pada pukul ${timeFormatted})` : ""}!`,
+          });
+          return;
+        }
+
+        const isComplete = currentCheckedSeats.length + 1 >= ticketCount;
+        await handleCheckIn(booking, isComplete ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN", {
+          ticketCode: cleanCode,
+          seatNumber: requestedSeat,
+          incrementQty: 1,
         });
       } else {
-        setStatusMessage({
-          type: "error",
-          text: `Tiket dengan kode [${cleanCode}] tidak ditemukan pada sistem data pemesanan.`,
-        });
+        if (currentCheckedSeats.length >= ticketCount) {
+          const timeStr = booking.checkInTime
+            ? new Date(booking.checkInTime).toLocaleTimeString("id-ID", {
+                hour: "2-digit",
+                minute: "2-digit",
+                timeZone: "Asia/Makassar",
+              }) + " WITA"
+            : "sebelumnya";
+          setStatusMessage({
+            type: "error",
+            text: `Peringatan: Seluruh ${ticketCount} tiket [${cleanCode}] atas nama ${booking.guestName} sudah selesai check-in sebelumnya (${timeStr})!`,
+          });
+          return;
+        }
+
+        if (ticketCount > 1) {
+          const isComplete = currentCheckedSeats.length + 1 >= ticketCount;
+          await handleCheckIn(booking, isComplete ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN", {
+            incrementQty: 1,
+          });
+        } else {
+          await handleCheckIn(booking, "CHECKED_IN", { ticketCode: cleanCode });
+        }
       }
-      return;
+    } finally {
+      setIsQuickScanning(false);
+      setQuickBarcodeInput("");
+      setTimeout(() => {
+        barcodeInputRef.current?.focus();
+      }, 50);
     }
-
-    if (booking.paymentStatus !== "PAID") {
-      setStatusMessage({
-        type: "error",
-        text: `Tiket [${cleanCode}] (${booking.guestName}) belum berstatus Lunas (Status: ${booking.paymentStatus}).`,
-      });
-      return;
-    }
-
-    const ticketCount = booking.ticketCount || 1;
-    const currentChecked =
-      typeof booking.checkedInQty === "number"
-        ? booking.checkedInQty
-        : booking.checkInStatus === "CHECKED_IN"
-        ? ticketCount
-        : 0;
-
-    if (currentChecked >= ticketCount) {
-      const timeStr = booking.checkInTime
-        ? new Date(booking.checkInTime).toLocaleTimeString("id-ID") + " WITA"
-        : "sebelumnya";
-      setStatusMessage({
-        type: "error",
-        text: `Peringatan: Seluruh ${ticketCount} tiket [${cleanCode}] atas nama ${booking.guestName} sudah selesai check-in sebelumnya (${timeStr})!`,
-      });
-      return;
-    }
-
-    if (ticketCount > 1) {
-      const newChecked = currentChecked + 1;
-      const isComplete = newChecked >= ticketCount;
-      await handleCheckIn(booking, isComplete ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN", {
-        incrementQty: 1,
-      });
-    } else {
-      await handleCheckIn(booking, "CHECKED_IN");
-    }
-    setQuickBarcodeInput("");
   };
 
   // Handle Logout & return to login
@@ -602,19 +680,34 @@ export default function EventCheckInDashboardPage() {
                       <form onSubmit={handleQuickBarcodeSubmit} className="flex items-center gap-2 bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-emerald-500/40 shadow-sm ring-1 ring-emerald-500/20">
                         <ScanLine className="w-4 h-4 text-emerald-400 shrink-0" />
                         <input
+                          ref={barcodeInputRef}
                           type="text"
                           value={quickBarcodeInput}
                           onChange={(e) => setQuickBarcodeInput(e.target.value)}
-                          placeholder="Ketik / Barcode Kode Tiket..."
-                          className="px-1 py-1 text-xs font-mono font-bold bg-transparent border-none text-white placeholder:text-slate-400 focus:outline-none focus:ring-0 shadow-none w-48 sm:w-56"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === "Tab") {
+                              e.preventDefault();
+                              handleQuickBarcodeSubmit();
+                            }
+                          }}
+                          placeholder={isQuickScanning ? "Memvalidasi tiket..." : "Ketik / Scan Barcode..."}
+                          disabled={isQuickScanning}
+                          className="px-1 py-1 text-xs font-mono font-bold bg-transparent border-none text-white placeholder:text-slate-400 focus:outline-none focus:ring-0 shadow-none w-48 sm:w-56 disabled:opacity-60"
                         />
                         <Button
                           type="submit"
                           size="sm"
-                          disabled={!quickBarcodeInput.trim()}
+                          disabled={!quickBarcodeInput.trim() || isQuickScanning}
                           className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl px-3 h-8 cursor-pointer shadow-xs disabled:opacity-40"
                         >
-                          Check-in
+                          {isQuickScanning ? (
+                            <span className="flex items-center space-x-1">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              <span>Validasi...</span>
+                            </span>
+                          ) : (
+                            "Check-in"
+                          )}
                         </Button>
                       </form>
                     </div>

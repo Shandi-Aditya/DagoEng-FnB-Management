@@ -486,6 +486,31 @@ export default function PrivateTicketViewPage() {
 
       {/* Main E-Ticket Container */}
       <div className="max-w-xl w-full mx-auto my-6 pb-12 space-y-4">
+        {/* Hidden Pre-rendered QR SVGs for 100% Reliable Download Generation for Every Sub-Ticket */}
+        <div style={{ position: "absolute", left: "-9999px", top: "-9999px", opacity: 0, pointerEvents: "none" }} aria-hidden="true">
+          {Array.from({ length: ticket.ticketCount || 1 }).map((_, i) => {
+            const seatNum = i + 1;
+            const isMulti = (ticket.ticketCount || 1) > 1;
+            const subCode = isMulti
+              ? `${ticket.ticketCode}-${String(seatNum).padStart(2, "0")}`
+              : ticket.ticketCode;
+            const subPayload = JSON.stringify({
+              ticketCode: subCode,
+              eventId: ticket.eventId,
+              seat: seatNum,
+            });
+            return (
+              <div key={seatNum} id={`sub-qr-svg-${seatNum}`}>
+                <QRCodeSVG
+                  value={subPayload}
+                  size={220}
+                  level="M"
+                  includeMargin
+                />
+              </div>
+            );
+          })}
+        </div>
         {/* Ticket Header Voucher Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-xl overflow-hidden">
           {/* Top Banner Ribbon */}

@@ -33,7 +33,13 @@ interface EventCheckInQRScannerModalProps {
   onCheckIn: (
     booking: EventTicketOrder,
     status: AttendeeCheckInStatus,
-    options?: { incrementQty?: number; targetQty?: number; reset?: boolean }
+    options?: {
+      incrementQty?: number;
+      targetQty?: number;
+      reset?: boolean;
+      ticketCode?: string;
+      seatNumber?: number;
+    }
   ) => Promise<void>;
 }
 
@@ -66,6 +72,7 @@ export function EventCheckInQRScannerModal({
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const manualInputRef = useRef<HTMLInputElement | null>(null);
   const isStoppingRef = useRef(false);
   const lastScannedRef = useRef<{ code: string; timestamp: number } | null>(null);
 
@@ -151,8 +158,8 @@ export function EventCheckInQRScannerModal({
       setIsProcessing(true);
 
       try {
-        // Support individual sub-ticket code (e.g. DAGO-EVT-FIT02-2) or base ticket code
-        const matchSeat = code.match(/^(DAGO-EVT-[A-Z0-9]+)-(\d+)$/i);
+        // Support individual sub-ticket code (e.g. DAGO-EVT-96354-01 or DAGO-EVT-FIT02-2) or base ticket code
+        const matchSeat = code.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
         const baseCode = matchSeat ? matchSeat[1] : code;
         const requestedSeat = matchSeat ? parseInt(matchSeat[2], 10) : undefined;
 
@@ -202,31 +209,50 @@ export function EventCheckInQRScannerModal({
         }
 
         const ticketCount = booking.ticketCount || 1;
-        const currentChecked =
-          typeof booking.checkedInQty === "number"
-            ? booking.checkedInQty
-            : booking.checkInStatus === "CHECKED_IN"
-            ? ticketCount
-            : 0;
+        const currentCheckedSeats: number[] = Array.isArray(booking.checkedInSeats)
+          ? [...booking.checkedInSeats]
+          : Array.from({ length: booking.checkedInQty || 0 }, (_, i) => i + 1);
 
         // Check if specific sub-ticket has already checked in
-        if (requestedSeat !== undefined && ticketCount > 1 && currentChecked >= requestedSeat) {
-          playChime(false);
-          setFeedback({
-            type: "ALREADY_USED",
-            title: "Tiket Sudah Digunakan!",
-            message: `Tiket #${requestedSeat} milik peserta [${booking.guestName}] sudah melakukan check-in sebelumnya.`,
-            ticketCode: code,
-            guestName: booking.guestName,
-            ticketCount: ticketCount,
-            checkedInQty: currentChecked,
-            timestamp: new Date().toLocaleTimeString("id-ID"),
-          });
-          return;
+        if (requestedSeat !== undefined) {
+          if (requestedSeat < 1 || requestedSeat > ticketCount) {
+            playChime(false);
+            setFeedback({
+              type: "ERROR",
+              title: "Nomor Tiket Tidak Valid",
+              message: `Nomor tiket #${requestedSeat} tidak valid untuk pemesanan ini (total ${ticketCount} tiket).`,
+              ticketCode: code,
+              timestamp: new Date().toLocaleTimeString("id-ID"),
+            });
+            return;
+          }
+
+          if (currentCheckedSeats.includes(requestedSeat)) {
+            playChime(false);
+            const priorTime = booking.seatCheckInTimes?.[String(requestedSeat)] || booking.checkInTime;
+            const timeFormatted = priorTime
+              ? new Date(priorTime).toLocaleTimeString("id-ID", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  timeZone: "Asia/Makassar",
+                }) + " WITA"
+              : "";
+            setFeedback({
+              type: "ALREADY_USED",
+              title: "Tiket Sudah Digunakan!",
+              message: `Tiket #${requestedSeat} [${code}] milik peserta [${booking.guestName}] sudah melakukan check-in sebelumnya${timeFormatted ? ` (check-in pada pukul ${timeFormatted})` : ""}.`,
+              ticketCode: code,
+              guestName: booking.guestName,
+              ticketCount: ticketCount,
+              checkedInQty: currentCheckedSeats.length,
+              timestamp: new Date().toLocaleTimeString("id-ID"),
+            });
+            return;
+          }
         }
 
         // Validate already checked in completely
-        if (currentChecked >= ticketCount) {
+        if (currentCheckedSeats.length >= ticketCount) {
           playChime(false);
           const timeStr = booking.checkInTime
             ? new Date(booking.checkInTime).toLocaleTimeString("id-ID") + " WITA"
@@ -245,12 +271,37 @@ export function EventCheckInQRScannerModal({
         }
 
         // Handle Group / Multi-Seat Booking (e.g. 2+ tickets)
-        if (ticketCount > 1) {
-          const newChecked = currentChecked + 1;
+        if (requestedSeat !== undefined) {
+          const newChecked = currentCheckedSeats.length + 1;
           const isComplete = newChecked >= ticketCount;
 
           await onCheckIn(booking, isComplete ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN", {
             incrementQty: 1,
+            ticketCode: code,
+            seatNumber: requestedSeat,
+          });
+          playChime(true);
+
+          setFeedback({
+            type: "SUCCESS",
+            title: isComplete ? "Check-in Selesai! (Lengkap) 🎉" : `Check-in Tiket #${requestedSeat} Berhasil ✅`,
+            message: isComplete
+              ? `Seluruh ${ticketCount} tiket milik ${booking.guestName} telah hadir lengkap di venue!`
+              : `Kehadiran peserta Tiket #${requestedSeat} untuk pemesanan ${booking.guestName} telah diverifikasi. Sisa ${ticketCount - newChecked} tiket belum hadir.`,
+            ticketCode: code,
+            guestName: booking.guestName,
+            ticketCount: ticketCount,
+            checkedInQty: newChecked,
+            timestamp: new Date().toLocaleTimeString("id-ID"),
+          });
+          return;
+        } else if (ticketCount > 1) {
+          const newChecked = currentCheckedSeats.length + 1;
+          const isComplete = newChecked >= ticketCount;
+
+          await onCheckIn(booking, isComplete ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN", {
+            incrementQty: 1,
+            ticketCode: code,
           });
           playChime(true);
 
@@ -259,7 +310,7 @@ export function EventCheckInQRScannerModal({
             title: isComplete ? "Check-in Grup Selesai! 🎉" : "Check-in Tiket Grup (+1) ✅",
             message: isComplete
               ? `Seluruh ${ticketCount} tiket milik ${booking.guestName} telah hadir lengkap di venue!`
-              : `Kehadiran peserta ke-${newChecked} untuk pemesanan ${booking.guestName} telah diverifikasi. Sisa ${ticketCount - newChecked} tiket belum hadir (teman dapat menyusul menggunakan QR ini).`,
+              : `Kehadiran peserta ke-${newChecked} untuk pemesanan ${booking.guestName} telah diverifikasi. Sisa ${ticketCount - newChecked} tiket belum hadir.`,
             ticketCode: code,
             guestName: booking.guestName,
             ticketCount: ticketCount,
@@ -270,7 +321,7 @@ export function EventCheckInQRScannerModal({
         }
 
         // Perform Standard Solo Check-in (1 Ticket)
-        await onCheckIn(booking, "CHECKED_IN");
+        await onCheckIn(booking, "CHECKED_IN", { ticketCode: code });
         playChime(true);
 
         setFeedback({
@@ -441,9 +492,14 @@ export function EventCheckInQRScannerModal({
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualCode.trim()) return;
-    processTicket(manualCode.trim());
+    const clean = manualCode.trim();
     setManualCode("");
+    if (!clean) {
+      manualInputRef.current?.focus();
+      return;
+    }
+    processTicket(clean);
+    setTimeout(() => manualInputRef.current?.focus(), 50);
   };
 
   if (!isOpen) return null;
@@ -632,9 +688,16 @@ export function EventCheckInQRScannerModal({
             </label>
             <div className="flex gap-2">
               <input
+                ref={manualInputRef}
                 type="text"
                 value={manualCode}
                 onChange={(e) => setManualCode(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === "Tab") {
+                    e.preventDefault();
+                    handleManualSubmit(e);
+                  }
+                }}
                 placeholder="Contoh: DAGO-EVT-72676"
                 disabled={isProcessing}
                 className="flex-1 px-3 py-2 text-xs font-mono rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white"
