@@ -301,14 +301,36 @@ export default function EventCheckInDashboardPage() {
     if (e) e.preventDefault();
     if (isQuickScanning) return;
 
-    const cleanCode = quickBarcodeInput.trim().toUpperCase();
+    const rawInput = quickBarcodeInput.trim();
     // Immediately clear input buffer so fast consecutive scans cannot concatenate strings
     setQuickBarcodeInput("");
 
-    if (!cleanCode) {
+    if (!rawInput) {
       barcodeInputRef.current?.focus();
       return;
     }
+
+    // Flexible QR parser: extracts ticket code whether scanner sends raw code, JSON payload, or ticket URL
+    let parsedCode = rawInput;
+    if (parsedCode.startsWith("{") && parsedCode.endsWith("}")) {
+      try {
+        const obj = JSON.parse(parsedCode);
+        if (obj.ticketCode) parsedCode = String(obj.ticketCode).trim();
+      } catch {}
+    }
+    if (parsedCode.includes('"ticketCode"')) {
+      const match = parsedCode.match(/"ticketCode"\s*:\s*"([^"]+)"/);
+      if (match && match[1]) parsedCode = match[1].trim();
+    }
+    if (parsedCode.startsWith("DAGO-CHECKIN:")) {
+      const parts = parsedCode.split(":");
+      if (parts[1]) parsedCode = parts[1].trim();
+    }
+    const matchUrl = parsedCode.match(/DAGO-EVT-[A-Z0-9-]+/i);
+    if (matchUrl) {
+      parsedCode = matchUrl[0];
+    }
+    const cleanCode = parsedCode.trim().toUpperCase();
 
     // Hardware Scanner deduplication guard against duplicate Enter/Tab events fired within 1200ms
     const now = Date.now();
@@ -331,14 +353,24 @@ export default function EventCheckInDashboardPage() {
       const baseCode = matchSeat ? matchSeat[1] : cleanCode;
       const requestedSeat = matchSeat ? parseInt(matchSeat[2], 10) : undefined;
 
-      const booking = eventTickets.find(
-        (b) => b.ticketCode.toUpperCase() === cleanCode || b.ticketCode.toUpperCase() === baseCode
-      );
+      const booking = eventTickets.find((b) => {
+        const bCode = (b.ticketCode || "").trim().toUpperCase();
+        const bId = (b.id || "").trim().toUpperCase();
+        return (
+          (bCode && (bCode === cleanCode || bCode === baseCode)) ||
+          (bId && (bId === cleanCode || bId === baseCode))
+        );
+      });
 
       if (!booking) {
-        const anyBooking = bookings.find(
-          (b) => b.ticketCode.toUpperCase() === cleanCode || b.ticketCode.toUpperCase() === baseCode
-        );
+        const anyBooking = bookings.find((b) => {
+          const bCode = (b.ticketCode || "").trim().toUpperCase();
+          const bId = (b.id || "").trim().toUpperCase();
+          return (
+            (bCode && (bCode === cleanCode || bCode === baseCode)) ||
+            (bId && (bId === cleanCode || bId === baseCode))
+          );
+        });
         if (anyBooking) {
           setStatusMessage({
             type: "error",
@@ -467,44 +499,92 @@ export default function EventCheckInDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex flex-col justify-between transition-colors duration-200">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F8FAFC] dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex flex-col justify-between transition-colors duration-200">
       {/* 1. DEDICATED FIELD OFFICER TOP NAVBAR */}
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#0B0F17]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-2xs">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          {/* Brand & Station Identity */}
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center font-black text-sm shrink-0 shadow-2xs">
-              <QrCode className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <span className="text-sm font-black text-slate-900 dark:text-white tracking-tight">
-                  DagoEng Event Desk
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] border border-emerald-200 dark:border-emerald-800">
-                  Meja Registrasi & Check-In
-                </span>
+      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#0B0F17]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-2xs w-full max-w-full">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-0 sm:h-16 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-4 w-full">
+          {/* Top Line on Mobile: Brand on Left, Actions on Right */}
+          <div className="flex items-center justify-between sm:justify-start space-x-3 w-full sm:w-auto">
+            <div className="flex items-center space-x-2.5 min-w-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center font-black text-sm shrink-0 shadow-2xs">
+                <QrCode className="w-5 h-5" />
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center space-x-1.5 mt-0.5">
-                <span>Petugas:</span>
-                <strong className="text-slate-800 dark:text-slate-200">
-                  {user?.name || "Petugas Lapangan"}
-                </strong>
-                <span className="text-slate-300 dark:text-slate-600">•</span>
-                <span className="font-mono text-[10px] text-slate-400">{user?.email}</span>
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                  {user?.email === "eventstaff@dagoeng.com"
-                    ? "Petugas Lapangan Resmi"
-                    : isHubAdmin
-                    ? "Supervisor / Hub Admin"
-                    : "Penyelenggara"}
-                </span>
-              </p>
+              <div className="min-w-0">
+                <div className="flex items-center space-x-1.5 sm:space-x-2">
+                  <span className="text-sm font-black text-slate-900 dark:text-white tracking-tight truncate">
+                    DagoEng Event Desk
+                  </span>
+                  <span className="text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] border border-emerald-200 dark:border-emerald-800 shrink-0">
+                    Check-In
+                  </span>
+                </div>
+                {/* Desktop Officer Badge */}
+                <p className="hidden sm:flex text-[11px] text-slate-500 dark:text-slate-400 items-center space-x-1.5 mt-0.5">
+                  <span>Petugas:</span>
+                  <strong className="text-slate-800 dark:text-slate-200 truncate max-w-[140px] md:max-w-none">
+                    {user?.name || "Petugas Lapangan"}
+                  </strong>
+                  <span className="text-slate-300 dark:text-slate-600">•</span>
+                  <span className="font-mono text-[10px] text-slate-400 truncate max-w-[160px]">{user?.email}</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
+                    {user?.email === "eventstaff@dagoeng.com"
+                      ? "Petugas Lapangan Resmi"
+                      : isHubAdmin
+                      ? "Supervisor / Hub Admin"
+                      : "Penyelenggara"}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            {/* Mobile Actions in Header Top Row */}
+            <div className="flex sm:hidden items-center space-x-1.5 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={loadData}
+                disabled={isLoading}
+                className="h-8 w-8 p-0 rounded-xl border-slate-200 dark:border-slate-800"
+                title="Segarkan data tiket"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              </Button>
+
+              <ThemeToggle variant="compact" />
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleOfficerLogout}
+                className="h-8 w-8 p-0 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl"
+                title="Keluar dari sesi petugas"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </Button>
             </div>
           </div>
 
-          {/* Action Tools & Session Controls */}
-          <div className="flex items-center space-x-2">
+          {/* Mobile Sub-Row: Officer Details */}
+          <div className="flex sm:hidden items-center justify-between text-[11px] px-2.5 py-1.5 rounded-xl bg-slate-100/70 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/50 text-slate-600 dark:text-slate-300">
+            <div className="flex items-center space-x-1.5 truncate">
+              <span className="text-slate-400">Petugas:</span>
+              <strong className="text-slate-800 dark:text-slate-100 truncate max-w-[180px]">
+                {user?.name || "Petugas Lapangan"}
+              </strong>
+            </div>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] border border-emerald-200 dark:border-emerald-800 shrink-0">
+              {user?.email === "eventstaff@dagoeng.com"
+                ? "Petugas Lapangan"
+                : isHubAdmin
+                ? "Admin Hub"
+                : "Penyelenggara"}
+            </span>
+          </div>
+
+          {/* Desktop Actions */}
+          <div className="hidden sm:flex items-center space-x-2">
             {isHubAdmin && (
               <Link href="/dashboard" className="hidden md:inline-flex">
                 <Button variant="ghost" size="sm" className="h-8 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 cursor-pointer">
@@ -545,7 +625,7 @@ export default function EventCheckInDashboardPage() {
       </header>
 
       {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 flex-1 w-full">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 flex-1 w-full max-w-full min-w-0">
         {/* Global Feedback Alert */}
         {statusMessage && (
           <div
@@ -591,13 +671,13 @@ export default function EventCheckInDashboardPage() {
         )}
 
         {events.length > 0 && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6 w-full max-w-full min-w-0">
             {/* Event Selector Card */}
-            <Card className="p-4 sm:p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-3xl shadow-xs">
-              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-                <div className="space-y-1">
+            <Card className="p-3.5 sm:p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-2xl sm:rounded-3xl shadow-xs w-full max-w-full min-w-0">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4 w-full min-w-0">
+                <div className="space-y-1 min-w-0">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                    <Sparkles className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
                     <span>Pilih Event Operasional:</span>
                   </label>
                   <p className="text-[11px] text-slate-400">
@@ -605,7 +685,7 @@ export default function EventCheckInDashboardPage() {
                   </p>
                 </div>
 
-                <div className="w-full sm:w-80 md:w-96">
+                <div className="w-full md:w-96 min-w-0">
                   <EventSearchInput
                     events={filteredEventsList}
                     selectedEventId={selectedEventId}
@@ -620,36 +700,36 @@ export default function EventCheckInDashboardPage() {
 
             {/* Selected Event Context */}
             {selectedEvent && (
-              <div className="space-y-6 animate-in fade-in duration-200">
+              <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 w-full max-w-full min-w-0">
                 {/* 2. DEDICATED QR SCANNER ACTION HERO BANNER */}
-                <Card className="p-6 border border-emerald-500/30 bg-gradient-to-br from-slate-900 via-[#0F2317] to-slate-900 text-white rounded-3xl shadow-lg relative overflow-hidden">
-                  <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-                    <div className="space-y-2 max-w-xl">
+                <Card className="p-4 sm:p-6 border border-emerald-500/30 bg-gradient-to-br from-slate-900 via-[#0F2317] to-slate-900 text-white rounded-2xl sm:rounded-3xl shadow-lg relative overflow-hidden w-full max-w-full min-w-0">
+                  <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 sm:gap-6 w-full min-w-0">
+                    <div className="space-y-2 max-w-xl w-full min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge className="bg-[#3B7A57] text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full border-none">
+                        <Badge className="bg-[#3B7A57] text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full border-none shrink-0">
                           {selectedEvent.category}
                         </Badge>
-                        <span className="text-xs text-slate-300 font-medium">
+                        <span className="text-xs text-slate-300 font-medium truncate">
                           Penyelenggara: <strong className="text-white">{selectedEvent.organizerName}</strong>
                         </span>
                       </div>
-                      <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-snug">
+                      <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-snug break-words">
                         {selectedEvent.title}
                       </h2>
-                      <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300">
-                        <span className="flex items-center space-x-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-[#52B788]" />
+                      <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 text-xs text-slate-300">
+                        <span className="flex items-center space-x-1.5 shrink-0">
+                          <Calendar className="w-3.5 h-3.5 text-[#52B788] shrink-0" />
                           <span>
                             {new Date(selectedEvent.startDate).toLocaleDateString("id-ID", {
-                              weekday: "long",
+                              weekday: "short",
                               day: "numeric",
-                              month: "long",
+                              month: "short",
                               year: "numeric",
                             })}
                           </span>
                         </span>
-                        <span className="flex items-center space-x-1.5">
-                          <Clock className="w-3.5 h-3.5 text-[#52B788]" />
+                        <span className="flex items-center space-x-1.5 shrink-0">
+                          <Clock className="w-3.5 h-3.5 text-[#52B788] shrink-0" />
                           <span>
                             {new Date(selectedEvent.startDate).toLocaleTimeString("id-ID", {
                               hour: "2-digit",
@@ -658,26 +738,26 @@ export default function EventCheckInDashboardPage() {
                             WITA
                           </span>
                         </span>
-                        <span className="flex items-center space-x-1.5">
-                          <MapPin className="w-3.5 h-3.5 text-[#52B788]" />
-                          <span>{selectedEvent.location}</span>
+                        <span className="flex items-center space-x-1.5 truncate max-w-full">
+                          <MapPin className="w-3.5 h-3.5 text-[#52B788] shrink-0" />
+                          <span className="truncate">{selectedEvent.location}</span>
                         </span>
                       </div>
                     </div>
 
                     {/* Prominent QR Camera Scanner Button & Barcode Gun Input */}
-                    <div className="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+                    <div className="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 shrink-0">
                       <Button
                         type="button"
                         onClick={() => setIsScannerOpen(true)}
-                        className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-black text-xs sm:text-sm px-6 py-5 rounded-2xl shadow-lg shadow-[#3B7A57]/30 flex items-center justify-center space-x-2.5 cursor-pointer transition-all hover:scale-105 active:scale-95"
+                        className="w-full sm:w-auto bg-[#3B7A57] hover:bg-[#2E6044] text-white font-black text-xs sm:text-sm px-5 sm:px-6 py-4 sm:py-5 rounded-2xl shadow-lg shadow-[#3B7A57]/30 flex items-center justify-center space-x-2.5 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
                       >
-                        <Camera className="w-5 h-5 text-white" />
+                        <Camera className="w-5 h-5 text-white shrink-0" />
                         <span>Buka Kamera Scanner QR</span>
                       </Button>
 
                       {/* Fast Barcode Gun Form */}
-                      <form onSubmit={handleQuickBarcodeSubmit} className="flex items-center gap-2 bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-emerald-500/40 shadow-sm ring-1 ring-emerald-500/20">
+                      <form onSubmit={handleQuickBarcodeSubmit} className="w-full sm:w-auto flex items-center gap-2 bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-emerald-500/40 shadow-sm ring-1 ring-emerald-500/20 min-w-0">
                         <ScanLine className="w-4 h-4 text-emerald-400 shrink-0" />
                         <input
                           ref={barcodeInputRef}
@@ -692,13 +772,13 @@ export default function EventCheckInDashboardPage() {
                           }}
                           placeholder={isQuickScanning ? "Memvalidasi tiket..." : "Ketik / Scan Barcode..."}
                           disabled={isQuickScanning}
-                          className="px-1 py-1 text-xs font-mono font-bold bg-transparent border-none text-white placeholder:text-slate-400 focus:outline-none focus:ring-0 shadow-none w-48 sm:w-56 disabled:opacity-60"
+                          className="flex-1 sm:w-56 min-w-0 px-1 py-1 text-xs font-mono font-bold bg-transparent border-none text-white placeholder:text-slate-400 focus:outline-none focus:ring-0 shadow-none disabled:opacity-60"
                         />
                         <Button
                           type="submit"
                           size="sm"
                           disabled={!quickBarcodeInput.trim() || isQuickScanning}
-                          className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl px-3 h-8 cursor-pointer shadow-xs disabled:opacity-40"
+                          className="shrink-0 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl px-3 h-8 cursor-pointer shadow-xs disabled:opacity-40"
                         >
                           {isQuickScanning ? (
                             <span className="flex items-center space-x-1">
@@ -715,47 +795,47 @@ export default function EventCheckInDashboardPage() {
                 </Card>
 
                 {/* 3. KPI ATTENDANCE METRICS */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                  <Card className="p-4 sm:p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-3xl shadow-xs">
-                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center space-x-1">
-                      <Ticket className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
-                      <span>Total Tiket Terdaftar</span>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full max-w-full min-w-0">
+                  <Card className="p-3.5 sm:p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-2xl sm:rounded-3xl shadow-xs min-w-0">
+                    <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center space-x-1 truncate">
+                      <Ticket className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                      <span className="truncate">Total Tiket</span>
                     </p>
-                    <p className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white mt-1">
+                    <p className="text-xl sm:text-3xl font-black text-slate-900 dark:text-white mt-1">
                       {stats.totalTickets}
                     </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Semua pemesanan tiket</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5 truncate">Semua pemesanan tiket</p>
                   </Card>
 
-                  <Card className="p-4 sm:p-5 border border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-3xl shadow-xs">
-                    <p className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider flex items-center space-x-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Sudah Check-In</span>
+                  <Card className="p-3.5 sm:p-5 border border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-2xl sm:rounded-3xl shadow-xs min-w-0">
+                    <p className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider flex items-center space-x-1 truncate">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="truncate">Sudah Check-In</span>
                     </p>
-                    <p className="text-2xl sm:text-3xl font-black text-emerald-700 dark:text-emerald-400 mt-1">
+                    <p className="text-xl sm:text-3xl font-black text-emerald-700 dark:text-emerald-400 mt-1">
                       {stats.checkedInCount}
                     </p>
-                    <p className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 mt-0.5">Telah berada di lokasi</p>
+                    <p className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 mt-0.5 truncate">Telah berada di lokasi</p>
                   </Card>
 
-                  <Card className="p-4 sm:p-5 border border-amber-500/20 bg-amber-50/50 dark:bg-amber-950/20 rounded-3xl shadow-xs">
-                    <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider flex items-center space-x-1">
-                      <Clock className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Belum Hadir</span>
+                  <Card className="p-3.5 sm:p-5 border border-amber-500/20 bg-amber-50/50 dark:bg-amber-950/20 rounded-2xl sm:rounded-3xl shadow-xs min-w-0">
+                    <p className="text-[10px] sm:text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider flex items-center space-x-1 truncate">
+                      <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span className="truncate">Belum Hadir</span>
                     </p>
-                    <p className="text-2xl sm:text-3xl font-black text-amber-700 dark:text-amber-400 mt-1">
+                    <p className="text-xl sm:text-3xl font-black text-amber-700 dark:text-amber-400 mt-1">
                       {stats.remainingCount}
                     </p>
-                    <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mt-0.5">Menunggu verifikasi</p>
+                    <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mt-0.5 truncate">Menunggu verifikasi</p>
                   </Card>
 
-                  <Card className="p-4 sm:p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-3xl shadow-xs">
-                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center space-x-1">
-                      <TrendingUp className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
-                      <span>Tingkat Kehadiran</span>
+                  <Card className="p-3.5 sm:p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-2xl sm:rounded-3xl shadow-xs min-w-0">
+                    <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center space-x-1 truncate">
+                      <TrendingUp className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                      <span className="truncate">Kehadiran</span>
                     </p>
                     <div className="flex items-baseline space-x-1.5 mt-1">
-                      <p className="text-2xl sm:text-3xl font-black text-[#3B7A57] dark:text-[#52B788]">
+                      <p className="text-xl sm:text-3xl font-black text-[#3B7A57] dark:text-[#52B788]">
                         {stats.percentage}%
                       </p>
                       <span className="text-[10px] text-slate-400">attendance</span>
@@ -770,14 +850,14 @@ export default function EventCheckInDashboardPage() {
                 </div>
 
                 {/* 4. ATTENDEES TABLE WITH FAST FILTER TABS */}
-                <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-3xl shadow-xs overflow-hidden">
-                  <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+                <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-2xl sm:rounded-3xl shadow-xs overflow-hidden w-full max-w-full min-w-0">
+                  <div className="p-3.5 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4 w-full min-w-0">
                     {/* Filter Tabs */}
-                    <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-2xl w-full sm:w-auto border border-slate-200/50 dark:border-slate-700/50">
+                    <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-2xl w-full md:w-auto border border-slate-200/50 dark:border-slate-700/50 overflow-x-auto no-scrollbar">
                       <button
                         type="button"
                         onClick={() => setActiveTab("UNCHECKED")}
-                        className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        className={`flex-1 sm:flex-none whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                           activeTab === "UNCHECKED"
                             ? "bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-200 shadow-xs border border-amber-300/30 dark:border-amber-700/50"
                             : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
@@ -788,7 +868,7 @@ export default function EventCheckInDashboardPage() {
                       <button
                         type="button"
                         onClick={() => setActiveTab("CHECKED")}
-                        className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        className={`flex-1 sm:flex-none whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                           activeTab === "CHECKED"
                             ? "bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-200 shadow-xs border border-emerald-300/30 dark:border-emerald-700/50"
                             : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
@@ -799,7 +879,7 @@ export default function EventCheckInDashboardPage() {
                       <button
                         type="button"
                         onClick={() => setActiveTab("ALL")}
-                        className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        className={`flex-1 sm:flex-none whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                           activeTab === "ALL"
                             ? "bg-white dark:bg-slate-700 text-[#3B7A57] dark:text-[#52B788] shadow-xs border border-[#3B7A57]/30 dark:border-[#52B788]/50"
                             : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
@@ -810,7 +890,7 @@ export default function EventCheckInDashboardPage() {
                     </div>
 
                     {/* Real-time Search Box */}
-                    <div className="relative w-full sm:w-80">
+                    <div className="relative w-full md:w-80 min-w-0">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
@@ -831,9 +911,221 @@ export default function EventCheckInDashboardPage() {
                     </div>
                   </div>
 
-                  {/* Attendees Table */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
+                  {/* 4A. MOBILE ATTENDEE CARD VIEW (FOR SMARTPHONE SCREENS) */}
+                  <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800 p-2 sm:p-3 space-y-2.5">
+                    {filteredTickets.length > 0 ? (
+                      filteredTickets.map((b) => {
+                        const ticketCount = b.ticketCount || 1;
+                        const checkedQty =
+                          typeof b.checkedInQty === "number"
+                            ? b.checkedInQty
+                            : b.checkInStatus === "CHECKED_IN"
+                            ? ticketCount
+                            : 0;
+                        const isFullyCheckedIn = b.checkInStatus === "CHECKED_IN" || checkedQty >= ticketCount;
+                        const isPartiallyCheckedIn = !isFullyCheckedIn && checkedQty > 0;
+                        const isPaid = b.paymentStatus === "PAID";
+                        const isProcessing = isProcessingId === b.id;
+                        const sisa = Math.max(0, ticketCount - checkedQty);
+
+                        return (
+                          <div
+                            key={b.id}
+                            className={`p-3.5 rounded-2xl border transition-all ${
+                              isFullyCheckedIn
+                                ? "bg-emerald-50/20 dark:bg-emerald-950/15 border-emerald-500/25"
+                                : "bg-white dark:bg-[#161F31]/80 border-slate-200/70 dark:border-slate-800 shadow-2xs"
+                            }`}
+                          >
+                            {/* Card Top: Code, Pax, Payment Badge */}
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <div className="flex items-center space-x-2 min-w-0">
+                                <span className="font-mono font-black text-xs text-slate-900 dark:text-slate-100 tracking-tight">
+                                  {b.ticketCode}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setViewQRBooking(b)}
+                                  className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors"
+                                  title="Lihat QR Code"
+                                >
+                                  <QrCode className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              <div className="flex items-center space-x-1.5 shrink-0">
+                                <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300">
+                                  {ticketCount} Pax
+                                </span>
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                                    b.paymentStatus === "PAID"
+                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
+                                      : b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED"
+                                      ? "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
+                                      : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
+                                  }`}
+                                >
+                                  {b.paymentStatus}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Card Middle: Attendee Name & Contact */}
+                            <div className="mb-2.5 space-y-0.5">
+                              <p className="font-bold text-sm text-slate-900 dark:text-white leading-tight">
+                                {b.guestName}
+                              </p>
+                              {b.institution && (
+                                <p className="text-[11px] text-slate-400">{b.institution}</p>
+                              )}
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center space-x-1.5 pt-0.5">
+                                <span className="truncate max-w-[150px]">{b.guestEmail}</span>
+                                <span>•</span>
+                                <span className="font-mono">{b.guestPhone}</span>
+                              </p>
+                            </div>
+
+                            {/* Card Bottom: Status & Action Button */}
+                            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                              <div className="min-w-0">
+                                {isFullyCheckedIn ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white shadow-2xs">
+                                    <Check className="w-3 h-3 mr-1 shrink-0" />
+                                    HADIR {ticketCount > 1 ? `(${ticketCount} Pax)` : ""}
+                                  </span>
+                                ) : isPartiallyCheckedIn ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800">
+                                    HADIR {checkedQty}/{ticketCount} Pax (Sisa {sisa})
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800">
+                                    BELUM HADIR {ticketCount > 1 ? `(0/${ticketCount})` : ""}
+                                  </span>
+                                )}
+                                {b.checkInTime && (
+                                  <p className="text-[9px] text-slate-400 mt-0.5">
+                                    {new Date(b.checkInTime).toLocaleTimeString("id-ID", {
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}{" "}
+                                    WITA
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="flex items-center space-x-1.5 shrink-0">
+                                {!isFullyCheckedIn ? (
+                                  <>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      disabled={!isPaid || isProcessing}
+                                      onClick={() => {
+                                        if (ticketCount > 1) {
+                                          setGroupCheckInBooking(b);
+                                        } else {
+                                          handleCheckIn(b, "CHECKED_IN");
+                                        }
+                                      }}
+                                      className={`h-8 px-3.5 text-xs font-bold rounded-xl shadow-xs cursor-pointer ${
+                                        !isPaid
+                                          ? "opacity-50 cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-800"
+                                          : "bg-[#3B7A57] hover:bg-[#2E6044] text-white"
+                                      }`}
+                                    >
+                                      <Check className="w-3.5 h-3.5 mr-1" />
+                                      {isProcessing
+                                        ? "Menyimpan..."
+                                        : isPartiallyCheckedIn
+                                        ? `+1 Pax`
+                                        : "Check-in"}
+                                    </Button>
+
+                                    {isPartiallyCheckedIn && (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        disabled={isProcessing}
+                                        onClick={() => handleCheckIn(b, "REGISTERED", { reset: true })}
+                                        className="h-8 px-2 text-xs font-semibold text-slate-400 hover:text-rose-600 border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer"
+                                        title="Reset kehadiran"
+                                      >
+                                        <RotateCcw className="w-3 h-3" />
+                                      </Button>
+                                    )}
+                                  </>
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={isProcessing}
+                                    onClick={() => handleCheckIn(b, "REGISTERED", { reset: true })}
+                                    className="h-8 px-2.5 text-xs font-semibold text-slate-500 hover:text-rose-600 border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer"
+                                    title="Reset status kehadiran"
+                                  >
+                                    <RotateCcw className="w-3 h-3 mr-1" />
+                                    Reset
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="py-12 text-center">
+                        <div className="max-w-md mx-auto space-y-3 px-4">
+                          {eventTickets.length > 0 && stats.remainingCount === 0 && activeTab === "UNCHECKED" ? (
+                            <>
+                              <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                                <CheckCircle2 className="w-6 h-6" />
+                              </div>
+                              <div>
+                                <p className="font-bold text-sm text-slate-800 dark:text-slate-100">
+                                  Semua Peserta ({stats.checkedInCount}) Sudah Hadir & Check-in!
+                                </p>
+                                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                                  Tidak ada peserta yang berstatus &quot;Belum Hadir&quot; pada event ini.
+                                </p>
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => setActiveTab("CHECKED")}
+                                className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl cursor-pointer"
+                              >
+                                Lihat {stats.checkedInCount} Peserta yang Sudah Hadir
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center mx-auto text-slate-400">
+                                <Ticket className="w-6 h-6 text-slate-400" />
+                              </div>
+                              <div>
+                                <p className="font-bold text-sm text-slate-800 dark:text-slate-200">
+                                  {eventTickets.length === 0
+                                    ? "Belum Ada Peserta Terdaftar di Event Ini"
+                                    : "Tidak Ada Tiket yang Cocok"}
+                                </p>
+                                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                                  {eventTickets.length === 0
+                                    ? `Event "${selectedEvent?.title}" saat ini belum memiliki transaksi pemesanan tiket.`
+                                    : "Tidak ditemukan data tiket yang cocok dengan filter tab atau kata kunci pencarian Anda."}
+                                </p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 4B. DESKTOP ATTENDEES TABLE VIEW */}
+                  <div className="hidden md:block overflow-x-auto w-full min-w-0">
+                    <table className="w-full text-left text-xs min-w-[650px]">
                       <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 font-bold uppercase text-[10px]">
                         <tr>
                           <th className="py-3.5 px-4">Kode Tiket</th>

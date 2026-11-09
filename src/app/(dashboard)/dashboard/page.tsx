@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useDateFilter } from "@/contexts/DateFilterContext";
@@ -35,13 +36,15 @@ import {
 } from "lucide-react";
 
 export default function DashboardPage() {
-  const { user, activeOrgModules } = useAuth();
+  const router = useRouter();
+  const { user, activeOrgModules, isLoading } = useAuth();
   const { isAllOutlets, activeOutlet } = useOutlet();
-  const { formattedRangeLabel } = useDateFilter();
+  const { formattedRangeLabel, isDateInRange } = useDateFilter();
   const { filteredOrders } = useOrders();
 
   const [isMounted, setIsMounted] = React.useState(false);
-  const [eventStats, setEventStats] = React.useState<{
+  const [allBookings, setAllBookings] = React.useState<any[]>([]);
+  const [fallbackStats, setFallbackStats] = React.useState<{
     totalRevenue: number;
     paidBookingsCount: number;
     platformRevenue: number;
@@ -63,9 +66,48 @@ export default function DashboardPage() {
     setIsMounted(true);
   }, []);
 
-  const isDagoOwner = user?.scopeLevel === "ORGANIZATION" || user?.scopeLevel === "PLATFORM";
+  const isDagoOwner =
+    (user?.role?.slug === "OWNER" || user?.role?.slug === "SUPER_ADMIN") &&
+    (user?.scopeLevel === "ORGANIZATION" || user?.scopeLevel === "PLATFORM");
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
   const userTenantId = user?.tenant?.id;
+
+  // Single-session RBAC guard: Non-executive personas attempting to open executive dashboard
+  // are routed to their designated working station.
+  React.useEffect(() => {
+    if (user && isMounted && !isLoading) {
+      if (user.role?.slug === "WAITER" || user.permissions?.includes("events:checkin")) {
+        router.replace("/events/checkin");
+      } else if (user.role?.slug === "CUSTOMER") {
+        router.replace("/customer");
+      }
+    }
+  }, [user, isMounted, isLoading, router]);
+
+  // Reactive date-range calculation for Event Komunitas bookings and platform fee
+  const eventStats = React.useMemo(() => {
+    if (!allBookings.length) {
+      return fallbackStats;
+    }
+    const filteredPaid = allBookings.filter(
+      (b: any) =>
+        b.paymentStatus === "PAID" &&
+        (isDateInRange ? isDateInRange(b.createdAt) : true)
+    );
+    const totalRevenue = filteredPaid.reduce(
+      (sum: number, b: any) => sum + (b.totalPrice || 0),
+      0
+    );
+    const paidBookingsCount = filteredPaid.reduce(
+      (sum: number, b: any) => sum + (b.ticketCount || 1),
+      0
+    );
+    const platformRevenue = filteredPaid.reduce(
+      (sum: number, b: any) => sum + (b.platformFeeAmount || 0),
+      0
+    );
+    return { totalRevenue, paidBookingsCount, platformRevenue };
+  }, [allBookings, fallbackStats, isDateInRange]);
 
   React.useEffect(() => {
     if (isDagoOwner) {
@@ -75,13 +117,14 @@ export default function DashboardPage() {
         .then((json) => {
           if (json.success) {
             if (json.stats) {
-              setEventStats({
+              setFallbackStats({
                 totalRevenue: json.stats.totalTicketRevenue || 0,
                 paidBookingsCount: json.stats.totalTicketsSold || 0,
                 platformRevenue: json.stats.platformCommissionRevenue || 0,
               });
             }
             if (Array.isArray(json.data)) {
+              setAllBookings(json.data);
               const pendingManual = json.data.filter(
                 (b: any) =>
                   b.totalPrice > 0 &&
@@ -229,7 +272,13 @@ export default function DashboardPage() {
               Selamat Datang, {user?.name.split(" ")[0]}
             </h1>
             <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-              {isDagoOwner ? "Owner Dago Hub" : `Tenant: ${user?.tenant?.name || "Kopi Senja"}`}
+              {isDagoOwner
+                ? user?.role?.slug === "SUPER_ADMIN"
+                  ? "Super Admin Platform"
+                  : "Owner Dago Hub"
+                : isTenantOwner
+                ? `Tenant: ${user?.tenant?.name || "Kopi Senja"}`
+                : user?.role?.name || "Staff Dago Hub"}
             </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">

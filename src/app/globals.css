@@ -102,6 +102,9 @@
     margin: 0 !important;
     padding: 0 !important;
     border: 0 !important;
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
     background-color: var(--bg-main);
     color: var(--text-main);
   }
@@ -123,6 +126,9 @@ body.dark,
   margin: 0 !important;
   padding: 0 !important;
   border: 0 !important;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
   background-color: #0F172A !important;
   color: #E2E8F0 !important;
 }

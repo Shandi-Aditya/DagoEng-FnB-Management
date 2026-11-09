@@ -130,6 +130,17 @@ export async function POST(req: NextRequest) {
         secure: process.env.NODE_ENV === "production",
       });
 
+      // Clear old database/organizer session cookie so it cannot conflict with new persona login
+      res.cookies.set({
+        name: SESSION_COOKIE_NAME,
+        value: "",
+        path: "/",
+        maxAge: 0,
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+
       return res;
     }
 
@@ -221,6 +232,22 @@ export async function POST(req: NextRequest) {
           });
 
           // Clear persona cookie so server strictly relies on the verified session
+          res.cookies.set({
+            name: "dagoeng_active_persona",
+            value: "",
+            path: "/",
+            maxAge: 0,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
+          res.cookies.set({
+            name: "dagoeng_active_persona",
+            value: "",
+            path: "/",
+            maxAge: 0,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
           res.cookies.delete("dagoeng_active_persona");
 
           return res;
@@ -283,6 +310,14 @@ export async function POST(req: NextRequest) {
             secure: process.env.NODE_ENV === "production",
           });
 
+          res.cookies.set({
+            name: "dagoeng_active_persona",
+            value: "",
+            path: "/",
+            maxAge: 0,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
           res.cookies.delete("dagoeng_active_persona");
           return res;
         } catch (sessErr) {

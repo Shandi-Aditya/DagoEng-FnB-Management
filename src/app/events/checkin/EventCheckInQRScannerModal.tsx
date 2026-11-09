@@ -120,7 +120,7 @@ export function EventCheckInQRScannerModal({
     }
   }, []);
 
-  // Parse QR content flexibly (raw code, JSON, or URL)
+  // Parse QR content flexibly (raw code, JSON, URL, or prefixed string)
   const parseQR = (raw: string): string => {
     const trimmed = raw.trim();
     if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
@@ -129,11 +129,18 @@ export function EventCheckInQRScannerModal({
         if (obj.ticketCode) return String(obj.ticketCode).trim();
       } catch {}
     }
+    // Also handle if JSON contains escaped quotes or wrapped in quotes
+    if (trimmed.includes('"ticketCode"')) {
+      try {
+        const match = trimmed.match(/"ticketCode"\s*:\s*"([^"]+)"/);
+        if (match && match[1]) return match[1].trim();
+      } catch {}
+    }
     if (trimmed.startsWith("DAGO-CHECKIN:")) {
       const parts = trimmed.split(":");
       if (parts[1]) return parts[1].trim();
     }
-    // Handle URL e.g. /events/tickets/DAGO-EVT-12345
+    // Handle URL e.g. /events/tickets/DAGO-EVT-12345 or ?code=DAGO-EVT-12345
     const match = trimmed.match(/DAGO-EVT-[A-Z0-9-]+/i);
     if (match) return match[0];
 
@@ -163,10 +170,17 @@ export function EventCheckInQRScannerModal({
         const baseCode = matchSeat ? matchSeat[1] : code;
         const requestedSeat = matchSeat ? parseInt(matchSeat[2], 10) : undefined;
 
-        // Find matching ticket in all bookings
-        const booking = bookings.find(
-          (b) => b.ticketCode.toUpperCase() === code || b.ticketCode.toUpperCase() === baseCode
-        );
+        // Find matching ticket in all bookings safely
+        const booking = bookings.find((b) => {
+          const bCode = (b.ticketCode || "").trim().toUpperCase();
+          const bId = (b.id || "").trim().toUpperCase();
+          const targetCode = code.toUpperCase();
+          const targetBase = baseCode.toUpperCase();
+          return (
+            (bCode && (bCode === targetCode || bCode === targetBase)) ||
+            (bId && (bId === targetCode || bId === targetBase))
+          );
+        });
 
         if (!booking) {
           playChime(false);
@@ -363,22 +377,24 @@ export function EventCheckInQRScannerModal({
         throw new Error("Wadah kamera belum siap dirender.");
       }
 
+      // Clean any residual canvas elements inside the container before starting
+      container.innerHTML = "";
+
       const html5Qr = new Html5Qrcode("event-checkin-camera-reader", {
         experimentalFeatures: {
-          useBarCodeDetectorIfSupported: false, // Use ZXing software decoder for better detection on smartphone screen glare
+          useBarCodeDetectorIfSupported: true, // Native BarcodeDetector API for fast & accurate QR detection from screen glare & mobile phones
         },
         verbose: false,
       });
       scannerRef.current = html5Qr;
 
       const config = {
-        fps: 10,
+        fps: 20,
         qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
           const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-          const size = Math.max(200, Math.floor(minEdge * 0.92));
+          const size = Math.max(220, Math.floor(minEdge * 0.88));
           return { width: size, height: size };
         },
-        aspectRatio: 1.0,
       };
 
       await html5Qr.start(
@@ -423,6 +439,100 @@ export function EventCheckInQRScannerModal({
     }
   }, [facingMode, processTicket, stopCameraStream]);
 
+  // Dedicated, robust file QR decoder (never collides with ongoing camera scan)
+  const decodeQRFromImageFile = async (file: File): Promise<string> => {
+    // 1. First attempt: Native BarcodeDetector API (fastest, most accurate on whole images & screenshots)
+    if (typeof window !== "undefined" && "BarcodeDetector" in window) {
+      try {
+        const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
+        const imageBitmap = await createImageBitmap(file);
+        const barcodes = await detector.detect(imageBitmap);
+        if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+          return barcodes[0].rawValue;
+        }
+      } catch (err) {
+        console.warn("BarcodeDetector fallback:", err);
+      }
+    }
+
+    // 2. Prepare temporary hidden container for Html5Qrcode to prevent collision with active camera
+    const tempContainerId = "qr-file-scan-temp-container";
+    let tempContainer = document.getElementById(tempContainerId);
+    if (!tempContainer) {
+      tempContainer = document.createElement("div");
+      tempContainer.id = tempContainerId;
+      tempContainer.style.display = "none";
+      document.body.appendChild(tempContainer);
+    }
+    tempContainer.innerHTML = "";
+
+    // 3. Attempt decoding via Html5Qrcode on hidden container:
+    // Attempt 3A: Direct full image scan
+    try {
+      const fileScanner = new Html5Qrcode(tempContainerId, {
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        verbose: false,
+      });
+      try {
+        const decoded = await fileScanner.scanFile(file, false);
+        try { fileScanner.clear(); } catch {}
+        if (decoded) return decoded;
+      } catch {
+        try { fileScanner.clear(); } catch {}
+      }
+    } catch {}
+
+    // Attempt 3B: Canvas Preprocessing & Focus on Ticket QR box region
+    // For generated tickets (720x1040), the QR code is located at the center-bottom region
+    try {
+      const imageBitmap = await createImageBitmap(file);
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        // Crop region around the lower card where the QR code lives (Y: 45% to 85%)
+        const cropY = Math.floor(imageBitmap.height * 0.45);
+        const cropHeight = Math.floor(imageBitmap.height * 0.45);
+        const cropX = Math.floor(imageBitmap.width * 0.08);
+        const cropWidth = Math.floor(imageBitmap.width * 0.84);
+
+        canvas.width = cropWidth;
+        canvas.height = cropHeight;
+        ctx.drawImage(imageBitmap, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+
+        const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+        if (blob) {
+          const croppedFile = new File([blob], "cropped-ticket.png", { type: "image/png" });
+
+          // Check with native detector on cropped image
+          if (typeof window !== "undefined" && "BarcodeDetector" in window) {
+            try {
+              const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
+              const croppedBitmap = await createImageBitmap(croppedFile);
+              const barcodes = await detector.detect(croppedBitmap);
+              if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+                return barcodes[0].rawValue;
+              }
+            } catch {}
+          }
+
+          // Check with Html5Qrcode on cropped image
+          const cropScanner = new Html5Qrcode(tempContainerId, { verbose: false });
+          try {
+            const decodedCrop = await cropScanner.scanFile(croppedFile, false);
+            try { cropScanner.clear(); } catch {}
+            if (decodedCrop) return decodedCrop;
+          } catch {
+            try { cropScanner.clear(); } catch {}
+          }
+        }
+      }
+    } catch {}
+
+    throw new Error(
+      "Tidak dapat mendeteksi QR Code dari gambar tiket ini. Pastikan gambar memuat QR Code yang jelas dan tidak buram, atau gunakan input manual kode tiket."
+    );
+  };
+
   // Handle Modal Lifecycle
   useEffect(() => {
     if (isOpen) {
@@ -439,6 +549,10 @@ export function EventCheckInQRScannerModal({
       stopCameraStream();
       setFeedback(null);
       setManualCode("");
+      const tempContainer = document.getElementById("qr-file-scan-temp-container");
+      if (tempContainer) {
+        tempContainer.remove();
+      }
     }
   }, [isOpen, facingMode]);
 
@@ -467,12 +581,7 @@ export function EventCheckInQRScannerModal({
     setIsProcessing(true);
     setCameraError(null);
     try {
-      let qrEngine = scannerRef.current;
-      if (!qrEngine) {
-        qrEngine = new Html5Qrcode("event-checkin-camera-reader");
-        scannerRef.current = qrEngine;
-      }
-      const decoded = await qrEngine.scanFile(file, true);
+      const decoded = await decodeQRFromImageFile(file);
       if (decoded) {
         await processTicket(decoded);
       }
@@ -481,7 +590,7 @@ export function EventCheckInQRScannerModal({
       setFeedback({
         type: "ERROR",
         title: "QR Tidak Terbaca dari Gambar",
-        message: "Tidak ditemukan kode QR yang jelas pada gambar tersebut. Pastikan gambar tidak buram atau gunakan input manual.",
+        message: err?.message || "Tidak ditemukan kode QR yang jelas pada gambar tersebut. Pastikan gambar tidak buram atau gunakan input manual.",
         timestamp: new Date().toLocaleTimeString("id-ID"),
       });
     } finally {
