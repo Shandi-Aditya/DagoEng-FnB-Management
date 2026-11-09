@@ -19,23 +19,24 @@ Modul pendukung lainnya meliputi **Commercial Retail Space**, **Customer CRM & L
 
 ---
 
-## 🚀 Quick Start / Menjalankan Proyek Secara Lokal
+## 🚀 Quick Start / Menjalankan Proyek
 
-Cara termudah untuk menjalankan proyek ini adalah menggunakan script runner Python [`run.py`](file:///Users/verisimb/Magang/dagoeng-management/run.py):
+Proyek ini dibangun menggunakan Next.js (App Router) fullstack yang menghubungkan antarmuka frontend dan API route backend secara terintegrasi dengan database online Neon PostgreSQL.
 
 ```bash
-# Jalankan runner lokal (otomatis cek node, npm, buat .env, generate prisma, dan jalankan dev server)
-python3 run.py
+# 1. Pasang dependensi
+npm install
 
-# Atau buka browser secara otomatis setelah server siap
-python3 run.py --open
+# 2. Sinkronkan dan generate Prisma Client ke database Neon
+npx prisma db push
+npm run db:seed
 
-# Opsi lainnya:
-python3 run.py --port 3001   # Ganti port lokal
-python3 run.py --check       # Cek kesiapan dependensi tanpa menjalankan server
-python3 run.py --db-seed     # Sinkronisasi & seed database demo
-python3 run.py --test        # Jalankan test suite otomatis
-python3 run.py --help        # Tampilkan seluruh opsi CLI
+# 3. Jalankan server pengembangan
+npm run dev
+
+# 4. Atau jalankan mode produksi
+npm run build
+npm run start
 ```
 
 ---
