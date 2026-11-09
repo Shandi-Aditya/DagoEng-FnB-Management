@@ -6,6 +6,7 @@ import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
 import { useDateFilter } from "./DateFilterContext";
 import { useActivityLog } from "./ActivityLogContext";
+import { syncWithOutbox, flushOutbox } from "@/lib/sync-outbox";
 
 export const INITIAL_ORDERS: OrderRecord[] = [];
 
@@ -16,7 +17,10 @@ interface OrderContextType {
     orderId: string,
     nextStatus: OrderStatus,
     note?: string,
-    paymentUpdate?: { paymentStatus?: "PENDING" | "PAID" | "REFUNDED"; paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" }
+    paymentUpdate?: {
+      paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
+      paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER";
+    }
   ) => void;
   createOrder: (order: Partial<OrderRecord>) => OrderRecord;
   createPosOrder: (order: Partial<OrderRecord>) => OrderRecord;
@@ -51,22 +55,26 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       setIsInitialized(true);
     }
 
-    // Hydrate orders from persistent server storage (POS-33 / TC-K04)
+    // Flush pending outbox orders first, then hydrate orders from persistent server storage (POS-33 / R9)
     if (typeof window !== "undefined") {
-      fetch("/api/orders")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && Array.isArray(data.orders) && data.orders.length > 0) {
-            setOrders((prev) => {
-              const merged = new Map(prev.map((o) => [o.id, o]));
-              for (const srvOrder of data.orders) {
-                merged.set(srvOrder.id, srvOrder);
+      flushOutbox()
+        .catch(() => {})
+        .finally(() => {
+          fetch("/api/orders")
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+              if (data && Array.isArray(data.orders) && data.orders.length > 0) {
+                setOrders((prev) => {
+                  const merged = new Map(prev.map((o) => [o.id, o]));
+                  for (const srvOrder of data.orders) {
+                    merged.set(srvOrder.id, srvOrder);
+                  }
+                  return Array.from(merged.values());
+                });
               }
-              return Array.from(merged.values());
-            });
-          }
-        })
-        .catch(() => {});
+            })
+            .catch(() => {});
+        });
     }
   }, []);
 
@@ -82,7 +90,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
   // Strict outlet scope and date filter
   const filteredOrders = orders.filter((o) => {
     const matchOutlet = isAllOutlets || o.outletId === activeOutletId;
-    const isActiveOrder = o.status !== "SERVED" && o.status !== "COMPLETED" && o.status !== "CANCELLED";
+    const isActiveOrder =
+      o.status !== "SERVED" && o.status !== "COMPLETED" && o.status !== "CANCELLED";
     const matchDate = isDateInRange(o.createdAt);
     return matchOutlet && (isActiveOrder || matchDate);
   });
@@ -91,7 +100,10 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     orderId: string,
     nextStatus: OrderStatus,
     note?: string,
-    paymentUpdate?: { paymentStatus?: "PENDING" | "PAID" | "REFUNDED"; paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" }
+    paymentUpdate?: {
+      paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
+      paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER";
+    }
   ) => {
     const target = orders.find((o) => o.id === orderId);
     if (!target) return;
@@ -109,48 +121,46 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       note: note || `Status diubah menjadi ${nextStatus}`,
     };
 
-    setOrders((prev) =>
-      prev.map((o) => {
-        if (o.id !== orderId) return o;
+    const updated: OrderRecord = {
+      ...target,
+      status: nextStatus,
+      statusHistory: [...target.statusHistory, historyItem],
+    };
 
-        const updated: OrderRecord = {
-          ...o,
-          status: nextStatus,
-          statusHistory: [...o.statusHistory, historyItem],
-        };
+    if (nextStatus === "CONFIRMED" && !target.confirmedAt) updated.confirmedAt = nowIso;
+    if (nextStatus === "KITCHEN_RECEIVED" && !target.kitchenReceivedAt)
+      updated.kitchenReceivedAt = nowIso;
+    if (nextStatus === "COOKING" && !target.cookingStartedAt) updated.cookingStartedAt = nowIso;
+    if (nextStatus === "READY" && !target.readyAt) {
+      updated.readyAt = nowIso;
+      updated.cookingFinishedAt = nowIso;
+    }
+    if (nextStatus === "SERVED" && !target.servedAt) updated.servedAt = nowIso;
+    if (nextStatus === "COMPLETED") {
+      if (!target.completedAt) updated.completedAt = nowIso;
+      updated.paymentStatus = paymentUpdate?.paymentStatus || "PAID";
+      if (paymentUpdate?.paymentMethod) {
+        updated.paymentMethod = paymentUpdate.paymentMethod;
+      }
+    } else if (nextStatus === "CANCELLED") {
+      updated.paymentStatus =
+        paymentUpdate?.paymentStatus || (target.paymentStatus === "PAID" ? "REFUNDED" : "PENDING");
+    } else if (paymentUpdate) {
+      if (paymentUpdate.paymentStatus) updated.paymentStatus = paymentUpdate.paymentStatus;
+      if (paymentUpdate.paymentMethod) updated.paymentMethod = paymentUpdate.paymentMethod;
+    }
 
-        if (nextStatus === "CONFIRMED" && !o.confirmedAt) updated.confirmedAt = nowIso;
-        if (nextStatus === "KITCHEN_RECEIVED" && !o.kitchenReceivedAt) updated.kitchenReceivedAt = nowIso;
-        if (nextStatus === "COOKING" && !o.cookingStartedAt) updated.cookingStartedAt = nowIso;
-        if (nextStatus === "READY" && !o.readyAt) {
-          updated.readyAt = nowIso;
-          updated.cookingFinishedAt = nowIso;
-        }
-        if (nextStatus === "SERVED" && !o.servedAt) updated.servedAt = nowIso;
-        if (nextStatus === "COMPLETED") {
-          if (!o.completedAt) updated.completedAt = nowIso;
-          updated.paymentStatus = paymentUpdate?.paymentStatus || "PAID";
-          if (paymentUpdate?.paymentMethod) {
-            updated.paymentMethod = paymentUpdate.paymentMethod;
-          }
-        } else if (nextStatus === "CANCELLED") {
-          updated.paymentStatus = paymentUpdate?.paymentStatus || (o.paymentStatus === "PAID" ? "REFUNDED" : "PENDING");
-        } else if (paymentUpdate) {
-          if (paymentUpdate.paymentStatus) updated.paymentStatus = paymentUpdate.paymentStatus;
-          if (paymentUpdate.paymentMethod) updated.paymentMethod = paymentUpdate.paymentMethod;
-        }
+    // R9: Pure state updater without network side effects inside setOrders
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
 
-        if (typeof window !== "undefined") {
-          fetch("/api/orders", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ order: updated }),
-          }).catch(() => {});
-        }
-
-        return updated;
-      })
-    );
+    if (typeof window !== "undefined") {
+      syncWithOutbox({
+        id: `order-sync-${updated.id}`,
+        endpoint: "/api/orders",
+        method: "POST",
+        payload: { order: updated },
+      });
+    }
 
     logActivity({
       module: "POS",
@@ -209,11 +219,12 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     setOrders((prev) => [newOrder, ...prev]);
 
     if (typeof window !== "undefined") {
-      fetch("/api/orders", {
+      syncWithOutbox({
+        id: `order-sync-${newOrder.id}`,
+        endpoint: "/api/orders",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ order: newOrder }),
-      }).catch(() => {});
+        payload: { order: newOrder },
+      });
     }
 
     logActivity({
@@ -290,16 +301,15 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     setOrders((prev) => [newOrder, ...prev]);
 
     if (typeof window !== "undefined") {
-      const pointsEarned = Math.floor((newOrder.total || 0) / 10000);
-      fetch("/api/orders", {
+      syncWithOutbox({
+        id: `order-sync-${newOrder.id}`,
+        endpoint: "/api/orders",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        payload: {
           order: newOrder,
           customerKey: newOrder.customerName,
-          loyaltyPointsDelta: pointsEarned,
-        }),
-      }).catch(() => {});
+        },
+      });
     }
 
     logActivity({

@@ -4,7 +4,13 @@ import { getRequestAuthUser } from "@/lib/server-auth";
 import { RoleSlug } from "@/types/auth";
 
 const COWORKING_READ_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
-const COWORKING_WRITE_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER", "CUSTOMER"];
+const COWORKING_WRITE_ROLES: RoleSlug[] = [
+  "SUPER_ADMIN",
+  "OWNER",
+  "MANAGER",
+  "CASHIER",
+  "CUSTOMER",
+];
 
 export async function GET(req: NextRequest) {
   try {
@@ -45,7 +51,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const auth = await getRequestAuthUser(req);
-    if (!auth.isAuthenticated || !auth.role) {
+    if (!auth.isAuthenticated || !auth.role || !auth.userId) {
       return NextResponse.json(
         { error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
         { status: 401 }
@@ -60,10 +66,49 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const booking = body.booking || body;
+    const booking = { ...(body.booking || body) };
 
     if (!booking.spaceId || !booking.guestName) {
-      return NextResponse.json({ error: "Booking requires spaceId and guestName." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Booking requires spaceId and guestName." },
+        { status: 400 }
+      );
+    }
+
+    // R11: Prevent CUSTOMER from overwriting another user's existing booking
+    if (auth.role === "CUSTOMER") {
+      const existingBookings = await getCoworkingBookings();
+      const matchedExisting = existingBookings.find(
+        (b: any) =>
+          (booking.id && b.id === booking.id) ||
+          (booking.bookingCode && b.bookingCode === booking.bookingCode)
+      );
+
+      if (matchedExisting) {
+        const isSameUser =
+          (matchedExisting.userId && matchedExisting.userId === auth.userId) ||
+          (!matchedExisting.userId &&
+            matchedExisting.guestEmail &&
+            auth.email &&
+            String(matchedExisting.guestEmail).toLowerCase() === auth.email.toLowerCase());
+
+        if (!isSameUser) {
+          return NextResponse.json(
+            {
+              error:
+                "FORBIDDEN: Pelanggan tidak diizinkan mengubah atau menimpa booking coworking milik pengguna lain.",
+            },
+            { status: 403 }
+          );
+        }
+      }
+
+      booking.userId = auth.userId;
+      if (auth.email && !booking.guestEmail) {
+        booking.guestEmail = auth.email;
+      }
+    } else if (!booking.userId) {
+      booking.userId = auth.userId;
     }
 
     if (!booking.id) {

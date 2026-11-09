@@ -1,4 +1,7 @@
 import { OrderRecord } from "@/types/order";
+import { ShiftRecord } from "@/types/shift";
+import { extractShiftStartTimeMs } from "@/lib/shift-management";
+import { hmacSha256Hex } from "@/lib/edge-session";
 
 export interface OrderTaxBreakdown {
   subtotal: number;
@@ -116,4 +119,66 @@ export function aggregateOrdersTaxAndRevenue(orders: OrderRecord[]): AggregatedT
     totalNetSales,
     orderCount: validOrders.length,
   };
+}
+
+/**
+ * R10: Filters orders strictly to the given shift's outlet and [startTime, endTime/closedAt] window
+ * before aggregating revenue, discounts, PB1 tax, and service charge.
+ */
+export function aggregateShiftOrdersTaxAndRevenue(
+  orders: OrderRecord[],
+  shift?: Partial<ShiftRecord> | null
+): AggregatedTaxReport {
+  if (!shift) {
+    return aggregateOrdersTaxAndRevenue(orders);
+  }
+
+  const startMs =
+    extractShiftStartTimeMs(shift as ShiftRecord) ||
+    (shift.startTime ? Date.parse(shift.startTime) : 0);
+
+  const rawEnd = shift.closedAt || shift.endTime;
+  const parsedEndMs = rawEnd ? Date.parse(rawEnd) : NaN;
+  const endMs = !isNaN(parsedEndMs) && parsedEndMs > 0 ? parsedEndMs : Infinity;
+
+  const scopedOrders = orders.filter((order) => {
+    if (shift.outletId && shift.outletId !== "ALL" && order.outletId && order.outletId !== shift.outletId) {
+      return false;
+    }
+
+    if (startMs > 0 && order.createdAt) {
+      const orderMs = Date.parse(order.createdAt);
+      if (!isNaN(orderMs)) {
+        if (orderMs < startMs || orderMs > endMs) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  });
+
+  return aggregateOrdersTaxAndRevenue(scopedOrders);
+}
+
+/**
+ * R10: Computes a deterministic SHA-256 verification hash from the shift and closing tax aggregation.
+ */
+export function computeClosingVerificationHash(
+  shift?: Partial<ShiftRecord> | null,
+  agg?: AggregatedTaxReport
+): string {
+  const payload = [
+    shift?.id || "no-shift",
+    shift?.outletId || "outlet-sgr",
+    Math.round(shift?.openingCash || 0),
+    Math.round(shift?.cashSales || 0),
+    Math.round(shift?.nonCashSales || 0),
+    Math.round(agg?.totalRevenue || 0),
+    Math.round(agg?.totalTaxPB1 || 0),
+    Math.round(agg?.totalServiceCharge || 0),
+    agg?.orderCount || 0,
+  ].join(":");
+  const digest = hmacSha256Hex("dagoeng-closing-report-v1", payload);
+  return `SHA256-${digest.slice(0, 16).toUpperCase()}`;
 }

@@ -9,6 +9,7 @@ import {
   signEdgeSessionToken,
   verifyEdgeSessionToken,
   clearRevocationRegistryForTests,
+  clearInMemoryRevocationCacheForTests,
 } from "@/lib/edge-session";
 import { middleware, config as middlewareConfig } from "@/middleware";
 import {
@@ -17,7 +18,10 @@ import {
 } from "@/lib/unified-account";
 import { GET as getShifts, POST as postShifts } from "@/app/api/shifts/route";
 import { GET as getAuditLogsRoute } from "@/app/api/audit-logs/route";
-import { GET as getCoworkingBookingsRoute } from "@/app/api/coworking/bookings/route";
+import {
+  GET as getCoworkingBookingsRoute,
+  POST as postCoworkingBookingsRoute,
+} from "@/app/api/coworking/bookings/route";
 
 describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)", () => {
   beforeEach(() => {
@@ -166,6 +170,42 @@ describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)"
       expect(customerRes.status).toBe(307);
       expect(customerRes.headers.get("location")).toContain("/customer");
     });
+
+    it("R6: fails closed in production when SESSION_SECRET is unset or shorter than 32 chars", () => {
+      const validToken = signEdgeSessionToken({
+        userId: "usr-owner-prod",
+        role: "OWNER",
+        scopeLevel: "ORGANIZATION",
+      });
+
+      const prevNodeEnv = process.env.NODE_ENV;
+      const prevSecret = process.env.SESSION_SECRET;
+      try {
+        (process.env as any).NODE_ENV = "production";
+        delete process.env.SESSION_SECRET;
+
+        const checkUnset = verifyEdgeSessionToken(validToken);
+        expect(checkUnset.valid).toBe(false);
+
+        const req = new NextRequest("http://localhost:3000/reports", {
+          headers: {
+            cookie: `${EDGE_SESSION_COOKIE_NAME}=${validToken}`,
+          },
+        });
+        const res = middleware(req);
+        expect(res.status).toBe(307);
+        expect(res.headers.get("location")).toContain("/login");
+
+        // Also test short secret (< 32 chars)
+        process.env.SESSION_SECRET = "too-short-secret";
+        expect(verifyEdgeSessionToken(validToken).valid).toBe(false);
+      } finally {
+        (process.env as any).NODE_ENV = prevNodeEnv;
+        if (prevSecret !== undefined) {
+          process.env.SESSION_SECRET = prevSecret;
+        }
+      }
+    });
   });
 
   describe("POS-23 & TC-I05: Session Expiry and Role/Password Change Revocation", () => {
@@ -189,7 +229,7 @@ describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)"
       expect(res.headers.get("location")).toContain("/login?reason=expired&returnTo=%2Fpos");
     });
 
-    it("immediately invalidates old sessions when user password or role is updated (TC-I05 / A5-4)", async () => {
+    it("R7: immediately invalidates old sessions when user password or role is updated and survives in-memory cache reset across restarts (TC-I05 / A5-4)", async () => {
       const email = `staff-revocation-${Date.now()}@dagoeng.com`;
       const reg = await registerUnifiedUser({
         name: "Staf Uji Revokasi",
@@ -217,12 +257,15 @@ describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)"
       });
       expect(updateRes.success).toBe(true);
 
-      // Old token issued before the change must now be rejected as revoked
-      const verifyAfter = verifyEdgeSessionToken(tokenBeforeChange);
-      expect(verifyAfter.valid).toBe(false);
-      expect(verifyAfter.revoked).toBe(true);
+      // R7: Clear in-memory revocation Map to simulate a cold serverless isolate / process restart
+      clearInMemoryRevocationCacheForTests();
 
-      // Server auth also rejects the revoked token
+      // Old token issued before the change must still be rejected from persistent revocation store
+      const verifyAfterRestart = verifyEdgeSessionToken(tokenBeforeChange);
+      expect(verifyAfterRestart.valid).toBe(false);
+      expect(verifyAfterRestart.revoked).toBe(true);
+
+      // Server auth also rejects the revoked token with 401 SESSION_REVOKED
       const apiReq = new NextRequest("http://localhost:3000/api/shifts", {
         headers: {
           cookie: `${EDGE_SESSION_COOKIE_NAME}=${tokenBeforeChange}`,
@@ -231,10 +274,13 @@ describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)"
       const authRes = await getRequestAuthUser(apiReq);
       expect(authRes.isAuthenticated).toBe(false);
       expect(authRes.error).toBe("SESSION_REVOKED");
+
+      const shiftRes = await getShifts(apiReq);
+      expect(shiftRes.status).toBe(401);
     });
   });
 
-  describe("A5-6: Server-Side Auth Guards on Operational API Routes", () => {
+  describe("A5-6 & R11: Server-Side Auth Guards on Operational API Routes & Coworking Isolation", () => {
     it("rejects unauthenticated requests to /api/shifts, /api/audit-logs, and /api/coworking/bookings with 401", async () => {
       const shiftRes = await getShifts(new NextRequest("http://localhost:3000/api/shifts"));
       expect(shiftRes.status).toBe(401);
@@ -267,6 +313,51 @@ describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)"
       });
       const auditRes = await getAuditLogsRoute(waiterAuditReq);
       expect(auditRes.status).toBe(403);
+    });
+
+    it("R11: rejects CUSTOMER B attempting to overwrite CUSTOMER A's coworking booking with 403", async () => {
+      const sharedBookingId = `cwb-owner-a-${Date.now()}`;
+      const sharedBookingCode = `CW-A-${Date.now().toString().slice(-4)}`;
+
+      // Customer A (CUSTOMER_DEMO) creates their booking
+      const createAReq = new NextRequest("http://localhost:3000/api/coworking/bookings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "dagoeng_active_persona=CUSTOMER_DEMO",
+        },
+        body: JSON.stringify({
+          id: sharedBookingId,
+          bookingCode: sharedBookingCode,
+          spaceId: "sp-hot-1",
+          guestName: "Customer A Original",
+          date: "2026-11-12",
+          duration: 2,
+          totalAmount: 30000,
+        }),
+      });
+      const createARes = await postCoworkingBookingsRoute(createAReq);
+      expect(createARes.status).toBe(200);
+
+      // Customer B (COMMUNITY_BARISTA, also role CUSTOMER) attempts to overwrite Customer A's booking
+      const overwriteBReq = new NextRequest("http://localhost:3000/api/coworking/bookings", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "dagoeng_active_persona=COMMUNITY_BARISTA",
+        },
+        body: JSON.stringify({
+          id: sharedBookingId,
+          bookingCode: sharedBookingCode,
+          spaceId: "sp-hot-1",
+          guestName: "Hijacked by Customer B",
+          date: "2026-11-12",
+          duration: 8,
+          totalAmount: 0,
+        }),
+      });
+      const overwriteBRes = await postCoworkingBookingsRoute(overwriteBReq);
+      expect(overwriteBRes.status).toBe(403);
     });
   });
 });

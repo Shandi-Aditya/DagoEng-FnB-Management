@@ -5,7 +5,10 @@ import { useOutlet } from "@/contexts/OutletContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useOrders } from "@/contexts/OrderContext";
-import { aggregateOrdersTaxAndRevenue } from "@/lib/tax-breakdown";
+import {
+  aggregateShiftOrdersTaxAndRevenue,
+  computeClosingVerificationHash,
+} from "@/lib/tax-breakdown";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -1631,13 +1634,14 @@ export default function EmployeesPage() {
 
       {/* PDF Closing Modal */}
       {isPDFOpen && (() => {
-        const closingTaxAgg = aggregateOrdersTaxAndRevenue(filteredOrders);
+        const closingTaxAgg = aggregateShiftOrdersTaxAndRevenue(filteredOrders, activeShift);
         const shiftGrossSales =
           (activeShift?.cashSales || 0) + (activeShift?.nonCashSales || 0) ||
           closingTaxAgg.totalRevenue;
         const storedTaxTotal = closingTaxAgg.totalTaxPB1;
         const storedServiceTotal = closingTaxAgg.totalServiceCharge;
         const netSalesAfterTax = Math.max(0, shiftGrossSales - storedTaxTotal - storedServiceTotal);
+        const verificationHash = computeClosingVerificationHash(activeShift, closingTaxAgg);
 
         return (
           <DailyClosingPDFModal
@@ -1656,7 +1660,7 @@ export default function EmployeesPage() {
               totalCashSales: activeShift?.cashSales || 0,
               qrisSales: activeShift?.nonCashSales || 0,
               edcSales: 0,
-              totalTransactionsCount: closingTaxAgg.orderCount || 14,
+              totalTransactionsCount: closingTaxAgg.orderCount,
               totalGrossSales: shiftGrossSales,
               totalDiscounts: closingTaxAgg.totalDiscounts,
               isTaxEnabled: true,
@@ -1674,7 +1678,7 @@ export default function EmployeesPage() {
               actualCashEnding: activeShift?.actualCash || (activeShift?.openingCash || 500000) + (activeShift?.cashSales || 0),
               cashDifference: activeShift?.cashVariance || 0,
               shiftNotes: activeShift?.closingNotes || "Kas fisik cocok sempurna dengan sistem POS.",
-              verificationHash: "SHA256-DAGO-VERIFIED-CLOSING-OK",
+              verificationHash,
             }}
           />
         );

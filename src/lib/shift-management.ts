@@ -114,6 +114,7 @@ export function validateManualShiftOpen(params: {
   outletId: string;
   outletName?: string;
   existingShifts: ShiftRecord[];
+  clientShiftId?: string;
   currentTimeMs?: number;
 }): { success: boolean; error?: string; shift?: ShiftRecord; isAlreadyOpen?: boolean } {
   const { openingCash, cashierId, cashierName, outletId, existingShifts } = params;
@@ -164,8 +165,15 @@ export function validateManualShiftOpen(params: {
   const resolvedOutletName =
     params.outletName || (resolvedOutletId === "outlet-dps" ? "Denpasar" : "Singaraja");
 
+  const validClientShiftId =
+    params.clientShiftId &&
+    /^shf-\d{10,15}(?:-[a-z0-9]+)?$/i.test(params.clientShiftId) &&
+    !reconciled.some((s) => s.id === params.clientShiftId)
+      ? params.clientShiftId
+      : `shf-${nowMs}-${Math.random().toString(36).slice(2, 6)}`;
+
   const newShift: ShiftRecord = {
-    id: `shf-${nowMs}-${Math.random().toString(36).slice(2, 6)}`,
+    id: validClientShiftId,
     shiftName: params.shiftName || "Shift Pagi (08:00 - 16:00)",
     outletId: resolvedOutletId,
     outletName: resolvedOutletName,
@@ -186,8 +194,66 @@ export function validateManualShiftOpen(params: {
 }
 
 /**
+ * Reconciles client shift list with the authoritative shift returned by the server on OPEN.
+ * Ensures any provisional client shift ID is replaced by the canonical server shift record (R1).
+ */
+export function reconcileClientShiftAfterServerOpen(
+  localShifts: ShiftRecord[],
+  provisionalClientShiftId: string,
+  serverShift: ShiftRecord
+): ShiftRecord[] {
+  const filtered = localShifts.filter(
+    (s) => s.id !== provisionalClientShiftId && s.id !== serverShift.id
+  );
+  return [serverShift, ...filtered];
+}
+
+/**
+ * Hydrates client shifts with authoritative server shifts (R1).
+ * - Server shifts always overwrite local shifts with the same ID.
+ * - Any local ACTIVE/OPEN shift that is not ACTIVE/OPEN on the server is removed or replaced
+ *   by the server state so closed server shifts never resurrect on reload.
+ */
+export function hydrateShiftsFromServer(
+  localShifts: ShiftRecord[],
+  serverShifts: ShiftRecord[],
+  pendingOutboxShiftIds: string[] = []
+): ShiftRecord[] {
+  const serverMap = new Map<string, ShiftRecord>();
+  for (const s of serverShifts) {
+    serverMap.set(s.id, s);
+  }
+
+  const pendingSet = new Set(pendingOutboxShiftIds);
+  const mergedMap = new Map<string, ShiftRecord>();
+
+  // First, populate all authoritative server shifts
+  for (const serverShift of serverShifts) {
+    mergedMap.set(serverShift.id, serverShift);
+  }
+
+  // Next, only retain local shifts that are either closed historical shifts not yet in server list
+  // or explicitly pending in the outbox. Never keep a stale local ACTIVE/OPEN shift that the server does not consider active.
+  for (const local of localShifts) {
+    if (mergedMap.has(local.id)) {
+      // Server state always wins for matching IDs
+      continue;
+    }
+    const isLocalActive = local.status === "ACTIVE" || local.status === "OPEN";
+    if (isLocalActive && !pendingSet.has(local.id)) {
+      // Stale local active shift not present on server -> drop it so server wins
+      continue;
+    }
+    mergedMap.set(local.id, local);
+  }
+
+  return Array.from(mergedMap.values());
+}
+
+/**
  * Records a sale transaction against an active shift.
- * Enforces that overdue shifts (>16h -> NEEDS_RECONCILIATION) cannot accept new sales (TC-A03).
+ * - Enforces that overdue shifts (>16h -> NEEDS_RECONCILIATION) cannot accept new sales (TC-A03).
+ * - Enforces shift ownership so a CASHIER cannot record sales against another cashier's shift (R3).
  */
 export function recordShiftSaleTransaction(params: {
   shifts: ShiftRecord[];
@@ -195,9 +261,12 @@ export function recordShiftSaleTransaction(params: {
   shiftId?: string;
   cashAmount: number;
   nonCashAmount: number;
+  actorId?: string;
+  actorRole?: RoleSlug;
   currentTimeMs?: number;
 }): {
   success: boolean;
+  statusCode: number;
   error?: string;
   shift?: ShiftRecord;
   updatedShifts: ShiftRecord[];
@@ -205,20 +274,43 @@ export function recordShiftSaleTransaction(params: {
   const nowMs = params.currentTimeMs ?? Date.now();
   const { shifts: reconciled } = reconcileOverdueShifts(params.shifts, nowMs);
 
+  const isSupervisor =
+    params.actorRole === "SUPER_ADMIN" ||
+    params.actorRole === "OWNER" ||
+    params.actorRole === "MANAGER";
+
+  const effectiveCashierId =
+    params.actorId && !isSupervisor ? params.actorId : params.cashierId;
+
+  // R3: If a non-supervisor explicitly passes another cashier's ID without supervisor privilege, reject with 403
+  if (
+    params.actorId &&
+    !isSupervisor &&
+    params.cashierId &&
+    params.cashierId !== params.actorId
+  ) {
+    return {
+      success: false,
+      statusCode: 403,
+      error: `FORBIDDEN: Kasir [${params.actorId}] tidak diizinkan mencatat transaksi atas nama kasir lain [${params.cashierId}].`,
+      updatedShifts: reconciled,
+    };
+  }
+
   const targetIndex = reconciled.findIndex((s) =>
     params.shiftId
       ? s.id === params.shiftId
-      : s.assignedCashierId === params.cashierId && (s.status === "ACTIVE" || s.status === "OPEN")
+      : s.assignedCashierId === effectiveCashierId && (s.status === "ACTIVE" || s.status === "OPEN")
   );
 
   if (targetIndex === -1) {
-    // Check if the cashier's shift was just transitioned to NEEDS_RECONCILIATION
     const overdueShift = reconciled.find(
-      (s) => s.assignedCashierId === params.cashierId && s.status === "NEEDS_RECONCILIATION"
+      (s) => s.assignedCashierId === effectiveCashierId && s.status === "NEEDS_RECONCILIATION"
     );
     if (overdueShift) {
       return {
         success: false,
+        statusCode: 409,
         error: "SHIFT_NEEDS_RECONCILIATION: Shift telah melebihi batas operasional 16 jam dan wajib direkonsiliasi sebelum transaksi baru.",
         shift: overdueShift,
         updatedShifts: reconciled,
@@ -227,15 +319,32 @@ export function recordShiftSaleTransaction(params: {
 
     return {
       success: false,
+      statusCode: 400,
       error: "SHIFT_NOT_OPEN: Tidak ada sesi shift aktif untuk kasir ini. Buka shift terlebih dahulu.",
       updatedShifts: reconciled,
     };
   }
 
   const target = reconciled[targetIndex];
+
+  // R3: Enforce ownership when shiftId is specified
+  if (
+    params.actorId &&
+    !isSupervisor &&
+    target.assignedCashierId !== params.actorId
+  ) {
+    return {
+      success: false,
+      statusCode: 403,
+      error: `FORBIDDEN: Anda (${params.actorId}) tidak berhak mencatat penjualan ke shift milik kasir lain (${target.assignedCashierId}).`,
+      updatedShifts: reconciled,
+    };
+  }
+
   if (target.status === "NEEDS_RECONCILIATION") {
     return {
       success: false,
+      statusCode: 409,
       error: "SHIFT_NEEDS_RECONCILIATION: Shift telah melebihi batas operasional 16 jam dan wajib direkonsiliasi sebelum transaksi baru.",
       shift: target,
       updatedShifts: reconciled,
@@ -245,6 +354,7 @@ export function recordShiftSaleTransaction(params: {
   if (target.status !== "ACTIVE" && target.status !== "OPEN") {
     return {
       success: false,
+      statusCode: 400,
       error: `SHIFT_INVALID_STATUS: Transaksi tidak dapat dicatat pada shift berstatus ${target.status}.`,
       shift: target,
       updatedShifts: reconciled,
@@ -269,13 +379,15 @@ export function recordShiftSaleTransaction(params: {
 
   return {
     success: true,
+    statusCode: 200,
     shift: updatedShift,
     updatedShifts: nextShifts,
   };
 }
 
 /**
- * Closes a specific shift by shiftId with server-calculated expectedCash and cashVariance (A2-5).
+ * Closes a specific shift by shiftId with server-calculated expectedCash and cashVariance (A2-5 & R2).
+ * Never trusts client-provided metrics to overwrite server-recorded cashSales or nonCashSales.
  */
 export function closeShiftById(params: {
   shifts: ShiftRecord[];
@@ -285,7 +397,6 @@ export function closeShiftById(params: {
   actorId: string;
   actorName: string;
   actorRole: RoleSlug;
-  metrics?: { cashSales?: number; nonCashSales?: number };
   currentTimeMs?: number;
 }): {
   success: boolean;
@@ -354,12 +465,9 @@ export function closeShiftById(params: {
     };
   }
 
-  const finalCashSales =
-    params.metrics?.cashSales !== undefined ? Number(params.metrics.cashSales) || 0 : target.cashSales || 0;
-  const finalNonCashSales =
-    params.metrics?.nonCashSales !== undefined
-      ? Number(params.metrics.nonCashSales) || 0
-      : target.nonCashSales || 0;
+  // R2: Strictly use server-recorded cashSales and nonCashSales. Never allow client metrics to overwrite them.
+  const finalCashSales = target.cashSales || 0;
+  const finalNonCashSales = target.nonCashSales || 0;
 
   const expectedCash = target.openingCash + finalCashSales - (target.refundAmount || 0);
   const cashVariance = parsedActual - expectedCash;

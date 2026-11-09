@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { OrderRecord, OrderStatus } from "@/types/order";
+import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import { calculateOrderMetrics, formatMinutesToHuman } from "@/lib/order-analytics";
 import { Card } from "@/components/ui/card";
 import {
@@ -124,22 +125,31 @@ export default function KitchenKDSPage() {
     const pickIdx = Math.floor(Math.random() * sampleItems.length);
     const chosenItems = sampleItems[pickIdx];
     const subtotal = chosenItems.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
-    const tax = Math.round(subtotal * 0.1);
+    const orderType = Math.random() > 0.3 ? "DINE_IN" : "TAKEAWAY";
+    const breakdown = getOrderTaxBreakdown({
+      subtotal,
+      tax: Math.round(subtotal * 0.1),
+      serviceCharge: 0,
+      taxRatePercent: 10,
+      serviceChargePercent: 0,
+      orderType,
+    });
 
     const newOrder = createOrder({
       outletId: activeOutletId || "outlet-sgr",
       outletName: activeOutlet?.name || "Singaraja",
       tableNumber: randomTables[Math.floor(Math.random() * randomTables.length)],
       customerName: randomNames[Math.floor(Math.random() * randomNames.length)],
-      orderType: Math.random() > 0.3 ? "DINE_IN" : "TAKEAWAY",
+      orderType,
       status: "CONFIRMED",
       targetServiceMinutes: 10,
       items: chosenItems,
-      subtotal,
-      tax,
-      total: subtotal + tax,
+      subtotal: breakdown.subtotal,
+      tax: breakdown.pb1,
+      serviceCharge: breakdown.serviceCharge,
+      total: breakdown.total,
       paymentStatus: "PAID",
-      paymentMethod: "QRIS",
+      paymentMethod: "CASH",
     });
 
     if (isSoundEnabled) {

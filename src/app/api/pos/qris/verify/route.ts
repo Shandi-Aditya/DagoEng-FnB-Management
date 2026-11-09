@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   authorizeSupervisorQrisOverride,
   verifyGatewayWebhook,
+  getWebhookSecret,
 } from "@/lib/qris-verification";
 import {
   getPersistentQrisSession,
@@ -13,6 +14,7 @@ import { getRequestAuthUser } from "@/lib/server-auth";
 import { RoleSlug } from "@/types/auth";
 
 const POS_ALLOWED_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
+const SUPERVISOR_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
 
 export async function GET(req: NextRequest) {
   try {
@@ -25,7 +27,9 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const invoiceNumber = searchParams.get("invoiceNumber") || searchParams.get("orderId") || "";
+    const invoiceNumber =
+      searchParams.get("invoiceNumber") || searchParams.get("orderId") || "";
+    const expectedAmountParam = searchParams.get("expectedAmount");
 
     if (!invoiceNumber.trim()) {
       return NextResponse.json(
@@ -35,12 +39,20 @@ export async function GET(req: NextRequest) {
     }
 
     const session = await getPersistentQrisSession(invoiceNumber);
-    const isVerified =
+    const statusVerified =
       session?.status === "VERIFIED_WEBHOOK" || session?.status === "VERIFIED_SUPERVISOR";
+
+    const amountMatches =
+      !expectedAmountParam ||
+      !session ||
+      Math.round(Number(expectedAmountParam)) === Math.round(session.expectedAmount);
+
+    const isVerified = Boolean(statusVerified && amountMatches);
 
     return NextResponse.json({
       verified: isVerified,
       status: session?.status || "PENDING",
+      amountMatches,
       session,
     });
   } catch (err: any) {
@@ -51,24 +63,127 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const mode = body.mode || (body.pin !== undefined ? "SUPERVISOR_OVERRIDE" : "WEBHOOK");
+    const mode =
+      body.mode || (body.pin !== undefined ? "SUPERVISOR_OVERRIDE" : "WEBHOOK");
+
+    if (mode === "INIT" || mode === "INIT_SESSION") {
+      const auth = await getRequestAuthUser(req);
+      if (!auth.isAuthenticated || !auth.role || !auth.userId) {
+        return NextResponse.json(
+          { error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
+          { status: 401 }
+        );
+      }
+
+      if (!POS_ALLOWED_ROLES.includes(auth.role)) {
+        return NextResponse.json(
+          { error: `FORBIDDEN: Role [${auth.role}] tidak diizinkan membuat sesi QRIS POS.` },
+          { status: 403 }
+        );
+      }
+
+      const invoiceNumber = String(body.invoiceNumber || body.orderId || "").trim();
+      const expectedAmount = Math.round(Number(body.expectedAmount));
+
+      if (!invoiceNumber) {
+        return NextResponse.json(
+          { error: "Parameter invoiceNumber wajib diisi untuk inisialisasi sesi QRIS." },
+          { status: 400 }
+        );
+      }
+
+      if (!Number.isFinite(expectedAmount) || expectedAmount <= 0) {
+        return NextResponse.json(
+          { error: "Nominal tagihan QRIS (expectedAmount) wajib lebih besar dari 0." },
+          { status: 400 }
+        );
+      }
+
+      const existing = await getPersistentQrisSession(invoiceNumber);
+      if (
+        existing &&
+        (existing.status === "VERIFIED_WEBHOOK" ||
+          existing.status === "VERIFIED_SUPERVISOR") &&
+        Math.round(existing.expectedAmount) === expectedAmount
+      ) {
+        return NextResponse.json({
+          success: true,
+          session: existing,
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      const pendingSession: QrisVerificationSessionRecord = {
+        orderId: String(body.orderId || invoiceNumber).trim(),
+        invoiceNumber,
+        expectedAmount,
+        status: "PENDING",
+        updatedAt: nowIso,
+      };
+
+      await savePersistentQrisSession(pendingSession);
+      return NextResponse.json({
+        success: true,
+        session: pendingSession,
+      });
+    }
 
     if (mode === "WEBHOOK") {
-      const invoiceNumber = (body.invoiceNumber || body.orderId || "").trim();
+      // R4: Fail closed immediately with 500 in production if QRIS_WEBHOOK_SECRET is not configured
+      try {
+        getWebhookSecret();
+      } catch (secretErr: any) {
+        return NextResponse.json(
+          { allowed: false, error: secretErr.message },
+          { status: 500 }
+        );
+      }
+
+      const invoiceNumber = String(body.invoiceNumber || body.orderId || "").trim();
       const amount = Number(body.amount);
-      const expectedAmount =
-        body.expectedAmount !== undefined ? Number(body.expectedAmount) : amount;
       const transactionStatus = body.transactionStatus || "PENDING";
       const signature =
         req.headers.get("x-dago-signature") || body.signature || undefined;
 
-      // Check existing session for expectedAmount if already registered
+      if (!invoiceNumber) {
+        return NextResponse.json(
+          { allowed: false, error: "Invoice number wajib disertakan pada webhook QRIS." },
+          { status: 400 }
+        );
+      }
+
+      // R4: Require a pre-registered server session for this invoiceNumber. Never trust body.expectedAmount.
       const existing = await getPersistentQrisSession(invoiceNumber);
-      const effectiveExpected =
-        existing && existing.expectedAmount > 0 ? existing.expectedAmount : expectedAmount;
+      if (!existing || !Number.isFinite(existing.expectedAmount) || existing.expectedAmount <= 0) {
+        return NextResponse.json(
+          {
+            allowed: false,
+            error: `QRIS_SESSION_NOT_FOUND: Tagihan QRIS [${invoiceNumber}] belum terdaftar di server.`,
+          },
+          { status: 404 }
+        );
+      }
+
+      const authoritativeExpectedAmount = existing.expectedAmount;
 
       // Enforce idempotency: duplicate webhook for already settled invoice returns 200 without double-processing
-      if (existing && existing.status === "VERIFIED_WEBHOOK") {
+      if (existing.status === "VERIFIED_WEBHOOK") {
+        // Still validate signature and amount so an invalid replay cannot probe or spoof
+        const replayCheck = verifyGatewayWebhook({
+          transactionStatus,
+          invoiceNumber,
+          amount,
+          expectedAmount: authoritativeExpectedAmount,
+          signature,
+          requireSignature: true,
+        });
+        if (!replayCheck.allowed) {
+          return NextResponse.json(
+            { allowed: false, error: replayCheck.error },
+            { status: replayCheck.statusCode || 400 }
+          );
+        }
+
         return NextResponse.json({
           success: true,
           allowed: true,
@@ -88,7 +203,7 @@ export async function POST(req: NextRequest) {
         transactionStatus,
         invoiceNumber,
         amount,
-        expectedAmount: effectiveExpected,
+        expectedAmount: authoritativeExpectedAmount,
         signature,
         requireSignature: true,
       });
@@ -102,9 +217,9 @@ export async function POST(req: NextRequest) {
 
       const nowIso = new Date().toISOString();
       const sessionRecord: QrisVerificationSessionRecord = {
-        orderId: body.orderId || invoiceNumber,
+        orderId: existing.orderId || body.orderId || invoiceNumber,
         invoiceNumber,
-        expectedAmount: effectiveExpected,
+        expectedAmount: authoritativeExpectedAmount,
         status: "VERIFIED_WEBHOOK",
         verificationMethod: "GATEWAY_WEBHOOK",
         transactionId: body.transactionId || invoiceNumber,
@@ -127,7 +242,7 @@ export async function POST(req: NextRequest) {
         metadata: {
           invoiceNumber,
           amount,
-          expectedAmount: effectiveExpected,
+          expectedAmount: authoritativeExpectedAmount,
           transactionStatus,
         },
       });
@@ -170,18 +285,29 @@ export async function POST(req: NextRequest) {
         invoiceNumber,
         orderId,
         expectedAmount,
-        supervisorRole,
-        supervisorId,
-        supervisorName,
       } = body;
+
+      // R5: Never read supervisorRole, supervisorId, or supervisorName from req.body!
+      // Resolve supervisor authority strictly on the server.
+      const isCallerAlreadySupervisor = SUPERVISOR_ROLES.includes(auth.role);
+      const serverSupervisorRole: RoleSlug = isCallerAlreadySupervisor
+        ? auth.role
+        : "MANAGER";
+      const serverSupervisorId = isCallerAlreadySupervisor
+        ? auth.userId
+        : "emp-001";
+      const serverSupervisorName = isCallerAlreadySupervisor
+        ? auth.name || "Store Supervisor"
+        : "Putu Arya (Store Manager)";
 
       const overrideResult = authorizeSupervisorQrisOverride({
         pin,
         referenceNumber,
         note,
-        supervisorRole: supervisorRole || "MANAGER",
-        supervisorId: supervisorId || auth.userId,
-        supervisorName: supervisorName || auth.name || "Store Supervisor",
+        supervisorRole: serverSupervisorRole,
+        supervisorId: serverSupervisorId,
+        supervisorName: serverSupervisorName,
+        actorKey: auth.userId,
       });
 
       if (!overrideResult.allowed || !overrideResult.verification) {
@@ -191,19 +317,27 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const resolvedInvoice = (invoiceNumber || orderId || overrideResult.verification.referenceNumber).trim();
+      const resolvedInvoice = String(
+        invoiceNumber || orderId || overrideResult.verification.referenceNumber
+      ).trim();
+      const existing = await getPersistentQrisSession(resolvedInvoice);
+      const resolvedExpectedAmount =
+        existing && existing.expectedAmount > 0
+          ? existing.expectedAmount
+          : Math.round(Number(expectedAmount) || 0);
+
       const nowIso = new Date().toISOString();
 
       const sessionRecord: QrisVerificationSessionRecord = {
-        orderId: orderId || resolvedInvoice,
+        orderId: String(orderId || existing?.orderId || resolvedInvoice),
         invoiceNumber: resolvedInvoice,
-        expectedAmount: Number(expectedAmount) || 0,
+        expectedAmount: resolvedExpectedAmount,
         status: "VERIFIED_SUPERVISOR",
         verificationMethod: "SUPERVISOR_OVERRIDE",
         rrn: overrideResult.verification.referenceNumber,
-        verifiedByUserId: overrideResult.verification.supervisorId || auth.userId,
-        verifiedByName: overrideResult.verification.supervisorName || auth.name || "Supervisor",
-        verifiedByRole: supervisorRole || "MANAGER",
+        verifiedByUserId: serverSupervisorId,
+        verifiedByName: serverSupervisorName,
+        verifiedByRole: serverSupervisorRole,
         verifiedAt: overrideResult.verification.verifiedAt,
         updatedAt: nowIso,
       };
@@ -226,7 +360,9 @@ export async function POST(req: NextRequest) {
           expectedAmount: sessionRecord.expectedAmount,
           authorizedBySupervisorId: sessionRecord.verifiedByUserId,
           authorizedBySupervisorName: sessionRecord.verifiedByName,
-          cashierUserId: auth.userId,
+          authorizedBySupervisorRole: sessionRecord.verifiedByRole,
+          requestedByCashierId: auth.userId,
+          requestedByRole: auth.role,
           note: overrideResult.verification.note,
         },
       });
@@ -240,7 +376,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Invalid verification mode. Expected WEBHOOK or SUPERVISOR_OVERRIDE." },
+      { error: "Invalid verification mode. Expected INIT, WEBHOOK, or SUPERVISOR_OVERRIDE." },
       { status: 400 }
     );
   } catch (err: any) {

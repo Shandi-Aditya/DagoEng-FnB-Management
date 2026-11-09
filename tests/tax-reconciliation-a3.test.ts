@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { OrderRecord } from "@/types/order";
+import { ShiftRecord } from "@/types/shift";
 import {
   getOrderTaxBreakdown,
   aggregateOrdersTaxAndRevenue,
+  aggregateShiftOrdersTaxAndRevenue,
+  computeClosingVerificationHash,
 } from "@/lib/tax-breakdown";
 import { calculateSettlement } from "@/lib/settlement";
 
@@ -140,5 +143,108 @@ describe("QA Handover A3 — Sinkronisasi Pajak Laporan vs Struk & Settlement (P
     expect(breakdown.pb1).toBe(0);
     expect(breakdown.serviceCharge).toBe(0);
     expect(breakdown.discount).toBe(0);
+  });
+
+  it("R10: aggregateShiftOrdersTaxAndRevenue hanya menghitung order dalam rentang [startTime, endTime] shift tersebut dan tidak mencampur order shift sebelumnya", () => {
+    const shiftStart = Date.parse("2026-11-09T08:00:00.000Z");
+    const shiftEnd = Date.parse("2026-11-09T16:00:00.000Z");
+
+    const shift: ShiftRecord = {
+      id: `shf-${shiftStart}-sgr`,
+      shiftName: "Shift Pagi",
+      outletId: "outlet-sgr",
+      outletName: "Singaraja",
+      assignedCashierId: "user-cashier-sgr",
+      assignedCashierName: "Ni Kadek Sri",
+      startTime: new Date(shiftStart).toISOString(),
+      endTime: new Date(shiftEnd).toISOString(),
+      closedAt: new Date(shiftEnd).toISOString(),
+      status: "CLOSED",
+      openingCash: 500000,
+      cashSales: 55000,
+      nonCashSales: 0,
+      refundAmount: 0,
+      expectedCash: 555000,
+      actualCash: 555000,
+      cashVariance: 0,
+    };
+
+    const orderBeforeShift: OrderRecord = {
+      id: "ord-prev-day",
+      orderNumber: "ORD-PREV",
+      organizationId: "org-1",
+      outletId: "outlet-sgr",
+      outletName: "Singaraja",
+      tableNumber: "T-01",
+      customerName: "Kemarin",
+      orderType: "DINE_IN",
+      status: "COMPLETED",
+      items: [],
+      subtotal: 200000,
+      tax: 20000,
+      serviceCharge: 10000,
+      total: 230000,
+      paymentStatus: "PAID",
+      targetServiceMinutes: 10,
+      createdAt: "2026-11-08T12:00:00.000Z",
+      statusHistory: [],
+    };
+
+    const orderInsideShift: OrderRecord = {
+      id: "ord-in-shift",
+      orderNumber: "ORD-IN",
+      organizationId: "org-1",
+      outletId: "outlet-sgr",
+      outletName: "Singaraja",
+      tableNumber: "T-02",
+      customerName: "Tamu Shift Pagi",
+      orderType: "DINE_IN",
+      status: "COMPLETED",
+      items: [],
+      subtotal: 50000,
+      tax: 5000,
+      serviceCharge: 0,
+      total: 55000,
+      paymentStatus: "PAID",
+      targetServiceMinutes: 10,
+      createdAt: "2026-11-09T10:30:00.000Z",
+      statusHistory: [],
+    };
+
+    const orderAfterShift: OrderRecord = {
+      id: "ord-next-shift",
+      orderNumber: "ORD-NEXT",
+      organizationId: "org-1",
+      outletId: "outlet-sgr",
+      outletName: "Singaraja",
+      tableNumber: "T-03",
+      customerName: "Tamu Shift Malam",
+      orderType: "DINE_IN",
+      status: "COMPLETED",
+      items: [],
+      subtotal: 100000,
+      tax: 10000,
+      serviceCharge: 0,
+      total: 110000,
+      paymentStatus: "PAID",
+      targetServiceMinutes: 10,
+      createdAt: "2026-11-09T19:00:00.000Z",
+      statusHistory: [],
+    };
+
+    const agg = aggregateShiftOrdersTaxAndRevenue(
+      [orderBeforeShift, orderInsideShift, orderAfterShift],
+      shift
+    );
+
+    expect(agg.orderCount).toBe(1);
+    expect(agg.totalRevenue).toBe(55000);
+    expect(agg.totalTaxPB1).toBe(5000);
+    expect(agg.totalNetSales).toBe(50000);
+
+    const hash1 = computeClosingVerificationHash(shift, agg);
+    const hash2 = computeClosingVerificationHash({ ...shift, cashSales: 999999 }, agg);
+    expect(hash1).toMatch(/^SHA256-[0-9A-F]{16}$/);
+    expect(hash1).not.toBe(hash2);
   });
 });

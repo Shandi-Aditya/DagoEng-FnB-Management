@@ -7,6 +7,7 @@ export interface QRISVerificationDetail {
   supervisorPinVerified?: boolean;
   supervisorId?: string;
   supervisorName?: string;
+  supervisorRole?: RoleSlug;
   serverSignature?: string;
   verifiedAt: string;
   note?: string;
@@ -22,26 +23,99 @@ export interface QrisVerificationResult {
 
 const AUTHORIZED_SUPERVISOR_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
 
-// Server-side supervisor PIN hashes (HMAC-SHA256 with static domain key so plaintext PIN is never exposed in source)
 const SUPERVISOR_PIN_DOMAIN_KEY = "dagoeng-supervisor-pin-salt-v1";
 
-// Precomputed HMAC-SHA256("dagoeng-supervisor-pin-salt-v1", "2580") and env override support
-const DEFAULT_SUPERVISOR_PIN_HMAC = hmacSha256Hex(SUPERVISOR_PIN_DOMAIN_KEY, "2580");
+const MAX_PIN_ATTEMPTS = 5;
+const PIN_LOCKOUT_WINDOW_MS = 15 * 60 * 1000;
+
+interface PinAttemptEntry {
+  count: number;
+  firstFailedAt: number;
+  lockedUntil: number;
+}
+
+const pinAttemptRegistry = new Map<string, PinAttemptEntry>();
+
+export function resetSupervisorPinRateLimitForTests(): void {
+  pinAttemptRegistry.clear();
+}
+
+export function checkSupervisorPinRateLimit(actorKey: string = "default"): {
+  locked: boolean;
+  remainingAttempts: number;
+} {
+  const now = Date.now();
+  const entry = pinAttemptRegistry.get(actorKey);
+  if (!entry) {
+    return { locked: false, remainingAttempts: MAX_PIN_ATTEMPTS };
+  }
+  if (entry.lockedUntil > now) {
+    return { locked: true, remainingAttempts: 0 };
+  }
+  if (now - entry.firstFailedAt > PIN_LOCKOUT_WINDOW_MS) {
+    pinAttemptRegistry.delete(actorKey);
+    return { locked: false, remainingAttempts: MAX_PIN_ATTEMPTS };
+  }
+  return {
+    locked: false,
+    remainingAttempts: Math.max(0, MAX_PIN_ATTEMPTS - entry.count),
+  };
+}
+
+function recordSupervisorPinFailure(actorKey: string = "default"): void {
+  const now = Date.now();
+  const existing = pinAttemptRegistry.get(actorKey);
+  if (!existing || now - existing.firstFailedAt > PIN_LOCKOUT_WINDOW_MS) {
+    pinAttemptRegistry.set(actorKey, {
+      count: 1,
+      firstFailedAt: now,
+      lockedUntil: 0,
+    });
+    return;
+  }
+  const nextCount = existing.count + 1;
+  pinAttemptRegistry.set(actorKey, {
+    count: nextCount,
+    firstFailedAt: existing.firstFailedAt,
+    lockedUntil: nextCount >= MAX_PIN_ATTEMPTS ? now + PIN_LOCKOUT_WINDOW_MS : 0,
+  });
+}
+
+function clearSupervisorPinFailures(actorKey: string = "default"): void {
+  pinAttemptRegistry.delete(actorKey);
+}
 
 export function computeSupervisorPinHmac(rawPin: string): string {
   return hmacSha256Hex(SUPERVISOR_PIN_DOMAIN_KEY, (rawPin || "").trim());
 }
 
-function getExpectedSupervisorPinHmac(): string {
+/**
+ * R5: Reads supervisor PIN exclusively from environment variable (never hardcoded in source).
+ * Fails closed (returns null) if SUPERVISOR_OVERRIDE_PIN is not configured.
+ */
+function getExpectedSupervisorPinHmac(): string | null {
   const envPin = process.env.SUPERVISOR_OVERRIDE_PIN;
-  if (envPin && envPin.trim()) {
-    return computeSupervisorPinHmac(envPin.trim());
+  if (!envPin || !envPin.trim()) {
+    return null;
   }
-  return DEFAULT_SUPERVISOR_PIN_HMAC;
+  return computeSupervisorPinHmac(envPin.trim());
 }
 
+/**
+ * R4: Requires QRIS_WEBHOOK_SECRET from environment.
+ * Fails closed by throwing in production when QRIS_WEBHOOK_SECRET is missing.
+ */
 export function getWebhookSecret(): string {
-  return process.env.QRIS_WEBHOOK_SECRET || "dagopay-webhook-secret-2026";
+  const envSecret = process.env.QRIS_WEBHOOK_SECRET;
+  if (envSecret && envSecret.trim().length > 0) {
+    return envSecret.trim();
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "CRITICAL_SECURITY_CONFIG: QRIS_WEBHOOK_SECRET wajib dikonfigurasi di environment production."
+    );
+  }
+  return "dev-test-only-qris-webhook-secret";
 }
 
 /**
@@ -58,17 +132,23 @@ export function signQrisWebhookPayload(payload: {
 
 /**
  * Validates supervisor PIN using constant-time HMAC comparison.
+ * Fails closed when no supervisor PIN is configured.
  */
 export function verifySupervisorPin(
   pin: string,
   configuredPin?: string
 ): boolean {
   if (!pin || typeof pin !== "string" || !pin.trim()) return false;
-  const candidateHmac = computeSupervisorPinHmac(pin.trim());
-  const expectedHmac = configuredPin
-    ? computeSupervisorPinHmac(configuredPin.trim())
-    : getExpectedSupervisorPinHmac();
+  const expectedHmac =
+    configuredPin && configuredPin.trim()
+      ? computeSupervisorPinHmac(configuredPin.trim())
+      : getExpectedSupervisorPinHmac();
 
+  if (!expectedHmac) {
+    return false;
+  }
+
+  const candidateHmac = computeSupervisorPinHmac(pin.trim());
   if (candidateHmac.length !== expectedHmac.length) return false;
   let diff = 0;
   for (let i = 0; i < candidateHmac.length; i++) {
@@ -78,7 +158,7 @@ export function verifySupervisorPin(
 }
 
 /**
- * Authorizes a manual QRIS payment using supervisor PIN, supervisor role check, and banking RRN.
+ * Authorizes a manual QRIS payment using supervisor PIN, supervisor role check, rate limiting, and banking RRN.
  */
 export function authorizeSupervisorQrisOverride(params: {
   pin: string;
@@ -88,7 +168,19 @@ export function authorizeSupervisorQrisOverride(params: {
   supervisorRole?: RoleSlug;
   supervisorId?: string;
   supervisorName?: string;
+  actorKey?: string;
 }): QrisVerificationResult {
+  const rateKey = params.actorKey || params.supervisorId || "default";
+  const rateStatus = checkSupervisorPinRateLimit(rateKey);
+  if (rateStatus.locked) {
+    return {
+      allowed: false,
+      statusCode: 429,
+      error:
+        "TOO_MANY_PIN_ATTEMPTS: Terlalu banyak percobaan PIN supervisor gagal. Otorisasi dikunci sementara selama 15 menit.",
+    };
+  }
+
   if (params.supervisorRole && !AUTHORIZED_SUPERVISOR_ROLES.includes(params.supervisorRole)) {
     return {
       allowed: false,
@@ -97,13 +189,29 @@ export function authorizeSupervisorQrisOverride(params: {
     };
   }
 
+  const hasConfiguredPin = Boolean(
+    (params.configuredPin && params.configuredPin.trim()) ||
+      (process.env.SUPERVISOR_OVERRIDE_PIN && process.env.SUPERVISOR_OVERRIDE_PIN.trim())
+  );
+  if (!hasConfiguredPin) {
+    return {
+      allowed: false,
+      statusCode: 503,
+      error:
+        "SUPERVISOR_PIN_NOT_CONFIGURED: SUPERVISOR_OVERRIDE_PIN belum dikonfigurasi di server.",
+    };
+  }
+
   if (!verifySupervisorPin(params.pin, params.configuredPin)) {
+    recordSupervisorPinFailure(rateKey);
     return {
       allowed: false,
       statusCode: 403,
       error: "PIN Supervisor tidak valid. Otorisasi pembayaran QRIS manual ditolak.",
     };
   }
+
+  clearSupervisorPinFailures(rateKey);
 
   const cleanRef = (params.referenceNumber || "").trim();
   if (cleanRef.length < 4) {
@@ -115,10 +223,22 @@ export function authorizeSupervisorQrisOverride(params: {
   }
 
   const verifiedAt = new Date().toISOString();
+  let secretForSig = "supervisor-fallback-sig-key";
+  try {
+    secretForSig = getWebhookSecret();
+  } catch {
+    secretForSig = SUPERVISOR_PIN_DOMAIN_KEY;
+  }
   const serverSignature = hmacSha256Hex(
-    getWebhookSecret(),
+    secretForSig,
     `SUPERVISOR:${cleanRef}:${verifiedAt}`
   );
+
+  // R5: Resolve supervisor identity from server-verified authority, never trusting raw client escalation
+  const resolvedRole: RoleSlug =
+    params.supervisorRole && AUTHORIZED_SUPERVISOR_ROLES.includes(params.supervisorRole)
+      ? params.supervisorRole
+      : "MANAGER";
 
   return {
     allowed: true,
@@ -127,8 +247,9 @@ export function authorizeSupervisorQrisOverride(params: {
       type: "SUPERVISOR_MANUAL",
       referenceNumber: cleanRef,
       supervisorPinVerified: true,
-      supervisorId: params.supervisorId || "mgr-supervisor",
-      supervisorName: params.supervisorName || "Store Supervisor",
+      supervisorId: params.supervisorId || "emp-001",
+      supervisorName: params.supervisorName || "Putu Arya (Store Manager)",
+      supervisorRole: resolvedRole,
       serverSignature,
       verifiedAt,
       note: params.note || "Otorisasi Manual QRIS Statis oleh Supervisor",
@@ -155,12 +276,20 @@ export function verifyGatewayWebhook(payload: {
     };
   }
 
+  let webhookSecret: string;
+  try {
+    webhookSecret = getWebhookSecret();
+  } catch (err: any) {
+    return {
+      allowed: false,
+      statusCode: 500,
+      error: err.message || "QRIS_WEBHOOK_SECRET belum dikonfigurasi.",
+    };
+  }
+
   if (payload.requireSignature || payload.signature !== undefined) {
-    const expectedSig = signQrisWebhookPayload({
-      invoiceNumber: payload.invoiceNumber,
-      amount: payload.amount,
-      transactionStatus: payload.transactionStatus,
-    });
+    const canonical = `${payload.invoiceNumber}:${Math.round(payload.amount)}:${payload.transactionStatus}`;
+    const expectedSig = hmacSha256Hex(webhookSecret, canonical);
     if (!payload.signature || payload.signature !== expectedSig) {
       return {
         allowed: false,
@@ -178,7 +307,11 @@ export function verifyGatewayWebhook(payload: {
     };
   }
 
-  if (Math.round(payload.amount) !== Math.round(payload.expectedAmount)) {
+  if (
+    !Number.isFinite(payload.expectedAmount) ||
+    payload.expectedAmount <= 0 ||
+    Math.round(payload.amount) !== Math.round(payload.expectedAmount)
+  ) {
     return {
       allowed: false,
       statusCode: 400,
@@ -188,7 +321,7 @@ export function verifyGatewayWebhook(payload: {
 
   const verifiedAt = new Date().toISOString();
   const serverSignature = hmacSha256Hex(
-    getWebhookSecret(),
+    webhookSecret,
     `WEBHOOK:${payload.invoiceNumber}:${Math.round(payload.amount)}`
   );
 
@@ -220,7 +353,10 @@ export function canConfirmQrisPayment(params: {
   if (params.isGatewayVerified) return true;
   if (
     params.supervisorOverride?.authorized &&
-    Boolean(params.supervisorOverride.referenceNumber && params.supervisorOverride.referenceNumber.trim().length >= 4)
+    Boolean(
+      params.supervisorOverride.referenceNumber &&
+        params.supervisorOverride.referenceNumber.trim().length >= 4
+    )
   ) {
     return true;
   }

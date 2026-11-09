@@ -94,11 +94,12 @@ export function PaymentModal({
 
   useEffect(() => {
     if (isOpen) {
+      const newTxId = `GW-DAGO-${Date.now().toString().slice(-6)}`;
       setCashGiven(grandTotal);
       setCashInputRaw(grandTotal.toString());
       setQrisSecondsLeft(120);
       setIsGatewayVerified(false);
-      setGatewayTxId(`GW-DAGO-${Date.now().toString().slice(-6)}`);
+      setGatewayTxId(newTxId);
       setIsSimulatingWebhook(false);
       setShowSupervisorAuth(false);
       setSupervisorPin("");
@@ -107,6 +108,18 @@ export function PaymentModal({
       setSupervisorAuthError(null);
       setSupervisorOverrideData(null);
       setApprovalCode(`APP-${Math.floor(100000 + Math.random() * 900000)}`);
+
+      if (grandTotal > 0) {
+        fetch("/api/pos/qris/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "INIT",
+            invoiceNumber: newTxId,
+            expectedAmount: grandTotal,
+          }),
+        }).catch(() => {});
+      }
 
       // Initialize Equal Split for 2 guests
       const perGuest = Math.floor(grandTotal / 2);
@@ -182,7 +195,9 @@ export function PaymentModal({
     if (!isOpen || activeTab !== "QRIS" || isQrisVerified || !gatewayTxId) return;
     const pollInterval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/pos/qris/verify?invoiceNumber=${encodeURIComponent(gatewayTxId)}`);
+        const res = await fetch(
+          `/api/pos/qris/verify?invoiceNumber=${encodeURIComponent(gatewayTxId)}&expectedAmount=${Math.round(grandTotal)}`
+        );
         if (!res.ok) return;
         const data = await res.json();
         if (data?.verified && data.session) {
@@ -207,7 +222,9 @@ export function PaymentModal({
     if (!gatewayTxId) return;
     setIsSimulatingWebhook(true);
     try {
-      const res = await fetch(`/api/pos/qris/verify?invoiceNumber=${encodeURIComponent(gatewayTxId)}`);
+      const res = await fetch(
+        `/api/pos/qris/verify?invoiceNumber=${encodeURIComponent(gatewayTxId)}&expectedAmount=${Math.round(grandTotal)}`
+      );
       if (res.ok) {
         const data = await res.json();
         if (data?.verified) {

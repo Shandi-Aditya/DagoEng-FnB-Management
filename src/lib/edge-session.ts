@@ -22,27 +22,142 @@ export interface EdgeTokenVerification {
   reason?: string;
 }
 
-// In-memory revocation registry (maps userId or email -> revocation timestamp in ms)
+// In-memory revocation cache (maps userId or email -> revocation timestamp in ms)
 const userRevocationRegistry = new Map<string, number>();
 
-export function revokeUserSessionsAfter(userIdOrEmail: string, timestampMs: number = Date.now()): void {
+function getNodeRevocationFilePath(): string | null {
+  try {
+    if (typeof process === "undefined" || !process.versions?.node) {
+      return null;
+    }
+    const req = eval("require");
+    const path = req("path");
+    const os = req("os");
+    let baseDir: string;
+    if (process.env.DATA_DIR_OVERRIDE && process.env.DATA_DIR_OVERRIDE.trim() !== "") {
+      baseDir = process.env.DATA_DIR_OVERRIDE;
+    } else if (process.env.NODE_ENV === "test") {
+      baseDir = path.join(process.cwd(), "data", ".test-storage");
+    } else if (
+      process.env.VERCEL ||
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.VERCEL_ENV
+    ) {
+      baseDir = path.join(os.tmpdir(), "dago-data");
+    } else {
+      baseDir = path.join(process.cwd(), "data");
+    }
+    return path.join(baseDir, "session_revocations.json");
+  } catch {
+    return null;
+  }
+}
+
+function readPersistentRevocations(): Record<string, number> {
+  try {
+    const filePath = getNodeRevocationFilePath();
+    if (!filePath) return {};
+    const req = eval("require");
+    const fs = req("fs");
+    if (!fs.existsSync(filePath)) return {};
+    const raw = fs.readFileSync(filePath, "utf-8").trim();
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePersistentRevocation(key: string, timestampMs: number): void {
+  try {
+    const filePath = getNodeRevocationFilePath();
+    if (!filePath) return;
+    const req = eval("require");
+    const fs = req("fs");
+    const path = req("path");
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const existing = readPersistentRevocations();
+    existing[key] = timestampMs;
+    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), "utf-8");
+  } catch {
+    // Ignore on pure Edge runtime without filesystem
+  }
+}
+
+export function revokeUserSessionsAfter(
+  userIdOrEmail: string,
+  timestampMs: number = Date.now()
+): void {
   const key = (userIdOrEmail || "").trim().toLowerCase();
   if (!key) return;
   userRevocationRegistry.set(key, timestampMs);
+  writePersistentRevocation(key, timestampMs);
 }
 
 export function getUserRevocationTimestamp(userIdOrEmail?: string | null): number | null {
   if (!userIdOrEmail) return null;
   const key = userIdOrEmail.trim().toLowerCase();
-  return userRevocationRegistry.get(key) ?? null;
+  const cached = userRevocationRegistry.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const persisted = readPersistentRevocations();
+  if (typeof persisted[key] === "number") {
+    userRevocationRegistry.set(key, persisted[key]);
+    return persisted[key];
+  }
+  return null;
+}
+
+/**
+ * R7: Clears only the in-memory revocation Map while keeping persistent storage intact.
+ * Used to simulate a cold serverless isolate or process restart in tests.
+ */
+export function clearInMemoryRevocationCacheForTests(): void {
+  userRevocationRegistry.clear();
 }
 
 export function clearRevocationRegistryForTests(): void {
   userRevocationRegistry.clear();
+  try {
+    const filePath = getNodeRevocationFilePath();
+    if (filePath) {
+      const req = eval("require");
+      const fs = req("fs");
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+  } catch {}
 }
 
-function getSigningSecret(): string {
-  return process.env.SESSION_SECRET || "dagoeng-pos-hmac-secret-key-2026-v1";
+/**
+ * R6: Returns the HMAC signing secret.
+ * In production, requires SESSION_SECRET to be explicitly set with >= 32 characters (fails closed).
+ */
+export function getSigningSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  const isProduction =
+    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+
+  if (isProduction) {
+    if (!secret || secret.trim().length < 32) {
+      throw new Error(
+        "CRITICAL_SECURITY_ERROR: SESSION_SECRET must be set and at least 32 characters in production."
+      );
+    }
+    return secret.trim();
+  }
+
+  if (secret && secret.trim().length > 0) {
+    return secret.trim();
+  }
+
+  return "dev-test-only-hmac-secret-key-2026-v1-min32chars";
 }
 
 // Pure TypeScript SHA-256 & HMAC-SHA256 so middleware works identically in Edge and Node runtimes
@@ -252,13 +367,25 @@ export function verifyEdgeSessionToken(
     return { valid: false, expired: false, payload: null, reason: "MISSING_TOKEN" };
   }
 
+  let secret: string;
+  try {
+    secret = getSigningSecret();
+  } catch (err: any) {
+    return {
+      valid: false,
+      expired: false,
+      payload: null,
+      reason: err?.message || "MISSING_PRODUCTION_SECRET",
+    };
+  }
+
   const parts = token.split(".");
   if (parts.length !== 2) {
     return { valid: false, expired: false, payload: null, reason: "MALFORMED_TOKEN" };
   }
 
   const [encodedPayload, signature] = parts;
-  const expectedSig = hmacSha256Hex(getSigningSecret(), encodedPayload);
+  const expectedSig = hmacSha256Hex(secret, encodedPayload);
 
   if (!timingSafeEqualStr(signature, expectedSig)) {
     return { valid: false, expired: false, payload: null, reason: "INVALID_SIGNATURE" };
@@ -275,7 +402,7 @@ export function verifyEdgeSessionToken(
     return { valid: false, expired: false, payload: null, reason: "INCOMPLETE_PAYLOAD" };
   }
 
-  // Check revocation by userId or email
+  // Check revocation by userId or email (both in-memory and persistent disk store)
   const revokedByUserId = getUserRevocationTimestamp(payload.userId);
   const revokedByEmail = getUserRevocationTimestamp(payload.email);
   const revokedAt = Math.max(revokedByUserId ?? 0, revokedByEmail ?? 0);

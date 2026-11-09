@@ -16,6 +16,7 @@ export interface LoyaltyPointsRecord {
   customerKey: string; // phone or customerId
   customerName?: string;
   points: number;
+  creditedOrderIds?: string[];
   updatedAt: string;
 }
 
@@ -32,6 +33,15 @@ export interface QrisVerificationSessionRecord {
   verifiedByRole?: string;
   verifiedAt?: string;
   updatedAt: string;
+}
+
+let mockStorageWriteFailure: Error | null = null;
+
+/**
+ * R9: Test hook to simulate disk or database write failures and verify API routes fail closed (500).
+ */
+export function __setMockStorageWriteFailure(err: Error | null): void {
+  mockStorageWriteFailure = err;
 }
 
 // Mutex queues per file to serialize read-modify-write operations atomically
@@ -66,6 +76,10 @@ async function readUnlocked<T>(filename: string, defaultValue: T): Promise<T> {
 }
 
 async function writeUnlocked<T>(filename: string, data: T): Promise<boolean> {
+  if (mockStorageWriteFailure) {
+    throw mockStorageWriteFailure;
+  }
+
   try {
     const filePath = getDataFilePath(filename);
     const dir = path.dirname(filePath);
@@ -80,14 +94,19 @@ async function writeUnlocked<T>(filename: string, data: T): Promise<boolean> {
       try {
         await persistStorageToDb(filename, content);
       } catch (dbErr) {
+        if (process.env.REQUIRE_DB_SYNC === "true" || process.env.NODE_ENV === "production") {
+          throw dbErr;
+        }
         console.warn(`[persistent-storage] DB sync warning for ${filename}:`, dbErr);
       }
     }
 
     return true;
-  } catch (err) {
+  } catch (err: any) {
     console.error(`[persistent-storage] Write failed for ${filename}:`, err);
-    return false;
+    throw new Error(
+      `STORAGE_WRITE_FAILED [${filename}]: ${err?.message || "Gagal menyimpan data ke media penyimpanan."}`
+    );
   }
 }
 
@@ -208,16 +227,22 @@ export async function getPersistentOrders(): Promise<OrderRecord[]> {
 }
 
 export async function savePersistentOrder(order: OrderRecord): Promise<OrderRecord> {
+  let savedOrder: OrderRecord = order;
   await mutatePersistentData<OrderRecord[]>(FILE_POS_ORDERS, [], (existing) => {
     const index = existing.findIndex((o) => o.id === order.id);
     if (index >= 0) {
+      const prev = existing[index] as any;
+      savedOrder = {
+        ...order,
+        ...(prev.loyaltyPointsCredited ? { loyaltyPointsCredited: true } : {}),
+      } as OrderRecord;
       const updated = [...existing];
-      updated[index] = order;
+      updated[index] = savedOrder;
       return updated;
     }
     return [order, ...existing];
   });
-  return order;
+  return savedOrder;
 }
 
 export async function getPersistentLoyaltyPoints(): Promise<LoyaltyPointsRecord[]> {
@@ -227,7 +252,8 @@ export async function getPersistentLoyaltyPoints(): Promise<LoyaltyPointsRecord[
 export async function updatePersistentLoyaltyPoints(
   customerKey: string,
   pointsDelta: number,
-  customerName?: string
+  customerName?: string,
+  orderId?: string
 ): Promise<LoyaltyPointsRecord> {
   const normalizedKey = customerKey.trim().toLowerCase();
   let resultRecord: LoyaltyPointsRecord | null = null;
@@ -236,12 +262,20 @@ export async function updatePersistentLoyaltyPoints(
     const index = existing.findIndex((r) => r.customerKey.toLowerCase() === normalizedKey);
     const now = new Date().toISOString();
     if (index >= 0) {
+      const prev = existing[index];
+      const creditedIds = Array.isArray(prev.creditedOrderIds) ? prev.creditedOrderIds : [];
+      // R8: Idempotency check per orderId so the same order never awards points twice
+      if (orderId && creditedIds.includes(orderId)) {
+        resultRecord = prev;
+        return existing;
+      }
       const updated = [...existing];
-      const currentPoints = Number(updated[index].points) || 0;
+      const currentPoints = Number(prev.points) || 0;
       resultRecord = {
-        ...updated[index],
-        customerName: customerName || updated[index].customerName,
+        ...prev,
+        customerName: customerName || prev.customerName,
         points: Math.max(0, currentPoints + pointsDelta),
+        creditedOrderIds: orderId ? [...creditedIds, orderId] : creditedIds,
         updatedAt: now,
       };
       updated[index] = resultRecord;
@@ -251,6 +285,7 @@ export async function updatePersistentLoyaltyPoints(
         customerKey: normalizedKey,
         customerName,
         points: Math.max(0, pointsDelta),
+        creditedOrderIds: orderId ? [orderId] : [],
         updatedAt: now,
       };
       return [resultRecord, ...existing];

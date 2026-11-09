@@ -11,7 +11,10 @@ import {
   getActiveShiftForCashier,
   validateManualShiftOpen,
   recordShiftSaleTransaction,
+  reconcileClientShiftAfterServerOpen,
+  hydrateShiftsFromServer,
 } from "@/lib/shift-management";
+import { syncWithOutbox, getOutboxItems, flushOutbox } from "@/lib/sync-outbox";
 
 export const INITIAL_EMPLOYEES: EmployeeProfile[] = [
   {
@@ -138,7 +141,12 @@ interface EmployeeShiftContextType {
   deleteEmployee: (id: string) => void;
   openShift: (shiftName: string, openingCash: number, cashierName?: string) => ShiftRecord;
   recordShiftTransaction: (cashAmount: number, nonCashAmount: number, outletId?: string) => void;
-  closeShift: (shiftId: string, actualCash: number, closingNotes?: string, metrics?: { cashSales?: number; nonCashSales?: number }) => void;
+  closeShift: (
+    shiftId: string,
+    actualCash: number,
+    closingNotes?: string,
+    metrics?: { cashSales?: number; nonCashSales?: number }
+  ) => void;
   resetEmployeeShiftData: () => void;
 }
 
@@ -177,24 +185,25 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       setIsInitialized(true);
     }
 
-    // Sync with persistent backend API to ensure shifts survive browser resets
+    // Flush any queued outbox items first, then hydrate authoritative shifts from server (R1)
     if (typeof window !== "undefined") {
-      fetch("/api/shifts")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && Array.isArray(data.shifts) && data.shifts.length > 0) {
-            setShifts((prev) => {
-              const prevMap = new Map(prev.map((s) => [s.id, s]));
-              for (const serverShift of data.shifts) {
-                if (!prevMap.has(serverShift.id)) {
-                  prevMap.set(serverShift.id, serverShift);
-                }
+      flushOutbox()
+        .catch(() => {})
+        .finally(() => {
+          fetch("/api/shifts")
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+              if (data && Array.isArray(data.shifts)) {
+                const pendingShiftIds = getOutboxItems()
+                  .filter((item) => item.endpoint === "/api/shifts")
+                  .map((item) => String(item.payload.shiftId || item.id));
+                setShifts((prev) =>
+                  hydrateShiftsFromServer(prev, data.shifts, pendingShiftIds)
+                );
               }
-              return Array.from(prevMap.values());
-            });
-          }
-        })
-        .catch(() => {});
+            })
+            .catch(() => {});
+        });
     }
   }, []);
 
@@ -363,20 +372,36 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     });
 
     if (typeof window !== "undefined") {
-      fetch("/api/shifts", {
+      syncWithOutbox({
+        id: `shift-open-${newShift.id}`,
+        endpoint: "/api/shifts",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        payload: {
           action: "OPEN",
+          shiftId: newShift.id,
           shiftName,
           openingCash: newShift.openingCash,
           cashierId: assignedId,
           cashierName: assignedName,
           outletId: targetOutletId,
           outletName: targetOutletName,
-        }),
-      }).catch((err) => {
-        console.warn("[shift] Persistent sync warning:", err);
+        },
+      }).then((result) => {
+        if (result.data?.shift) {
+          setShifts((prev) =>
+            reconcileClientShiftAfterServerOpen(prev, newShift.id, result.data.shift)
+          );
+        } else if (!result.synced && result.error) {
+          addNotification({
+            type: "SHIFT_CLOSED",
+            title: "Sinkronisasi Pembukaan Shift Tertunda",
+            detail: result.error,
+            relatedModule: "EMPLOYEES_SHIFT",
+            actionUrl: "/employees",
+            outletId: targetOutletId,
+            outletName: targetOutletName,
+          });
+        }
       });
     }
 
@@ -385,10 +410,13 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
 
   const recordShiftTransaction = (cashAmount: number, nonCashAmount: number, _outletId?: string) => {
     const assignedId = user?.id || "emp-002";
+    const targetShiftId = activeShift?.id;
+
     setShifts((prev) => {
       const res = recordShiftSaleTransaction({
         shifts: prev,
         cashierId: assignedId,
+        shiftId: targetShiftId,
         cashAmount,
         nonCashAmount,
       });
@@ -396,17 +424,24 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     });
 
     if (typeof window !== "undefined") {
-      fetch("/api/shifts", {
+      syncWithOutbox({
+        id: `shift-sale-${targetShiftId || assignedId}-${Date.now()}`,
+        endpoint: "/api/shifts",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        payload: {
           action: "RECORD_SALE",
+          shiftId: targetShiftId,
           cashierId: assignedId,
           cashAmount,
           nonCashAmount,
-        }),
-      }).catch((err) => {
-        console.warn("[shift] Persistent sale sync warning:", err);
+        },
+      }).then((result) => {
+        if (result.data?.shift) {
+          const serverShift: ShiftRecord = result.data.shift;
+          setShifts((prev) =>
+            prev.map((s) => (s.id === serverShift.id ? serverShift : s))
+          );
+        }
       });
     }
   };
@@ -415,14 +450,15 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     shiftId: string,
     actualCash: number,
     closingNotes?: string,
-    metrics?: { cashSales?: number; nonCashSales?: number }
+    _metrics?: { cashSales?: number; nonCashSales?: number }
   ) => {
     const shift = shifts.find((s) => s.id === shiftId);
     if (!shift) return;
 
-    const nowFormatted = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) + " WITA";
-    const finalCashSales = metrics?.cashSales !== undefined ? metrics.cashSales : (shift.cashSales || 0);
-    const finalNonCashSales = metrics?.nonCashSales !== undefined ? metrics.nonCashSales : (shift.nonCashSales || 0);
+    // R2: Compute expected and variance strictly from recorded shift.cashSales and shift.nonCashSales
+    const nowIso = new Date().toISOString();
+    const finalCashSales = shift.cashSales || 0;
+    const finalNonCashSales = shift.nonCashSales || 0;
     const expected = shift.openingCash + finalCashSales - (shift.refundAmount || 0);
     const variance = actualCash - expected;
 
@@ -435,11 +471,11 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
               cashSales: finalCashSales,
               nonCashSales: finalNonCashSales,
               expectedCash: expected,
-              endTime: nowFormatted,
+              endTime: nowIso,
               actualCash,
               cashVariance: variance,
               closingNotes,
-              closedAt: nowFormatted,
+              closedAt: nowIso,
               closedBy: user?.name || s.assignedCashierName || "Ni Kadek Sri",
             }
           : s
@@ -447,18 +483,33 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     );
 
     if (typeof window !== "undefined") {
-      fetch("/api/shifts", {
+      syncWithOutbox({
+        id: `shift-close-${shiftId}`,
+        endpoint: "/api/shifts",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        payload: {
           action: "CLOSE",
           shiftId,
           actualCash,
           closingNotes,
-          metrics,
-        }),
-      }).catch((err) => {
-        console.warn("[shift] Persistent sync warning on close:", err);
+        },
+      }).then((result) => {
+        if (result.data?.shift) {
+          const serverShift: ShiftRecord = result.data.shift;
+          setShifts((prev) =>
+            prev.map((s) => (s.id === serverShift.id ? serverShift : s))
+          );
+        } else if (!result.synced && result.error) {
+          addNotification({
+            type: "SHIFT_CLOSED",
+            title: "Sinkronisasi Penutupan Shift Gagal",
+            detail: result.error,
+            relatedModule: "EMPLOYEES_SHIFT",
+            actionUrl: "/employees",
+            outletId: shift.outletId,
+            outletName: shift.outletName,
+          });
+        }
       });
     }
 

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getPersistentShifts,
   savePersistentShift,
-  writePersistentData,
 } from "@/lib/persistent-storage";
 import { getRequestAuthUser } from "@/lib/server-auth";
 import { RoleSlug } from "@/types/auth";
@@ -98,7 +97,6 @@ export async function POST(req: NextRequest) {
       outletName,
       cashAmount,
       nonCashAmount,
-      metrics,
     } = body;
 
     if (action === "SYNC") {
@@ -132,6 +130,7 @@ export async function POST(req: NextRequest) {
         outletId: outletId || "outlet-sgr",
         outletName,
         existingShifts: shifts,
+        clientShiftId: typeof shiftId === "string" ? shiftId : typeof body.id === "string" ? body.id : undefined,
         currentTimeMs: nowMs,
       });
 
@@ -157,6 +156,8 @@ export async function POST(req: NextRequest) {
         shiftId,
         cashAmount: Number(cashAmount) || 0,
         nonCashAmount: Number(nonCashAmount) || 0,
+        actorId: auth.userId,
+        actorRole: auth.role,
         currentTimeMs: nowMs,
       });
 
@@ -168,7 +169,10 @@ export async function POST(req: NextRequest) {
             { status: 409 }
           );
         }
-        return NextResponse.json({ error: saleResult.error }, { status: 400 });
+        return NextResponse.json(
+          { error: saleResult.error },
+          { status: saleResult.statusCode || 400 }
+        );
       }
 
       await savePersistentShift(saleResult.shift);
@@ -184,7 +188,6 @@ export async function POST(req: NextRequest) {
         actorId: auth.userId,
         actorName: auth.name || cashierName || auth.email || "Kasir Bertugas",
         actorRole: auth.role,
-        metrics,
         currentTimeMs: nowMs,
       });
 
