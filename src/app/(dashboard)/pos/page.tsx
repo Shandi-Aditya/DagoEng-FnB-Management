@@ -593,7 +593,10 @@ export default function POSPage() {
       subtotal,
       discount: totalDiscount,
       promoId: selectedPromoId || undefined,
-      tax: taxPB1 + serviceCharge,
+      tax: taxPB1,
+      serviceCharge: serviceCharge,
+      taxRatePercent: isTaxEnabled ? Number(taxRatePercent) || 10 : 0,
+      serviceChargePercent: orderType === "DINE_IN" ? Number(settings.serviceChargePercent) || 0 : 0,
       total: grandTotal,
       paymentMethod: paymentData.method === "CASH" ? "CASH" : paymentData.method === "EDC" ? "EDC" : "QRIS",
       items: cartItems.map((c, i) => ({

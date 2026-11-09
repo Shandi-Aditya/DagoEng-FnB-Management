@@ -98,6 +98,31 @@ export default function ReportsPage() {
     .filter((o) => o.status !== "CANCELLED" && o.paymentMethod === "CASH")
     .reduce((sum, o) => sum + o.total, 0);
 
+  // Exact aggregation of final saved tax and service charge from receipts/orders (QA POS-34)
+  const totalTaxPB1 = filteredOrders
+    .filter((o) => o.status !== "CANCELLED")
+    .reduce((sum, o) => {
+      if (o.serviceCharge !== undefined) {
+        return sum + (o.tax || 0);
+      }
+      const taxRate = (o.taxRatePercent || 10) / 100;
+      const servRate = (o.serviceChargePercent || 5) / 100;
+      const ratio = taxRate / (taxRate + servRate);
+      return sum + Math.round((o.tax || 0) * ratio);
+    }, 0);
+
+  const totalServiceCharge = filteredOrders
+    .filter((o) => o.status !== "CANCELLED")
+    .reduce((sum, o) => {
+      if (o.serviceCharge !== undefined) {
+        return sum + (o.serviceCharge || 0);
+      }
+      const taxRate = (o.taxRatePercent || 10) / 100;
+      const servRate = (o.serviceChargePercent || 5) / 100;
+      const ratio = servRate / (taxRate + servRate);
+      return sum + Math.round((o.tax || 0) * ratio);
+    }, 0);
+
   // Generate Report Configuration Data for PDF/CSV
   const getReportData = (type: ReportType) => {
     const scopeName = activeOutlet?.name || "Semua Outlet (Konsolidasi)";
@@ -129,8 +154,8 @@ export default function ReportsPage() {
             ];
           }),
           reconciliationInfo: [
-            { label: "Total Pajak PB1 (10%)", value: `Rp ${Math.round(totalRevenue * 0.1).toLocaleString("id-ID")}` },
-            { label: "Total Service Charge (5%)", value: `Rp ${Math.round(totalRevenue * 0.05).toLocaleString("id-ID")}` },
+            { label: "Total Pajak PB1", value: `Rp ${totalTaxPB1.toLocaleString("id-ID")}` },
+            { label: "Total Service Charge", value: `Rp ${totalServiceCharge.toLocaleString("id-ID")}` },
             { label: "Total Diskon Promo", value: `Rp ${totalDiscounts.toLocaleString("id-ID")}` },
             { label: "Metode Non-Tunai / QRIS", value: `Rp ${totalNonCashRevenue.toLocaleString("id-ID")}` },
             { label: "Metode Kas Tunai", value: `Rp ${totalCashRevenue.toLocaleString("id-ID")}` },

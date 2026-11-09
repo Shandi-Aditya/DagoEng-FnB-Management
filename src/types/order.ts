@@ -47,6 +47,9 @@ export interface OrderRecord {
   discount?: number;
   promoId?: string;
   tax: number;
+  serviceCharge?: number;
+  taxRatePercent?: number;
+  serviceChargePercent?: number;
   total: number;
   paymentStatus: "PENDING" | "PAID" | "REFUNDED";
   paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER";
