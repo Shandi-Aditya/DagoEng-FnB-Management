@@ -23,8 +23,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
-  authorizeSupervisorQrisOverride,
-  DEFAULT_SUPERVISOR_PIN,
   QRISVerificationDetail,
 } from "@/lib/qris-verification";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
@@ -179,45 +177,93 @@ export function PaymentModal({
   // QRIS Verification status
   const isQrisVerified = isGatewayVerified || Boolean(supervisorOverrideData);
 
-  const handleSimulateWebhook = () => {
+  // Poll server-side QRIS gateway status while waiting for webhook
+  useEffect(() => {
+    if (!isOpen || activeTab !== "QRIS" || isQrisVerified || !gatewayTxId) return;
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/pos/qris/verify?invoiceNumber=${encodeURIComponent(gatewayTxId)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.verified && data.session) {
+          if (data.session.status === "VERIFIED_WEBHOOK") {
+            setIsGatewayVerified(true);
+          } else if (data.session.status === "VERIFIED_SUPERVISOR") {
+            setSupervisorOverrideData({
+              type: "SUPERVISOR_MANUAL",
+              referenceNumber: data.session.rrn || data.session.invoiceNumber,
+              supervisorPinVerified: true,
+              verifiedAt: data.session.verifiedAt || data.session.updatedAt,
+              note: "Otorisasi Manual QRIS Statis oleh Supervisor",
+            });
+          }
+        }
+      } catch {}
+    }, 3000);
+    return () => clearInterval(pollInterval);
+  }, [isOpen, activeTab, isQrisVerified, gatewayTxId]);
+
+  const handleCheckGatewayStatus = async () => {
+    if (!gatewayTxId) return;
     setIsSimulatingWebhook(true);
-    setTimeout(() => {
+    try {
+      const res = await fetch(`/api/pos/qris/verify?invoiceNumber=${encodeURIComponent(gatewayTxId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.verified) {
+          setIsGatewayVerified(true);
+          setSupervisorOverrideData(null);
+        }
+      }
+    } catch {
+      // Ignore network poll errors
+    } finally {
       setIsSimulatingWebhook(false);
-      setIsGatewayVerified(true);
-      setSupervisorOverrideData(null);
-    }, 600);
+    }
   };
 
-  const handleAuthorizeSupervisor = () => {
+  const handleAuthorizeSupervisor = async () => {
     setSupervisorAuthError(null);
-    const result = authorizeSupervisorQrisOverride({
-      pin: supervisorPin,
-      referenceNumber,
-      note: supervisorNote || `QRIS Statis Meja ${tableNumber}`,
-    });
+    try {
+      const res = await fetch("/api/pos/qris/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "SUPERVISOR_OVERRIDE",
+          pin: supervisorPin,
+          referenceNumber,
+          note: supervisorNote || `QRIS Statis Meja ${tableNumber}`,
+          invoiceNumber: gatewayTxId,
+          expectedAmount: grandTotal,
+        }),
+      });
+      const data = await res.json();
 
-    if (!result.allowed || !result.verification) {
-      setSupervisorAuthError(result.error || "Otorisasi supervisor gagal.");
-      return;
+      if (!res.ok || !data.allowed || !data.verification) {
+        setSupervisorAuthError(data.error || "Otorisasi supervisor ditolak oleh server.");
+        return;
+      }
+
+      setSupervisorOverrideData(data.verification);
+      setShowSupervisorAuth(false);
+
+      logActivity({
+        module: "POS",
+        action: "QRIS_SUPERVISOR_MANUAL_OVERRIDE",
+        description: `Otorisasi manual pembayaran QRIS Statis Rp ${grandTotal.toLocaleString("id-ID")} untuk ${customerName || "Pelanggan"} (${orderType === "DINE_IN" ? "Meja " + tableNumber : "Takeaway"}). Ref RRN: ${referenceNumber}`,
+        category: "TRANSACTION",
+        severity: "HIGH",
+        metadata: {
+          grandTotal,
+          referenceNumber,
+          tableNumber,
+          note: supervisorNote,
+          timestamp: data.verification.verifiedAt,
+        },
+      });
+    } catch {
+      setSupervisorAuthError("Gagal menghubungi server verifikasi QRIS.");
     }
-
-    setSupervisorOverrideData(result.verification);
-    setShowSupervisorAuth(false);
-
-    logActivity({
-      module: "POS",
-      action: "QRIS_SUPERVISOR_MANUAL_OVERRIDE",
-      description: `Otorisasi manual pembayaran QRIS Statis Rp ${grandTotal.toLocaleString("id-ID")} untuk ${customerName || "Pelanggan"} (${orderType === "DINE_IN" ? "Meja " + tableNumber : "Takeaway"}). Ref RRN: ${referenceNumber}`,
-      category: "TRANSACTION",
-      severity: "HIGH",
-      metadata: {
-        grandTotal,
-        referenceNumber,
-        tableNumber,
-        note: supervisorNote,
-        timestamp: new Date().toISOString(),
-      },
-    });
   };
 
   const handleCashShortcut = (amount: number) => {
@@ -413,16 +459,16 @@ export function PaymentModal({
                     </div>
                   </div>
 
-                  {/* Dev Sandbox simulation & Supervisor override actions */}
+                  {/* Server status check & Supervisor override actions */}
                   <div className="flex flex-wrap gap-2 pt-1 border-t border-amber-200/80 dark:border-amber-800/60">
                     <button
                       type="button"
                       disabled={isSimulatingWebhook}
-                      onClick={handleSimulateWebhook}
+                      onClick={handleCheckGatewayStatus}
                       className="px-2.5 py-1.5 bg-white dark:bg-slate-900 hover:bg-amber-100 dark:hover:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-[11px] font-bold text-amber-900 dark:text-amber-200 flex items-center space-x-1.5 shadow-xs transition-colors"
                     >
                       <RefreshCw className={`w-3 h-3 ${isSimulatingWebhook ? "animate-spin text-amber-600" : ""}`} />
-                      <span>{isSimulatingWebhook ? "Menerima Webhook..." : "Simulasikan Webhook DagoPay (Dev)"}</span>
+                      <span>{isSimulatingWebhook ? "Memeriksa Status Server..." : "Cek Status Gateway DagoPay"}</span>
                     </button>
 
                     <button
@@ -491,7 +537,7 @@ export function PaymentModal({
                         maxLength={6}
                         value={supervisorPin}
                         onChange={(e) => setSupervisorPin(e.target.value)}
-                        placeholder="PIN Supervisor (Default: 1234)"
+                        placeholder="Masukkan PIN Supervisor Resmi"
                         className="w-full px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
                       />
                     </div>

@@ -10,6 +10,13 @@ import {
   withDbTimeout,
   isLocalDevFallbackAllowed,
 } from "./organizer-activation";
+import {
+  EDGE_SESSION_COOKIE_NAME,
+  verifyEdgeSessionToken,
+  getUserRevocationTimestamp,
+  isPersonaCookieAllowedInEnv,
+} from "./edge-session";
+import { findUnifiedUserByEmail, findUnifiedUserById } from "./unified-account";
 
 export interface ServerAuthResult {
   isAuthenticated: boolean;
@@ -394,43 +401,11 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
     if (isLocalDevFallbackAllowed()) {
       const orgSession = getOrganizerSession(sessionTokenHash);
       if (orgSession && orgSession.expiresAt > new Date()) {
-        return {
-          isAuthenticated: true,
-          role: "CUSTOMER",
-          userId: orgSession.userId,
-          email: orgSession.email,
-          name: orgSession.name,
-          scopeLevel: "TENANT",
-          permissions: ["events:manage_own"],
-          tenantId: null,
-          businessModule: "CORE",
-        };
-      }
-    }
-  }
-
-  // 2. Check verified active persona cookie (only permitted in dev/test or when role simulator explicitly enabled)
-  const personaCookie = req.cookies.get("dagoeng_active_persona")?.value;
-  if (personaCookie && TRUSTED_PERSONAS[personaCookie]) {
-    const persona = TRUSTED_PERSONAS[personaCookie];
-    const isPrivileged =
-      persona.role === "SUPER_ADMIN" ||
-      persona.role === "OWNER" ||
-      persona.role === "MANAGER" ||
-      persona.scopeLevel === "PLATFORM" ||
-      persona.scopeLevel === "ORGANIZATION";
-
-    if (process.env.NODE_ENV === "production") {
-      const isVercelDemo =
-        Boolean(process.env.VERCEL || process.env.NEXT_PUBLIC_VERCEL_ENV || process.env.VERCEL_ENV) ||
-        process.env.ALLOW_DEMO_LOGIN === "true" ||
-        process.env.NEXT_PUBLIC_ALLOW_DEMO_LOGIN === "true" ||
-        process.env.NEXT_PUBLIC_DEMO_MODE === "true";
-
-      if (!isVercelDemo) {
-        const simulatorEnabled = process.env.ENABLE_ROLE_SIMULATOR === "true";
-        // In strict production, persona cookie cannot grant privileged administrative roles
-        if (!simulatorEnabled || isPrivileged) {
+        const revokedAt = Math.max(
+          getUserRevocationTimestamp(orgSession.userId) ?? 0,
+          getUserRevocationTimestamp(orgSession.email) ?? 0
+        );
+        if (revokedAt > 0) {
           return {
             isAuthenticated: false,
             role: null,
@@ -440,10 +415,99 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
             permissions: [],
             tenantId: null,
             businessModule: null,
-            error: "UNAUTHORIZED: Simulasi persona administratif tidak diizinkan di production. Gunakan sesi kredensial resmi.",
+            error: "SESSION_REVOKED",
           };
         }
+
+        // Resolve latest role from unified user record if available
+        const unifiedUser = findUnifiedUserByEmail(orgSession.email) || findUnifiedUserById(orgSession.userId);
+        const currentRole: RoleSlug =
+          unifiedUser?.role === "ADMIN"
+            ? "OWNER"
+            : unifiedUser?.role === "STAFF"
+              ? "CASHIER"
+              : "CUSTOMER";
+
+        return {
+          isAuthenticated: true,
+          role: currentRole,
+          userId: unifiedUser?.id || orgSession.userId,
+          email: orgSession.email,
+          name: unifiedUser?.name || orgSession.name,
+          scopeLevel: "TENANT",
+          permissions: ["events:manage_own"],
+          tenantId: null,
+          businessModule: "CORE",
+        };
       }
+    }
+  }
+
+  // 1b. Check signed edge token cookie (dagoeng_edge_token)
+  const edgeToken = req.cookies.get(EDGE_SESSION_COOKIE_NAME)?.value;
+  if (edgeToken) {
+    const verification = verifyEdgeSessionToken(edgeToken);
+    if (verification.revoked || verification.expired) {
+      return {
+        isAuthenticated: false,
+        role: null,
+        userId: null,
+        email: null,
+        scopeLevel: null,
+        permissions: [],
+        tenantId: null,
+        businessModule: null,
+        error: verification.revoked ? "SESSION_REVOKED" : "SESSION_EXPIRED",
+      };
+    }
+    if (verification.valid && verification.payload) {
+      return {
+        isAuthenticated: true,
+        role: verification.payload.role,
+        userId: verification.payload.userId,
+        email: verification.payload.email || null,
+        scopeLevel: verification.payload.scopeLevel || "OUTLET",
+        permissions: [],
+        tenantId: null,
+        businessModule: null,
+      };
+    }
+  }
+
+  // 2. Check verified active persona cookie (only permitted in dev/test or when role simulator explicitly enabled)
+  const personaCookie = req.cookies.get("dagoeng_active_persona")?.value;
+  if (personaCookie && TRUSTED_PERSONAS[personaCookie]) {
+    const persona = TRUSTED_PERSONAS[personaCookie];
+    if (!isPersonaCookieAllowedInEnv(persona.role, persona.scopeLevel)) {
+      return {
+        isAuthenticated: false,
+        role: null,
+        userId: null,
+        email: null,
+        scopeLevel: null,
+        permissions: [],
+        tenantId: null,
+        businessModule: null,
+        error: "UNAUTHORIZED: Simulasi persona administratif tidak diizinkan di production. Gunakan sesi kredensial resmi.",
+      };
+    }
+
+    const revokedAt = Math.max(
+      getUserRevocationTimestamp(persona.userId) ?? 0,
+      getUserRevocationTimestamp(persona.email) ?? 0
+    );
+    if (revokedAt > 0) {
+      return {
+        isAuthenticated: false,
+        role: null,
+        userId: null,
+        email: null,
+        scopeLevel: null,
+        permissions: [],
+        tenantId: null,
+        businessModule: null,
+        error: "SESSION_REVOKED",
+      };
     }
 
     return {

@@ -4,6 +4,8 @@ import React, { useState } from "react";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
+import { useOrders } from "@/contexts/OrderContext";
+import { aggregateOrdersTaxAndRevenue } from "@/lib/tax-breakdown";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,6 +70,7 @@ const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
 export default function EmployeesPage() {
   const { activeOutlet, activeOutletId } = useOutlet();
   const { user } = useAuth();
+  const { filteredOrders } = useOrders();
   const {
     filteredEmployees,
     filteredShifts,
@@ -1627,45 +1630,55 @@ export default function EmployeesPage() {
       )}
 
       {/* PDF Closing Modal */}
-      {isPDFOpen && (
-        <DailyClosingPDFModal
-          isOpen={isPDFOpen}
-          onClose={() => setIsPDFOpen(false)}
-          managerPhone="+62 812-3456-7890"
-          reportData={{
-            reportNumber: `RPT-CLS-${Date.now().toString().slice(-6)}`,
-            outletName: activeOutlet?.name || "Singaraja",
-            outletAddress: "Jl. Ngurah Rai No. 45, Singaraja, Bali",
-            outletPhone: "+62 812-3344-5566",
-            cashierName: activeShift?.assignedCashierName || user?.name || "Kasir",
-            closingDateTime: new Date().toLocaleString("id-ID"),
-            shiftName: activeShift?.shiftName || "Shift Pagi",
-            initialCash: activeShift?.openingCash || 500000,
-            totalCashSales: activeShift?.cashSales || 0,
-            qrisSales: activeShift?.nonCashSales || 0,
-            edcSales: 0,
-            totalTransactionsCount: 14,
-            totalGrossSales: (activeShift?.cashSales || 0) + (activeShift?.nonCashSales || 0),
-            totalDiscounts: 0,
-            isTaxEnabled: true,
-            taxRatePercent: 10,
-            totalTax: Math.round(((activeShift?.cashSales || 0) + (activeShift?.nonCashSales || 0)) * (10 / 110)),
-            totalNetSales: ((activeShift?.cashSales || 0) + (activeShift?.nonCashSales || 0)) - Math.round(((activeShift?.cashSales || 0) + (activeShift?.nonCashSales || 0)) * (10 / 110)),
-            tenantSharePercent: 80,
-            dagoSharePercent: 20,
-            tenantTotalShare: Math.round((((activeShift?.cashSales || 0) + (activeShift?.nonCashSales || 0)) - Math.round(((activeShift?.cashSales || 0) + (activeShift?.nonCashSales || 0)) * (10 / 110))) * 0.8),
-            dagoTotalShare: Math.round((((activeShift?.cashSales || 0) + (activeShift?.nonCashSales || 0)) - Math.round(((activeShift?.cashSales || 0) + (activeShift?.nonCashSales || 0)) * (10 / 110))) * 0.2),
-            tenantQrisShare: Math.round((activeShift?.nonCashSales || 0) * 0.8),
-            dagoQrisShare: Math.round((activeShift?.nonCashSales || 0) * 0.2),
-            tenantCashShare: Math.round((activeShift?.cashSales || 0) * 0.8),
-            dagoCashShare: Math.round((activeShift?.cashSales || 0) * 0.2),
-            actualCashEnding: activeShift?.actualCash || (activeShift?.openingCash || 500000) + (activeShift?.cashSales || 0),
-            cashDifference: activeShift?.cashVariance || 0,
-            shiftNotes: activeShift?.closingNotes || "Kas fisik cocok sempurna dengan sistem POS.",
-            verificationHash: "SHA256-DAGO-VERIFIED-CLOSING-OK",
-          }}
-        />
-      )}
+      {isPDFOpen && (() => {
+        const closingTaxAgg = aggregateOrdersTaxAndRevenue(filteredOrders);
+        const shiftGrossSales =
+          (activeShift?.cashSales || 0) + (activeShift?.nonCashSales || 0) ||
+          closingTaxAgg.totalRevenue;
+        const storedTaxTotal = closingTaxAgg.totalTaxPB1;
+        const storedServiceTotal = closingTaxAgg.totalServiceCharge;
+        const netSalesAfterTax = Math.max(0, shiftGrossSales - storedTaxTotal - storedServiceTotal);
+
+        return (
+          <DailyClosingPDFModal
+            isOpen={isPDFOpen}
+            onClose={() => setIsPDFOpen(false)}
+            managerPhone="+62 812-3456-7890"
+            reportData={{
+              reportNumber: `RPT-CLS-${Date.now().toString().slice(-6)}`,
+              outletName: activeOutlet?.name || "Singaraja",
+              outletAddress: "Jl. Ngurah Rai No. 45, Singaraja, Bali",
+              outletPhone: "+62 812-3344-5566",
+              cashierName: activeShift?.assignedCashierName || user?.name || "Kasir",
+              closingDateTime: new Date().toLocaleString("id-ID"),
+              shiftName: activeShift?.shiftName || "Shift Pagi",
+              initialCash: activeShift?.openingCash || 500000,
+              totalCashSales: activeShift?.cashSales || 0,
+              qrisSales: activeShift?.nonCashSales || 0,
+              edcSales: 0,
+              totalTransactionsCount: closingTaxAgg.orderCount || 14,
+              totalGrossSales: shiftGrossSales,
+              totalDiscounts: closingTaxAgg.totalDiscounts,
+              isTaxEnabled: true,
+              taxRatePercent: 10,
+              totalTax: storedTaxTotal,
+              totalNetSales: netSalesAfterTax,
+              tenantSharePercent: 80,
+              dagoSharePercent: 20,
+              tenantTotalShare: Math.round(netSalesAfterTax * 0.8),
+              dagoTotalShare: Math.round(netSalesAfterTax * 0.2),
+              tenantQrisShare: Math.round((activeShift?.nonCashSales || 0) * 0.8),
+              dagoQrisShare: Math.round((activeShift?.nonCashSales || 0) * 0.2),
+              tenantCashShare: Math.round((activeShift?.cashSales || 0) * 0.8),
+              dagoCashShare: Math.round((activeShift?.cashSales || 0) * 0.2),
+              actualCashEnding: activeShift?.actualCash || (activeShift?.openingCash || 500000) + (activeShift?.cashSales || 0),
+              cashDifference: activeShift?.cashVariance || 0,
+              shiftNotes: activeShift?.closingNotes || "Kas fisik cocok sempurna dengan sistem POS.",
+              verificationHash: "SHA256-DAGO-VERIFIED-CLOSING-OK",
+            }}
+          />
+        );
+      })()}
 
       {/* PDF Official HR & Shift Report Modal */}
       <EmployeesReportPDFModal

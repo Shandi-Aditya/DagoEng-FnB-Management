@@ -11,6 +11,7 @@ import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { calculateSettlement, getTenantPayoutAccount, maskAccountNumber } from "@/lib/settlement";
+import { getOrderTaxBreakdown, aggregateOrdersTaxAndRevenue } from "@/lib/tax-breakdown";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -76,16 +77,9 @@ export default function ReportsPage() {
     (l) => (activeOutletId === "ALL" || l.outletId === activeOutletId || !l.outletId) && (l.module === "POS" || l.module === "FINANCE" || l.module === "COMMERCIAL")
   );
 
-  const totalRevenue = filteredOrders
-    .filter((o) => o.status !== "CANCELLED")
-    .reduce((sum, o) => sum + o.total, 0);
-
-  const totalDiscounts = filteredOrders
-    .filter((o) => o.status !== "CANCELLED")
-    .reduce((sum, o) => {
-      const disc = o.discount ?? Math.max(0, (o.subtotal + (o.tax || 0)) - o.total);
-      return sum + disc;
-    }, 0);
+  const aggregatedTaxReport = aggregateOrdersTaxAndRevenue(filteredOrders);
+  const totalRevenue = aggregatedTaxReport.totalRevenue;
+  const totalDiscounts = aggregatedTaxReport.totalDiscounts;
 
   const totalOrdersCount = filteredOrders.length;
   const totalItemsSold = filteredOrders.reduce((sum, o) => sum + o.items.reduce((iSum, it) => iSum + it.quantity, 0), 0);
@@ -99,29 +93,8 @@ export default function ReportsPage() {
     .reduce((sum, o) => sum + o.total, 0);
 
   // Exact aggregation of final saved tax and service charge from receipts/orders (QA POS-34)
-  const totalTaxPB1 = filteredOrders
-    .filter((o) => o.status !== "CANCELLED")
-    .reduce((sum, o) => {
-      if (o.serviceCharge !== undefined) {
-        return sum + (o.tax || 0);
-      }
-      const taxRate = (o.taxRatePercent || 10) / 100;
-      const servRate = (o.serviceChargePercent || 5) / 100;
-      const ratio = taxRate / (taxRate + servRate);
-      return sum + Math.round((o.tax || 0) * ratio);
-    }, 0);
-
-  const totalServiceCharge = filteredOrders
-    .filter((o) => o.status !== "CANCELLED")
-    .reduce((sum, o) => {
-      if (o.serviceCharge !== undefined) {
-        return sum + (o.serviceCharge || 0);
-      }
-      const taxRate = (o.taxRatePercent || 10) / 100;
-      const servRate = (o.serviceChargePercent || 5) / 100;
-      const ratio = servRate / (taxRate + servRate);
-      return sum + Math.round((o.tax || 0) * ratio);
-    }, 0);
+  const totalTaxPB1 = aggregatedTaxReport.totalTaxPB1;
+  const totalServiceCharge = aggregatedTaxReport.totalServiceCharge;
 
   // Generate Report Configuration Data for PDF/CSV
   const getReportData = (type: ReportType) => {
@@ -140,7 +113,7 @@ export default function ReportsPage() {
           tableHeaders: ["ID Order", "Customer", "Meja/Tipe", "Waktu", "Promo", "Diskon", "Status", "Metode Bayar", "Total (Rp)"],
           tableRows: filteredOrders.map((o) => {
             const promoName = settings.promos.find((p) => p.id === o.promoId)?.name || o.promoId || "-";
-            const disc = o.discount ?? Math.max(0, (o.subtotal + (o.tax || 0)) - o.total);
+            const disc = getOrderTaxBreakdown(o).discount;
             return [
               o.orderNumber || o.id,
               o.customerName || "Walk-in Guest",
@@ -247,7 +220,7 @@ export default function ReportsPage() {
           tableHeaders: ["Timestamp", "Aktor", "Modul", "Aksi", "Perubahan Data / Nominal", "Alasan / Notes"],
           tableRows: filteredFinanceLogs.map((l) => [
             l.timestamp.split("T")[0],
-            l.actorName,
+            l.actorName || l.userName || "-",
             l.module,
             l.action,
             l.newValue || l.description,

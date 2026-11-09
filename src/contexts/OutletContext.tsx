@@ -2,46 +2,10 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
+import { DEMO_OUTLETS, OutletItem } from "@/lib/receipt-publisher";
 
-export interface OutletItem {
-  id: string;
-  name: string;
-  code: string;
-  address: string;
-  status: "ACTIVE" | "COMING_SOON" | "INACTIVE";
-  badgeLabel?: string;
-  isComingSoon?: boolean;
-}
-
-export const DEMO_OUTLETS: OutletItem[] = [
-  {
-    id: "outlet-sgr",
-    name: "Singaraja (Pusat)",
-    code: "KS-SGR",
-    address: "Jl. Ngurah Rai No. 45, Singaraja",
-    status: "ACTIVE",
-    badgeLabel: "● Beroperasi Aktif",
-    isComingSoon: false,
-  },
-  {
-    id: "outlet-dps",
-    name: "Denpasar",
-    code: "KS-DPS",
-    address: "Jl. Teuku Umar No. 88, Denpasar",
-    status: "COMING_SOON",
-    badgeLabel: "⏳ Segera Hadir (Ekspansi)",
-    isComingSoon: true,
-  },
-  {
-    id: "outlet-ubd",
-    name: "Ubud",
-    code: "KS-UBD",
-    address: "Jl. Raya Ubud No. 12, Ubud",
-    status: "COMING_SOON",
-    badgeLabel: "⏳ Segera Hadir (Ekspansi)",
-    isComingSoon: true,
-  },
-];
+export { DEMO_OUTLETS };
+export type { OutletItem };
 
 interface OutletContextType {
   activeOutletId: string; // 'ALL' or specific outlet id

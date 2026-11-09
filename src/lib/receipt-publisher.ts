@@ -1,5 +1,49 @@
 import { DEFAULT_FNB_TENANTS, getTenantName, getAllStoredTenantSettings } from "./tenant";
 
+export interface OutletItem {
+  id: string;
+  name: string;
+  code: string;
+  address: string;
+  phone?: string;
+  status: "ACTIVE" | "COMING_SOON" | "INACTIVE";
+  badgeLabel?: string;
+  isComingSoon?: boolean;
+}
+
+export const DEMO_OUTLETS: OutletItem[] = [
+  {
+    id: "outlet-sgr",
+    name: "Singaraja (Pusat)",
+    code: "KS-SGR",
+    address: "Jl. Ngurah Rai No. 45, Singaraja, Bali",
+    phone: "(0362) 23456",
+    status: "ACTIVE",
+    badgeLabel: "● Beroperasi Aktif",
+    isComingSoon: false,
+  },
+  {
+    id: "outlet-dps",
+    name: "Denpasar",
+    code: "KS-DPS",
+    address: "Jl. Teuku Umar No. 88, Denpasar",
+    phone: "(0361) 889900",
+    status: "COMING_SOON",
+    badgeLabel: "⏳ Segera Hadir (Ekspansi)",
+    isComingSoon: true,
+  },
+  {
+    id: "outlet-ubd",
+    name: "Ubud",
+    code: "KS-UBD",
+    address: "Jl. Raya Ubud No. 12, Ubud",
+    phone: "(0361) 776655",
+    status: "COMING_SOON",
+    badgeLabel: "⏳ Segera Hadir (Ekspansi)",
+    isComingSoon: true,
+  },
+];
+
 export interface MasterOutletInfo {
   name: string;
   address: string;
@@ -7,9 +51,9 @@ export interface MasterOutletInfo {
 }
 
 export const MASTER_HQ_OUTLET: MasterOutletInfo = {
-  name: "Singaraja (Pusat)",
-  address: "Jl. Ngurah Rai No. 45, Singaraja, Bali",
-  phone: "(0362) 23456",
+  name: DEMO_OUTLETS[0].name,
+  address: DEMO_OUTLETS[0].address,
+  phone: DEMO_OUTLETS[0].phone || "(0362) 23456",
 };
 
 export interface ReceiptPublisherInfo {
@@ -61,7 +105,15 @@ export function resolvePosReceiptPublisher(
   const tenantIdsInItems = Array.from(
     new Set(
       items
-        .map((i) => i.tenantId || (i.tenantName ? DEFAULT_FNB_TENANTS.find((t) => t.name.toLowerCase() === i.tenantName?.toLowerCase())?.id : undefined))
+        .map(
+          (i) =>
+            i.tenantId ||
+            (i.tenantName
+              ? DEFAULT_FNB_TENANTS.find(
+                  (t) => t.name.toLowerCase() === i.tenantName?.toLowerCase()
+                )?.id
+              : undefined)
+        )
         .filter(Boolean) as string[]
     )
   );
@@ -82,7 +134,18 @@ export function resolvePosReceiptPublisher(
   // Single tenant resolution
   const primaryTenantId = tenantIdsInItems[0] || fallbackTenantId || "tenant-ks";
   const tenantMeta = DEFAULT_FNB_TENANTS.find((t) => t.id === primaryTenantId);
-  const tenantName = items[0]?.tenantName || tenantMeta?.name || getTenantName(primaryTenantId) || "Kopi Senja";
+  const matchingItem = items.find(
+    (i) =>
+      i.tenantId === primaryTenantId ||
+      (i.tenantName &&
+        DEFAULT_FNB_TENANTS.find((t) => t.name.toLowerCase() === i.tenantName?.toLowerCase())
+          ?.id === primaryTenantId)
+  );
+  const tenantName =
+    matchingItem?.tenantName ||
+    tenantMeta?.name ||
+    getTenantName(primaryTenantId) ||
+    "Kopi Senja";
 
   const allStoredSettings = typeof window !== "undefined" ? getAllStoredTenantSettings() : {};
   const storedTenantSettings = (allStoredSettings as any)[primaryTenantId];

@@ -1,4 +1,5 @@
 import { OrderRecord } from "@/types/order";
+import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 
 export interface SettlementSummary {
   tenantId: string | "DAGO_HUB";
@@ -134,18 +135,20 @@ export function calculateSettlement(
         });
       });
 
-      // Step 2: Allocate order level discount and tax based on prorata
-      const computedDiscount = Math.max(0, order.subtotal + order.tax - order.total);
+      // Step 2: Allocate order level discount, PB1 tax, and service charge based on prorata (POS-34 / A3-1)
+      const breakdown = getOrderTaxBreakdown(order);
+      const computedDiscount = breakdown.discount;
 
       tenantGrosses.forEach((data, tenantId) => {
         const ratio = orderValidGross > 0 ? data.gross / orderValidGross : 0;
 
         const allocatedDiscount = computedDiscount * ratio;
-        const allocatedTax = order.tax * ratio;
-        const allocatedServiceCharge = 0;
+        const allocatedTax = breakdown.pb1 * ratio;
+        const allocatedServiceCharge = breakdown.serviceCharge * ratio;
         const allocatedPaymentFee = 0;
 
-        const netRevenue = data.gross - allocatedDiscount + allocatedTax;
+        const netRevenue =
+          data.gross - allocatedDiscount + allocatedTax + allocatedServiceCharge;
 
         const defaultTenantNames: Record<string, string> = {
           "tenant-ks": "Kopi Senja",
@@ -188,6 +191,7 @@ export function calculateSettlement(
           grossRevenue: current.grossRevenue + data.gross,
           discount: current.discount + allocatedDiscount,
           tax: current.tax + allocatedTax,
+          serviceCharge: current.serviceCharge + allocatedServiceCharge,
           netRevenue: current.netRevenue + netRevenue,
           itemCount: current.itemCount + data.qty,
           transactionCount: current.transactionCount + 1,
@@ -205,6 +209,7 @@ export function calculateSettlement(
     r.grossRevenue = Math.round(r.grossRevenue);
     r.discount = Math.round(r.discount);
     r.tax = Math.round(r.tax);
+    r.serviceCharge = Math.round(r.serviceCharge);
     r.netRevenue = Math.round(r.netRevenue);
     if (r.tenantShareAmount !== undefined) r.tenantShareAmount = Math.round(r.tenantShareAmount);
     if (r.dagoShareAmount !== undefined) r.dagoShareAmount = Math.round(r.dagoShareAmount);

@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TRUSTED_PERSONAS, isDemoLoginAllowed } from "@/lib/server-auth";
 import { isOrganizerActive, getAllOrganizers } from "@/lib/organizers";
-import { PersonaKey } from "@/types/auth";
-import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { PersonaKey, RoleSlug } from "@/types/auth";
+import { SESSION_COOKIE_NAME, hashSessionToken } from "@/lib/session";
+import {
+  EDGE_SESSION_COOKIE_NAME,
+  OPERATIONAL_MAX_AGE_SECONDS,
+  signEdgeSessionToken,
+} from "@/lib/edge-session";
 import {
   verifyOrganizerCredentials,
   createOrganizerSession,
@@ -125,7 +130,25 @@ export async function POST(req: NextRequest) {
         name: "dagoeng_active_persona",
         value: match.personaKey,
         path: "/",
-        maxAge: 16 * 60 * 60,
+        maxAge: OPERATIONAL_MAX_AGE_SECONDS,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+
+      const edgeToken = signEdgeSessionToken({
+        userId: user.userId,
+        role: user.role,
+        scopeLevel: user.scopeLevel,
+        email: user.email,
+        maxAgeSeconds: OPERATIONAL_MAX_AGE_SECONDS,
+      });
+
+      res.cookies.set({
+        name: EDGE_SESSION_COOKIE_NAME,
+        value: edgeToken,
+        path: "/",
+        httpOnly: true,
+        maxAge: OPERATIONAL_MAX_AGE_SECONDS,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
       });
@@ -215,23 +238,33 @@ export async function POST(req: NextRequest) {
             value: session.rawToken,
             path: "/",
             httpOnly: true,
-            maxAge: 16 * 60 * 60,
+            maxAge: OPERATIONAL_MAX_AGE_SECONDS,
             sameSite: "lax",
             secure: process.env.NODE_ENV === "production",
           });
 
+          const edgeToken = signEdgeSessionToken({
+            userId: credResult.user.id,
+            role: credResult.user.role.slug,
+            scopeLevel: credResult.user.scopeLevel,
+            email: credResult.user.email,
+            sessionHash: hashSessionToken(session.rawToken),
+            maxAgeSeconds: OPERATIONAL_MAX_AGE_SECONDS,
+          });
+
           res.cookies.set({
-            name: "dagoeng_session_role",
-            value: credResult.user.role.slug,
+            name: EDGE_SESSION_COOKIE_NAME,
+            value: edgeToken,
             path: "/",
             httpOnly: true,
-            maxAge: 16 * 60 * 60,
+            maxAge: OPERATIONAL_MAX_AGE_SECONDS,
             sameSite: "lax",
             secure: process.env.NODE_ENV === "production",
           });
 
           // Clear persona cookie so server strictly relies on the verified session
           res.cookies.delete("dagoeng_active_persona");
+          res.cookies.delete("dagoeng_session_role");
 
           return res;
         } catch (sessErr) {
@@ -288,12 +321,32 @@ export async function POST(req: NextRequest) {
             value: session.rawToken,
             path: "/",
             httpOnly: true,
-            maxAge: 7 * 24 * 60 * 60,
+            maxAge: OPERATIONAL_MAX_AGE_SECONDS,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
+
+          const edgeToken = signEdgeSessionToken({
+            userId: unifiedAuth.user.id,
+            role: "CUSTOMER",
+            scopeLevel: "TENANT",
+            email: unifiedAuth.user.email,
+            sessionHash: hashSessionToken(session.rawToken),
+            maxAgeSeconds: OPERATIONAL_MAX_AGE_SECONDS,
+          });
+
+          res.cookies.set({
+            name: EDGE_SESSION_COOKIE_NAME,
+            value: edgeToken,
+            path: "/",
+            httpOnly: true,
+            maxAge: OPERATIONAL_MAX_AGE_SECONDS,
             sameSite: "lax",
             secure: process.env.NODE_ENV === "production",
           });
 
           res.cookies.delete("dagoeng_active_persona");
+          res.cookies.delete("dagoeng_session_role");
           return res;
         } catch (sessErr) {
           console.error("Failed to establish session for verified unified organizer:", sessErr);
@@ -363,27 +416,40 @@ export async function POST(req: NextRequest) {
         },
       });
 
+      const resolvedRole: RoleSlug =
+        uUser.role === "ADMIN" ? "OWNER" : uUser.role === "STAFF" ? "CASHIER" : "CUSTOMER";
+
       res.cookies.set({
         name: SESSION_COOKIE_NAME,
         value: session.rawToken,
         path: "/",
         httpOnly: true,
-        maxAge: 16 * 60 * 60,
+        maxAge: OPERATIONAL_MAX_AGE_SECONDS,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
       });
 
+      const edgeToken = signEdgeSessionToken({
+        userId: uUser.id,
+        role: resolvedRole,
+        scopeLevel: "TENANT",
+        email: uUser.email,
+        sessionHash: hashSessionToken(session.rawToken),
+        maxAgeSeconds: OPERATIONAL_MAX_AGE_SECONDS,
+      });
+
       res.cookies.set({
-        name: "dagoeng_session_role",
-        value: uUser.role || "CUSTOMER",
+        name: EDGE_SESSION_COOKIE_NAME,
+        value: edgeToken,
         path: "/",
         httpOnly: true,
-        maxAge: 16 * 60 * 60,
+        maxAge: OPERATIONAL_MAX_AGE_SECONDS,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
       });
 
       res.cookies.delete("dagoeng_active_persona");
+      res.cookies.delete("dagoeng_session_role");
 
       return res;
     }

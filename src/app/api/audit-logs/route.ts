@@ -1,9 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuditLogs, appendAuditLog } from "@/lib/persistent-storage";
 import { ActivityLogEntry } from "@/types/audit";
+import { getRequestAuthUser } from "@/lib/server-auth";
+import { RoleSlug } from "@/types/auth";
+
+const AUDIT_READ_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    if (!AUDIT_READ_ROLES.includes(auth.role)) {
+      return NextResponse.json(
+        { error: `FORBIDDEN: Role [${auth.role}] tidak memiliki izin membaca log audit.` },
+        { status: 403 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const module = searchParams.get("module");
     const outletId = searchParams.get("outletId");
@@ -25,23 +44,43 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const entry: ActivityLogEntry = body.entry || body;
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role || !auth.userId) {
+      return NextResponse.json(
+        { error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan untuk mencatat audit." },
+        { status: 401 }
+      );
+    }
 
-    if (!entry.action || !entry.description) {
+    const body = await req.json();
+    const rawEntry: Partial<ActivityLogEntry> = body.entry || body;
+
+    if (!rawEntry.action || !rawEntry.description) {
       return NextResponse.json({ error: "Audit entry must contain action and description." }, { status: 400 });
     }
 
-    if (!entry.id) {
-      entry.id = `audit-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    }
-    if (!entry.timestamp) {
-      entry.timestamp = new Date().toISOString();
-    }
+    // Bind actor identity from server session; generate server timestamp if not explicitly provided
+    const entry: ActivityLogEntry = {
+      id: rawEntry.id || `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: new Date().toISOString(),
+      userId: auth.userId,
+      userName: auth.name || rawEntry.userName || auth.email || "Authenticated Staff",
+      userRole: auth.role,
+      action: rawEntry.action,
+      module: rawEntry.module || "SYSTEM",
+      outletId: rawEntry.outletId,
+      outletName: rawEntry.outletName,
+      description: rawEntry.description,
+      referenceId: rawEntry.referenceId,
+      metadata: rawEntry.metadata,
+    };
 
-    await appendAuditLog(entry);
-    return NextResponse.json({ success: true, entry });
+    const saved = await appendAuditLog(entry);
+    return NextResponse.json({ success: true, entry: saved });
   } catch (err: any) {
+    if (err.message && err.message.includes("AUDIT_INTEGRITY_VIOLATION")) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

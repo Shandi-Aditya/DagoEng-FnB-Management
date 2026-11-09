@@ -9,6 +9,7 @@ import { useTables } from "@/contexts/TableContext";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { OrderRecord } from "@/types/order";
+import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import { calculateOrderMetrics, formatMinutesToHuman } from "@/lib/order-analytics";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatCurrencyIDR } from "@/lib/utils";
@@ -145,10 +146,10 @@ export default function OrdersPage() {
         tenantName: getTenantName(i.tenantId),
       })),
       subtotal: order.subtotal,
-      tax: order.tax || 0,
-      serviceCharge: 0,
+      tax: getOrderTaxBreakdown(order).pb1,
+      serviceCharge: getOrderTaxBreakdown(order).serviceCharge,
       promoName: order.promoId,
-      discount: order.discount || 0,
+      discount: getOrderTaxBreakdown(order).discount,
       grandTotal: order.total,
       paymentMethod: (order.paymentMethod as any) || "QRIS",
       amountPaid: order.total,
@@ -174,7 +175,7 @@ export default function OrdersPage() {
     ];
     const rows = displayedOrders.map((o) => {
       const promoName = settings.promos.find((p) => p.id === o.promoId)?.name || o.promoId || "-";
-      const discountVal = o.discount ?? Math.max(0, (o.subtotal + (o.tax || 0)) - o.total);
+      const discountVal = getOrderTaxBreakdown(o).discount;
       const opStatusLabel =
         o.status === "COMPLETED"
           ? "Selesai"
@@ -638,10 +639,11 @@ export default function OrdersPage() {
                 </div>
               </div>
 
-              {/* Financial Calculation (Subtotal, Promo, Discount, Total) */}
+              {/* Financial Calculation (Subtotal, Promo, Discount, PB1, Service Charge, Total) */}
               {(() => {
                 const promoName = settings.promos.find((p) => p.id === selectedOrder.promoId)?.name || selectedOrder.promoId;
-                const discountAmount = selectedOrder.discount ?? Math.max(0, (selectedOrder.subtotal + (selectedOrder.tax || 0)) - selectedOrder.total);
+                const breakdown = getOrderTaxBreakdown(selectedOrder);
+                const discountAmount = breakdown.discount;
 
                 return (
                   <div className="pt-2.5 border-t border-slate-200/80 dark:border-slate-700 space-y-1 text-xs">
@@ -661,10 +663,16 @@ export default function OrdersPage() {
                         <span>-{formatCurrencyIDR(discountAmount)}</span>
                       </div>
                     )}
-                    {selectedOrder.tax > 0 && (
+                    {breakdown.pb1 > 0 && (
                       <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                        <span>Pajak Restoran:</span>
-                        <span>+{formatCurrencyIDR(selectedOrder.tax)}</span>
+                        <span>Pajak PB1:</span>
+                        <span>+{formatCurrencyIDR(breakdown.pb1)}</span>
+                      </div>
+                    )}
+                    {breakdown.serviceCharge > 0 && (
+                      <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                        <span>Service Charge:</span>
+                        <span>+{formatCurrencyIDR(breakdown.serviceCharge)}</span>
                       </div>
                     )}
                     <div className="flex justify-between font-bold text-slate-900 dark:text-slate-100 pt-1 border-t border-slate-200 dark:border-slate-700 text-sm">

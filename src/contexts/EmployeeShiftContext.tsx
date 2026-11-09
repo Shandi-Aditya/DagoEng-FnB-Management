@@ -1,11 +1,17 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { EmployeeProfile, ShiftRecord, ShiftStatus } from "@/types/shift";
+import { EmployeeProfile, ShiftRecord } from "@/types/shift";
 import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
 import { useActivityLog } from "./ActivityLogContext";
 import { useNotifications } from "./NotificationContext";
+import {
+  reconcileOverdueShifts,
+  getActiveShiftForCashier,
+  validateManualShiftOpen,
+  recordShiftSaleTransaction,
+} from "@/lib/shift-management";
 
 export const INITIAL_EMPLOYEES: EmployeeProfile[] = [
   {
@@ -212,42 +218,20 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     return s.outletId === activeOutletId || !s.outletId;
   });
 
-  const activeShift = filteredShifts.find((s) => s.status === "ACTIVE" || s.status === "OPEN") || null;
+  // POS-02 / TC-A02: Active shift is strictly bound to the logged-in cashier (user.id).
+  const activeShift = getActiveShiftForCashier(
+    filteredShifts,
+    user?.id || null,
+    isAllOutlets ? "ALL" : activeOutletId
+  );
 
   // QA Handover A1: Shift kasir wajib dibuka manual dengan modal awal.
   // Otomatis tandai shift aktif gantung yang melebihi 16 jam sebagai NEEDS_RECONCILIATION.
   useEffect(() => {
     if (!isInitialized) return;
-    const now = Date.now();
-    const maxDurationMs = 16 * 60 * 60 * 1000;
-
     setShifts((prev) => {
-      let changed = false;
-      const updated = prev.map((s) => {
-        if (s.status === "ACTIVE" || s.status === "OPEN") {
-          let startTimeMs = 0;
-          if (s.id.startsWith("shf-") || s.id.startsWith("shift-")) {
-            const rawTs = Number(s.id.replace(/\D/g, ""));
-            if (rawTs > 1000000000) startTimeMs = rawTs;
-          }
-          if (!startTimeMs && s.startTime) {
-            const parsed = Date.parse(s.startTime);
-            if (!isNaN(parsed)) startTimeMs = parsed;
-          }
-          if (startTimeMs && now - startTimeMs > maxDurationMs) {
-            changed = true;
-            return {
-              ...s,
-              status: "NEEDS_RECONCILIATION" as ShiftStatus,
-              closingNotes:
-                (s.closingNotes ? s.closingNotes + " • " : "") +
-                "Otomatis dialihkan: Melebihi batas waktu operasional (Perlu Rekonsiliasi)",
-            };
-          }
-        }
-        return s;
-      });
-      return changed ? updated : prev;
+      const { shifts: next, changed } = reconcileOverdueShifts(prev, Date.now());
+      return changed ? next : prev;
     });
   }, [isInitialized]);
 
@@ -338,38 +322,27 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
   const openShift = (shiftName: string, openingCash: number, cashierName?: string): ShiftRecord => {
     const targetOutletId = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
     const targetOutletName = activeOutlet?.name || "Singaraja";
-
-    // Guard against multiple concurrent active shifts for the same outlet
-    const existingActive = shifts.find(
-      (s) => (s.status === "ACTIVE" || s.status === "OPEN") && s.outletId === targetOutletId
-    );
-    if (existingActive) {
-      console.warn(`[EmployeeShift] Shift aktif sudah berjalan untuk outlet ${targetOutletName}:`, existingActive.id);
-      return existingActive;
-    }
-
-    const sanitizedCash = Math.max(0, Number(openingCash) || 0);
     const assignedId = user?.id || "emp-002";
     const assignedName = cashierName || user?.name || "Kasir Bertugas";
-    const nowFormatted = new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }) + " WITA";
 
-    const newShift: ShiftRecord = {
-      id: `shf-${Date.now()}`,
+    const validation = validateManualShiftOpen({
+      openingCash,
       shiftName,
+      cashierId: assignedId,
+      cashierName: assignedName,
       outletId: targetOutletId,
       outletName: targetOutletName,
-      assignedCashierId: assignedId,
-      assignedCashierName: assignedName,
-      startTime: nowFormatted,
-      status: "ACTIVE",
-      openingCash: sanitizedCash,
-      cashSales: 0,
-      nonCashSales: 0,
-      refundAmount: 0,
-      expectedCash: sanitizedCash,
-      actualCash: sanitizedCash,
-      cashVariance: 0,
-    };
+      existingShifts: shifts,
+    });
+
+    if (!validation.success) {
+      if (validation.isAlreadyOpen && validation.shift) {
+        return validation.shift;
+      }
+      throw new Error(validation.error || "Gagal membuka shift kasir.");
+    }
+
+    const newShift = validation.shift!;
 
     if (typeof window !== "undefined" && user) {
       sessionStorage.removeItem(`dagoeng_shift_closed_${user.id}_${targetOutletId}`);
@@ -381,7 +354,7 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       module: "EMPLOYEES_SHIFT",
       action: "OPEN_SHIFT",
       recordId: newShift.id,
-      newValue: `Modal Awal: Rp ${openingCash.toLocaleString()} (Kasir: ${newShift.assignedCashierName})`,
+      newValue: `Modal Awal: Rp ${newShift.openingCash.toLocaleString()} (Kasir: ${newShift.assignedCashierName})`,
       description: `Pembukaan kasir baru: ${shiftName} di ${targetOutletName}`,
       reason: "Shift kasir resmi dibuka",
       status: "SUCCESS",
@@ -393,7 +366,15 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       fetch("/api/shifts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "SYNC", shiftRecord: newShift }),
+        body: JSON.stringify({
+          action: "OPEN",
+          shiftName,
+          openingCash: newShift.openingCash,
+          cashierId: assignedId,
+          cashierName: assignedName,
+          outletId: targetOutletId,
+          outletName: targetOutletName,
+        }),
       }).catch((err) => {
         console.warn("[shift] Persistent sync warning:", err);
       });
@@ -402,29 +383,32 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     return newShift;
   };
 
-  const recordShiftTransaction = (cashAmount: number, nonCashAmount: number, outletId?: string) => {
+  const recordShiftTransaction = (cashAmount: number, nonCashAmount: number, _outletId?: string) => {
+    const assignedId = user?.id || "emp-002";
     setShifts((prev) => {
-      const activeIdx = prev.findIndex(
-        (s) => (s.status === "ACTIVE" || s.status === "OPEN") && (!outletId || outletId === "ALL" || s.outletId === outletId)
-      );
-      if (activeIdx === -1) return prev;
-
-      const current = prev[activeIdx];
-      const newCashSales = (current.cashSales || 0) + (cashAmount || 0);
-      const newNonCashSales = (current.nonCashSales || 0) + (nonCashAmount || 0);
-      const newExpected = current.openingCash + newCashSales - (current.refundAmount || 0);
-
-      const updated = {
-        ...current,
-        cashSales: newCashSales,
-        nonCashSales: newNonCashSales,
-        expectedCash: newExpected,
-      };
-
-      const next = [...prev];
-      next[activeIdx] = updated;
-      return next;
+      const res = recordShiftSaleTransaction({
+        shifts: prev,
+        cashierId: assignedId,
+        cashAmount,
+        nonCashAmount,
+      });
+      return res.updatedShifts;
     });
+
+    if (typeof window !== "undefined") {
+      fetch("/api/shifts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "RECORD_SALE",
+          cashierId: assignedId,
+          cashAmount,
+          nonCashAmount,
+        }),
+      }).catch((err) => {
+        console.warn("[shift] Persistent sale sync warning:", err);
+      });
+    }
   };
 
   const closeShift = (
@@ -463,24 +447,16 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     );
 
     if (typeof window !== "undefined") {
-      const closedShiftRecord: ShiftRecord = {
-        ...shift,
-        status: "CLOSED",
-        cashSales: finalCashSales,
-        nonCashSales: finalNonCashSales,
-        expectedCash: expected,
-        endTime: nowFormatted,
-        actualCash,
-        cashVariance: variance,
-        closingNotes,
-        closedAt: nowFormatted,
-        closedBy: user?.name || shift.assignedCashierName || "Ni Kadek Sri",
-      };
-
       fetch("/api/shifts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "SYNC", shiftRecord: closedShiftRecord }),
+        body: JSON.stringify({
+          action: "CLOSE",
+          shiftId,
+          actualCash,
+          closingNotes,
+          metrics,
+        }),
       }).catch((err) => {
         console.warn("[shift] Persistent sync warning on close:", err);
       });

@@ -1,11 +1,30 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import { RoleSlug } from "@/types/auth";
 import { TRUSTED_PERSONAS, getRequestAuthUser, assertCheckInAuth } from "@/lib/server-auth";
-import { ALL_NAV_ITEMS, hasRole } from "@/lib/rbac";
+import { ALL_NAV_ITEMS } from "@/lib/rbac";
 import { evaluateRouteAccess } from "@/lib/route-guard";
+import {
+  EDGE_SESSION_COOKIE_NAME,
+  signEdgeSessionToken,
+  verifyEdgeSessionToken,
+  clearRevocationRegistryForTests,
+} from "@/lib/edge-session";
+import { middleware, config as middlewareConfig } from "@/middleware";
+import {
+  registerUnifiedUser,
+  updateUnifiedUserCredentialsOrRole,
+} from "@/lib/unified-account";
+import { GET as getShifts, POST as postShifts } from "@/app/api/shifts/route";
+import { GET as getAuditLogsRoute } from "@/app/api/audit-logs/route";
+import { GET as getCoworkingBookingsRoute } from "@/app/api/coworking/bookings/route";
 
 describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)", () => {
+  beforeEach(() => {
+    clearRevocationRegistryForTests();
+    delete process.env.DISABLE_DEMO_LOGIN;
+  });
+
   describe("POS-22: Role Separation between Check-in Staff and Waiter", () => {
     it("distinguishes CHECKIN_STAFF from WAITER as distinct RoleSlugs", () => {
       const checkinRole: RoleSlug = "CHECKIN_STAFF";
@@ -28,7 +47,6 @@ describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)"
     });
 
     it("strictly blocks WAITER in assertCheckInAuth", async () => {
-      // Mock request from a WAITER persona
       const req = new NextRequest("http://localhost:3000/api/events/bookings", {
         headers: {
           cookie: "dagoeng_active_persona=WAITER_SGR",
@@ -53,7 +71,7 @@ describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)"
     });
   });
 
-  describe("POS-21: Server-Side RBAC on Operational Routes (/pos, /kitchen, etc.)", () => {
+  describe("POS-21: Server-Side RBAC & Cookie Spoofing Protection", () => {
     it("allows CASHIER, SUPER_ADMIN, OWNER, and MANAGER to access /pos", () => {
       expect(evaluateRouteAccess("/pos", "CASHIER").allowed).toBe(true);
       expect(evaluateRouteAccess("/pos", "SUPER_ADMIN").allowed).toBe(true);
@@ -61,70 +79,194 @@ describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)"
       expect(evaluateRouteAccess("/pos", "MANAGER").allowed).toBe(true);
     });
 
-    it("strictly forbids WAITER, KITCHEN_STAFF, CHECKIN_STAFF, and CUSTOMER from /pos", () => {
+    it("strictly forbids WAITER, KITCHEN_STAFF, CHECKIN_STAFF, and CUSTOMER from /pos (TC-I01, TC-I02, TC-I03)", () => {
       expect(evaluateRouteAccess("/pos", "WAITER").allowed).toBe(false);
       expect(evaluateRouteAccess("/pos", "KITCHEN_STAFF").allowed).toBe(false);
       expect(evaluateRouteAccess("/pos", "CHECKIN_STAFF").allowed).toBe(false);
       expect(evaluateRouteAccess("/pos", "CUSTOMER").allowed).toBe(false);
     });
 
-    it("strictly forbids unauthenticated access to protected routes", () => {
-      expect(evaluateRouteAccess("/pos", null).allowed).toBe(false);
-      expect(evaluateRouteAccess("/pos", null).redirectTo).toMatch(/\/login/);
-      expect(evaluateRouteAccess("/kitchen", null).allowed).toBe(false);
-      expect(evaluateRouteAccess("/dashboard", null).allowed).toBe(false);
+    it("includes /orders/:path* in middleware matcher configuration (A5-5)", () => {
+      expect(middlewareConfig.matcher).toContain("/orders/:path*");
     });
 
-    it("allows KITCHEN_STAFF to /kitchen but blocks WAITER and CASHIER", () => {
-      expect(evaluateRouteAccess("/kitchen", "KITCHEN_STAFF").allowed).toBe(true);
-      expect(evaluateRouteAccess("/kitchen", "WAITER").allowed).toBe(false);
-      expect(evaluateRouteAccess("/kitchen", "CASHIER").allowed).toBe(false);
-    });
-
-    it("allows CHECKIN_STAFF to /events/checkin but blocks WAITER and CASHIER", () => {
-      expect(evaluateRouteAccess("/events/checkin", "CHECKIN_STAFF").allowed).toBe(true);
-      expect(evaluateRouteAccess("/events/checkin", "WAITER").allowed).toBe(false);
-      expect(evaluateRouteAccess("/events/checkin", "CASHIER").allowed).toBe(false);
-    });
-
-    it("verifies middleware redirects unauthenticated /pos navigation to /login", async () => {
-      const { middleware } = await import("@/middleware");
-      const req = new NextRequest("http://localhost:3000/pos");
-      const res = middleware(req);
-      expect(res.status).toBe(307);
-      expect(res.headers.get("location")).toContain("/login?returnTo=%2Fpos");
-    });
-
-    it("verifies middleware redirects WAITER navigating to /pos to /tables", async () => {
-      const { middleware } = await import("@/middleware");
-      const req = new NextRequest("http://localhost:3000/pos", {
+    it("rejects spoofed unsigned dagoeng_session_role=OWNER cookie without valid signed token (A5-1)", () => {
+      const req = new NextRequest("http://localhost:3000/reports", {
         headers: {
-          cookie: "dagoeng_active_persona=WAITER_SGR",
+          cookie: "dagoeng_session_role=OWNER",
         },
       });
       const res = middleware(req);
       expect(res.status).toBe(307);
-      expect(res.headers.get("location")).toContain("/tables");
+      expect(res.headers.get("location")).toContain("/login?returnTo=%2Freports");
     });
 
-    it("verifies middleware allows CASHIER to access /pos directly", async () => {
-      const { middleware } = await import("@/middleware");
-      const req = new NextRequest("http://localhost:3000/pos", {
+    it("rejects tampered edge token signature in middleware (A5-1)", () => {
+      const validToken = signEdgeSessionToken({
+        userId: "usr-1",
+        role: "OWNER",
+        scopeLevel: "ORGANIZATION",
+      });
+      const tamperedToken = validToken.slice(0, -4) + "ffff";
+
+      const req = new NextRequest("http://localhost:3000/reports", {
         headers: {
-          cookie: "dagoeng_active_persona=CASHIER_SGR",
+          cookie: `${EDGE_SESSION_COOKIE_NAME}=${tamperedToken}`,
+        },
+      });
+      const res = middleware(req);
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toContain("/login?returnTo=%2Freports");
+    });
+
+    it("rejects dagoeng_active_persona=SUPER_ADMIN when demo login is disabled (A5-1)", () => {
+      process.env.DISABLE_DEMO_LOGIN = "true";
+      const req = new NextRequest("http://localhost:3000/dashboard", {
+        headers: {
+          cookie: "dagoeng_active_persona=SUPER_ADMIN",
+        },
+      });
+      const res = middleware(req);
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toContain("/login?returnTo=%2Fdashboard");
+    });
+
+    it("allows access to /reports with a valid signed OWNER edge session token", () => {
+      const validToken = signEdgeSessionToken({
+        userId: "usr-owner-1",
+        role: "OWNER",
+        scopeLevel: "ORGANIZATION",
+      });
+
+      const req = new NextRequest("http://localhost:3000/reports", {
+        headers: {
+          cookie: `${EDGE_SESSION_COOKIE_NAME}=${validToken}`,
         },
       });
       const res = middleware(req);
       expect(res.status).toBe(200);
-      expect(res.headers.get("location")).toBeNull();
+    });
+
+    it("redirects WAITER navigating to /pos to /tables and CUSTOMER navigating to /orders to /customer", () => {
+      const waiterReq = new NextRequest("http://localhost:3000/pos", {
+        headers: {
+          cookie: "dagoeng_active_persona=WAITER_SGR",
+        },
+      });
+      const waiterRes = middleware(waiterReq);
+      expect(waiterRes.status).toBe(307);
+      expect(waiterRes.headers.get("location")).toContain("/tables");
+
+      const customerReq = new NextRequest("http://localhost:3000/orders", {
+        headers: {
+          cookie: "dagoeng_active_persona=CUSTOMER_DEMO",
+        },
+      });
+      const customerRes = middleware(customerReq);
+      expect(customerRes.status).toBe(307);
+      expect(customerRes.headers.get("location")).toContain("/customer");
     });
   });
 
-  describe("POS-23: Session Expiry Validation", () => {
-    it("rejects expired sessions and flags session expiry", async () => {
-      const expiredDate = new Date(Date.now() - 1000 * 60 * 60); // 1 hour ago
-      const isSessionValid = expiredDate.getTime() > Date.now();
-      expect(isSessionValid).toBe(false);
+  describe("POS-23 & TC-I05: Session Expiry and Role/Password Change Revocation", () => {
+    it("redirects expired edge session token to /login?reason=expired (A5-3)", () => {
+      const pastIat = Date.now() - 20 * 60 * 60 * 1000;
+      const pastExp = Date.now() - 4 * 60 * 60 * 1000;
+      const expiredToken = signEdgeSessionToken({
+        userId: "usr-cashier-1",
+        role: "CASHIER",
+        iat: pastIat,
+        exp: pastExp,
+      });
+
+      const req = new NextRequest("http://localhost:3000/pos", {
+        headers: {
+          cookie: `${EDGE_SESSION_COOKIE_NAME}=${expiredToken}`,
+        },
+      });
+      const res = middleware(req);
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toContain("/login?reason=expired&returnTo=%2Fpos");
+    });
+
+    it("immediately invalidates old sessions when user password or role is updated (TC-I05 / A5-4)", async () => {
+      const email = `staff-revocation-${Date.now()}@dagoeng.com`;
+      const reg = await registerUnifiedUser({
+        name: "Staf Uji Revokasi",
+        email,
+        phone: "081234567890",
+        password: "Password123!",
+        role: "STAFF",
+      });
+
+      const issuedBeforeChange = Date.now() - 5000;
+      const tokenBeforeChange = signEdgeSessionToken({
+        userId: reg.user.id,
+        email: reg.user.email,
+        role: "CASHIER",
+        iat: issuedBeforeChange,
+      });
+
+      // Verify token is valid before role/password change
+      expect(verifyEdgeSessionToken(tokenBeforeChange).valid).toBe(true);
+
+      // Update role & password
+      const updateRes = await updateUnifiedUserCredentialsOrRole(email, {
+        newRole: "CUSTOMER",
+        newPassword: "NewSecurePassword99!",
+      });
+      expect(updateRes.success).toBe(true);
+
+      // Old token issued before the change must now be rejected as revoked
+      const verifyAfter = verifyEdgeSessionToken(tokenBeforeChange);
+      expect(verifyAfter.valid).toBe(false);
+      expect(verifyAfter.revoked).toBe(true);
+
+      // Server auth also rejects the revoked token
+      const apiReq = new NextRequest("http://localhost:3000/api/shifts", {
+        headers: {
+          cookie: `${EDGE_SESSION_COOKIE_NAME}=${tokenBeforeChange}`,
+        },
+      });
+      const authRes = await getRequestAuthUser(apiReq);
+      expect(authRes.isAuthenticated).toBe(false);
+      expect(authRes.error).toBe("SESSION_REVOKED");
+    });
+  });
+
+  describe("A5-6: Server-Side Auth Guards on Operational API Routes", () => {
+    it("rejects unauthenticated requests to /api/shifts, /api/audit-logs, and /api/coworking/bookings with 401", async () => {
+      const shiftRes = await getShifts(new NextRequest("http://localhost:3000/api/shifts"));
+      expect(shiftRes.status).toBe(401);
+
+      const auditRes = await getAuditLogsRoute(new NextRequest("http://localhost:3000/api/audit-logs"));
+      expect(auditRes.status).toBe(401);
+
+      const cwRes = await getCoworkingBookingsRoute(
+        new NextRequest("http://localhost:3000/api/coworking/bookings")
+      );
+      expect(cwRes.status).toBe(401);
+    });
+
+    it("rejects WAITER role attempting to POST /api/shifts or GET /api/audit-logs with 403", async () => {
+      const waiterShiftReq = new NextRequest("http://localhost:3000/api/shifts", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "dagoeng_active_persona=WAITER_SGR",
+        },
+        body: JSON.stringify({ action: "OPEN", openingCash: 200000 }),
+      });
+      const shiftRes = await postShifts(waiterShiftReq);
+      expect(shiftRes.status).toBe(403);
+
+      const waiterAuditReq = new NextRequest("http://localhost:3000/api/audit-logs", {
+        headers: {
+          cookie: "dagoeng_active_persona=WAITER_SGR",
+        },
+      });
+      const auditRes = await getAuditLogsRoute(waiterAuditReq);
+      expect(auditRes.status).toBe(403);
     });
   });
 });

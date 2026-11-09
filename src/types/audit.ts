@@ -12,7 +12,8 @@ export type ActivityModule =
   | "SETTINGS"
   | "AI_INSIGHT"
   | "AUTH"
-  | "SECURITY";
+  | "SECURITY"
+  | "SYSTEM";
 
 export type AuditModule = ActivityModule;
 export type AuditStatus = "SUCCESS" | "WARNING" | "FAILED";
@@ -28,11 +29,14 @@ export type ActivityCategory =
 
 export interface ActivityLogEntry {
   id: string;
-  actorId: string;
-  actorName: string;
-  actorRole: string;
-  role: string;
-  organization: string;
+  actorId?: string;
+  actorName?: string;
+  actorRole?: string;
+  role?: string;
+  userId?: string;
+  userName?: string;
+  userRole?: string;
+  organization?: string;
   organizationName?: string;
   tenantId?: string;
   tenantName?: string;
@@ -41,13 +45,14 @@ export interface ActivityLogEntry {
   module: ActivityModule;
   action: string;
   recordId?: string;
+  referenceId?: string;
   timestamp: string; // ISO string
   formattedTime?: string;
   previousValue?: string;
   newValue?: string;
   description: string;
   reason?: string;
-  status: AuditStatus;
+  status?: AuditStatus;
   severity?: ActivitySeverity;
   category?: ActivityCategory;
   metadata?: Record<string, any>;

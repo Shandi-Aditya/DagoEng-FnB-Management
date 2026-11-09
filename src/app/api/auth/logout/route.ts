@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE_NAME, hashSessionToken } from "@/lib/session";
+import { EDGE_SESSION_COOKIE_NAME } from "@/lib/edge-session";
 import { revokeOrganizerSession } from "@/lib/organizer-activation";
 import { db } from "@/lib/db";
 
@@ -58,6 +59,27 @@ export async function POST(req: NextRequest) {
     // Invalidate session role cookie
     res.cookies.set({
       name: "dagoeng_session_role",
+      value: "",
+      path: "/",
+      httpOnly: true,
+      maxAge: 0,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+
+    // Invalidate signed edge token cookie
+    res.cookies.set({
+      name: EDGE_SESSION_COOKIE_NAME,
+      value: "",
+      path: "/",
+      httpOnly: true,
+      maxAge: 0,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+
+    res.cookies.set({
+      name: "dagoeng_persona_exp",
       value: "",
       path: "/",
       maxAge: 0,

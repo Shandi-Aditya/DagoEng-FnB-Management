@@ -714,7 +714,7 @@ export async function createOrganizerSession(
 ): Promise<{ rawToken: string; expiresAt: Date; sessionId: string }> {
   const rawToken = crypto.randomBytes(32).toString("hex");
   const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex");
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(Date.now() + 16 * 60 * 60 * 1000);
 
   const org = getOrganizerByEmail(email);
   const name = org?.name || "Penyelenggara Event";
@@ -813,5 +813,41 @@ export function getOrganizerSession(tokenHash: string): {
 export function revokeOrganizerSession(tokenHash: string): void {
   activeOrganizerSessions.delete(tokenHash);
   saveSessionsToDisk(activeOrganizerSessions);
+}
+
+export function revokeOrganizerSessionsByEmail(email: string): number {
+  const normalized = (email || "").toLowerCase().trim();
+  if (!normalized) return 0;
+  let removed = 0;
+  const diskSessions = loadSessionsFromDisk();
+  for (const [k, v] of diskSessions.entries()) {
+    activeOrganizerSessions.set(k, v);
+  }
+  for (const [tokenHash, session] of activeOrganizerSessions.entries()) {
+    if (session.email.toLowerCase().trim() === normalized) {
+      activeOrganizerSessions.delete(tokenHash);
+      removed++;
+    }
+  }
+  try {
+    const file = getSessionsFile();
+    const arr: PersistedOrganizerSession[] = [];
+    const now = new Date();
+    for (const [tokenHash, val] of activeOrganizerSessions.entries()) {
+      if (val.expiresAt > now && val.email.toLowerCase().trim() !== normalized) {
+        arr.push({
+          tokenHash,
+          email: val.email,
+          name: val.name,
+          expiresAt: val.expiresAt.toISOString(),
+          userId: val.userId,
+        });
+      }
+    }
+    const dir = path.dirname(file);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(arr, null, 2), "utf-8");
+  } catch {}
+  return removed;
 }
 

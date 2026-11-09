@@ -279,12 +279,17 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const OPERATIONAL_COOKIE_MAX_AGE = 16 * 60 * 60; // 16 hours (POS-23)
+
 function syncPersonaCookie(personaKey: string | null) {
   if (typeof document === "undefined") return;
   if (!personaKey) {
     document.cookie = "dagoeng_active_persona=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
+    document.cookie = "dagoeng_persona_exp=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
   } else {
-    document.cookie = `dagoeng_active_persona=${personaKey}; path=/; max-age=604800; SameSite=Lax`;
+    const expMs = Date.now() + OPERATIONAL_COOKIE_MAX_AGE * 1000;
+    document.cookie = `dagoeng_active_persona=${personaKey}; path=/; max-age=${OPERATIONAL_COOKIE_MAX_AGE}; SameSite=Lax`;
+    document.cookie = `dagoeng_persona_exp=${expMs}; path=/; max-age=${OPERATIONAL_COOKIE_MAX_AGE}; SameSite=Lax`;
   }
 }
 

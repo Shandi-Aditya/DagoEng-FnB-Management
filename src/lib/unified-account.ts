@@ -11,7 +11,9 @@ import {
   saveCredentialsToDisk,
   loadCredentialsFromDisk,
   OrganizerCredentialRecord,
+  revokeOrganizerSessionsByEmail,
 } from "./organizer-activation";
+import { revokeUserSessionsAfter } from "./edge-session";
 
 export interface UnifiedUserAccount {
   id: string;
@@ -174,25 +176,27 @@ export async function registerUnifiedUser(payload: RegisterUserPayload): Promise
   saveUnifiedUsersToDisk(all);
 
   // Sync to PostgreSQL db.user if available
-  try {
-    const { db } = await import("./db");
-    await db.user.upsert({
-      where: { email: normalizedEmail },
-      create: {
-        email: normalizedEmail,
-        name: normalizedName,
-        phone: normalizedPhone,
-        passwordHash,
-        isActive: true,
-      },
-      update: {
-        name: normalizedName,
-        phone: normalizedPhone,
-        passwordHash,
-        isActive: true,
-      },
-    }).catch(() => {});
-  } catch {}
+  if (process.env.NODE_ENV !== "test") {
+    try {
+      const { db } = await import("./db");
+      await db.user.upsert({
+        where: { email: normalizedEmail },
+        create: {
+          email: normalizedEmail,
+          name: normalizedName,
+          phone: normalizedPhone,
+          passwordHash,
+          isActive: true,
+        },
+        update: {
+          name: normalizedName,
+          phone: normalizedPhone,
+          passwordHash,
+          isActive: true,
+        },
+      }).catch(() => {});
+    } catch {}
+  }
 
   // If already an organizer, make sure credentials record is also synchronized
   if (existingOrg) {
@@ -341,5 +345,76 @@ export async function activateOrganizerSelfService(
     success: true,
     organizer,
     user,
+  };
+}
+
+/**
+ * Updates a user's password and/or role and immediately revokes all existing sessions
+ * for that user so stale role claims or old sessions can no longer be used (TC-I05).
+ */
+export async function updateUnifiedUserCredentialsOrRole(
+  emailOrId: string,
+  updates: { newPassword?: string; newRole?: "CUSTOMER" | "STAFF" | "ADMIN" }
+): Promise<{
+  success: boolean;
+  user: UnifiedUserAccount | null;
+  revokedAt: number;
+  error?: string;
+}> {
+  const normalizedTarget = (emailOrId || "").trim().toLowerCase();
+  if (!normalizedTarget) {
+    return { success: false, user: null, revokedAt: 0, error: "Identitas pengguna tidak valid." };
+  }
+
+  const allUsers = loadUnifiedUsersFromDisk();
+  const idx = allUsers.findIndex(
+    (u) => u.email.toLowerCase() === normalizedTarget || u.id.toLowerCase() === normalizedTarget
+  );
+
+  const revokedAt = Date.now();
+
+  if (idx === -1) {
+    // Still register revocation for demo/external user IDs or emails
+    revokeUserSessionsAfter(normalizedTarget, revokedAt);
+    revokeOrganizerSessionsByEmail(normalizedTarget);
+    return { success: false, user: null, revokedAt, error: "Pengguna tidak ditemukan." };
+  }
+
+  const targetUser = { ...allUsers[idx] };
+  if (updates.newPassword && updates.newPassword.trim()) {
+    targetUser.passwordHash = await bcrypt.hash(updates.newPassword.trim(), 10);
+    if (targetUser.organizerProfileId) {
+      syncOrganizerCredentials(targetUser.organizerProfileId, targetUser.email, targetUser.passwordHash);
+    }
+  }
+
+  if (updates.newRole) {
+    targetUser.role = updates.newRole;
+  }
+
+  targetUser.updatedAt = new Date(revokedAt).toISOString();
+  allUsers[idx] = targetUser;
+  saveUnifiedUsersToDisk(allUsers);
+
+  // Immediately revoke active sessions in memory/disk and edge token registry
+  revokeUserSessionsAfter(targetUser.id, revokedAt);
+  revokeUserSessionsAfter(targetUser.email, revokedAt);
+  revokeOrganizerSessionsByEmail(targetUser.email);
+
+  // Best-effort revocation in PostgreSQL session table if connected
+  if (process.env.NODE_ENV !== "test") {
+    try {
+      const { db } = await import("./db");
+      const dbUser = await db.user.findUnique({ where: { email: targetUser.email.toLowerCase() } });
+      if (dbUser) {
+        await db.session.deleteMany({ where: { userId: dbUser.id } }).catch(() => {});
+      }
+    } catch {}
+  }
+
+  return {
+    success: true,
+    user: targetUser,
+    revokedAt,
   };
 }

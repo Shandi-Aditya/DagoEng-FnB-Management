@@ -1,31 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { OrderRecord } from "@/types/order";
+import {
+  getOrderTaxBreakdown,
+  aggregateOrdersTaxAndRevenue,
+} from "@/lib/tax-breakdown";
+import { calculateSettlement } from "@/lib/settlement";
 
-// Function simulating report aggregation of stored taxes
-export function aggregateReportTaxAndService(orders: OrderRecord[]): {
-  totalRevenue: number;
-  totalTaxPB1: number;
-  totalServiceCharge: number;
-  totalDiscounts: number;
-} {
-  const validOrders = orders.filter((o) => o.status !== "CANCELLED");
-
-  const totalRevenue = validOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-  const totalTaxPB1 = validOrders.reduce((sum, o) => sum + (o.tax || 0), 0);
-  const totalServiceCharge = validOrders.reduce((sum, o) => sum + (o.serviceCharge || 0), 0);
-  const totalDiscounts = validOrders.reduce((sum, o) => sum + (o.discount || 0), 0);
-
-  return {
-    totalRevenue,
-    totalTaxPB1,
-    totalServiceCharge,
-    totalDiscounts,
-  };
-}
-
-describe("QA Handover A3 — Sinkronisasi Pajak Laporan vs Struk (POS-34)", () => {
-  it("A3.1: Struk dan laporan menghasilkan nilai PB1 dan Service Charge yang identik persis", () => {
-    // Simulasi pesanan ORD-POS-5612 dari QA Report
+describe("QA Handover A3 — Sinkronisasi Pajak Laporan vs Struk & Settlement (POS-34)", () => {
+  it("A3.1 (TC-K05): Struk, laporan penjualan, dan closing shift menghasilkan nilai PB1 Rp 4.900 dan Service Charge Rp 2.450 yang identik persis", () => {
     const subtotal = 49000;
     const taxRatePercent = 10;
     const serviceRatePercent = 5;
@@ -34,11 +16,6 @@ describe("QA Handover A3 — Sinkronisasi Pajak Laporan vs Struk (POS-34)", () =
     const receiptService = Math.round(subtotal * (serviceRatePercent / 100)); // 2.450
     const grandTotal = subtotal + receiptPB1 + receiptService; // 56.350
 
-    expect(receiptPB1).toBe(4900);
-    expect(receiptService).toBe(2450);
-    expect(grandTotal).toBe(56350);
-
-    // Order record yang disimpan di sistem
     const storedOrder: OrderRecord = {
       id: "ord-pos-5612",
       orderNumber: "ORD-POS-5612",
@@ -56,12 +33,13 @@ describe("QA Handover A3 — Sinkronisasi Pajak Laporan vs Struk (POS-34)", () =
           productName: "Menu F&B Kopi Senja",
           quantity: 1,
           unitPrice: 49000,
+          tenantId: "tenant-ks",
         },
       ],
       subtotal,
       discount: 0,
-      tax: receiptPB1, // Disimpan terpisah sebagai nilai PB1 final
-      serviceCharge: receiptService, // Disimpan terpisah sebagai nilai service final
+      tax: receiptPB1,
+      serviceCharge: receiptService,
       taxRatePercent,
       serviceChargePercent: serviceRatePercent,
       total: grandTotal,
@@ -72,69 +50,95 @@ describe("QA Handover A3 — Sinkronisasi Pajak Laporan vs Struk (POS-34)", () =
       statusHistory: [],
     };
 
-    // Jalankan agregasi laporan
-    const report = aggregateReportTaxAndService([storedOrder]);
+    const breakdown = getOrderTaxBreakdown(storedOrder);
+    expect(breakdown.pb1).toBe(4900);
+    expect(breakdown.serviceCharge).toBe(2450);
+    expect(breakdown.discount).toBe(0);
+    expect(breakdown.total).toBe(56350);
 
-    // Verifikasi bahwa laporan menghasilkan PB1 Rp 4.900 (bukan Rp 5.635)
+    const report = aggregateOrdersTaxAndRevenue([storedOrder]);
     expect(report.totalTaxPB1).toBe(4900);
-    expect(report.totalTaxPB1).not.toBe(5635);
-
-    // Verifikasi bahwa laporan menghasilkan Service Charge Rp 2.450 (bukan Rp 2.818)
     expect(report.totalServiceCharge).toBe(2450);
-    expect(report.totalServiceCharge).not.toBe(2818);
-
-    // Selisih antara struk dan laporan harus persis nol
-    expect(report.totalTaxPB1 - receiptPB1).toBe(0);
-    expect(report.totalServiceCharge - receiptService).toBe(0);
+    expect(report.totalDiscounts).toBe(0);
+    expect(report.totalNetSales).toBe(49000);
   });
 
-  it("A3.2: Agregasi multi-order mengakumulasi nilai pajak tersimpan tanpa floating point drift", () => {
-    const orders: OrderRecord[] = [
-      {
-        id: "ord-1",
-        orderNumber: "ORD-1",
-        organizationId: "org-1",
-        outletId: "outlet-sgr",
-        outletName: "Singaraja",
-        tableNumber: "T-01",
-        customerName: "Guest 1",
-        orderType: "DINE_IN",
-        status: "COMPLETED",
-        items: [],
-        subtotal: 100000,
-        tax: 10000,
-        serviceCharge: 5000,
-        total: 115000,
-        paymentStatus: "PAID",
-        targetServiceMinutes: 10,
-        createdAt: new Date().toISOString(),
-        statusHistory: [],
-      },
-      {
-        id: "ord-2",
-        orderNumber: "ORD-2",
-        organizationId: "org-1",
-        outletId: "outlet-sgr",
-        outletName: "Singaraja",
-        tableNumber: "T-02",
-        customerName: "Guest 2",
-        orderType: "TAKEAWAY",
-        status: "COMPLETED",
-        items: [],
-        subtotal: 50000,
-        tax: 5000,
-        serviceCharge: 0, // Takeaway no service charge
-        total: 55000,
-        paymentStatus: "PAID",
-        targetServiceMinutes: 10,
-        createdAt: new Date().toISOString(),
-        statusHistory: [],
-      },
-    ];
+  it("A3.2 (TC-H01): Order dine-in dengan diskon dan service charge menghasilkan discount dan settlement mitra yang akurat (A3-1)", () => {
+    // Subtotal 100.000, Diskon 10.000 -> DPP 90.000, PB1 (10%) = 9.000, Service (5%) = 4.500 -> Total = 103.500
+    const discountedOrder: OrderRecord = {
+      id: "ord-disc-1",
+      orderNumber: "ORD-DISC-1",
+      organizationId: "org-dago-hub",
+      outletId: "outlet-sgr",
+      outletName: "Singaraja",
+      tableNumber: "T-05",
+      customerName: "Guest Promo",
+      orderType: "DINE_IN",
+      status: "COMPLETED",
+      items: [
+        {
+          id: "it-ks",
+          productId: "prod-ks",
+          productName: "Paket Kopi Senja",
+          quantity: 2,
+          unitPrice: 50000,
+          tenantId: "tenant-ks",
+        },
+      ],
+      subtotal: 100000,
+      // Even when discount field is omitted on legacy record, getOrderTaxBreakdown derives 10.000 accurately
+      tax: 9000,
+      serviceCharge: 4500,
+      total: 103500,
+      paymentStatus: "PAID",
+      paymentMethod: "QRIS",
+      targetServiceMinutes: 10,
+      createdAt: new Date().toISOString(),
+      statusHistory: [],
+    };
 
-    const report = aggregateReportTaxAndService(orders);
-    expect(report.totalTaxPB1).toBe(15000);
-    expect(report.totalServiceCharge).toBe(5000);
-    expect(report.totalRevenue).toBe(170000);
+    const breakdown = getOrderTaxBreakdown(discountedOrder);
+    expect(breakdown.discount).toBe(10000);
+    expect(breakdown.dpp).toBe(90000);
+    expect(breakdown.pb1).toBe(9000);
+    expect(breakdown.serviceCharge).toBe(4500);
+
+    const settlements = calculateSettlement([discountedOrder]);
+    expect(settlements.length).toBe(1);
+    const ksSettlement = settlements[0];
+    expect(ksSettlement.grossRevenue).toBe(100000);
+    expect(ksSettlement.discount).toBe(10000);
+    expect(ksSettlement.tax).toBe(9000);
+    expect(ksSettlement.serviceCharge).toBe(4500);
+    expect(ksSettlement.netRevenue).toBe(103500);
+  });
+
+  it("A3.3: Menghormati taxRatePercent = 0 dan tidak menerapkan service charge pada order TAKEAWAY legacy (A3-3)", () => {
+    const zeroTaxTakeaway: OrderRecord = {
+      id: "ord-takeaway-0",
+      orderNumber: "ORD-TW-0",
+      organizationId: "org-1",
+      outletId: "outlet-sgr",
+      outletName: "Singaraja",
+      tableNumber: "-",
+      customerName: "Takeaway Guest",
+      orderType: "TAKEAWAY",
+      status: "COMPLETED",
+      items: [],
+      subtotal: 50000,
+      tax: 0,
+      taxRatePercent: 0,
+      serviceChargePercent: 0,
+      total: 50000,
+      paymentStatus: "PAID",
+      targetServiceMinutes: 10,
+      createdAt: new Date().toISOString(),
+      statusHistory: [],
+    };
+
+    const breakdown = getOrderTaxBreakdown(zeroTaxTakeaway);
+    expect(breakdown.pb1).toBe(0);
+    expect(breakdown.serviceCharge).toBe(0);
+    expect(breakdown.discount).toBe(0);
   });
 });

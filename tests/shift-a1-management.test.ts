@@ -1,162 +1,131 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { ShiftRecord, ShiftStatus } from "@/types/shift";
-
-// Helper logic simulating the shift reconciliation & validation engine
-export function checkShiftReconciliation(shift: ShiftRecord, currentTimeMs: number, maxDurationHours: number = 16): ShiftRecord {
-  if (shift.status !== "ACTIVE" && shift.status !== "OPEN") {
-    return shift;
-  }
-
-  // Parse ISO date or extract timestamp from shift.id or startTime
-  let startTimeMs = 0;
-  if (shift.id.startsWith("shf-") || shift.id.startsWith("shift-")) {
-    const rawTs = Number(shift.id.replace(/\D/g, ""));
-    if (rawTs > 1000000000) startTimeMs = rawTs;
-  }
-
-  // Fallback if id did not contain numeric timestamp
-  if (!startTimeMs && shift.startTime) {
-    const parsed = Date.parse(shift.startTime);
-    if (!isNaN(parsed)) startTimeMs = parsed;
-  }
-
-  if (startTimeMs && currentTimeMs - startTimeMs > maxDurationHours * 60 * 60 * 1000) {
-    return {
-      ...shift,
-      status: "NEEDS_RECONCILIATION",
-      closingNotes: (shift.closingNotes ? shift.closingNotes + " • " : "") + "Otomatis dialihkan: Melebihi batas durasi operasional (Perlu Rekonsiliasi)",
-    };
-  }
-
-  return shift;
-}
-
-export function validateManualShiftOpen(params: {
-  openingCash: number;
-  shiftName: string;
-  cashierId: string;
-  cashierName: string;
-  outletId: string;
-  existingShifts: ShiftRecord[];
-}): { success: boolean; error?: string; shift?: ShiftRecord } {
-  if (params.openingCash === undefined || params.openingCash === null || isNaN(params.openingCash)) {
-    return { success: false, error: "Modal awal wajib diisi." };
-  }
-
-  if (params.openingCash < 0) {
-    return { success: false, error: "Modal awal kas tidak boleh bernilai negatif." };
-  }
-
-  if (!params.cashierId) {
-    return { success: false, error: "Shift kasir wajib terikat pada akun kasir yang valid." };
-  }
-
-  const activeExisting = params.existingShifts.find(
-    (s) => (s.status === "ACTIVE" || s.status === "OPEN") && s.outletId === params.outletId
-  );
-
-  if (activeExisting) {
-    return {
-      success: false,
-      error: `Shift aktif (${activeExisting.assignedCashierName}) sudah berjalan untuk outlet ini. Tutup sesi sebelumnya terlebih dahulu.`,
-    };
-  }
-
-  const nowMs = Date.now();
-  const newShift: ShiftRecord = {
-    id: `shf-${nowMs}`,
-    shiftName: params.shiftName,
-    outletId: params.outletId,
-    outletName: "Singaraja",
-    assignedCashierId: params.cashierId,
-    assignedCashierName: params.cashierName,
-    startTime: new Date(nowMs).toISOString(),
-    status: "ACTIVE",
-    openingCash: params.openingCash,
-    cashSales: 0,
-    nonCashSales: 0,
-    refundAmount: 0,
-    expectedCash: params.openingCash,
-    actualCash: params.openingCash,
-    cashVariance: 0,
-  };
-
-  return { success: true, shift: newShift };
-}
+import { describe, it, expect } from "vitest";
+import { NextRequest } from "next/server";
+import { ShiftRecord } from "@/types/shift";
+import {
+  checkShiftReconciliation,
+  reconcileOverdueShifts,
+  getActiveShiftForCashier,
+  validateManualShiftOpen,
+  recordShiftSaleTransaction,
+} from "@/lib/shift-management";
+import { savePersistentShift, getPersistentShifts } from "@/lib/persistent-storage";
+import { POST as postShifts } from "@/app/api/shifts/route";
 
 describe("QA Handover A1 — Shift Kasir Manual & Rekonsiliasi (POS-01, POS-02, POS-32)", () => {
-  it("A1.1: Menolak pembukaan shift otomatis tanpa input modal awal manual", () => {
-    // Attempting to open without valid modal awal fails
-    const result = validateManualShiftOpen({
-      openingCash: NaN,
-      shiftName: "Shift Pagi",
-      cashierId: "usr-kasir-1",
-      cashierName: "Ni Kadek Sri",
-      outletId: "outlet-sgr",
-      existingShifts: [],
-    });
+  it("A1.1 (TC-A01): Menolak pembukaan shift tanpa input modal awal (kosong, null, undefined, NaN, atau negatif)", async () => {
+    expect(
+      validateManualShiftOpen({
+        openingCash: undefined,
+        cashierId: "usr-kasir-1",
+        cashierName: "Ni Kadek Sri",
+        outletId: "outlet-sgr",
+        existingShifts: [],
+      }).success
+    ).toBe(false);
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("Modal awal wajib diisi");
+    expect(
+      validateManualShiftOpen({
+        openingCash: "",
+        cashierId: "usr-kasir-1",
+        cashierName: "Ni Kadek Sri",
+        outletId: "outlet-sgr",
+        existingShifts: [],
+      }).success
+    ).toBe(false);
+
+    expect(
+      validateManualShiftOpen({
+        openingCash: NaN,
+        cashierId: "usr-kasir-1",
+        cashierName: "Ni Kadek Sri",
+        outletId: "outlet-sgr",
+        existingShifts: [],
+      }).success
+    ).toBe(false);
+
+    expect(
+      validateManualShiftOpen({
+        openingCash: -50000,
+        cashierId: "usr-kasir-1",
+        cashierName: "Ni Kadek Sri",
+        outletId: "outlet-sgr",
+        existingShifts: [],
+      }).success
+    ).toBe(false);
+
+    // Also verify POST /api/shifts rejects missing startingCash/openingCash with 400
+    const badOpenReq = new NextRequest("http://localhost:3000/api/shifts", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: "dagoeng_active_persona=CASHIER_SGR",
+      },
+      body: JSON.stringify({
+        action: "OPEN",
+        shiftName: "Shift Tanpa Modal",
+      }),
+    });
+    const badOpenRes = await postShifts(badOpenReq);
+    expect(badOpenRes.status).toBe(400);
   });
 
-  it("A1.2: Memvalidasi modal awal non-negatif dan mengikat shift langsung ke akun kasir yang login", () => {
-    const result = validateManualShiftOpen({
-      openingCash: 250000,
-      shiftName: "Shift Pagi (08:00 - 16:00)",
-      cashierId: "usr-kasir-42",
-      cashierName: "Ni Kadek Sri",
-      outletId: "outlet-sgr",
-      existingShifts: [],
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.shift?.assignedCashierId).toBe("usr-kasir-42");
-    expect(result.shift?.assignedCashierName).toBe("Ni Kadek Sri");
-    expect(result.shift?.openingCash).toBe(250000);
-    expect(result.shift?.status).toBe("ACTIVE");
-  });
-
-  it("A1.3: Mencegah pembukaan shift ganda pada outlet yang sama sebelum shift aktif ditutup", () => {
-    const existingActive: ShiftRecord = {
-      id: `shf-${Date.now() - 3600000}`,
-      shiftName: "Shift Pagi",
-      outletId: "outlet-sgr",
-      outletName: "Singaraja",
-      assignedCashierId: "usr-kasir-1",
-      assignedCashierName: "Budi",
-      startTime: new Date().toISOString(),
-      status: "ACTIVE",
+  it("A1.2 (TC-A02): Mengikat shift per kasir sehingga Kasir B wajib membuka shift sendiri saat Kasir A masih aktif di outlet yang sama", () => {
+    const openCashierA = validateManualShiftOpen({
       openingCash: 300000,
-      cashSales: 0,
-      nonCashSales: 0,
-      refundAmount: 0,
-      expectedCash: 300000,
-      actualCash: 300000,
-      cashVariance: 0,
-    };
-
-    const result = validateManualShiftOpen({
-      openingCash: 200000,
-      shiftName: "Shift Sore",
-      cashierId: "usr-kasir-2",
-      cashierName: "Siti",
+      shiftName: "Shift Pagi Kasir A",
+      cashierId: "usr-kasir-A",
+      cashierName: "Kasir A (Budi)",
       outletId: "outlet-sgr",
-      existingShifts: [existingActive],
+      existingShifts: [],
     });
+    expect(openCashierA.success).toBe(true);
+    const shiftA = openCashierA.shift!;
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("sudah berjalan untuk outlet ini");
+    // When Cashier B logs in, getActiveShiftForCashier for Cashier B returns null (does NOT inherit Shift A)
+    const activeForBBeforeOpen = getActiveShiftForCashier(
+      [shiftA],
+      "usr-kasir-B",
+      "outlet-sgr"
+    );
+    expect(activeForBBeforeOpen).toBeNull();
+
+    // Cashier B can open their own separate shift at the same outlet
+    const openCashierB = validateManualShiftOpen({
+      openingCash: 250000,
+      shiftName: "Shift Siang Kasir B",
+      cashierId: "usr-kasir-B",
+      cashierName: "Kasir B (Siti)",
+      outletId: "outlet-sgr",
+      existingShifts: [shiftA],
+    });
+    expect(openCashierB.success).toBe(true);
+    expect(openCashierB.shift?.assignedCashierId).toBe("usr-kasir-B");
+    expect(openCashierB.shift?.id).not.toBe(shiftA.id);
+
+    // Meanwhile Cashier A cannot open a second duplicate active shift
+    const duplicateCashierA = validateManualShiftOpen({
+      openingCash: 100000,
+      shiftName: "Shift Ganda Kasir A",
+      cashierId: "usr-kasir-A",
+      cashierName: "Kasir A (Budi)",
+      outletId: "outlet-sgr",
+      existingShifts: [shiftA, openCashierB.shift!],
+    });
+    expect(duplicateCashierA.success).toBe(false);
+    expect(duplicateCashierA.isAlreadyOpen).toBe(true);
   });
 
-  it("A1.4: Menandai shift aktif gantung yang melebihi 16 jam sebagai 'NEEDS_RECONCILIATION'", () => {
+  it("A1.3 (TC-A03): Shift > 16 jam otomatis menjadi NEEDS_RECONCILIATION di server dan menolak transaksi baru", async () => {
     const seventeenHoursAgo = Date.now() - 17 * 60 * 60 * 1000;
+    const staleShiftId = `shf-${seventeenHoursAgo}`;
+    const staleCashierId = `usr-stale-${Date.now()}`;
+
     const staleShift: ShiftRecord = {
-      id: `shf-${seventeenHoursAgo}`,
+      id: staleShiftId,
       shiftName: "Shift Malam Gantung",
       outletId: "outlet-sgr",
       outletName: "Singaraja",
-      assignedCashierId: "usr-barista-bandung",
+      assignedCashierId: staleCashierId,
       assignedCashierName: "Barista Community Bandung",
       startTime: new Date(seventeenHoursAgo).toISOString(),
       status: "ACTIVE",
@@ -170,19 +139,53 @@ describe("QA Handover A1 — Shift Kasir Manual & Rekonsiliasi (POS-01, POS-02, 
     };
 
     const reconciled = checkShiftReconciliation(staleShift, Date.now(), 16);
-
     expect(reconciled.status).toBe("NEEDS_RECONCILIATION");
     expect(reconciled.closingNotes).toContain("Perlu Rekonsiliasi");
+
+    // Attempting to record a sale on an overdue shift fails and transitions it to NEEDS_RECONCILIATION
+    const saleAttempt = recordShiftSaleTransaction({
+      shifts: [staleShift],
+      cashierId: staleCashierId,
+      shiftId: staleShiftId,
+      cashAmount: 50000,
+      nonCashAmount: 0,
+    });
+    expect(saleAttempt.success).toBe(false);
+    expect(saleAttempt.error).toContain("SHIFT_NEEDS_RECONCILIATION");
+    expect(saleAttempt.shift?.status).toBe("NEEDS_RECONCILIATION");
+
+    // Also verify via server API route POST /api/shifts (action: RECORD_SALE)
+    await savePersistentShift(staleShift);
+    const apiSaleReq = new NextRequest("http://localhost:3000/api/shifts", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: "dagoeng_active_persona=CASHIER_SGR",
+      },
+      body: JSON.stringify({
+        action: "RECORD_SALE",
+        shiftId: staleShiftId,
+        cashierId: staleCashierId,
+        cashAmount: 45000,
+        nonCashAmount: 0,
+      }),
+    });
+    const apiSaleRes = await postShifts(apiSaleReq);
+    expect(apiSaleRes.status).toBe(409);
+
+    const persistedShifts = await getPersistentShifts();
+    const persistedStale = persistedShifts.find((s) => s.id === staleShiftId);
+    expect(persistedStale?.status).toBe("NEEDS_RECONCILIATION");
   });
 
-  it("A1.5: Shift yang baru berjalan (<16 jam) tetap berstatus ACTIVE", () => {
+  it("A1.4: Shift yang baru berjalan (<16 jam) tetap berstatus ACTIVE dan menerima pencatatan transaksi", () => {
     const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
     const ongoingShift: ShiftRecord = {
       id: `shf-${twoHoursAgo}`,
       shiftName: "Shift Pagi Segar",
       outletId: "outlet-sgr",
       outletName: "Singaraja",
-      assignedCashierId: "usr-kasir-1",
+      assignedCashierId: "usr-kasir-active",
       assignedCashierName: "Ni Kadek Sri",
       startTime: new Date(twoHoursAgo).toISOString(),
       status: "ACTIVE",
@@ -195,8 +198,16 @@ describe("QA Handover A1 — Shift Kasir Manual & Rekonsiliasi (POS-01, POS-02, 
       cashVariance: 0,
     };
 
-    const reconciled = checkShiftReconciliation(ongoingShift, Date.now(), 16);
-
-    expect(reconciled.status).toBe("ACTIVE");
+    const saleRes = recordShiftSaleTransaction({
+      shifts: [ongoingShift],
+      cashierId: "usr-kasir-active",
+      cashAmount: 75000,
+      nonCashAmount: 50000,
+    });
+    expect(saleRes.success).toBe(true);
+    expect(saleRes.shift?.status).toBe("ACTIVE");
+    expect(saleRes.shift?.cashSales).toBe(75000);
+    expect(saleRes.shift?.nonCashSales).toBe(50000);
+    expect(saleRes.shift?.expectedCash).toBe(275000);
   });
 });

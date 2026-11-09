@@ -50,6 +50,24 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsInitialized(true);
     }
+
+    // Hydrate orders from persistent server storage (POS-33 / TC-K04)
+    if (typeof window !== "undefined") {
+      fetch("/api/orders")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.orders) && data.orders.length > 0) {
+            setOrders((prev) => {
+              const merged = new Map(prev.map((o) => [o.id, o]));
+              for (const srvOrder of data.orders) {
+                merged.set(srvOrder.id, srvOrder);
+              }
+              return Array.from(merged.values());
+            });
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -122,6 +140,14 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
           if (paymentUpdate.paymentMethod) updated.paymentMethod = paymentUpdate.paymentMethod;
         }
 
+        if (typeof window !== "undefined") {
+          fetch("/api/orders", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ order: updated }),
+          }).catch(() => {});
+        }
+
         return updated;
       })
     );
@@ -181,6 +207,14 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     };
 
     setOrders((prev) => [newOrder, ...prev]);
+
+    if (typeof window !== "undefined") {
+      fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: newOrder }),
+      }).catch(() => {});
+    }
 
     logActivity({
       module: "POS",
@@ -254,6 +288,19 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     };
 
     setOrders((prev) => [newOrder, ...prev]);
+
+    if (typeof window !== "undefined") {
+      const pointsEarned = Math.floor((newOrder.total || 0) / 10000);
+      fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          order: newOrder,
+          customerKey: newOrder.customerName,
+          loyaltyPointsDelta: pointsEarned,
+        }),
+      }).catch(() => {});
+    }
 
     logActivity({
       module: "POS",

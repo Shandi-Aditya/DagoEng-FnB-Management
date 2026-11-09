@@ -1,112 +1,187 @@
 import { describe, it, expect } from "vitest";
+import { NextRequest } from "next/server";
 import {
   authorizeSupervisorQrisOverride,
   verifyGatewayWebhook,
   canConfirmQrisPayment,
-  verifySupervisorPin,
-  DEFAULT_SUPERVISOR_PIN,
+  signQrisWebhookPayload,
 } from "../src/lib/qris-verification";
+import { POST as postQrisVerify, GET as getQrisVerify } from "../src/app/api/pos/qris/verify/route";
+import { getAuditLogs } from "../src/lib/persistent-storage";
 
 describe("A4 (POS-25): QRIS Payment Verification & Supervisor Manual Override", () => {
-  // Test 1: Standard cashier cannot confirm dynamic QRIS without gateway webhook or supervisor PIN
-  it("prevents standard cashier from marking QRIS as paid without gateway confirmation or supervisor PIN", () => {
-    const unverifiedState = {
+  it("prevents standard cashier from marking QRIS as paid without gateway confirmation or supervisor PIN (TC-K01)", () => {
+    const canConfirm = canConfirmQrisPayment({
       isGatewayVerified: false,
       supervisorOverride: undefined,
-    };
-
-    const canConfirm = canConfirmQrisPayment(unverifiedState);
+    });
     expect(canConfirm).toBe(false);
   });
 
-  // Test 2: Webhook payment gateway callback successfully enables confirmation
-  it("allows confirmation when payment gateway webhook confirms SUCCESS with matching amount", () => {
-    const webhookResult = verifyGatewayWebhook({
-      transactionStatus: "SUCCESS",
-      invoiceNumber: "INV-DAGO-20261109-881",
+  it("rejects webhook confirmation if signature is invalid, status is PENDING, or amount mismatches", async () => {
+    const invoice = `INV-TEST-${Date.now()}`;
+    const validSig = signQrisWebhookPayload({
+      invoiceNumber: invoice,
       amount: 150000,
-      expectedAmount: 150000,
-    });
-
-    expect(webhookResult.allowed).toBe(true);
-    expect(webhookResult.verification?.type).toBe("GATEWAY_WEBHOOK");
-    expect(webhookResult.verification?.referenceNumber).toBe("INV-DAGO-20261109-881");
-
-    const canConfirm = canConfirmQrisPayment({
-      isGatewayVerified: webhookResult.allowed,
-    });
-    expect(canConfirm).toBe(true);
-  });
-
-  // Test 3: Gateway webhook rejects non-SUCCESS or amount mismatch
-  it("rejects webhook confirmation if status is PENDING or amount mismatches", () => {
-    const pendingResult = verifyGatewayWebhook({
-      transactionStatus: "PENDING",
-      invoiceNumber: "INV-DAGO-01",
-      amount: 150000,
-      expectedAmount: 150000,
-    });
-    expect(pendingResult.allowed).toBe(false);
-
-    const mismatchResult = verifyGatewayWebhook({
       transactionStatus: "SUCCESS",
-      invoiceNumber: "INV-DAGO-02",
+    });
+
+    // 1. Invalid signature -> 401
+    const badSigReq = new NextRequest("http://localhost:3000/api/pos/qris/verify", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-dago-signature": "forged-signature-123",
+      },
+      body: JSON.stringify({
+        mode: "WEBHOOK",
+        invoiceNumber: invoice,
+        amount: 150000,
+        expectedAmount: 150000,
+        transactionStatus: "SUCCESS",
+      }),
+    });
+    const badSigRes = await postQrisVerify(badSigReq);
+    expect(badSigRes.status).toBe(401);
+
+    // 2. Amount mismatch -> 400
+    const mismatchSig = signQrisWebhookPayload({
+      invoiceNumber: invoice,
       amount: 100000,
-      expectedAmount: 150000,
+      transactionStatus: "SUCCESS",
     });
-    expect(mismatchResult.allowed).toBe(false);
-    expect(mismatchResult.error).toContain("Ketidakcocokan");
+    const mismatchReq = new NextRequest("http://localhost:3000/api/pos/qris/verify", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-dago-signature": mismatchSig,
+      },
+      body: JSON.stringify({
+        mode: "WEBHOOK",
+        invoiceNumber: invoice,
+        amount: 100000,
+        expectedAmount: 150000,
+        transactionStatus: "SUCCESS",
+      }),
+    });
+    const mismatchRes = await postQrisVerify(mismatchReq);
+    expect(mismatchRes.status).toBe(400);
+
+    // 3. Valid signature & matching amount -> 200 and idempotent on replay
+    const validReq1 = new NextRequest("http://localhost:3000/api/pos/qris/verify", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-dago-signature": validSig,
+      },
+      body: JSON.stringify({
+        mode: "WEBHOOK",
+        invoiceNumber: invoice,
+        amount: 150000,
+        expectedAmount: 150000,
+        transactionStatus: "SUCCESS",
+      }),
+    });
+    const validRes1 = await postQrisVerify(validReq1);
+    expect(validRes1.status).toBe(200);
+    const data1 = await validRes1.json();
+    expect(data1.allowed).toBe(true);
+    expect(data1.idempotent).toBe(false);
+
+    // Replay same webhook -> idempotent: true, does not duplicate
+    const validReq2 = new NextRequest("http://localhost:3000/api/pos/qris/verify", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-dago-signature": validSig,
+      },
+      body: JSON.stringify({
+        mode: "WEBHOOK",
+        invoiceNumber: invoice,
+        amount: 150000,
+        expectedAmount: 150000,
+        transactionStatus: "SUCCESS",
+      }),
+    });
+    const validRes2 = await postQrisVerify(validReq2);
+    expect(validRes2.status).toBe(200);
+    const data2 = await validRes2.json();
+    expect(data2.idempotent).toBe(true);
+    expect(data2.alreadyProcessed).toBe(true);
+
+    // Poll status via GET /api/pos/qris/verify
+    const statusReq = new NextRequest(
+      `http://localhost:3000/api/pos/qris/verify?invoiceNumber=${invoice}`,
+      {
+        headers: { cookie: "dagoeng_active_persona=CASHIER_SGR" },
+      }
+    );
+    const statusRes = await getQrisVerify(statusReq);
+    const statusData = await statusRes.json();
+    expect(statusData.verified).toBe(true);
+    expect(statusData.status).toBe("VERIFIED_WEBHOOK");
   });
 
-  // Test 4: Static QRIS manual override requires valid supervisor PIN
-  it("rejects supervisor manual override when PIN is incorrect or blank", () => {
-    const invalidPinResult = authorizeSupervisorQrisOverride({
+  it("rejects supervisor override when PIN is wrong, RRN is missing, or non-supervisor role is supplied", async () => {
+    // Wrong PIN
+    const wrongPinResult = authorizeSupervisorQrisOverride({
       pin: "0000",
       referenceNumber: "RRN-99281726",
-      note: "QRIS Statis Meja 4",
     });
+    expect(wrongPinResult.allowed).toBe(false);
 
-    expect(invalidPinResult.allowed).toBe(false);
-    expect(invalidPinResult.error).toContain("PIN Supervisor tidak valid");
-
-    const emptyPinResult = authorizeSupervisorQrisOverride({
-      pin: "",
+    // Non-supervisor role attempting to act as supervisor
+    const cashierAsSupervisor = authorizeSupervisorQrisOverride({
+      pin: "2580",
       referenceNumber: "RRN-99281726",
+      supervisorRole: "CASHIER",
     });
-    expect(emptyPinResult.allowed).toBe(false);
-  });
+    expect(cashierAsSupervisor.allowed).toBe(false);
+    expect(cashierAsSupervisor.statusCode).toBe(403);
 
-  // Test 5: Static QRIS manual override requires reference number (RRN)
-  it("rejects supervisor manual override when reference number is missing or too short", () => {
+    // Missing RRN
     const missingRefResult = authorizeSupervisorQrisOverride({
-      pin: DEFAULT_SUPERVISOR_PIN,
+      pin: "2580",
       referenceNumber: "  ",
     });
-
     expect(missingRefResult.allowed).toBe(false);
-    expect(missingRefResult.error).toContain("Nomor referensi");
   });
 
-  // Test 6: Valid supervisor PIN and reference number successfully authorizes manual QRIS
-  it("successfully authorizes manual static QRIS with valid supervisor PIN and reference number", () => {
-    const authResult = authorizeSupervisorQrisOverride({
-      pin: DEFAULT_SUPERVISOR_PIN,
-      referenceNumber: "BCA-RRN-20260914-9981",
-      note: "QRIS Statis Akrilik Meja 03",
-    });
+  it("verifies supervisor override on the server and records an immutable audit log entry", async () => {
+    const invoice = `INV-SUP-${Date.now()}`;
+    const rrn = `BCA-RRN-${Date.now()}`;
 
-    expect(authResult.allowed).toBe(true);
-    expect(authResult.verification?.type).toBe("SUPERVISOR_MANUAL");
-    expect(authResult.verification?.supervisorPinVerified).toBe(true);
-    expect(authResult.verification?.referenceNumber).toBe("BCA-RRN-20260914-9981");
-
-    const canConfirm = canConfirmQrisPayment({
-      isGatewayVerified: false,
-      supervisorOverride: {
-        authorized: authResult.allowed,
-        referenceNumber: authResult.verification?.referenceNumber,
+    const req = new NextRequest("http://localhost:3000/api/pos/qris/verify", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: "dagoeng_active_persona=CASHIER_SGR",
       },
+      body: JSON.stringify({
+        mode: "SUPERVISOR_OVERRIDE",
+        pin: "2580",
+        referenceNumber: rrn,
+        invoiceNumber: invoice,
+        expectedAmount: 85000,
+        supervisorRole: "MANAGER",
+        supervisorName: "Putu Arya (Store Manager)",
+        note: "QRIS Statis Akrilik Meja 03",
+      }),
     });
-    expect(canConfirm).toBe(true);
+
+    const res = await postQrisVerify(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.allowed).toBe(true);
+    expect(data.verification.type).toBe("SUPERVISOR_MANUAL");
+    expect(data.verification.referenceNumber).toBe(rrn);
+
+    // Check audit log was written on server
+    const logs = await getAuditLogs();
+    const matchedLog = logs.find(
+      (l) => l.action === "QRIS_SUPERVISOR_MANUAL_OVERRIDE" && l.referenceId === invoice
+    );
+    expect(matchedLog).toBeDefined();
+    expect(matchedLog?.metadata?.rrn).toBe(rrn);
   });
 });
