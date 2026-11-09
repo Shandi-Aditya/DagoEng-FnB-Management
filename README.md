@@ -19,6 +19,27 @@ Modul pendukung lainnya meliputi **Commercial Retail Space**, **Customer CRM & L
 
 ---
 
+## 🚀 Quick Start / Menjalankan Proyek Secara Lokal
+
+Cara termudah untuk menjalankan proyek ini adalah menggunakan script runner Python [`run.py`](file:///Users/verisimb/Magang/dagoeng-management/run.py):
+
+```bash
+# Jalankan runner lokal (otomatis cek node, npm, buat .env, generate prisma, dan jalankan dev server)
+python3 run.py
+
+# Atau buka browser secara otomatis setelah server siap
+python3 run.py --open
+
+# Opsi lainnya:
+python3 run.py --port 3001   # Ganti port lokal
+python3 run.py --check       # Cek kesiapan dependensi tanpa menjalankan server
+python3 run.py --db-seed     # Sinkronisasi & seed database demo
+python3 run.py --test        # Jalankan test suite otomatis
+python3 run.py --help        # Tampilkan seluruh opsi CLI
+```
+
+---
+
 ## 📂 Struktur Direktori & Modul Proyek (Clean Architecture)
 
 ```text

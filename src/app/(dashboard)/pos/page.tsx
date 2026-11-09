@@ -932,6 +932,12 @@ export default function POSPage() {
       startTime: cwStartTime,
       endTime: `${startH + cwDuration}:00 WITA`,
     });
+    if (!activeShift) {
+      setPosToast("Harap buka shift kasir dengan modal awal sebelum memproses pembayaran.");
+      setIsPosOpenShiftModalOpen(true);
+      return;
+    }
+
     if (conflict.hasConflict) {
       setPosToast(`Booking Bentrok: ${conflict.message}`);
       return;
@@ -1082,12 +1088,12 @@ export default function POSPage() {
           </button>
         </div>
 
-        {/* Status Shift Otomatis (Subtil & Informatif) */}
-        {activeShift && (
+        {/* Status Shift Kasir */}
+        {activeShift ? (
           <div className="flex items-center gap-2">
             <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1 rounded-xl">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Shift Otomatis: <strong className="text-slate-700 dark:text-slate-200">{activeShift.shiftName}</strong></span>
+              <span>Shift Aktif: <strong className="text-slate-700 dark:text-slate-200">{activeShift.shiftName}</strong> ({activeShift.assignedCashierName})</span>
             </span>
             <button
               type="button"
@@ -1096,6 +1102,18 @@ export default function POSPage() {
               title="Tutup Shift & Rekonsiliasi Kasir"
             >
               Tutup Shift
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsPosOpenShiftModalOpen(true)}
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded-lg shadow-xs"
+              title="Buka Shift Kasir Baru"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Buka Shift Kasir</span>
             </button>
           </div>
         )}
@@ -1634,7 +1652,14 @@ export default function POSPage() {
                 <Button
                   type="button"
                   disabled={cartItems.length === 0 || (orderType === "DINE_IN" && availableTables.length === 0)}
-                  onClick={() => setIsPaymentModalOpen(true)}
+                  onClick={() => {
+                    if (!activeShift) {
+                      setPosToast("Harap buka shift kasir dengan modal awal sebelum memproses pembayaran.");
+                      setIsPosOpenShiftModalOpen(true);
+                      return;
+                    }
+                    setIsPaymentModalOpen(true);
+                  }}
                   className="w-full text-xs font-bold h-11 space-x-2 bg-brand-orange hover:bg-orange-600 text-white shadow-md"
                 >
                   <CreditCard className="w-4 h-4" />

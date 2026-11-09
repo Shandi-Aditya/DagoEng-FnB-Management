@@ -1,4 +1,4 @@
-export type ShiftStatus = "SCHEDULED" | "OPEN" | "ACTIVE" | "CLOSING" | "CLOSED";
+export type ShiftStatus = "SCHEDULED" | "OPEN" | "ACTIVE" | "CLOSING" | "CLOSED" | "NEEDS_RECONCILIATION";
 
 export type EmployeePermission =
   | "pos_access"
