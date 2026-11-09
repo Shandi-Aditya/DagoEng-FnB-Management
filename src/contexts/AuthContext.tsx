@@ -407,6 +407,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("dagoeng_is_logged_out");
       localStorage.removeItem("dagoeng_custom_customer");
       localStorage.setItem("dagoeng_active_persona", matchedKey);
+      if (typeof document !== "undefined") {
+        document.cookie = "dagoeng_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
+      }
       syncPersonaCookie(matchedKey);
       if (targetUser?.email) {
         localStorage.setItem("dago_organizer_email", targetUser.email);
@@ -497,6 +500,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("dagoeng_is_logged_out");
       localStorage.removeItem("dagoeng_custom_customer");
       localStorage.setItem("dagoeng_active_persona", personaKey);
+      if (typeof document !== "undefined") {
+        document.cookie = "dagoeng_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
+      }
+      if (target.email) {
+        localStorage.setItem("dago_organizer_email", target.email);
+      }
       syncPersonaCookie(personaKey);
     }
   };

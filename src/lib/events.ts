@@ -840,8 +840,8 @@ export function isSafePublicUrl(urlString: string): { safe: boolean; reason?: st
   try {
     const trimmed = urlString.trim();
 
-    // Allow safe local uploaded assets (e.g., /images/events/..., /uploads/...)
-    if (trimmed.startsWith("/images/") || trimmed.startsWith("/uploads/")) {
+    // Allow safe local uploaded assets (e.g., /images/events/..., /uploads/..., /api/events/posters/...)
+    if (trimmed.startsWith("/images/") || trimmed.startsWith("/uploads/") || trimmed.startsWith("/api/events/posters/")) {
       if (trimmed.includes("..")) {
         return { safe: false, reason: "Path gambar tidak boleh mengandung path traversal." };
       }
@@ -2580,6 +2580,8 @@ export async function adminRejectBookingPayment(
  * Calculates operational KPIs for Event Komunitas.
  */
 export async function getEventOperationalStats(): Promise<EventOperationalStats> {
+  await syncStorageFromDb("events.json").catch(() => {});
+  await syncStorageFromDb("event_bookings.json").catch(() => {});
   const events = loadEventsFromDisk();
   const bookings = loadBookingsFromDisk();
 

@@ -68,22 +68,31 @@ export async function POST(req: NextRequest) {
       process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL_ENV
     );
 
-    // If running in Vercel Serverless environment, local filesystem is read-only.
-    // Encode image directly as safe Base64 Data URI so it renders immediately anywhere without cloud credentials.
-    if (isVercel) {
-      const base64 = buffer.toString("base64");
-      const dataUri = `data:${file.type};base64,${base64}`;
+    const base64 = buffer.toString("base64");
 
-      return NextResponse.json({
-        success: true,
-        url: dataUri,
-        filename,
-        originalName: file.name,
-        size: file.size,
-        mimeType: file.type,
-      });
+    // 1. Distributed cloud persistence via PostgreSQL SystemSetting
+    // Stores poster binary separately so events.json never gets bloated by huge Base64 strings
+    if (process.env.DATABASE_URL) {
+      try {
+        const { db } = await import("@/lib/db");
+        await db.systemSetting.upsert({
+          where: { key: `POSTER_${filename}` },
+          create: {
+            key: `POSTER_${filename}`,
+            value: base64,
+            description: `Public event poster asset: ${file.name} (${file.type})`,
+          },
+          update: {
+            value: base64,
+          },
+        });
+      } catch (dbErr) {
+        console.warn("[events/upload] Failed to persist poster to PostgreSQL:", dbErr);
+      }
     }
 
+    // 2. Attempt local filesystem write (works in local dev, gracefully skips on read-only serverless)
+    let isSavedToLocal = false;
     try {
       const uploadDir = path.join(process.cwd(), "public/images/events");
       if (!fs.existsSync(uploadDir)) {
@@ -92,31 +101,27 @@ export async function POST(req: NextRequest) {
 
       const filepath = path.join(uploadDir, filename);
       fs.writeFileSync(filepath, buffer);
-
-      const publicUrl = `/images/events/${filename}`;
-
-      return NextResponse.json({
-        success: true,
-        url: publicUrl,
-        filename,
-        originalName: file.name,
-        size: file.size,
-        mimeType: file.type,
-      });
-    } catch (fsErr: any) {
-      console.warn("Local upload write failed, falling back to data URI:", fsErr?.message);
-      const base64 = buffer.toString("base64");
-      const dataUri = `data:${file.type};base64,${base64}`;
-
-      return NextResponse.json({
-        success: true,
-        url: dataUri,
-        filename,
-        originalName: file.name,
-        size: file.size,
-        mimeType: file.type,
-      });
+      isSavedToLocal = true;
+    } catch {
+      // Local write fails on read-only serverless; served via /api/events/posters/
     }
+
+    // 3. Return lightweight asset URL
+    // Priority: /api/events/posters/ (serves from DB or disk) or /images/events/
+    const assetUrl = process.env.DATABASE_URL
+      ? `/api/events/posters/${filename}`
+      : isSavedToLocal
+      ? `/images/events/${filename}`
+      : `data:${file.type};base64,${base64}`;
+
+    return NextResponse.json({
+      success: true,
+      url: assetUrl,
+      filename,
+      originalName: file.name,
+      size: file.size,
+      mimeType: file.type,
+    });
   } catch (error: any) {
     console.error("POST /api/events/upload error:", error);
     return NextResponse.json(
