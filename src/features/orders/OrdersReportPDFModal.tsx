@@ -121,7 +121,7 @@ export function OrdersReportPDFModal({
                     F&B Management & Unified Commercial Platform
                   </p>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Outlet: {outletName} • Jl. Veteran No. 18, Singaraja, Bali
+                    Outlet: {outletName} • Jl. Ngurah Rai No. 45, Singaraja, Bali
                   </p>
                 </div>
               </div>

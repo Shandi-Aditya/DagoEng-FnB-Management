@@ -34,6 +34,7 @@ import { KitchenTicketData } from "@/types/printer";
 import { CashDrawerShiftModal } from "@/features/pos/CashDrawerShiftModal";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { isTenantActive, DEFAULT_FNB_TENANTS, getAllFnbTenants, getTenantName } from "@/lib/tenant";
+import { resolvePosReceiptPublisher, resolveCoworkingReceiptPublisher } from "@/lib/receipt-publisher";
 import {
   isCoworkingDateOpen,
   checkCoworkingBookingConflict,
@@ -718,17 +719,21 @@ export default function POSPage() {
 
     // 7. Prepare Receipt Data
     const primaryTenantId = cartItems[0]?.tenantId || (selectedTenantId !== "ALL" ? selectedTenantId : "tenant-ks");
-    const primaryTenantName = getTenantName(primaryTenantId) || "Kopi Senja";
+    const posPublisher = resolvePosReceiptPublisher(
+      cartItems.map((item) => ({ tenantId: item.tenantId })),
+      activeOutlet,
+      primaryTenantId
+    );
 
     const receipt: POSReceiptData = {
       orderNumber: receiptNo,
       date: nowFormatted,
       cashierName: user?.name || "Kasir Bertugas",
-      tenantId: primaryTenantId,
-      tenantName: primaryTenantName,
-      outletName: activeOutlet?.name ? `${primaryTenantName} — ${activeOutlet.name}` : "Outlet Singaraja",
-      outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
-      outletPhone: "(0362) 23456",
+      tenantId: posPublisher.tenantId || primaryTenantId,
+      tenantName: posPublisher.brandName,
+      outletName: posPublisher.outletName,
+      outletAddress: posPublisher.outletAddress,
+      outletPhone: posPublisher.outletPhone,
       tableNumber: selectedTable,
       customerName: effectiveCustomerName,
       orderType,
@@ -1011,6 +1016,7 @@ export default function POSPage() {
     });
 
     const endTimeFormatted = calculateEndTime(cwStartTime, cwDuration);
+    const cwPublisher = resolveCoworkingReceiptPublisher(activeOutlet);
     const coworkReceipt: CoworkingReceiptData = {
       bookingCode: createdBooking.bookingCode,
       transactionDate: new Date().toLocaleString("id-ID", {
@@ -1026,9 +1032,9 @@ export default function POSPage() {
       company: effectiveCompany,
       spaceName: selectedSpace.name,
       spaceType: selectedSpace.type,
-      outletName: activeOutlet?.name ? `Kopi Senja — ${activeOutlet.name}` : "Dago Creative Hub",
-      outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
-      outletPhone: "(0362) 23456",
+      outletName: cwPublisher.outletName,
+      outletAddress: cwPublisher.outletAddress,
+      outletPhone: cwPublisher.outletPhone,
       bookingDate: cwDate,
       startTime: cwStartTime,
       endTime: endTimeFormatted,

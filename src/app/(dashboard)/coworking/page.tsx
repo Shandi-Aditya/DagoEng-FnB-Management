@@ -40,6 +40,7 @@ import { SpaceType, CoworkingSpaceItem } from "@/types/coworking";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { CoworkingReportPDFModal } from "@/features/coworking/CoworkingReportPDFModal";
 import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
+import { resolveCoworkingReceiptPublisher } from "@/lib/receipt-publisher";
 import { useSettings } from "@/contexts/SettingsContext";
 import {
   isCoworkingDateOpen,
@@ -723,6 +724,7 @@ export default function CoworkingPage() {
                               const [startH, startM] = (b.startTime || "09:00").split(":").map(Number);
                               const endH = (startH + (b.duration || 1)) % 24;
                               const endTime = `${endH.toString().padStart(2, "0")}:${(startM || 0).toString().padStart(2, "0")}`;
+                              const cwPublisher = resolveCoworkingReceiptPublisher(activeOutlet);
 
                               setSelectedBookingForReceipt({
                                 bookingCode: b.bookingCode || b.id,
@@ -733,9 +735,9 @@ export default function CoworkingPage() {
                                 company: b.company,
                                 spaceName: b.spaceName,
                                 spaceType: b.spaceType,
-                                outletName: activeOutlet?.name || "Singaraja",
-                                outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
-                                outletPhone: "(0362) 23456",
+                                outletName: cwPublisher.outletName,
+                                outletAddress: cwPublisher.outletAddress,
+                                outletPhone: cwPublisher.outletPhone,
                                 bookingDate: b.date,
                                 endDate: b.endDate,
                                 startTime: b.startTime,

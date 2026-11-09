@@ -88,6 +88,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import { POSReceiptData } from "@/features/pos/types";
 import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
+import { resolveCoworkingReceiptPublisher, resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
 
 interface FnbPartner {
   id: string;
@@ -4137,9 +4138,9 @@ function CustomerPortalContent() {
                                       company: bk.company,
                                       spaceName: bk.spaceName,
                                       spaceType: bk.spaceType,
-                                      outletName: (bk as any).outletName || activeOutlet?.name || "Singaraja",
-                                      outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
-                                      outletPhone: "(0362) 23456",
+                                      outletName: resolveCoworkingReceiptPublisher(activeOutlet).outletName,
+                                      outletAddress: resolveCoworkingReceiptPublisher(activeOutlet).outletAddress,
+                                      outletPhone: resolveCoworkingReceiptPublisher(activeOutlet).outletPhone,
                                       bookingDate: bk.date,
                                       startTime: bk.startTime,
                                       endTime,
@@ -4319,9 +4320,9 @@ function CustomerPortalContent() {
                                     cashierName: "Kasir / Self-Order Online",
                                     tenantId: primaryTenantId,
                                     tenantName: primaryTenantName,
-                                    outletName: ord.outletName ? `${primaryTenantName} — ${ord.outletName}` : "Outlet Singaraja",
-                                    outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
-                                    outletPhone: "(0362) 23456",
+                                    outletName: resolvePosReceiptPublisher(ord.items.map((i) => ({ tenantId: i.tenantId })), activeOutlet, primaryTenantId).outletName,
+                                    outletAddress: resolvePosReceiptPublisher(ord.items.map((i) => ({ tenantId: i.tenantId })), activeOutlet, primaryTenantId).outletAddress,
+                                    outletPhone: resolvePosReceiptPublisher(ord.items.map((i) => ({ tenantId: i.tenantId })), activeOutlet, primaryTenantId).outletPhone,
                                     tableNumber: ord.tableNumber,
                                     customerName: ord.customerName,
                                     orderType: (ord.orderType as any) || "DINE_IN",
@@ -4481,9 +4482,9 @@ function CustomerPortalContent() {
                                           minute: "2-digit",
                                         }),
                                         cashierName: "Kasir / Self-Order Online",
-                                        outletName: ord.outletName ? `${primaryTenantName} — ${ord.outletName}` : "Dago Creative Hub",
-                                        outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
-                                        outletPhone: "(0362) 23456",
+                                        outletName: resolvePosReceiptPublisher(ord.items.map((i) => ({ tenantId: i.tenantId })), activeOutlet, primaryTenantId).outletName,
+                                        outletAddress: resolvePosReceiptPublisher(ord.items.map((i) => ({ tenantId: i.tenantId })), activeOutlet, primaryTenantId).outletAddress,
+                                        outletPhone: resolvePosReceiptPublisher(ord.items.map((i) => ({ tenantId: i.tenantId })), activeOutlet, primaryTenantId).outletPhone,
                                         tableNumber: ord.tableNumber,
                                         customerName: ord.customerName,
                                         orderType: (ord.orderType as any) || "DINE_IN",

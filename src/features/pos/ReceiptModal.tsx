@@ -7,6 +7,7 @@ import { formatCurrencyIDR } from "@/lib/utils";
 import { X, Printer, Share2, CheckCircle2, RotateCcw, Store, MessageSquare, UtensilsCrossed } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_FNB_TENANTS, getAllStoredTenantSettings, getTenantName } from "@/lib/tenant";
+import { MASTER_HQ_OUTLET } from "@/lib/receipt-publisher";
 import { getOrCreateSimulatedWifiVoucher, getSimulatedWifiCalcBasis } from "@/lib/wifi";
 import { isAddonActive } from "@/lib/subscription";
 import { usePrinter } from "@/contexts/PrinterContext";
@@ -187,7 +188,7 @@ export function ReceiptModal({
                   </p>
                 )}
                 <p className="text-[10px] text-slate-500 leading-tight">
-                  {receiptData.outletAddress || "Jl. Veteran No. 18, Singaraja, Bali"}
+                  {receiptData.outletAddress || MASTER_HQ_OUTLET.address}
                 </p>
                 {contactPhone && <p className="text-[10px] text-slate-500">Telp: {contactPhone}</p>}
               </div>

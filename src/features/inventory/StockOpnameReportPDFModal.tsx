@@ -155,7 +155,7 @@ export function StockOpnameReportPDFModal({
                       Divisi Logistik, Pergudangan & Manajemen Inventori
                     </p>
                     <p className="text-[10px] text-slate-400 leading-tight">
-                      Jl. Veteran No. 18, Singaraja, Bali 81118 &bull; Telp: (0362) 23456
+                      Jl. Ngurah Rai No. 45, Singaraja, Bali 81116 &bull; Telp: (0362) 23456
                     </p>
                   </div>
                 </div>

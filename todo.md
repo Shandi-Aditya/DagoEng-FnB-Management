@@ -54,4 +54,11 @@
   - [x] Enforce operational session expiration (16h shift limit) in `src/lib/session.ts` and `src/lib/server-auth.ts`
   - [x] Add client-side layout fallback guard in `src/app/(dashboard)/layout.tsx` for defense in depth
   - [x] Verify all 58 Task A suite tests pass
-- [ ] **A6. Identitas & Penerbit Struk Tidak Sesuai (POS-03)**
+- [x] **A6. Identitas & Penerbit Struk Tidak Sesuai (POS-03)**
+  - [x] Reproduce: Co-working receipts printed under "Outlet: Kopi Senja — Singaraja" and hardcoded address "Jl. Veteran No. 18, Singaraja, Bali" inconsistent with central master data
+  - [x] Write regression test `tests/receipt-publisher-a6.test.ts` (5/5 tests green)
+  - [x] Create centralized publisher resolver `src/lib/receipt-publisher.ts` defining `MASTER_HQ_OUTLET` ("Jl. Ngurah Rai No. 45, Singaraja, Bali")
+  - [x] Dynamically set co-working publisher to `Dago Creative Hub` in `pos/page.tsx`, `coworking/page.tsx`, and `customer/page.tsx`
+  - [x] Dynamically set single-mitra and multi-mitra publishers for F&B receipts
+  - [x] Eliminate hardcoded "Jl. Veteran No. 18" across `ReceiptModal`, `CoworkingReceiptModal`, `StockOpnameReportPDFModal`, and `OrdersReportPDFModal`
+  - [x] Verify all 63 Task A suite tests pass

@@ -41,6 +41,7 @@ import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModa
 import { usePrinter } from "@/contexts/PrinterContext";
 import { KitchenTicketData, PrintPurpose } from "@/types/printer";
 import { getTenantName } from "@/lib/tenant";
+import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
 
 export default function OrdersPage() {
   const { user } = useAuth();
@@ -109,7 +110,11 @@ export default function OrdersPage() {
 
   const convertOrderToReceiptData = (order: OrderRecord): POSReceiptData => {
     const primaryTenantId = order.items[0]?.tenantId || "tenant-ks";
-    const primaryTenantName = getTenantName(primaryTenantId) || "Kopi Senja";
+    const posPublisher = resolvePosReceiptPublisher(
+      order.items.map((i) => ({ tenantId: i.tenantId })),
+      { name: order.outletName || "Singaraja (Pusat)" },
+      primaryTenantId
+    );
 
     return {
       orderNumber: order.orderNumber,
@@ -121,11 +126,11 @@ export default function OrdersPage() {
         minute: "2-digit",
       }),
       cashierName: "Kasir / Staff Bertugas",
-      tenantId: primaryTenantId,
-      tenantName: primaryTenantName,
-      outletName: order.outletName ? `${primaryTenantName} — ${order.outletName}` : "Outlet Singaraja",
-      outletAddress: "Jl. Veteran No. 18, Singaraja, Bali",
-      outletPhone: "(0362) 23456",
+      tenantId: posPublisher.tenantId || primaryTenantId,
+      tenantName: posPublisher.brandName,
+      outletName: posPublisher.outletName,
+      outletAddress: posPublisher.outletAddress,
+      outletPhone: posPublisher.outletPhone,
       tableNumber: order.tableNumber,
       customerName: order.customerName,
       orderType: (order.orderType as any) || "DINE_IN",
