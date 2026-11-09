@@ -35,7 +35,9 @@ import { Button } from "@/components/ui/button";
 import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pagination";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { PaymentModal } from "@/features/pos/PaymentModal";
-import { POSCartItem, POSPaymentMethod, POSReceiptData } from "@/features/pos/types";
+import { POSCartItem, POSPaymentMethod, POSReceiptData, SplitGuestBill } from "@/features/pos/types";
+import { QRISVerificationDetail } from "@/lib/qris-verification";
+import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { OrdersReportPDFModal } from "@/features/orders/OrdersReportPDFModal";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
@@ -78,6 +80,7 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
   const [paymentOrder, setPaymentOrder] = useState<OrderRecord | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
+  const { recordShiftTransaction } = useEmployeeShift();
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
   const [receiptModalOrder, setReceiptModalOrder] = useState<POSReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
@@ -244,11 +247,12 @@ export default function OrdersPage() {
     method: POSPaymentMethod;
     amountPaid: number;
     changeDue: number;
+    qrisVerification?: QRISVerificationDetail;
+    splitDetails?: SplitGuestBill[];
   }) => {
     if (!paymentOrder) return;
 
-    const chosenMethod =
-      paymentData.method === "CASH" ? "CASH" : paymentData.method === "EDC" ? "EDC" : "QRIS";
+    const chosenMethod = paymentData.method;
 
     // 1. Advance order status to COMPLETED and update payment
     advanceOrderStatus(
@@ -258,8 +262,19 @@ export default function OrdersPage() {
       {
         paymentStatus: "PAID",
         paymentMethod: chosenMethod,
+        qrisVerification: paymentData.qrisVerification,
       }
     );
+
+    const cashPortion =
+      paymentData.method === "SPLIT"
+        ? (paymentData.splitDetails || [])
+            .filter((guest) => guest.paymentMethod === "CASH")
+            .reduce((sum, guest) => sum + guest.assignedAmount, 0)
+        : paymentData.method === "CASH"
+          ? paymentOrder.total
+          : 0;
+    recordShiftTransaction(cashPortion, paymentOrder.total - cashPortion, paymentOrder.outletId, paymentOrder.id);
 
     // 2. Inventory: Deduct ingredients based on Recipe BOM
     paymentOrder.items.forEach((item) => {

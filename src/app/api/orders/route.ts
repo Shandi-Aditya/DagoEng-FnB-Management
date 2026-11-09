@@ -5,7 +5,8 @@ import {
   savePersistentOrder,
   getPersistentLoyaltyPoints,
   updatePersistentLoyaltyPoints,
-  getPersistentQrisSession,
+  claimQrisSessionForOrder,
+  appendAuditLog,
 } from "@/lib/persistent-storage";
 import { getRequestAuthUser } from "@/lib/server-auth";
 import { OrderRecord } from "@/types/order";
@@ -27,6 +28,118 @@ const ORDER_WRITE_ROLES: RoleSlug[] = [
   "CASHIER",
 ];
 
+const SUPERVISOR_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
+const LOYALTY_READ_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
+
+const QRIS_CLAIM_MESSAGES = {
+  NOT_FOUND: "Sesi QRIS untuk invoice ini tidak ditemukan di server.",
+  UNVERIFIED: "Pembayaran QRIS belum terverifikasi webhook atau supervisor.",
+  AMOUNT_MISMATCH: "Nominal pembayaran QRIS tidak sama dengan total transaksi.",
+  ALREADY_CONSUMED: "Pembayaran QRIS ini sudah dipakai untuk transaksi lain.",
+} as const;
+
+const STATUS_ONLY_ROLES: RoleSlug[] = ["KITCHEN_STAFF", "WAITER"];
+const ORDER_ACCESS_ROLES: RoleSlug[] = [...ORDER_WRITE_ROLES, ...STATUS_ONLY_ROLES];
+
+// Fields that kitchen/floor workflow may change on an existing order. Everything else is the sale itself.
+const WORKFLOW_FIELDS = new Set<string>([
+  "status",
+  "statusHistory",
+  "confirmedAt",
+  "kitchenReceivedAt",
+  "cookingStartedAt",
+  "cookingFinishedAt",
+  "readyAt",
+  "servedAt",
+  "completedAt",
+  "loyaltyPointsCredited",
+]);
+
+// Client-side bookkeeping that must never be stored on the server.
+const CLIENT_ONLY_FIELDS = ["syncStatus", "syncError"] as const;
+
+function withoutClientFields(order: OrderRecord): OrderRecord {
+  const copy: Record<string, unknown> = { ...order };
+  for (const field of CLIENT_ONLY_FIELDS) delete copy[field];
+  return copy as unknown as OrderRecord;
+}
+
+function historyOnlyAppends(previous: OrderRecord, next: OrderRecord): boolean {
+  const before = previous.statusHistory ?? [];
+  const after = next.statusHistory ?? [];
+  return (
+    after.length >= before.length &&
+    before.every((entry, index) => JSON.stringify(entry) === JSON.stringify(after[index]))
+  );
+}
+
+function canonicalSale(order: OrderRecord): string {
+  const sortKeys = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(sortKeys);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(
+        Object.keys(value as Record<string, unknown>)
+          .sort()
+          .map((key) => [key, sortKeys((value as Record<string, unknown>)[key])])
+      );
+    }
+    return value;
+  };
+  const sale = Object.fromEntries(
+    Object.entries(order).filter(([key, value]) => !WORKFLOW_FIELDS.has(key) && value !== undefined)
+  );
+  return JSON.stringify(sortKeys(sale));
+}
+
+type OrderWriteDecision =
+  | { allowed: true; auditPaidChange: boolean }
+  | { allowed: false; error: string };
+
+/**
+ * Who may write what:
+ * - new order: POS roles; a waiter only an unpaid (PENDING) order
+ * - workflow-only change (status/timestamps) that does not cancel: POS roles, kitchen and waiter
+ * - any other change to an unpaid order: POS roles
+ * - any other change to a PAID, CANCELLED or REFUNDED order: supervisors only, and it is audited
+ * - workflow history may only grow by appending
+ */
+function decideOrderWrite(
+  role: RoleSlug,
+  existing: OrderRecord | undefined,
+  next: OrderRecord
+): OrderWriteDecision {
+  const isPosRole = ORDER_WRITE_ROLES.includes(role);
+  const isSupervisor = SUPERVISOR_ROLES.includes(role);
+
+  if (!existing) {
+    if (isPosRole) return { allowed: true, auditPaidChange: false };
+    if (role === "WAITER" && next.paymentStatus === "PENDING") return { allowed: true, auditPaidChange: false };
+    return { allowed: false, error: `FORBIDDEN: Role [${role}] tidak diizinkan membuat transaksi POS ini.` };
+  }
+
+  const isClosed = existing.status === "CANCELLED" || existing.paymentStatus === "REFUNDED";
+  const workflowOnly =
+    !isClosed &&
+    next.status !== "CANCELLED" &&
+    canonicalSale(existing) === canonicalSale(next) &&
+    historyOnlyAppends(existing, next);
+  if (workflowOnly) return { allowed: true, auditPaidChange: false };
+
+  if (existing.paymentStatus !== "PAID" && !isClosed) {
+    return isPosRole
+      ? { allowed: true, auditPaidChange: false }
+      : { allowed: false, error: `FORBIDDEN: Role [${role}] hanya boleh mengubah status pesanan.` };
+  }
+
+  return isSupervisor
+    ? { allowed: true, auditPaidChange: true }
+    : {
+        allowed: false,
+        error:
+          "FORBIDDEN: Perubahan data atau pembatalan transaksi yang sudah lunas wajib dilakukan oleh supervisor (Manager/Owner).",
+      };
+}
+
 const OrderItemSchema = z.object({
   id: z.string().optional(),
   productId: z.string().optional(),
@@ -47,6 +160,9 @@ const OrderPayloadSchema = z.object({
   items: z.array(OrderItemSchema).optional(),
   paymentStatus: z.enum(["PENDING", "PAID", "REFUNDED"]).optional(),
   paymentMethod: z.enum(["CASH", "QRIS", "EDC", "TRANSFER", "SPLIT"]).optional(),
+  status: z
+    .enum(["NEW", "CONFIRMED", "KITCHEN_RECEIVED", "COOKING", "READY", "SERVED", "COMPLETED", "CANCELLED"])
+    .optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -79,7 +195,9 @@ export async function GET(req: NextRequest) {
       orders = orders.filter((o) => o.status === status || o.paymentStatus === status);
     }
 
-    let loyaltyPoints = await getPersistentLoyaltyPoints();
+    let loyaltyPoints = LOYALTY_READ_ROLES.includes(auth.role)
+      ? await getPersistentLoyaltyPoints()
+      : [];
     if (customerKey) {
       const normalized = customerKey.trim().toLowerCase();
       loyaltyPoints = loyaltyPoints.filter((l) => l.customerKey.toLowerCase() === normalized);
@@ -101,7 +219,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!ORDER_WRITE_ROLES.includes(auth.role)) {
+    if (!ORDER_ACCESS_ROLES.includes(auth.role)) {
       return NextResponse.json(
         { error: `FORBIDDEN: Role [${auth.role}] tidak memiliki wewenang menyimpan transaksi POS.` },
         { status: 403 }
@@ -109,7 +227,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const orderData: OrderRecord = body.order || body;
+    const orderData: OrderRecord = withoutClientFields(body.order || body);
 
     if (!orderData || !orderData.id) {
       return NextResponse.json(
@@ -132,6 +250,7 @@ export async function POST(req: NextRequest) {
       items: Array.isArray(orderData.items) ? orderData.items : undefined,
       paymentStatus: orderData.paymentStatus,
       paymentMethod: orderData.paymentMethod as any,
+      status: orderData.status,
     });
 
     if (!parsed.success) {
@@ -171,61 +290,77 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // R5: Verify server-side QRIS session before allowing a PAID QRIS order to be saved
-    if (orderData.paymentMethod === "QRIS" && orderData.paymentStatus === "PAID") {
-      const candidateKeys = [
-        orderData.qrisVerification?.referenceNumber,
-        orderData.paymentReference,
-        orderData.orderNumber,
-        orderData.id,
-      ].filter((k): k is string => Boolean(k && typeof k === "string" && k.trim()));
+    const existingOrder = (await getPersistentOrders()).find((o) => o.id === orderData.id);
+    const decision = decideOrderWrite(auth.role, existingOrder, orderData);
+    if (!decision.allowed) {
+      return NextResponse.json({ error: decision.error }, { status: 403 });
+    }
+    const reversesPaidOrder = decision.auditPaidChange;
 
-      let verifiedQrisSession = null;
-      for (const key of candidateKeys) {
-        const session = await getPersistentQrisSession(key);
-        if (
-          session &&
-          (session.status === "VERIFIED_WEBHOOK" ||
-            session.status === "VERIFIED_SUPERVISOR") &&
-          Math.round(session.expectedAmount) === Math.round(v.total)
-        ) {
-          verifiedQrisSession = session;
-          break;
-        }
-      }
+    // A PAID QRIS order must consume exactly one verified QRIS session, identified by its gateway invoice number.
+    const alreadySettledByThisPayment =
+      existingOrder?.paymentStatus === "PAID" &&
+      existingOrder.paymentMethod === "QRIS" &&
+      existingOrder.total === orderData.total &&
+      existingOrder.qrisVerification?.invoiceNumber === orderData.qrisVerification?.invoiceNumber;
+    if (orderData.paymentMethod === "QRIS" && orderData.paymentStatus === "PAID" && !alreadySettledByThisPayment) {
+      const qrisInvoiceNumber = orderData.qrisVerification?.invoiceNumber?.trim();
+      const claim = qrisInvoiceNumber
+        ? await claimQrisSessionForOrder({
+            invoiceNumber: qrisInvoiceNumber,
+            orderId: orderData.id,
+            amount: v.total,
+          })
+        : ({ ok: false, reason: "NOT_FOUND" } as const);
 
-      if (!verifiedQrisSession) {
+      if (!claim.ok) {
         return NextResponse.json(
           {
-            error:
-              "QRIS_PAYMENT_UNVERIFIED: Transaksi QRIS berstatus PAID ditolak karena belum memiliki sesi verifikasi server (webhook/supervisor) dengan nominal yang sesuai.",
+            error: `QRIS_PAYMENT_UNVERIFIED [${claim.reason}]: ${QRIS_CLAIM_MESSAGES[claim.reason]}`,
           },
           { status: 409 }
         );
       }
     }
 
-    const savedOrder = await savePersistentOrder(orderData);
-
-    // R8: Compute loyalty points strictly on the server (1 point per Rp 10,000 of verified order total)
-    // and guarantee idempotency per order.id so duplicate POSTs never double-credit points.
-    let loyaltyRecord = null;
-    const customerKey = String(
-      body.customerKey || (orderData as any).customerPhone || orderData.customerName || ""
-    ).trim();
-
-    const isPaidAndValid =
-      orderData.paymentStatus === "PAID" && orderData.status !== "CANCELLED";
-    const serverEarnedPoints = isPaidAndValid ? Math.floor(v.total / 10000) : 0;
-
-    if (customerKey && serverEarnedPoints > 0) {
-      loyaltyRecord = await updatePersistentLoyaltyPoints(
-        customerKey,
-        serverEarnedPoints,
-        orderData.customerName,
-        orderData.id
-      );
+    if (reversesPaidOrder) {
+      await appendAuditLog({
+        id: `audit-order-reversal-${orderData.id}-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        userId: auth.userId || "unknown",
+        userName: auth.name || auth.email || "Supervisor",
+        userRole: auth.role,
+        action: "PAID_ORDER_CHANGED_BY_SUPERVISOR",
+        module: "POS",
+        description: `Transaksi lunas ${orderData.orderNumber || orderData.id} diubah supervisor: status ${orderData.paymentStatus}/${orderData.status}, total ${existingOrder?.total} -> ${v.total}.`,
+        referenceId: orderData.id,
+        metadata: {
+          previousPaymentStatus: existingOrder?.paymentStatus,
+          previousTotal: existingOrder?.total,
+          total: v.total,
+          paymentStatus: orderData.paymentStatus,
+          status: orderData.status,
+        },
+      });
     }
+
+    // Loyalty is earned once, when an order first becomes PAID, by the customer named on that order.
+    const becomesPaid =
+      orderData.paymentStatus === "PAID" &&
+      orderData.status !== "CANCELLED" &&
+      existingOrder?.paymentStatus !== "PAID" &&
+      !existingOrder?.loyaltyPointsCredited;
+    const customerKey = String(orderData.customerName || "").trim();
+    const serverEarnedPoints = becomesPaid ? Math.floor(v.total / 10000) : 0;
+    const creditsLoyalty = Boolean(customerKey) && serverEarnedPoints > 0;
+
+    const savedOrder = await savePersistentOrder(
+      creditsLoyalty ? { ...orderData, loyaltyPointsCredited: true } : orderData
+    );
+
+    const loyaltyRecord = creditsLoyalty
+      ? await updatePersistentLoyaltyPoints(customerKey, serverEarnedPoints, orderData.customerName, orderData.id)
+      : null;
 
     return NextResponse.json({
       success: true,

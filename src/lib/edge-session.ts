@@ -17,128 +17,10 @@ export interface EdgeSessionPayload {
 export interface EdgeTokenVerification {
   valid: boolean;
   expired: boolean;
-  revoked?: boolean;
   payload: EdgeSessionPayload | null;
   reason?: string;
 }
 
-// In-memory revocation cache (maps userId or email -> revocation timestamp in ms)
-const userRevocationRegistry = new Map<string, number>();
-
-function getNodeRevocationFilePath(): string | null {
-  try {
-    if (typeof process === "undefined" || !process.versions?.node) {
-      return null;
-    }
-    const req = eval("require");
-    const path = req("path");
-    const os = req("os");
-    let baseDir: string;
-    if (process.env.DATA_DIR_OVERRIDE && process.env.DATA_DIR_OVERRIDE.trim() !== "") {
-      baseDir = process.env.DATA_DIR_OVERRIDE;
-    } else if (process.env.NODE_ENV === "test") {
-      baseDir = path.join(process.cwd(), "data", ".test-storage");
-    } else if (
-      process.env.VERCEL ||
-      process.env.AWS_LAMBDA_FUNCTION_NAME ||
-      process.env.VERCEL_ENV
-    ) {
-      baseDir = path.join(os.tmpdir(), "dago-data");
-    } else {
-      baseDir = path.join(process.cwd(), "data");
-    }
-    return path.join(baseDir, "session_revocations.json");
-  } catch {
-    return null;
-  }
-}
-
-function readPersistentRevocations(): Record<string, number> {
-  try {
-    const filePath = getNodeRevocationFilePath();
-    if (!filePath) return {};
-    const req = eval("require");
-    const fs = req("fs");
-    if (!fs.existsSync(filePath)) return {};
-    const raw = fs.readFileSync(filePath, "utf-8").trim();
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function writePersistentRevocation(key: string, timestampMs: number): void {
-  try {
-    const filePath = getNodeRevocationFilePath();
-    if (!filePath) return;
-    const req = eval("require");
-    const fs = req("fs");
-    const path = req("path");
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    const existing = readPersistentRevocations();
-    existing[key] = timestampMs;
-    fs.writeFileSync(filePath, JSON.stringify(existing, null, 2), "utf-8");
-  } catch {
-    // Ignore on pure Edge runtime without filesystem
-  }
-}
-
-export function revokeUserSessionsAfter(
-  userIdOrEmail: string,
-  timestampMs: number = Date.now()
-): void {
-  const key = (userIdOrEmail || "").trim().toLowerCase();
-  if (!key) return;
-  userRevocationRegistry.set(key, timestampMs);
-  writePersistentRevocation(key, timestampMs);
-}
-
-export function getUserRevocationTimestamp(userIdOrEmail?: string | null): number | null {
-  if (!userIdOrEmail) return null;
-  const key = userIdOrEmail.trim().toLowerCase();
-  const cached = userRevocationRegistry.get(key);
-  if (cached !== undefined) {
-    return cached;
-  }
-  const persisted = readPersistentRevocations();
-  if (typeof persisted[key] === "number") {
-    userRevocationRegistry.set(key, persisted[key]);
-    return persisted[key];
-  }
-  return null;
-}
-
-/**
- * R7: Clears only the in-memory revocation Map while keeping persistent storage intact.
- * Used to simulate a cold serverless isolate or process restart in tests.
- */
-export function clearInMemoryRevocationCacheForTests(): void {
-  userRevocationRegistry.clear();
-}
-
-export function clearRevocationRegistryForTests(): void {
-  userRevocationRegistry.clear();
-  try {
-    const filePath = getNodeRevocationFilePath();
-    if (filePath) {
-      const req = eval("require");
-      const fs = req("fs");
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    }
-  } catch {}
-}
-
-/**
- * R6: Returns the HMAC signing secret.
- * In production, requires SESSION_SECRET to be explicitly set with >= 32 characters (fails closed).
- */
 export function getSigningSecret(): string {
   const secret = process.env.SESSION_SECRET;
   const isProduction =
@@ -357,7 +239,7 @@ export function signEdgeSessionToken(
 }
 
 /**
- * Verifies a signed edge session token, checking cryptographic signature, expiration, and revocation.
+ * Verifies a signed edge session token: signature and expiry only. Revocation needs storage, so it is checked in server-auth (Node runtime).
  */
 export function verifyEdgeSessionToken(
   token: string | undefined | null,
@@ -400,20 +282,6 @@ export function verifyEdgeSessionToken(
 
   if (!payload || !payload.userId || !payload.role || typeof payload.exp !== "number") {
     return { valid: false, expired: false, payload: null, reason: "INCOMPLETE_PAYLOAD" };
-  }
-
-  // Check revocation by userId or email (both in-memory and persistent disk store)
-  const revokedByUserId = getUserRevocationTimestamp(payload.userId);
-  const revokedByEmail = getUserRevocationTimestamp(payload.email);
-  const revokedAt = Math.max(revokedByUserId ?? 0, revokedByEmail ?? 0);
-  if (revokedAt > 0 && payload.iat <= revokedAt) {
-    return {
-      valid: false,
-      expired: false,
-      revoked: true,
-      payload,
-      reason: "SESSION_REVOKED",
-    };
   }
 
   if (payload.exp <= nowMs) {

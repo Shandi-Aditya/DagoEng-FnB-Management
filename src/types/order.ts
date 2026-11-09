@@ -52,15 +52,19 @@ export interface OrderRecord {
   serviceChargePercent?: number;
   total: number;
   paymentStatus: "PENDING" | "PAID" | "REFUNDED";
-  paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER";
+  paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
   paymentReference?: string;
   qrisVerification?: {
     type: "GATEWAY_WEBHOOK" | "SUPERVISOR_MANUAL";
     referenceNumber: string;
+    invoiceNumber?: string;
     supervisorPinVerified?: boolean;
     verifiedAt: string;
     note?: string;
   };
+  loyaltyPointsCredited?: boolean;
+  syncStatus?: "SYNCED" | "PENDING" | "REJECTED";
+  syncError?: string;
   targetServiceMinutes: number; // Target SLA in minutes (e.g. 10m or 15m)
   notes?: string; // Optional customer / order notes
 

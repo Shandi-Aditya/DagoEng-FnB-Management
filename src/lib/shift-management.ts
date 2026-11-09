@@ -261,6 +261,7 @@ export function recordShiftSaleTransaction(params: {
   shiftId?: string;
   cashAmount: number;
   nonCashAmount: number;
+  saleId?: string;
   actorId?: string;
   actorRole?: RoleSlug;
   currentTimeMs?: number;
@@ -361,6 +362,11 @@ export function recordShiftSaleTransaction(params: {
     };
   }
 
+  const recordedSaleIds = target.recordedSaleIds ?? [];
+  if (params.saleId && recordedSaleIds.includes(params.saleId)) {
+    return { success: true, statusCode: 200, shift: target, updatedShifts: reconciled };
+  }
+
   const cashDelta = Math.max(0, Number(params.cashAmount) || 0);
   const nonCashDelta = Math.max(0, Number(params.nonCashAmount) || 0);
   const newCashSales = (target.cashSales || 0) + cashDelta;
@@ -372,6 +378,7 @@ export function recordShiftSaleTransaction(params: {
     cashSales: newCashSales,
     nonCashSales: newNonCashSales,
     expectedCash: newExpected,
+    recordedSaleIds: params.saleId ? [...recordedSaleIds, params.saleId] : recordedSaleIds,
   };
 
   const nextShifts = [...reconciled];

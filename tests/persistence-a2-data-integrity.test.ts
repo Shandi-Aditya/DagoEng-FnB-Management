@@ -245,7 +245,7 @@ describe("QA Handover A2 — Data Persistence & Loss Prevention (POS-33)", () =>
       outletId: "outlet-sgr",
       outletName: "Singaraja",
       tableNumber: "T-04",
-      customerName: "Budi Santoso",
+      customerName: customerKey,
       orderType: "DINE_IN",
       status: "COMPLETED",
       items: [
@@ -263,6 +263,12 @@ describe("QA Handover A2 — Data Persistence & Loss Prevention (POS-33)", () =>
       total: 57500,
       paymentStatus: "PAID",
       paymentMethod: "QRIS",
+      qrisVerification: {
+        type: "GATEWAY_WEBHOOK",
+        referenceNumber: orderNumber,
+        invoiceNumber: orderNumber,
+        verifiedAt: new Date().toISOString(),
+      },
       targetServiceMinutes: 10,
       createdAt: new Date().toISOString(),
       statusHistory: [],

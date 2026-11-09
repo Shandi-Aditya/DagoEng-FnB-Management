@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   authorizeSupervisorQrisOverride,
+  SHARED_SUPERVISOR_PIN_LABEL,
   verifyGatewayWebhook,
   getWebhookSecret,
 } from "@/lib/qris-verification";
 import {
   getPersistentQrisSession,
   savePersistentQrisSession,
+  isVerifiedQrisStatus,
   appendAuditLog,
   QrisVerificationSessionRecord,
 } from "@/lib/persistent-storage";
@@ -100,16 +102,16 @@ export async function POST(req: NextRequest) {
       }
 
       const existing = await getPersistentQrisSession(invoiceNumber);
-      if (
-        existing &&
-        (existing.status === "VERIFIED_WEBHOOK" ||
-          existing.status === "VERIFIED_SUPERVISOR") &&
-        Math.round(existing.expectedAmount) === expectedAmount
-      ) {
-        return NextResponse.json({
-          success: true,
-          session: existing,
-        });
+      if (existing && isVerifiedQrisStatus(existing.status)) {
+        if (Math.round(existing.expectedAmount) === expectedAmount) {
+          return NextResponse.json({ success: true, session: existing });
+        }
+        return NextResponse.json(
+          {
+            error: `QRIS_ALREADY_SETTLED: Tagihan QRIS [${invoiceNumber}] sudah lunas dan tidak dapat diubah nominalnya.`,
+          },
+          { status: 409 }
+        );
       }
 
       const nowIso = new Date().toISOString();
@@ -252,7 +254,7 @@ export async function POST(req: NextRequest) {
         allowed: true,
         idempotent: false,
         session: sessionRecord,
-        verification: webhookCheck.verification,
+        verification: { ...webhookCheck.verification, invoiceNumber },
       });
     }
 
@@ -284,29 +286,43 @@ export async function POST(req: NextRequest) {
         note,
         invoiceNumber,
         orderId,
-        expectedAmount,
       } = body;
 
-      // R5: Never read supervisorRole, supervisorId, or supervisorName from req.body!
-      // Resolve supervisor authority strictly on the server.
-      const isCallerAlreadySupervisor = SUPERVISOR_ROLES.includes(auth.role);
-      const serverSupervisorRole: RoleSlug = isCallerAlreadySupervisor
-        ? auth.role
-        : "MANAGER";
-      const serverSupervisorId = isCallerAlreadySupervisor
-        ? auth.userId
-        : "emp-001";
-      const serverSupervisorName = isCallerAlreadySupervisor
-        ? auth.name || "Store Supervisor"
-        : "Putu Arya (Store Manager)";
+      // A shared PIN proves a supervisor approved, not which one. Record the caller only when the caller is a supervisor.
+      const isCallerSupervisor = SUPERVISOR_ROLES.includes(auth.role);
+      const approver = isCallerSupervisor
+        ? { id: auth.userId, name: auth.name || auth.email || auth.userId, role: auth.role }
+        : { id: undefined, name: SHARED_SUPERVISOR_PIN_LABEL, role: undefined };
+
+      const resolvedInvoice = String(invoiceNumber || orderId || "").trim();
+      const existing = resolvedInvoice ? await getPersistentQrisSession(resolvedInvoice) : null;
+      if (!existing || !(existing.expectedAmount > 0)) {
+        return NextResponse.json(
+          {
+            allowed: false,
+            error: `QRIS_SESSION_NOT_FOUND: Tagihan QRIS [${resolvedInvoice || "-"}] belum terdaftar di server.`,
+          },
+          { status: 404 }
+        );
+      }
+
+      if (isVerifiedQrisStatus(existing.status)) {
+        return NextResponse.json(
+          {
+            allowed: false,
+            error: `QRIS_ALREADY_SETTLED: Tagihan QRIS [${resolvedInvoice}] sudah terverifikasi (${existing.status}). Otorisasi manual tidak diperlukan.`,
+          },
+          { status: 409 }
+        );
+      }
 
       const overrideResult = authorizeSupervisorQrisOverride({
         pin,
         referenceNumber,
         note,
-        supervisorRole: serverSupervisorRole,
-        supervisorId: serverSupervisorId,
-        supervisorName: serverSupervisorName,
+        supervisorRole: approver.role,
+        supervisorId: approver.id,
+        supervisorName: approver.name,
         actorKey: auth.userId,
       });
 
@@ -317,27 +333,17 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const resolvedInvoice = String(
-        invoiceNumber || orderId || overrideResult.verification.referenceNumber
-      ).trim();
-      const existing = await getPersistentQrisSession(resolvedInvoice);
-      const resolvedExpectedAmount =
-        existing && existing.expectedAmount > 0
-          ? existing.expectedAmount
-          : Math.round(Number(expectedAmount) || 0);
-
       const nowIso = new Date().toISOString();
 
       const sessionRecord: QrisVerificationSessionRecord = {
-        orderId: String(orderId || existing?.orderId || resolvedInvoice),
+        ...existing,
         invoiceNumber: resolvedInvoice,
-        expectedAmount: resolvedExpectedAmount,
         status: "VERIFIED_SUPERVISOR",
-        verificationMethod: "SUPERVISOR_OVERRIDE",
+        verificationMethod: isCallerSupervisor ? "SUPERVISOR_OVERRIDE" : "SHARED_SUPERVISOR_PIN",
         rrn: overrideResult.verification.referenceNumber,
-        verifiedByUserId: serverSupervisorId,
-        verifiedByName: serverSupervisorName,
-        verifiedByRole: serverSupervisorRole,
+        verifiedByUserId: approver.id,
+        verifiedByName: approver.name,
+        verifiedByRole: approver.role,
         verifiedAt: overrideResult.verification.verifiedAt,
         updatedAt: nowIso,
       };
@@ -352,7 +358,9 @@ export async function POST(req: NextRequest) {
         userRole: auth.role,
         action: "QRIS_SUPERVISOR_MANUAL_OVERRIDE",
         module: "POS",
-        description: `Otorisasi manual QRIS Statis disetujui oleh Supervisor (${sessionRecord.verifiedByName}). RRN: ${overrideResult.verification.referenceNumber}`,
+        description: isCallerSupervisor
+          ? `Otorisasi manual QRIS Statis oleh supervisor ${approver.name}. RRN: ${overrideResult.verification.referenceNumber}`
+          : `Otorisasi manual QRIS Statis dengan ${SHARED_SUPERVISOR_PIN_LABEL}, diminta kasir ${auth.name || auth.userId}. RRN: ${overrideResult.verification.referenceNumber}`,
         referenceId: resolvedInvoice,
         metadata: {
           invoiceNumber: resolvedInvoice,
@@ -371,7 +379,7 @@ export async function POST(req: NextRequest) {
         success: true,
         allowed: true,
         session: sessionRecord,
-        verification: overrideResult.verification,
+        verification: { ...overrideResult.verification, invoiceNumber: resolvedInvoice },
       });
     }
 

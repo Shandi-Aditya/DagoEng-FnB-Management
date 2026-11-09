@@ -6,7 +6,11 @@ import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
 import { useDateFilter } from "./DateFilterContext";
 import { useActivityLog } from "./ActivityLogContext";
+import { useNotifications } from "./NotificationContext";
 import { syncWithOutbox, flushOutbox } from "@/lib/sync-outbox";
+
+const ORDER_SYNC_ENDPOINT = "/api/orders";
+const orderSyncId = (orderId: string) => `order-sync-${orderId}`;
 
 export const INITIAL_ORDERS: OrderRecord[] = [];
 
@@ -19,7 +23,8 @@ interface OrderContextType {
     note?: string,
     paymentUpdate?: {
       paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
-      paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER";
+      paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
+      qrisVerification?: OrderRecord["qrisVerification"];
     }
   ) => void;
   createOrder: (order: Partial<OrderRecord>) => OrderRecord;
@@ -36,8 +41,56 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
   const { activeOutletId, activeOutlet, isAllOutlets } = useOutlet();
   const { isDateInRange } = useDateFilter();
   const { logActivity } = useActivityLog();
+  const { addNotification } = useNotifications();
 
   const [orders, setOrders] = useState<OrderRecord[]>(INITIAL_ORDERS);
+
+  const markOrderSync = (
+    orderId: string,
+    syncStatus: NonNullable<OrderRecord["syncStatus"]>,
+    syncError?: string
+  ) => {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, syncStatus, syncError } : o))
+    );
+  };
+
+  const notifyOrderRejected = (
+    order: Pick<OrderRecord, "id" | "orderNumber" | "outletId" | "outletName">,
+    error: string
+  ) => {
+    addNotification({
+      type: "SYSTEM_ALERT",
+      title: `Transaksi ${order.orderNumber || order.id} ditolak server`,
+      detail: error,
+      relatedModule: "POS",
+      relatedRecordId: order.id,
+      actionUrl: "/orders",
+      outletId: order.outletId,
+      outletName: order.outletName || "",
+    });
+  };
+
+  const syncOrderToServer = (order: OrderRecord, extraPayload: Record<string, unknown> = {}) => {
+    if (typeof window === "undefined") return;
+    // Customer self-order devices have no POS write permission; their orders stay local by design.
+    if (user?.role?.slug === "CUSTOMER") return;
+    syncWithOutbox({
+      id: orderSyncId(order.id),
+      endpoint: ORDER_SYNC_ENDPOINT,
+      method: "POST",
+      payload: { order, ...extraPayload },
+    }).then((result) => {
+      if (result.synced) {
+        markOrderSync(order.id, "SYNCED");
+      } else if (result.rejected) {
+        markOrderSync(order.id, "REJECTED", result.error);
+        notifyOrderRejected(order, result.error || "Ditolak server.");
+      } else {
+        markOrderSync(order.id, "PENDING", result.error);
+      }
+    });
+  };
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
@@ -58,6 +111,14 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     // Flush pending outbox orders first, then hydrate orders from persistent server storage (POS-33 / R9)
     if (typeof window !== "undefined") {
       flushOutbox()
+        .then(({ rejected }) => {
+          for (const { item, error } of rejected) {
+            const rejectedOrder = item.payload.order as OrderRecord | undefined;
+            if (item.endpoint !== ORDER_SYNC_ENDPOINT || !rejectedOrder?.id) continue;
+            markOrderSync(rejectedOrder.id, "REJECTED", error);
+            notifyOrderRejected(rejectedOrder, error);
+          }
+        })
         .catch(() => {})
         .finally(() => {
           fetch("/api/orders")
@@ -102,7 +163,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     note?: string,
     paymentUpdate?: {
       paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
-      paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER";
+      paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
+      qrisVerification?: OrderRecord["qrisVerification"];
     }
   ) => {
     const target = orders.find((o) => o.id === orderId);
@@ -142,6 +204,9 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       if (paymentUpdate?.paymentMethod) {
         updated.paymentMethod = paymentUpdate.paymentMethod;
       }
+      if (paymentUpdate?.qrisVerification) {
+        updated.qrisVerification = paymentUpdate.qrisVerification;
+      }
     } else if (nextStatus === "CANCELLED") {
       updated.paymentStatus =
         paymentUpdate?.paymentStatus || (target.paymentStatus === "PAID" ? "REFUNDED" : "PENDING");
@@ -153,14 +218,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     // R9: Pure state updater without network side effects inside setOrders
     setOrders((prev) => prev.map((o) => (o.id === orderId ? updated : o)));
 
-    if (typeof window !== "undefined") {
-      syncWithOutbox({
-        id: `order-sync-${updated.id}`,
-        endpoint: "/api/orders",
-        method: "POST",
-        payload: { order: updated },
-      });
-    }
+    syncOrderToServer(updated);
 
     logActivity({
       module: "POS",
@@ -218,14 +276,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
 
     setOrders((prev) => [newOrder, ...prev]);
 
-    if (typeof window !== "undefined") {
-      syncWithOutbox({
-        id: `order-sync-${newOrder.id}`,
-        endpoint: "/api/orders",
-        method: "POST",
-        payload: { order: newOrder },
-      });
-    }
+    syncOrderToServer(newOrder);
 
     logActivity({
       module: "POS",
@@ -300,17 +351,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
 
     setOrders((prev) => [newOrder, ...prev]);
 
-    if (typeof window !== "undefined") {
-      syncWithOutbox({
-        id: `order-sync-${newOrder.id}`,
-        endpoint: "/api/orders",
-        method: "POST",
-        payload: {
-          order: newOrder,
-          customerKey: newOrder.customerName,
-        },
-      });
-    }
+    syncOrderToServer(newOrder, { customerKey: newOrder.customerName });
 
     logActivity({
       module: "POS",

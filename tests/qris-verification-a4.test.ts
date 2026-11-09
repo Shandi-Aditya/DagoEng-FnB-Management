@@ -5,6 +5,7 @@ import {
   canConfirmQrisPayment,
   signQrisWebhookPayload,
   resetSupervisorPinRateLimitForTests,
+  SHARED_SUPERVISOR_PIN_LABEL,
 } from "../src/lib/qris-verification";
 import { POST as postQrisVerify, GET as getQrisVerify } from "../src/app/api/pos/qris/verify/route";
 import { POST as postOrders } from "../src/app/api/orders/route";
@@ -220,6 +221,18 @@ describe("A4 (POS-25): QRIS Payment Verification & Supervisor Manual Override", 
     const invoice = `INV-SUP-${Date.now()}`;
     const rrn = `BCA-RRN-${Date.now()}`;
 
+    const initRes = await postQrisVerify(
+      new NextRequest("http://localhost:3000/api/pos/qris/verify", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          cookie: "dagoeng_active_persona=CASHIER_SGR",
+        },
+        body: JSON.stringify({ mode: "INIT", invoiceNumber: invoice, expectedAmount: 85000 }),
+      })
+    );
+    expect(initRes.status).toBe(200);
+
     // Cashier sends valid PIN with forged supervisorRole: "SUPER_ADMIN" in body
     const req = new NextRequest("http://localhost:3000/api/pos/qris/verify", {
       method: "POST",
@@ -245,9 +258,10 @@ describe("A4 (POS-25): QRIS Payment Verification & Supervisor Manual Override", 
     expect(data.allowed).toBe(true);
     expect(data.verification.type).toBe("SUPERVISOR_MANUAL");
     expect(data.verification.referenceNumber).toBe(rrn);
-    // Stored role must come from server supervisor record ("MANAGER"), never "SUPER_ADMIN" from body
-    expect(data.session.verifiedByRole).toBe("MANAGER");
-    expect(data.session.verifiedByName).toBe("Putu Arya (Store Manager)");
+    // Forged identity in the body is ignored; a cashier using the shared PIN is recorded as such
+    expect(data.session.verifiedByRole).toBeUndefined();
+    expect(data.session.verifiedByName).toBe(SHARED_SUPERVISOR_PIN_LABEL);
+    expect(data.session.verificationMethod).toBe("SHARED_SUPERVISOR_PIN");
 
     // Check audit log was written on server
     const logs = await getAuditLogs();

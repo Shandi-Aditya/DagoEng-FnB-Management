@@ -207,6 +207,7 @@ export function PaymentModal({
             setSupervisorOverrideData({
               type: "SUPERVISOR_MANUAL",
               referenceNumber: data.session.rrn || data.session.invoiceNumber,
+              invoiceNumber: data.session.invoiceNumber,
               supervisorPinVerified: true,
               verifiedAt: data.session.verifiedAt || data.session.updatedAt,
               note: "Otorisasi Manual QRIS Statis oleh Supervisor",
@@ -261,7 +262,7 @@ export function PaymentModal({
         return;
       }
 
-      setSupervisorOverrideData(data.verification);
+      setSupervisorOverrideData({ ...data.verification, invoiceNumber: data.verification.invoiceNumber || gatewayTxId });
       setShowSupervisorAuth(false);
 
       logActivity({
@@ -310,6 +311,7 @@ export function PaymentModal({
         const qrisData: QRISVerificationDetail = supervisorOverrideData || {
           type: "GATEWAY_WEBHOOK",
           referenceNumber: gatewayTxId,
+          invoiceNumber: gatewayTxId,
           verifiedAt: new Date().toISOString(),
           note: "Auto-verified via DagoPay / DOKU QRIS Webhook",
         };

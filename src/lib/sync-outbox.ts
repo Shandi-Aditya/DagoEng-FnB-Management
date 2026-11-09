@@ -101,6 +101,7 @@ export async function syncWithOutbox<T = any>(
   status: number;
   data: T | null;
   error?: string;
+  rejected: boolean;
   pendingCount: number;
 }> {
   const method = params.method || "POST";
@@ -125,7 +126,8 @@ export async function syncWithOutbox<T = any>(
       const errMsg =
         data?.error || `HTTP_${res.status}: Sinkronisasi ke ${params.endpoint} gagal.`;
       // Queue on 5xx / transient server failures or when explicitly retryable
-      if (res.status >= 500 || res.status === 408 || res.status === 429) {
+      // 401 means the session expired, not that the payload is wrong: keep it for after re-login.
+      if (res.status >= 500 || res.status === 401 || res.status === 408 || res.status === 429) {
         const queued = enqueueOutboxItem({
           id: params.id,
           endpoint: params.endpoint,
@@ -138,15 +140,19 @@ export async function syncWithOutbox<T = any>(
           status: res.status,
           data,
           error: errMsg,
+          rejected: false,
           pendingCount: queued.length,
         };
       }
+      // The server refused the payload itself; retrying the same body can never succeed.
+      const remainingAfterReject = removeOutboxItem(params.id, params.endpoint);
       return {
         synced: false,
         status: res.status,
         data,
         error: errMsg,
-        pendingCount: readOutboxStorage().length,
+        rejected: true,
+        pendingCount: remainingAfterReject.length,
       };
     }
 
@@ -155,6 +161,7 @@ export async function syncWithOutbox<T = any>(
       synced: true,
       status: res.status,
       data,
+      rejected: false,
       pendingCount: remaining.length,
     };
   } catch (err: any) {
@@ -171,6 +178,7 @@ export async function syncWithOutbox<T = any>(
       status: 0,
       data: null,
       error: errMsg,
+      rejected: false,
       pendingCount: queued.length,
     };
   }
@@ -182,14 +190,16 @@ export async function flushOutbox(
   flushedCount: number;
   remainingCount: number;
   errors: string[];
+  rejected: Array<{ item: OutboxMutationItem; error: string }>;
 }> {
   const items = readOutboxStorage();
   if (items.length === 0) {
-    return { flushedCount: 0, remainingCount: 0, errors: [] };
+    return { flushedCount: 0, remainingCount: 0, errors: [], rejected: [] };
   }
 
   let flushedCount = 0;
   const errors: string[] = [];
+  const rejected: Array<{ item: OutboxMutationItem; error: string }> = [];
 
   for (const item of items) {
     const result = await syncWithOutbox(
@@ -205,6 +215,9 @@ export async function flushOutbox(
       flushedCount += 1;
     } else if (result.error) {
       errors.push(result.error);
+      if (result.rejected) {
+        rejected.push({ item, error: result.error });
+      }
     }
   }
 
@@ -212,5 +225,6 @@ export async function flushOutbox(
     flushedCount,
     remainingCount: readOutboxStorage().length,
     errors,
+    rejected,
   };
 }

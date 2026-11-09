@@ -13,9 +13,9 @@ import {
 import {
   EDGE_SESSION_COOKIE_NAME,
   verifyEdgeSessionToken,
-  getUserRevocationTimestamp,
   isPersonaCookieAllowedInEnv,
 } from "./edge-session";
+import { getLatestRevocation, isSessionRevoked } from "./session-revocation";
 import { findUnifiedUserByEmail, findUnifiedUserById } from "./unified-account";
 
 export interface ServerAuthResult {
@@ -401,10 +401,7 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
     if (isLocalDevFallbackAllowed()) {
       const orgSession = getOrganizerSession(sessionTokenHash);
       if (orgSession && orgSession.expiresAt > new Date()) {
-        const revokedAt = Math.max(
-          getUserRevocationTimestamp(orgSession.userId) ?? 0,
-          getUserRevocationTimestamp(orgSession.email) ?? 0
-        );
+        const revokedAt = await getLatestRevocation(orgSession.userId, orgSession.email);
         if (revokedAt > 0) {
           return {
             isAuthenticated: false,
@@ -447,7 +444,14 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
   const edgeToken = req.cookies.get(EDGE_SESSION_COOKIE_NAME)?.value;
   if (edgeToken) {
     const verification = verifyEdgeSessionToken(edgeToken);
-    if (verification.revoked || verification.expired) {
+    const isRevoked =
+      verification.valid &&
+      verification.payload !== null &&
+      (await isSessionRevoked({
+        issuedAtMs: verification.payload.iat,
+        identities: [verification.payload.userId, verification.payload.email],
+      }));
+    if (isRevoked || verification.expired) {
       return {
         isAuthenticated: false,
         role: null,
@@ -457,7 +461,7 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
         permissions: [],
         tenantId: null,
         businessModule: null,
-        error: verification.revoked ? "SESSION_REVOKED" : "SESSION_EXPIRED",
+        error: isRevoked ? "SESSION_REVOKED" : "SESSION_EXPIRED",
       };
     }
     if (verification.valid && verification.payload) {
@@ -492,10 +496,7 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
       };
     }
 
-    const revokedAt = Math.max(
-      getUserRevocationTimestamp(persona.userId) ?? 0,
-      getUserRevocationTimestamp(persona.email) ?? 0
-    );
+    const revokedAt = await getLatestRevocation(persona.userId, persona.email);
     if (revokedAt > 0) {
       return {
         isAuthenticated: false,

@@ -13,7 +13,7 @@ import {
   OrganizerCredentialRecord,
   revokeOrganizerSessionsByEmail,
 } from "./organizer-activation";
-import { revokeUserSessionsAfter } from "./edge-session";
+import { revokeUserSessionsAfter } from "./session-revocation";
 
 export interface UnifiedUserAccount {
   id: string;
@@ -375,7 +375,7 @@ export async function updateUnifiedUserCredentialsOrRole(
 
   if (idx === -1) {
     // Still register revocation for demo/external user IDs or emails
-    revokeUserSessionsAfter(normalizedTarget, revokedAt);
+    await revokeUserSessionsAfter(normalizedTarget, revokedAt);
     revokeOrganizerSessionsByEmail(normalizedTarget);
     return { success: false, user: null, revokedAt, error: "Pengguna tidak ditemukan." };
   }
@@ -397,8 +397,8 @@ export async function updateUnifiedUserCredentialsOrRole(
   saveUnifiedUsersToDisk(allUsers);
 
   // Immediately revoke active sessions in memory/disk and edge token registry
-  revokeUserSessionsAfter(targetUser.id, revokedAt);
-  revokeUserSessionsAfter(targetUser.email, revokedAt);
+  await revokeUserSessionsAfter(targetUser.id, revokedAt);
+  await revokeUserSessionsAfter(targetUser.email, revokedAt);
   revokeOrganizerSessionsByEmail(targetUser.email);
 
   // Best-effort revocation in PostgreSQL session table if connected

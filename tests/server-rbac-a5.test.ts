@@ -8,9 +8,10 @@ import {
   EDGE_SESSION_COOKIE_NAME,
   signEdgeSessionToken,
   verifyEdgeSessionToken,
-  clearRevocationRegistryForTests,
-  clearInMemoryRevocationCacheForTests,
 } from "@/lib/edge-session";
+import { writePersistentData } from "@/lib/persistent-storage";
+import fs from "fs";
+import path from "path";
 import { middleware, config as middlewareConfig } from "@/middleware";
 import {
   registerUnifiedUser,
@@ -24,8 +25,8 @@ import {
 } from "@/app/api/coworking/bookings/route";
 
 describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)", () => {
-  beforeEach(() => {
-    clearRevocationRegistryForTests();
+  beforeEach(async () => {
+    await writePersistentData("session_revocations.json", {});
     delete process.env.DISABLE_DEMO_LOGIN;
   });
 
@@ -257,13 +258,8 @@ describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)"
       });
       expect(updateRes.success).toBe(true);
 
-      // R7: Clear in-memory revocation Map to simulate a cold serverless isolate / process restart
-      clearInMemoryRevocationCacheForTests();
-
-      // Old token issued before the change must still be rejected from persistent revocation store
-      const verifyAfterRestart = verifyEdgeSessionToken(tokenBeforeChange);
-      expect(verifyAfterRestart.valid).toBe(false);
-      expect(verifyAfterRestart.revoked).toBe(true);
+      // Signature stays valid; revocation lives in shared storage and is enforced by server-auth (N1/N7)
+      expect(verifyEdgeSessionToken(tokenBeforeChange).valid).toBe(true);
 
       // Server auth also rejects the revoked token with 401 SESSION_REVOKED
       const apiReq = new NextRequest("http://localhost:3000/api/shifts", {
@@ -358,6 +354,49 @@ describe("Task A5: Server-side RBAC and Auth Hardening (POS-21, POS-22, POS-23)"
       });
       const overwriteBRes = await postCoworkingBookingsRoute(overwriteBReq);
       expect(overwriteBRes.status).toBe(403);
+    });
+  });
+
+  describe("N1: edge middleware bundle stays free of Node-only code", () => {
+    it("edge-session.ts uses no eval, require, or filesystem access", () => {
+      const source = fs.readFileSync(path.join(process.cwd(), "src/lib/edge-session.ts"), "utf-8");
+      expect(source).not.toMatch(/\beval\s*\(/);
+      expect(source).not.toMatch(/\brequire\s*\(/);
+      expect(source).not.toMatch(/from ["'](fs|path|os)["']/);
+    });
+  });
+
+  describe("N7: revocation survives a cold instance because it is read from shared storage", () => {
+    it("rejects a token revoked earlier even when no in-process state exists", async () => {
+      const { revokeUserSessionsAfter } = await import("@/lib/session-revocation");
+      const token = signEdgeSessionToken({
+        userId: "user-n7",
+        email: "n7@example.com",
+        role: "CASHIER",
+        iat: Date.now() - 1000,
+      });
+      await revokeUserSessionsAfter("n7@example.com");
+
+      const auth = await getRequestAuthUser(
+        new NextRequest("http://localhost:3000/api/shifts", {
+          headers: { cookie: `${EDGE_SESSION_COOKIE_NAME}=${token}` },
+        })
+      );
+      expect(auth.isAuthenticated).toBe(false);
+      expect(auth.error).toBe("SESSION_REVOKED");
+
+      const fresh = signEdgeSessionToken({
+        userId: "user-n7",
+        email: "n7@example.com",
+        role: "CASHIER",
+        iat: Date.now() + 1000,
+      });
+      const freshAuth = await getRequestAuthUser(
+        new NextRequest("http://localhost:3000/api/shifts", {
+          headers: { cookie: `${EDGE_SESSION_COOKIE_NAME}=${fresh}` },
+        })
+      );
+      expect(freshAuth.isAuthenticated).toBe(true);
     });
   });
 });

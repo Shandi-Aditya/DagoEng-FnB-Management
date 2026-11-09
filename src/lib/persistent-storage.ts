@@ -25,7 +25,8 @@ export interface QrisVerificationSessionRecord {
   invoiceNumber: string;
   expectedAmount: number;
   status: "PENDING" | "VERIFIED_WEBHOOK" | "VERIFIED_SUPERVISOR" | "FAILED";
-  verificationMethod?: "GATEWAY_WEBHOOK" | "SUPERVISOR_OVERRIDE";
+  verificationMethod?: "GATEWAY_WEBHOOK" | "SUPERVISOR_OVERRIDE" | "SHARED_SUPERVISOR_PIN";
+  consumedByOrderId?: string;
   transactionId?: string;
   rrn?: string;
   verifiedByUserId?: string;
@@ -312,19 +313,74 @@ export async function getPersistentQrisSession(
   return all.find((s) => s.orderId === target || s.invoiceNumber === target) || null;
 }
 
+export function isVerifiedQrisStatus(status: QrisVerificationSessionRecord["status"]): boolean {
+  return status === "VERIFIED_WEBHOOK" || status === "VERIFIED_SUPERVISOR";
+}
+
 export async function savePersistentQrisSession(
   session: QrisVerificationSessionRecord
 ): Promise<QrisVerificationSessionRecord> {
+  let saved: QrisVerificationSessionRecord = session;
   await mutatePersistentData<QrisVerificationSessionRecord[]>(FILE_QRIS_SESSIONS, [], (existing) => {
     const index = existing.findIndex(
       (s) => s.orderId === session.orderId || s.invoiceNumber === session.invoiceNumber
     );
-    if (index >= 0) {
-      const updated = [...existing];
-      updated[index] = session;
-      return updated;
+    if (index === -1) {
+      saved = session;
+      return [session, ...existing];
     }
-    return [session, ...existing];
+    const previous = existing[index];
+    // Proof of payment is never downgraded, and the order a payment settled stays bound to it.
+    saved =
+      isVerifiedQrisStatus(previous.status) && !isVerifiedQrisStatus(session.status)
+        ? previous
+        : { ...session, consumedByOrderId: previous.consumedByOrderId ?? session.consumedByOrderId };
+    const updated = [...existing];
+    updated[index] = saved;
+    return updated;
   });
-  return session;
+  return saved;
+}
+
+export type QrisSessionClaimResult =
+  | { ok: true; session: QrisVerificationSessionRecord }
+  | { ok: false; reason: "NOT_FOUND" | "UNVERIFIED" | "AMOUNT_MISMATCH" | "ALREADY_CONSUMED"; session?: QrisVerificationSessionRecord };
+
+/**
+ * Binds one verified QRIS session to exactly one order. Re-claiming by the same order is a no-op,
+ * so a retried save stays idempotent, while a second order using the same payment is rejected.
+ */
+export async function claimQrisSessionForOrder(params: {
+  invoiceNumber: string;
+  orderId: string;
+  amount: number;
+}): Promise<QrisSessionClaimResult> {
+  let result: QrisSessionClaimResult = { ok: false, reason: "NOT_FOUND" };
+  await mutatePersistentData<QrisVerificationSessionRecord[]>(FILE_QRIS_SESSIONS, [], (existing) => {
+    const index = existing.findIndex((s) => s.invoiceNumber === params.invoiceNumber);
+    if (index === -1) return existing;
+    const session = existing[index];
+    if (session.status !== "VERIFIED_WEBHOOK" && session.status !== "VERIFIED_SUPERVISOR") {
+      result = { ok: false, reason: "UNVERIFIED", session };
+      return existing;
+    }
+    if (Math.round(session.expectedAmount) !== Math.round(params.amount)) {
+      result = { ok: false, reason: "AMOUNT_MISMATCH", session };
+      return existing;
+    }
+    if (session.consumedByOrderId && session.consumedByOrderId !== params.orderId) {
+      result = { ok: false, reason: "ALREADY_CONSUMED", session };
+      return existing;
+    }
+    const claimed: QrisVerificationSessionRecord = {
+      ...session,
+      consumedByOrderId: params.orderId,
+      updatedAt: new Date().toISOString(),
+    };
+    result = { ok: true, session: claimed };
+    const updated = [...existing];
+    updated[index] = claimed;
+    return updated;
+  });
+  return result;
 }

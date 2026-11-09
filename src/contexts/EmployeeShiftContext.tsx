@@ -140,7 +140,7 @@ interface EmployeeShiftContextType {
   toggleEmployeeStatus: (id: string) => void;
   deleteEmployee: (id: string) => void;
   openShift: (shiftName: string, openingCash: number, cashierName?: string) => ShiftRecord;
-  recordShiftTransaction: (cashAmount: number, nonCashAmount: number, outletId?: string) => void;
+  recordShiftTransaction: (cashAmount: number, nonCashAmount: number, outletId?: string, saleId?: string) => void;
   closeShift: (
     shiftId: string,
     actualCash: number,
@@ -188,6 +188,20 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     // Flush any queued outbox items first, then hydrate authoritative shifts from server (R1)
     if (typeof window !== "undefined") {
       flushOutbox()
+        .then(({ rejected }) => {
+          for (const { item, error } of rejected) {
+            if (item.endpoint !== "/api/shifts") continue;
+            addNotification({
+              type: "SYSTEM_ALERT",
+              title: `Sinkronisasi shift (${String(item.payload.action || "-")}) ditolak server`,
+              detail: error,
+              relatedModule: "EMPLOYEES_SHIFT",
+              actionUrl: "/employees",
+              outletId: String(item.payload.outletId || "outlet-sgr"),
+              outletName: String(item.payload.outletName || ""),
+            });
+          }
+        })
         .catch(() => {})
         .finally(() => {
           fetch("/api/shifts")
@@ -408,7 +422,12 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     return newShift;
   };
 
-  const recordShiftTransaction = (cashAmount: number, nonCashAmount: number, _outletId?: string) => {
+  const recordShiftTransaction = (
+    cashAmount: number,
+    nonCashAmount: number,
+    _outletId?: string,
+    saleId: string = `sale-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  ) => {
     const assignedId = user?.id || "emp-002";
     const targetShiftId = activeShift?.id;
 
@@ -419,13 +438,14 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
         shiftId: targetShiftId,
         cashAmount,
         nonCashAmount,
+        saleId,
       });
       return res.updatedShifts;
     });
 
     if (typeof window !== "undefined") {
       syncWithOutbox({
-        id: `shift-sale-${targetShiftId || assignedId}-${Date.now()}`,
+        id: `shift-sale-${saleId}`,
         endpoint: "/api/shifts",
         method: "POST",
         payload: {
@@ -434,6 +454,7 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
           cashierId: assignedId,
           cashAmount,
           nonCashAmount,
+          saleId,
         },
       }).then((result) => {
         if (result.data?.shift) {
@@ -441,6 +462,16 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
           setShifts((prev) =>
             prev.map((s) => (s.id === serverShift.id ? serverShift : s))
           );
+        } else if (result.rejected) {
+          addNotification({
+            type: "SYSTEM_ALERT",
+            title: "Penjualan shift ditolak server",
+            detail: result.error || "Penjualan tidak tercatat pada shift di server.",
+            relatedModule: "EMPLOYEES_SHIFT",
+            actionUrl: "/employees",
+            outletId: activeShift?.outletId || "outlet-sgr",
+            outletName: activeShift?.outletName || "",
+          });
         }
       });
     }

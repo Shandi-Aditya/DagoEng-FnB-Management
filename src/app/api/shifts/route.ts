@@ -156,6 +156,7 @@ export async function POST(req: NextRequest) {
         shiftId,
         cashAmount: Number(cashAmount) || 0,
         nonCashAmount: Number(nonCashAmount) || 0,
+        saleId: typeof body.saleId === "string" && body.saleId.trim() ? body.saleId.trim() : undefined,
         actorId: auth.userId,
         actorRole: auth.role,
         currentTimeMs: nowMs,

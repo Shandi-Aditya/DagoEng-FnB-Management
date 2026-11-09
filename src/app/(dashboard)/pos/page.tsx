@@ -601,7 +601,7 @@ export default function POSPage() {
       taxRatePercent: isTaxEnabled ? Number(taxRatePercent) || 10 : 0,
       serviceChargePercent: orderType === "DINE_IN" ? Number(settings.serviceChargePercent) || 0 : 0,
       total: grandTotal,
-      paymentMethod: paymentData.method === "CASH" ? "CASH" : paymentData.method === "EDC" ? "EDC" : "QRIS",
+      paymentMethod: paymentData.method,
       paymentReference: paymentData.qrisVerification?.referenceNumber,
       qrisVerification: paymentData.qrisVerification,
       items: cartItems.map((c, i) => ({
@@ -700,11 +700,15 @@ export default function POSPage() {
     }
 
     // 6. Cross-Module: Record shift cash and non-cash sales metrics
-    recordShiftTransaction(
-      paymentData.method === "CASH" ? grandTotal : 0,
-      paymentData.method !== "CASH" ? grandTotal : 0,
-      activeOutletId
-    );
+    const cashPortion =
+      paymentData.method === "SPLIT"
+        ? (paymentData.splitDetails || [])
+            .filter((guest) => guest.paymentMethod === "CASH")
+            .reduce((sum, guest) => sum + guest.assignedAmount, 0)
+        : paymentData.method === "CASH"
+          ? grandTotal
+          : 0;
+    recordShiftTransaction(cashPortion, grandTotal - cashPortion, activeOutletId, createdOrder.id);
 
     // 6. Audit Trail Logging
     logActivity({
@@ -1002,7 +1006,8 @@ export default function POSPage() {
     recordShiftTransaction(
       cwPaymentMethod === "CASH" ? cwPricing.total : 0,
       cwPaymentMethod !== "CASH" ? cwPricing.total : 0,
-      activeOutletId
+      activeOutletId,
+      createdBooking?.id ? `cw-${createdBooking.id}` : undefined
     );
 
     logActivity({

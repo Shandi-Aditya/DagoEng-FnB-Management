@@ -4,6 +4,7 @@ import { RoleSlug } from "@/types/auth";
 export interface QRISVerificationDetail {
   type: "GATEWAY_WEBHOOK" | "SUPERVISOR_MANUAL";
   referenceNumber: string;
+  invoiceNumber?: string;
   supervisorPinVerified?: boolean;
   supervisorId?: string;
   supervisorName?: string;
@@ -22,6 +23,8 @@ export interface QrisVerificationResult {
 }
 
 const AUTHORIZED_SUPERVISOR_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
+
+export const SHARED_SUPERVISOR_PIN_LABEL = "PIN Supervisor (bersama)";
 
 const SUPERVISOR_PIN_DOMAIN_KEY = "dagoeng-supervisor-pin-salt-v1";
 
@@ -234,12 +237,6 @@ export function authorizeSupervisorQrisOverride(params: {
     `SUPERVISOR:${cleanRef}:${verifiedAt}`
   );
 
-  // R5: Resolve supervisor identity from server-verified authority, never trusting raw client escalation
-  const resolvedRole: RoleSlug =
-    params.supervisorRole && AUTHORIZED_SUPERVISOR_ROLES.includes(params.supervisorRole)
-      ? params.supervisorRole
-      : "MANAGER";
-
   return {
     allowed: true,
     statusCode: 200,
@@ -247,9 +244,9 @@ export function authorizeSupervisorQrisOverride(params: {
       type: "SUPERVISOR_MANUAL",
       referenceNumber: cleanRef,
       supervisorPinVerified: true,
-      supervisorId: params.supervisorId || "emp-001",
-      supervisorName: params.supervisorName || "Putu Arya (Store Manager)",
-      supervisorRole: resolvedRole,
+      supervisorId: params.supervisorId,
+      supervisorName: params.supervisorName || SHARED_SUPERVISOR_PIN_LABEL,
+      supervisorRole: params.supervisorRole,
       serverSignature,
       verifiedAt,
       note: params.note || "Otorisasi Manual QRIS Statis oleh Supervisor",
