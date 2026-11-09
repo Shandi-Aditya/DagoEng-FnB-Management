@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Sidebar } from "@/features/layout/Sidebar";
 import { Header } from "@/features/layout/Header";
+import { evaluateRouteAccess } from "@/lib/route-guard";
 import { Menu, X } from "lucide-react";
 
 export default function DashboardLayout({
@@ -44,8 +45,16 @@ export default function DashboardLayout({
   useEffect(() => {
     if (!isLoading && user === null) {
       router.push("/login");
+      return;
     }
-  }, [user, isLoading, router]);
+
+    if (!isLoading && user) {
+      const evaluation = evaluateRouteAccess(pathname, user.role.slug);
+      if (!evaluation.allowed && evaluation.redirectTo) {
+        router.push(evaluation.redirectTo);
+      }
+    }
+  }, [user, isLoading, pathname, router]);
 
   if (!user && !isLoading) {
     if (isLoggingOut) {
@@ -60,6 +69,20 @@ export default function DashboardLayout({
         </div>
       </div>
     );
+  }
+
+  if (user && !isLoading) {
+    const evaluation = evaluateRouteAccess(pathname, user.role.slug);
+    if (!evaluation.allowed) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white p-4">
+          <div className="text-center space-y-3 animate-in fade-in">
+            <div className="w-10 h-10 border-3 border-red-500 border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-xs text-red-400 font-medium">Akses Ditolak. Role [{user.role.name}] tidak memiliki hak akses ke halaman ini. Mengalihkan...</p>
+          </div>
+        </div>
+      );
+    }
   }
 
   return (

@@ -1,0 +1,57 @@
+# Bug Fix Playbook — QA Handover POS A1 sampai A6
+
+- [ ] 1. Reproduce it yourself on the matching surface via the driver skill
+- [ ] 2. Binary-search the cause
+- [ ] 3. Plan the fix
+- [ ] 4. Verify on the same surface
+- [ ] 5. Stage the commits so the failing repro lands before the fix in git history
+- [ ] 6. Run Opening a PR: skip: local developer task without git push target
+
+## Task Checklist (A1 to A6)
+- [x] **A1. Shift Kasir Terbuka Otomatis dan Jatuh ke Akun yang Salah (POS-01, POS-02, POS-32)**
+  - [x] Reproduce: Login triggers unwanted automatic shift creation with hardcoded Rp 500.000 float
+  - [x] Write failing regression test for A1
+  - [x] Remove `useEffect` auto-shift creation in `EmployeeShiftContext.tsx`
+  - [x] Enforce manual shift opening with valid `modal_awal` (starting cash float)
+  - [x] Bind shift exclusively to authenticated cashier user ID
+  - [x] Implement auto-flagging `NEEDS_RECONCILIATION` for unclosed shifts exceeding 16 hours
+  - [x] Integrate POS page UI prompt when no active shift is open
+  - [x] Verify A1 regression test passes
+- [x] **A2. Data Lama Hilang / Resets (POS-33)**
+  - [x] Reproduce: Operational records (shifts, coworking bookings, audit logs) reside only in ephemeral memory/client storage
+  - [x] Write regression test for A2 data persistence & append-only audit trail
+  - [x] Create centralized persistent storage helper `src/lib/persistent-storage.ts` using `data-storage`
+  - [x] Upgrade `/api/shifts/route.ts` to read/write persistent backend records instead of module variable
+  - [x] Create `/api/audit-logs/route.ts` with append-only invariant (DELETE permanently rejected)
+  - [x] Create `/api/coworking/bookings/route.ts` for persistent booking storage
+  - [x] Connect `ActivityLogContext`, `EmployeeShiftContext`, and `CoworkingContext` to backend API endpoints
+  - [x] Verify A2 regression tests pass (4/4 tests green)
+- [x] **A3. Ketidaksesuaian Perhitungan Pajak pada Laporan vs Struk (POS-34)**
+  - [x] Reproduce: Reports recalculate tax from gross/nett revenue (0.1 * totalRevenue) producing Rp 5.635 instead of Rp 4.900 from receipt
+  - [x] Write regression test `tests/tax-reconciliation-a3.test.ts`
+  - [x] Add `serviceCharge`, `taxRatePercent`, `serviceChargePercent` fields to `OrderRecord`
+  - [x] Store final `taxPB1` and `serviceCharge` separately during POS order creation
+  - [x] Update reports page to aggregate stored tax values directly without percentage re-multiplication
+  - [x] Correct closing PDF modal gross/net/tax math (DPP formula)
+  - [x] Verify A3 regression tests pass (2/2 tests green)
+- [x] **A4. Verifikasi Manual Pembayaran QRIS oleh Kasir (POS-25)**
+  - [x] Reproduce: POS PaymentModal allows standard cashiers to unconditionally click confirm payment on unverified QRIS
+  - [x] Write regression test `tests/qris-verification-a4.test.ts`
+  - [x] Create `src/lib/qris-verification.ts` with webhook validation, supervisor PIN authorization, and confirm gate
+  - [x] Lock confirm button on QRIS tab: requires verified gateway webhook or supervisor PIN override
+  - [x] Add supervisor manual override dialog with PIN verification (`1234`) and RRN reference requirement
+  - [x] Dispatch high-severity financial audit trail on supervisor QRIS manual override
+  - [x] Print QRIS reference/RRN on POS receipt
+  - [x] Verify A4 regression tests pass (6/6 tests green)
+- [x] **A5. Implements Otentikasi dan Akses Server-Side Rendah (POS-21, POS-22, POS-23)**
+  - [x] Reproduce: POS route `/pos` lacked server-side middleware and role checks, allowing non-cashier roles (waiter, customer) to open POS via direct URL (POS-21)
+  - [x] Reproduce: Event check-in staff was conflated with WAITER in auth types and seed data (POS-22)
+  - [x] Reproduce: Sessions had unmonitored 7-day default max-age without operational shift expiry (POS-23)
+  - [x] Write regression tests `tests/server-rbac-a5.test.ts` (14/14 tests green)
+  - [x] Separate `CHECKIN_STAFF` as distinct `RoleSlug` in `src/types/auth.ts`, `prisma/seed.ts`, `src/lib/server-auth.ts`, and `src/contexts/AuthContext.tsx`
+  - [x] Create `src/lib/route-guard.ts` defining authoritative route permission matrix and fallback routes
+  - [x] Implement Next.js Edge Middleware `src/middleware.ts` guarding `/pos`, `/kitchen`, `/tables`, `/events/checkin`, etc.
+  - [x] Enforce operational session expiration (16h shift limit) in `src/lib/session.ts` and `src/lib/server-auth.ts`
+  - [x] Add client-side layout fallback guard in `src/app/(dashboard)/layout.tsx` for defense in depth
+  - [x] Verify all 58 Task A suite tests pass
+- [ ] **A6. Identitas & Penerbit Struk Tidak Sesuai (POS-03)**

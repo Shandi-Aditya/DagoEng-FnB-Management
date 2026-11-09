@@ -187,7 +187,7 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     href: "/events/checkin",
     icon: "UserCheck",
     module: "CORE",
-    allowedRoles: ["WAITER", "CASHIER"],
+    allowedRoles: ["CHECKIN_STAFF"],
   },
 
   // 5. Governance, Reports & Master Data
@@ -243,7 +243,7 @@ const SCOPE_HIERARCHY: Record<ScopeLevel, number> = {
 export function canAccessEventCheckIn(user: AuthenticatedUser | null): boolean {
   if (!user) return false;
   const roleSlug = getRoleSlug(user);
-  if (roleSlug === "SUPER_ADMIN") return true;
+  if (roleSlug === "SUPER_ADMIN" || roleSlug === "CHECKIN_STAFF") return true;
 
   // Strict exclusion: F&B Tenant Owners and Tenant Staff must NEVER see Check-in Event
   if (user.scopeLevel === "TENANT" || (user.tenant && user.tenant.businessModule === "FNB")) {
@@ -294,8 +294,13 @@ export function getAuthorizedNavItems(
   if (roleSlug === "SUPER_ADMIN") return ALL_NAV_ITEMS.filter((item) => item.href !== "/events/checkin");
 
   return ALL_NAV_ITEMS.filter((item) => {
-    // 1. Role must match
-    if (!item.allowedRoles.includes(roleSlug)) return false;
+    // 1. Role must match OR explicit permission override for check-in staff
+    const isCheckInExplicitlyPermitted =
+      item.href === "/events/checkin" && user.permissions.includes("events:checkin");
+
+    if (!item.allowedRoles.includes(roleSlug) && !isCheckInExplicitlyPermitted) {
+      return false;
+    }
 
     // 2. Minimum Scope Level check
     if (item.minScope && SCOPE_HIERARCHY[user.scopeLevel] < SCOPE_HIERARCHY[item.minScope]) {

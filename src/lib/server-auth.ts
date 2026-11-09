@@ -255,7 +255,7 @@ export const TRUSTED_PERSONAS: Record<
   },
   // Event Staff with explicit check-in permission
   EVENT_STAFF: {
-    role: "WAITER",
+    role: "CHECKIN_STAFF",
     scopeLevel: "ORGANIZATION",
     userId: "user-event-staff-demo",
     email: "eventstaff@dagoeng.com",
@@ -348,27 +348,43 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
           },
         })
       );
-      if (session && session.expiresAt > new Date() && session.user.isActive) {
-        const primaryRole = session.user.userRoles[0];
-        const scopeLevel: ScopeLevel =
-          (primaryRole?.scopeLevel as ScopeLevel) ||
-          (primaryRole?.outlet
-            ? "OUTLET"
-            : primaryRole?.organization
-              ? "ORGANIZATION"
-              : "PLATFORM");
+      if (session) {
+        if (session.expiresAt <= new Date()) {
+          return {
+            isAuthenticated: false,
+            role: null,
+            userId: session.user?.id || null,
+            email: session.user?.email || null,
+            scopeLevel: null,
+            permissions: [],
+            tenantId: null,
+            businessModule: null,
+            error: "SESSION_EXPIRED",
+          };
+        }
 
-        return {
-          isAuthenticated: true,
-          role: (primaryRole?.role?.slug as RoleSlug) || "CUSTOMER",
-          userId: session.user.id,
-          email: session.user.email,
-          name: session.user.name,
-          scopeLevel,
-          permissions: (session.user as any).permissions || [],
-          tenantId: (session.user as any).tenantId || (primaryRole as any)?.tenantId || null,
-          businessModule: (primaryRole?.organization as any)?.businessModule || null,
-        };
+        if (session.user.isActive) {
+          const primaryRole = session.user.userRoles[0];
+          const scopeLevel: ScopeLevel =
+            (primaryRole?.scopeLevel as ScopeLevel) ||
+            (primaryRole?.outlet
+              ? "OUTLET"
+              : primaryRole?.organization
+                ? "ORGANIZATION"
+                : "PLATFORM");
+
+          return {
+            isAuthenticated: true,
+            role: (primaryRole?.role?.slug as RoleSlug) || "CUSTOMER",
+            userId: session.user.id,
+            email: session.user.email,
+            name: session.user.name,
+            scopeLevel,
+            permissions: (session.user as any).permissions || [],
+            tenantId: (session.user as any).tenantId || (primaryRole as any)?.tenantId || null,
+            businessModule: (primaryRole?.organization as any)?.businessModule || null,
+          };
+        }
       }
     } catch {
       // Database unavailable or query error, fall through to session store
@@ -786,8 +802,11 @@ export async function assertCheckInAuth(
     };
   }
 
-  // 4. Hub Staff with explicit check-in permission (if eventId is not provided or generic check-in authorized)
-  if (hasExplicitCheckInPerm && auth.scopeLevel === "ORGANIZATION" && !auth.tenantId) {
+  // 4. Check-in Staff or Hub Staff with explicit check-in permission
+  if (
+    auth.role === "CHECKIN_STAFF" ||
+    (hasExplicitCheckInPerm && auth.scopeLevel === "ORGANIZATION" && !auth.tenantId)
+  ) {
     return {
       authorized: true,
       role: auth.role || undefined,
@@ -798,11 +817,11 @@ export async function assertCheckInAuth(
     };
   }
 
-  // 5. WAITER and CASHIER without explicit permission or assignment are STRICTLY REJECTED!
-  if (auth.role === "WAITER" || auth.role === "CASHIER") {
+  // 5. WAITER, CASHIER, and KITCHEN_STAFF are STRICTLY REJECTED from check-in!
+  if (auth.role === "WAITER" || auth.role === "CASHIER" || auth.role === "KITCHEN_STAFF") {
     return {
       authorized: false,
-      error: `FORBIDDEN: Staf [${auth.role}] tidak memiliki penugasan atau izin check-in pada event ini.`,
+      error: `FORBIDDEN: Staf [${auth.role}] tidak memiliki penugasan atau wewenang check-in pada event ini.`,
     };
   }
 

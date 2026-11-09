@@ -267,7 +267,7 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     email: "eventstaff@dagoeng.com",
     name: "Bagus Pratama (Petugas Check-In Dago)",
     phone: "+62 812-5566-7788",
-    role: { id: "role-staff", slug: "WAITER", name: "Petugas Check-In" },
+    role: { id: "role-checkin-staff", slug: "CHECKIN_STAFF", name: "Petugas Check-In" },
     scopeLevel: "ORGANIZATION",
     allowedModules: ["CORE"],
     organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },

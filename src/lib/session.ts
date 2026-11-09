@@ -4,7 +4,9 @@ import { db } from "./db";
 import { AuthenticatedUser } from "@/types/auth";
 
 export const SESSION_COOKIE_NAME = "dagoeng_session";
-export const SESSION_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds
+export const DEFAULT_SESSION_MAX_AGE = 7 * 24 * 60 * 60; // 7 days in seconds
+export const OPERATIONAL_SESSION_MAX_AGE = 16 * 60 * 60; // 16 hours for shift/operational terminals (POS-23)
+export const SESSION_MAX_AGE = OPERATIONAL_SESSION_MAX_AGE;
 
 /**
  * Computes a secure SHA-256 hash of a raw session token string.
@@ -20,11 +22,12 @@ export function hashSessionToken(token: string): string {
 export async function createDatabaseSession(
   userId: string,
   userAgent?: string,
-  ipAddress?: string
+  ipAddress?: string,
+  maxAgeSeconds: number = OPERATIONAL_SESSION_MAX_AGE
 ): Promise<{ rawToken: string; expiresAt: Date; sessionId: string }> {
   const rawToken = crypto.randomBytes(32).toString("hex");
   const sessionTokenHash = hashSessionToken(rawToken);
-  const expiresAt = new Date(Date.now() + SESSION_MAX_AGE * 1000);
+  const expiresAt = new Date(Date.now() + maxAgeSeconds * 1000);
 
   const session = await db.session.create({
     data: {

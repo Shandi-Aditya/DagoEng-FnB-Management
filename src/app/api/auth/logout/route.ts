@@ -55,6 +55,16 @@ export async function POST(req: NextRequest) {
       secure: process.env.NODE_ENV === "production",
     });
 
+    // Invalidate session role cookie
+    res.cookies.set({
+      name: "dagoeng_session_role",
+      value: "",
+      path: "/",
+      maxAge: 0,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    });
+
     return res;
   } catch (error: any) {
     console.error("POST /api/auth/logout error:", error);

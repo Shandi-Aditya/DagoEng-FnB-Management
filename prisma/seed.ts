@@ -37,6 +37,7 @@ async function main() {
     { name: "Kitchen Staff", slug: "KITCHEN_STAFF", description: "Kitchen Display System operations" },
     { name: "Inventory Staff", slug: "INVENTORY_STAFF", description: "Stock, ingredients & procurement" },
     { name: "Waiter", slug: "WAITER", description: "Table & customer floor ordering" },
+    { name: "Check-in Staff", slug: "CHECKIN_STAFF", description: "Event attendee check-in and ticket validation" },
     { name: "Customer", slug: "CUSTOMER", description: "Digital menu & self-ordering user" },
   ];
 
@@ -44,7 +45,7 @@ async function main() {
   for (const role of rolesData) {
     createdRoles[role.slug] = await prisma.role.create({ data: role });
   }
-  console.log("✅ Created 8 Standard Roles.");
+  console.log("✅ Created 9 Standard Roles.");
 
   // 3. CREATE PERMISSIONS
   const permissionsData = [
@@ -64,6 +65,8 @@ async function main() {
     { code: "reports:view", module: "REPORTS", description: "View sales, financial and staff reports" },
     { code: "employees:manage", module: "EMPLOYEES", description: "Manage staff, shifts and rosters" },
     { code: "settings:manage", module: "SETTINGS", description: "Configure outlet and system settings" },
+    { code: "events:checkin", module: "EVENTS", description: "Validate tickets and check in attendees" },
+    { code: "events:manage_own", module: "EVENTS", description: "Manage organizer's own events" },
   ];
 
   const createdPermissions: Record<string, any> = {};
@@ -88,6 +91,7 @@ async function main() {
     KITCHEN_STAFF: ["kitchen:kds", "orders:view"],
     INVENTORY_STAFF: ["inventory:view", "inventory:manage"],
     WAITER: ["tables:view", "tables:manage", "orders:view"],
+    CHECKIN_STAFF: ["events:checkin"],
     CUSTOMER: ["menu:view"],
   };
 

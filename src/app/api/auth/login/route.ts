@@ -120,12 +120,12 @@ export async function POST(req: NextRequest) {
         user,
       });
 
-      // Synchronize session persona cookie securely
+      // Synchronize session persona cookie securely with operational expiry (POS-23)
       res.cookies.set({
         name: "dagoeng_active_persona",
         value: match.personaKey,
         path: "/",
-        maxAge: 604800,
+        maxAge: 16 * 60 * 60,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
       });
@@ -215,7 +215,17 @@ export async function POST(req: NextRequest) {
             value: session.rawToken,
             path: "/",
             httpOnly: true,
-            maxAge: 7 * 24 * 60 * 60,
+            maxAge: 16 * 60 * 60,
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+          });
+
+          res.cookies.set({
+            name: "dagoeng_session_role",
+            value: credResult.user.role.slug,
+            path: "/",
+            httpOnly: true,
+            maxAge: 16 * 60 * 60,
             sameSite: "lax",
             secure: process.env.NODE_ENV === "production",
           });
@@ -358,7 +368,17 @@ export async function POST(req: NextRequest) {
         value: session.rawToken,
         path: "/",
         httpOnly: true,
-        maxAge: 7 * 24 * 60 * 60,
+        maxAge: 16 * 60 * 60,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+
+      res.cookies.set({
+        name: "dagoeng_session_role",
+        value: uUser.role || "CUSTOMER",
+        path: "/",
+        httpOnly: true,
+        maxAge: 16 * 60 * 60,
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
       });

@@ -6,6 +6,7 @@ export type RoleSlug =
   | "KITCHEN_STAFF"
   | "INVENTORY_STAFF"
   | "WAITER"
+  | "CHECKIN_STAFF"
   | "CUSTOMER";
 
 export type ScopeLevel =
