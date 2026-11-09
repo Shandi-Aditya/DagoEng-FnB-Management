@@ -51,3 +51,7 @@ data/*.backup.json
 data/organizer_credentials.json
 data/organizer_sessions.json
 data/unified_users.json
+
+# QA reference and handover checklists
+Test Case POS DagoEng — Regression Checklist.md
+QA Handover POS DagoEng — Temuan & Rekomendasi Improvement.md
