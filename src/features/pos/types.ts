@@ -1,3 +1,5 @@
+import type { QRISVerificationDetail } from "@/lib/qris-verification";
+
 export interface POSVariantOption {
   name: string;
   priceAdjustment: number;
@@ -108,6 +110,7 @@ export interface POSReceiptData {
   amountPaid: number;
   changeDue: number;
   splitDetails?: SplitGuestBill[];
+  qrisVerification?: QRISVerificationDetail;
   loyaltyMember?: {
     name: string;
     tier: string;

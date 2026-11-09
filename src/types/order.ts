@@ -53,6 +53,14 @@ export interface OrderRecord {
   total: number;
   paymentStatus: "PENDING" | "PAID" | "REFUNDED";
   paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER";
+  paymentReference?: string;
+  qrisVerification?: {
+    type: "GATEWAY_WEBHOOK" | "SUPERVISOR_MANUAL";
+    referenceNumber: string;
+    supervisorPinVerified?: boolean;
+    verifiedAt: string;
+    note?: string;
+  };
   targetServiceMinutes: number; // Target SLA in minutes (e.g. 10m or 15m)
   notes?: string; // Optional customer / order notes
 

@@ -226,6 +226,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       total: newOrderData.total || 0,
       paymentStatus: "PAID",
       paymentMethod: newOrderData.paymentMethod || "QRIS",
+      paymentReference: newOrderData.paymentReference,
+      qrisVerification: newOrderData.qrisVerification,
       createdAt: nowIso,
       confirmedAt: nowIso,
       statusHistory: [

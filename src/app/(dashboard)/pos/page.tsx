@@ -26,6 +26,7 @@ import {
 } from "@/features/pos/types";
 import { ModifierModal } from "@/features/pos/ModifierModal";
 import { PaymentModal } from "@/features/pos/PaymentModal";
+import { QRISVerificationDetail } from "@/lib/qris-verification";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
 import { usePrinter } from "@/contexts/PrinterContext";
@@ -569,6 +570,7 @@ export default function POSPage() {
     amountPaid: number;
     changeDue: number;
     splitDetails?: SplitGuestBill[];
+    qrisVerification?: QRISVerificationDetail;
   }) => {
     setIsPaymentModalOpen(false);
 
@@ -599,6 +601,8 @@ export default function POSPage() {
       serviceChargePercent: orderType === "DINE_IN" ? Number(settings.serviceChargePercent) || 0 : 0,
       total: grandTotal,
       paymentMethod: paymentData.method === "CASH" ? "CASH" : paymentData.method === "EDC" ? "EDC" : "QRIS",
+      paymentReference: paymentData.qrisVerification?.referenceNumber,
+      qrisVerification: paymentData.qrisVerification,
       items: cartItems.map((c, i) => ({
         id: `pos-it-${i}-${Date.now()}`,
         productId: c.productId,
@@ -749,6 +753,7 @@ export default function POSPage() {
       amountPaid: paymentData.amountPaid,
       changeDue: paymentData.changeDue,
       splitDetails: paymentData.splitDetails,
+      qrisVerification: paymentData.qrisVerification,
       loyaltyMember: loyaltyReceiptInfo,
     };
 

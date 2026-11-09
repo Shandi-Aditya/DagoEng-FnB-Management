@@ -16,8 +16,18 @@ import {
   Check,
   AlertTriangle,
   RotateCcw,
+  Lock,
+  KeyRound,
+  RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  authorizeSupervisorQrisOverride,
+  DEFAULT_SUPERVISOR_PIN,
+  QRISVerificationDetail,
+} from "@/lib/qris-verification";
+import { useActivityLog } from "@/contexts/ActivityLogContext";
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -36,6 +46,7 @@ interface PaymentModalProps {
     amountPaid: number;
     changeDue: number;
     splitDetails?: SplitGuestBill[];
+    qrisVerification?: QRISVerificationDetail;
   }) => void;
 }
 
@@ -53,6 +64,7 @@ export function PaymentModal({
   orderType,
   onPaymentSuccess,
 }: PaymentModalProps) {
+  const { logActivity } = useActivityLog();
   const [activeTab, setActiveTab] = useState<POSPaymentMethod>("QRIS");
 
   // Cash Tab States
@@ -62,6 +74,17 @@ export function PaymentModal({
   // QRIS Tab States
   const [qrisSecondsLeft, setQrisSecondsLeft] = useState<number>(120);
   const [isQrisProcessing, setIsQrisProcessing] = useState<boolean>(false);
+  const [isGatewayVerified, setIsGatewayVerified] = useState<boolean>(false);
+  const [gatewayTxId, setGatewayTxId] = useState<string>("");
+  const [isSimulatingWebhook, setIsSimulatingWebhook] = useState<boolean>(false);
+
+  // Supervisor Manual QRIS Override States
+  const [showSupervisorAuth, setShowSupervisorAuth] = useState<boolean>(false);
+  const [supervisorPin, setSupervisorPin] = useState<string>("");
+  const [referenceNumber, setReferenceNumber] = useState<string>("");
+  const [supervisorNote, setSupervisorNote] = useState<string>("");
+  const [supervisorAuthError, setSupervisorAuthError] = useState<string | null>(null);
+  const [supervisorOverrideData, setSupervisorOverrideData] = useState<QRISVerificationDetail | null>(null);
 
   // EDC Tab States
   const [selectedBank, setSelectedBank] = useState<string>("BCA");
@@ -76,6 +99,15 @@ export function PaymentModal({
       setCashGiven(grandTotal);
       setCashInputRaw(grandTotal.toString());
       setQrisSecondsLeft(120);
+      setIsGatewayVerified(false);
+      setGatewayTxId(`GW-DAGO-${Date.now().toString().slice(-6)}`);
+      setIsSimulatingWebhook(false);
+      setShowSupervisorAuth(false);
+      setSupervisorPin("");
+      setReferenceNumber("");
+      setSupervisorNote("");
+      setSupervisorAuthError(null);
+      setSupervisorOverrideData(null);
       setApprovalCode(`APP-${Math.floor(100000 + Math.random() * 900000)}`);
 
       // Initialize Equal Split for 2 guests
@@ -144,6 +176,50 @@ export function PaymentModal({
   const changeDue = Math.max(0, cashGiven - grandTotal);
   const isCashSufficient = cashGiven >= grandTotal;
 
+  // QRIS Verification status
+  const isQrisVerified = isGatewayVerified || Boolean(supervisorOverrideData);
+
+  const handleSimulateWebhook = () => {
+    setIsSimulatingWebhook(true);
+    setTimeout(() => {
+      setIsSimulatingWebhook(false);
+      setIsGatewayVerified(true);
+      setSupervisorOverrideData(null);
+    }, 600);
+  };
+
+  const handleAuthorizeSupervisor = () => {
+    setSupervisorAuthError(null);
+    const result = authorizeSupervisorQrisOverride({
+      pin: supervisorPin,
+      referenceNumber,
+      note: supervisorNote || `QRIS Statis Meja ${tableNumber}`,
+    });
+
+    if (!result.allowed || !result.verification) {
+      setSupervisorAuthError(result.error || "Otorisasi supervisor gagal.");
+      return;
+    }
+
+    setSupervisorOverrideData(result.verification);
+    setShowSupervisorAuth(false);
+
+    logActivity({
+      module: "POS",
+      action: "QRIS_SUPERVISOR_MANUAL_OVERRIDE",
+      description: `Otorisasi manual pembayaran QRIS Statis Rp ${grandTotal.toLocaleString("id-ID")} untuk ${customerName || "Pelanggan"} (${orderType === "DINE_IN" ? "Meja " + tableNumber : "Takeaway"}). Ref RRN: ${referenceNumber}`,
+      category: "TRANSACTION",
+      severity: "HIGH",
+      metadata: {
+        grandTotal,
+        referenceNumber,
+        tableNumber,
+        note: supervisorNote,
+        timestamp: new Date().toISOString(),
+      },
+    });
+  };
+
   const handleCashShortcut = (amount: number) => {
     setCashGiven(amount);
     setCashInputRaw(amount.toString());
@@ -164,15 +240,23 @@ export function PaymentModal({
         changeDue,
       });
     } else if (activeTab === "QRIS") {
+      if (!isQrisVerified) return;
       setIsQrisProcessing(true);
       setTimeout(() => {
         setIsQrisProcessing(false);
+        const qrisData: QRISVerificationDetail = supervisorOverrideData || {
+          type: "GATEWAY_WEBHOOK",
+          referenceNumber: gatewayTxId,
+          verifiedAt: new Date().toISOString(),
+          note: "Auto-verified via DagoPay / DOKU QRIS Webhook",
+        };
         onPaymentSuccess({
           method: "QRIS",
           amountPaid: grandTotal,
           changeDue: 0,
+          qrisVerification: qrisData,
         });
-      }, 500);
+      }, 400);
     } else if (activeTab === "EDC") {
       onPaymentSuccess({
         method: "EDC",
@@ -278,7 +362,7 @@ export function PaymentModal({
 
         {/* Tab Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-4 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-          {/* TAB 1: QRIS DINAMIS */}
+          {/* TAB 1: QRIS DINAMIS & STATIS DENGAN VERIFIKASI */}
           {activeTab === "QRIS" && (
             <div className="flex flex-col items-center justify-center text-center space-y-4 py-2">
               <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl border-2 border-dashed border-primary/40 shadow-md relative">
@@ -314,12 +398,150 @@ export function PaymentModal({
                 </p>
               </div>
 
-              <div className="w-full max-w-sm p-3 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200 dark:border-emerald-800/60 text-left flex items-start space-x-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-emerald-800 dark:text-emerald-300">
-                  Pembayaran terverifikasi otomatis secara real-time melalui QRIS Payment Gateway.
-                </p>
-              </div>
+              {/* Status Box */}
+              {!isQrisVerified ? (
+                <div className="w-full max-w-md p-3.5 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800/60 text-left space-y-2">
+                  <div className="flex items-start space-x-2">
+                    <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5 animate-pulse" />
+                    <div>
+                      <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                        Menunggu Notifikasi Gateway QRIS
+                      </h4>
+                      <p className="text-[11px] text-amber-800/90 dark:text-amber-300/90 mt-0.5">
+                        Kasir dilarang menandai lunas manual tanpa webhook gateway atau PIN supervisor (POS-25).
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Dev Sandbox simulation & Supervisor override actions */}
+                  <div className="flex flex-wrap gap-2 pt-1 border-t border-amber-200/80 dark:border-amber-800/60">
+                    <button
+                      type="button"
+                      disabled={isSimulatingWebhook}
+                      onClick={handleSimulateWebhook}
+                      className="px-2.5 py-1.5 bg-white dark:bg-slate-900 hover:bg-amber-100 dark:hover:bg-slate-800 border border-amber-300 dark:border-amber-700 rounded-lg text-[11px] font-bold text-amber-900 dark:text-amber-200 flex items-center space-x-1.5 shadow-xs transition-colors"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isSimulatingWebhook ? "animate-spin text-amber-600" : ""}`} />
+                      <span>{isSimulatingWebhook ? "Menerima Webhook..." : "Simulasikan Webhook DagoPay (Dev)"}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowSupervisorAuth((prev) => !prev)}
+                      className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-[11px] font-bold flex items-center space-x-1.5 shadow-xs transition-colors ml-auto"
+                    >
+                      <Lock className="w-3 h-3" />
+                      <span>{showSupervisorAuth ? "Tutup Form PIN" : "Otorisasi Manual QRIS Statis"}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : isGatewayVerified ? (
+                <div className="w-full max-w-md p-3.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-300 dark:border-emerald-800 text-left flex items-start space-x-2.5">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 text-xs">
+                    <span className="font-bold text-emerald-900 dark:text-emerald-200 block">
+                      Pembayaran QRIS Terverifikasi Gateway!
+                    </span>
+                    <span className="text-[11px] text-emerald-700 dark:text-emerald-300 block font-mono">
+                      Ref DagoPay: {gatewayTxId} • Status: SETTLED
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="w-full max-w-md p-3.5 bg-blue-50 dark:bg-blue-950/40 rounded-xl border border-blue-300 dark:border-blue-800 text-left flex items-start space-x-2.5">
+                  <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 text-xs">
+                    <span className="font-bold text-blue-900 dark:text-blue-200 block">
+                      Otorisasi QRIS Statis Disetujui (PIN Supervisor OK)
+                    </span>
+                    <span className="text-[11px] text-blue-700 dark:text-blue-300 block font-mono">
+                      RRN / Ref: {supervisorOverrideData?.referenceNumber} • Diaudit Sesuai SOP
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Form Input Otorisasi Supervisor */}
+              {showSupervisorAuth && !isQrisVerified && (
+                <div className="w-full max-w-md p-4 bg-slate-50 dark:bg-slate-800/90 rounded-2xl border-2 border-primary/30 text-left space-y-3 animate-in fade-in zoom-in-95 duration-150 shadow-lg">
+                  <div className="flex items-center space-x-2 pb-1 border-b border-slate-200 dark:border-slate-700">
+                    <KeyRound className="w-4 h-4 text-primary" />
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                      Otorisasi QRIS Statis oleh Supervisor
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Gunakan bila tamu membayar via QRIS statis meja/kasir. Membutuhkan PIN supervisor & nomor referensi struk bank.
+                  </p>
+
+                  {supervisorAuthError && (
+                    <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-[11px] flex items-center space-x-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{supervisorAuthError}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        PIN Supervisor:
+                      </label>
+                      <input
+                        type="password"
+                        maxLength={6}
+                        value={supervisorPin}
+                        onChange={(e) => setSupervisorPin(e.target.value)}
+                        placeholder="PIN Supervisor (Default: 1234)"
+                        className="w-full px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Nomor Referensi Bank (RRN / Ref ID):
+                      </label>
+                      <input
+                        type="text"
+                        value={referenceNumber}
+                        onChange={(e) => setReferenceNumber(e.target.value)}
+                        placeholder="Contoh: RRN-20261109-001 (Lihat struk m-banking)"
+                        className="w-full px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                        Catatan Manual (Opsional):
+                      </label>
+                      <input
+                        type="text"
+                        value={supervisorNote}
+                        onChange={(e) => setSupervisorNote(e.target.value)}
+                        placeholder="Contoh: QRIS Statis Meja 4 / Mandiri Livin"
+                        className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end space-x-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowSupervisorAuth(false)}
+                      className="px-3 py-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-700"
+                    >
+                      Batal
+                    </button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleAuthorizeSupervisor}
+                      className="text-xs bg-primary hover:bg-primary/90 text-white font-bold h-8 px-3"
+                    >
+                      Verifikasi & Setujui
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -578,22 +800,30 @@ export function PaymentModal({
             disabled={
               (activeTab === "CASH" && !isCashSufficient) ||
               (activeTab === "SPLIT" && !isSplitValid) ||
+              (activeTab === "QRIS" && !isQrisVerified) ||
               isQrisProcessing
             }
             onClick={handleCompletePayment}
             className={`flex-1 text-xs font-bold h-11 space-x-2 shadow-md ${
-              activeTab === "SPLIT" && !isSplitValid
+              (activeTab === "SPLIT" && !isSplitValid) || (activeTab === "QRIS" && !isQrisVerified)
                 ? "bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
                 : "bg-primary hover:bg-primary/90 text-white"
             }`}
           >
             {isQrisProcessing ? (
-              <span>Memverifikasi QRIS...</span>
+              <span>Memproses Transaksi...</span>
+            ) : activeTab === "QRIS" && !isQrisVerified ? (
+              <span className="flex items-center space-x-2">
+                <Clock className="w-4 h-4 animate-spin text-amber-500" />
+                <span>Menunggu Pembayaran Tamu (QRIS) — {formatCurrencyIDR(grandTotal)}</span>
+              </span>
             ) : (
               <>
                 <CheckCircle2 className="w-4 h-4" />
                 <span>
-                  Konfirmasi Pembayaran ({activeTab}) — {formatCurrencyIDR(grandTotal)}
+                  {activeTab === "QRIS"
+                    ? `Selesaikan QRIS (${supervisorOverrideData ? "Otorisasi Supervisor" : "Terverifikasi Gateway"}) — ${formatCurrencyIDR(grandTotal)}`
+                    : `Konfirmasi Pembayaran (${activeTab}) — ${formatCurrencyIDR(grandTotal)}`}
                 </span>
               </>
             )}
