@@ -170,6 +170,26 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     } finally {
       setIsInitialized(true);
     }
+
+    // Sync with persistent backend API to ensure shifts survive browser resets
+    if (typeof window !== "undefined") {
+      fetch("/api/shifts")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.shifts) && data.shifts.length > 0) {
+            setShifts((prev) => {
+              const prevMap = new Map(prev.map((s) => [s.id, s]));
+              for (const serverShift of data.shifts) {
+                if (!prevMap.has(serverShift.id)) {
+                  prevMap.set(serverShift.id, serverShift);
+                }
+              }
+              return Array.from(prevMap.values());
+            });
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -369,6 +389,16 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       outletName: targetOutletName,
     });
 
+    if (typeof window !== "undefined") {
+      fetch("/api/shifts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "SYNC", shiftRecord: newShift }),
+      }).catch((err) => {
+        console.warn("[shift] Persistent sync warning:", err);
+      });
+    }
+
     return newShift;
   };
 
@@ -431,6 +461,30 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
           : s
       )
     );
+
+    if (typeof window !== "undefined") {
+      const closedShiftRecord: ShiftRecord = {
+        ...shift,
+        status: "CLOSED",
+        cashSales: finalCashSales,
+        nonCashSales: finalNonCashSales,
+        expectedCash: expected,
+        endTime: nowFormatted,
+        actualCash,
+        cashVariance: variance,
+        closingNotes,
+        closedAt: nowFormatted,
+        closedBy: user?.name || shift.assignedCashierName || "Ni Kadek Sri",
+      };
+
+      fetch("/api/shifts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "SYNC", shiftRecord: closedShiftRecord }),
+      }).catch((err) => {
+        console.warn("[shift] Persistent sync warning on close:", err);
+      });
+    }
 
     if (typeof window !== "undefined" && user) {
       sessionStorage.setItem(`dagoeng_shift_closed_${user.id}_${shift.outletId}`, "true");

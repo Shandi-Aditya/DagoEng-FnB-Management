@@ -253,6 +253,26 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsInitialized(true);
     }
+
+    // Sync with persistent backend API to ensure bookings survive browser resets
+    if (typeof window !== "undefined") {
+      fetch("/api/coworking/bookings")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.bookings) && data.bookings.length > 0) {
+            setBookings((prev) => {
+              const prevMap = new Map(prev.map((b) => [b.id, b]));
+              for (const serverBooking of data.bookings) {
+                if (!prevMap.has(serverBooking.id)) {
+                  prevMap.set(serverBooking.id, serverBooking);
+                }
+              }
+              return Array.from(prevMap.values());
+            });
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -393,6 +413,16 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
 
     setBookings((prev) => [newBooking, ...prev]);
 
+    if (typeof window !== "undefined") {
+      fetch("/api/coworking/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ booking: newBooking }),
+      }).catch((err) => {
+        console.warn("[coworking] Persistent sync warning:", err);
+      });
+    }
+
     if (isPaid) {
       // Record check-in log
       const newLog: CheckInOutLog = {
@@ -456,6 +486,25 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
           : b
       )
     );
+
+    if (typeof window !== "undefined") {
+      const updatedBooking = {
+        ...booking,
+        paymentStatus: "PAID",
+        paymentMethod: method,
+        checkInStatus: "RESERVED",
+        paidAmount: booking.totalAmount,
+        remainingAmount: 0,
+        paymentTimestamp: `${dateFormatted} ${nowFormatted}`,
+      };
+      fetch("/api/coworking/bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ booking: updatedBooking }),
+      }).catch((err) => {
+        console.warn("[coworking] Persistent sync warning on confirm:", err);
+      });
+    }
 
     addNotification({
       type: "PAYMENT_RECEIVED",

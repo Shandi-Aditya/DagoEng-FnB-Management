@@ -56,9 +56,32 @@ export function ActivityLogProvider({ children }: { children: React.ReactNode })
         }
       }
     } catch (e) {
-      console.error("Failed to load persistent audit log", e);
+      console.error("Failed to load persistent audit log from storage", e);
     } finally {
       setIsInitialized(true);
+    }
+
+    // Sync with persistent backend API to ensure records survive browser resets
+    if (typeof window !== "undefined") {
+      fetch("/api/audit-logs")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.logs) && data.logs.length > 0) {
+            setLogs((prev) => {
+              const prevMap = new Map(prev.map((l) => [l.id, l]));
+              for (const serverLog of data.logs) {
+                if (!prevMap.has(serverLog.id)) {
+                  prevMap.set(serverLog.id, serverLog);
+                }
+              }
+              const merged = Array.from(prevMap.values()).sort(
+                (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+              );
+              return merged;
+            });
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
@@ -115,6 +138,17 @@ export function ActivityLogProvider({ children }: { children: React.ReactNode })
     };
 
     setLogs((prev) => [entry, ...prev]);
+
+    // Persist to server backend storage
+    if (typeof window !== "undefined") {
+      fetch("/api/audit-logs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entry }),
+      }).catch((err) => {
+        console.warn("[audit] Persistent sync warning:", err);
+      });
+    }
   };
 
   const simulateActivity = (scenarioType: "VOID" | "DISCOUNT" | "STOCK_DIFF" | "CONFIG_CHANGE" | "RESERVATION") => {
@@ -194,12 +228,9 @@ export function ActivityLogProvider({ children }: { children: React.ReactNode })
   };
 
   const clearLogs = () => {
-    setLogs(INITIAL_AUDIT_LOGS);
-    try {
-      localStorage.removeItem(STORAGE_KEY_AUDIT);
-    } catch (e) {
-      console.error(e);
-    }
+    // Append-only audit trail invariant: audit records cannot be permanently purged
+    console.warn("[Audit] Immutable audit log: clearing local memory view only");
+    setLogs([]);
   };
 
   return (
