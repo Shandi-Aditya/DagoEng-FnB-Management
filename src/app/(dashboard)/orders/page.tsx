@@ -58,6 +58,13 @@ export default function OrdersPage() {
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
   const userTenantId = user?.tenant?.id;
 
+  const roleSlug = user?.role?.slug || (typeof user?.role === "string" ? user.role : "");
+  const canProcessPayment =
+    roleSlug === "CASHIER" ||
+    roleSlug === "SUPER_ADMIN" ||
+    roleSlug === "OWNER" ||
+    roleSlug === "MANAGER";
+
   // Strict tenant-aware order list
   const displayedOrders = useMemo(() => {
     if (!isTenantOwner || !userTenantId) return filteredOrders;
@@ -239,6 +246,14 @@ export default function OrdersPage() {
   };
 
   const handleOpenPayment = (order: OrderRecord) => {
+    if (order.paymentStatus === "PAID") {
+      setSuccessToast("Pesanan ini sudah berstatus LUNAS. Pembayaran kedua tidak dapat diproses.");
+      return;
+    }
+    if (!canProcessPayment) {
+      setSuccessToast("Role Anda tidak memiliki akses untuk memproses pembayaran.");
+      return;
+    }
     setPaymentOrder(order);
     setIsPaymentModalOpen(true);
   };
@@ -524,7 +539,7 @@ export default function OrdersPage() {
                         </td>
                         <td className="p-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap shrink-0">
-                            {!isCompleted && o.status !== "CANCELLED" && (
+                            {!isCompleted && o.status !== "CANCELLED" && o.paymentStatus !== "PAID" && canProcessPayment && (
                               <Button
                                 size="sm"
                                 onClick={() => handleOpenPayment(o)}
@@ -740,7 +755,7 @@ export default function OrdersPage() {
             {/* Modal Actions */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
               <div className="flex items-center space-x-2">
-                {selectedOrder.status !== "COMPLETED" && selectedOrder.status !== "CANCELLED" && selectedOrder.paymentStatus !== "PAID" && (
+                {selectedOrder.status !== "COMPLETED" && selectedOrder.status !== "CANCELLED" && selectedOrder.paymentStatus !== "PAID" && canProcessPayment && (
                   <Button
                     size="sm"
                     onClick={() => {
