@@ -64,9 +64,9 @@ export async function PUT(req: NextRequest) {
 
     if (defaultPlatformFeePercent !== undefined && defaultPlatformFeePercent !== null) {
       const fee = Number(defaultPlatformFeePercent);
-      if (isNaN(fee) || fee < 0 || fee > 100) {
+      if (isNaN(fee) || !Number.isInteger(fee) || fee < 0 || fee > 50) {
         return NextResponse.json(
-          { success: false, error: "Persentase komisi platform harus berupa angka valid antara 0% dan 100%." },
+          { success: false, error: "Persentase komisi platform harus berupa bilangan bulat antara 0% dan 50%." },
           { status: 400 }
         );
       }

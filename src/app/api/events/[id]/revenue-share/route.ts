@@ -78,6 +78,19 @@ export async function POST(
       data: updatedEvent,
     });
   } catch (error: any) {
+    if (
+      error?.code === "EVENT_REVENUE_SPLIT_LOCKED" ||
+      error?.message?.includes("EVENT_REVENUE_SPLIT_LOCKED")
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "EVENT_REVENUE_SPLIT_LOCKED",
+          error: error.message.replace(/^EVENT_REVENUE_SPLIT_LOCKED:\s*/, ""),
+        },
+        { status: 400 }
+      );
+    }
     if (error?.name === "DatabasePersistenceError") {
       return NextResponse.json(
         {
@@ -175,6 +188,19 @@ export async function PATCH(
       data: updatedEvent,
     });
   } catch (error: any) {
+    if (
+      error?.code === "EVENT_REVENUE_SPLIT_LOCKED" ||
+      error?.message?.includes("EVENT_REVENUE_SPLIT_LOCKED")
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "EVENT_REVENUE_SPLIT_LOCKED",
+          error: error.message.replace(/^EVENT_REVENUE_SPLIT_LOCKED:\s*/, ""),
+        },
+        { status: 400 }
+      );
+    }
     if (error?.name === "DatabasePersistenceError") {
       return NextResponse.json(
         {

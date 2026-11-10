@@ -169,8 +169,8 @@ export function updateEventRevenuePolicy(
       ? Number(updates.defaultPlatformFeePercent)
       : current.defaultPlatformFeePercent;
 
-  if (isNaN(fee) || fee < 0 || fee > 100) {
-    throw new Error("Persentase komisi platform harus berupa angka valid antara 0% hingga 100%.");
+  if (isNaN(fee) || !Number.isInteger(fee) || fee < 0 || fee > 50) {
+    throw new Error("Persentase komisi platform harus berupa bilangan bulat antara 0% hingga 50%.");
   }
 
   const prevFee = current.defaultPlatformFeePercent;
@@ -236,16 +236,96 @@ export function updateEventRevenuePolicy(
 
 export const updateEventBusinessSettings = updateEventRevenuePolicy;
 
-export function calculateEventRevenueSplit(totalPrice: number, platformFeePercent: number = 20) {
-  const feePct = Math.max(0, Math.min(100, Number(platformFeePercent) || 0));
-  const platformFeeAmount = Math.round((totalPrice * feePct) / 100);
-  const organizerShareAmount = totalPrice - platformFeeAmount;
+/**
+ * Validates platform commission fee percentage.
+ * Requirements:
+ * - Must be an integer without decimals
+ * - Must be between 0% and 50% inclusive
+ */
+export function validateRevenueSplitPercentage(platformFeePercent: number): { valid: boolean; error?: string } {
+  if (typeof platformFeePercent !== "number" || isNaN(platformFeePercent)) {
+    return { valid: false, error: "Persentase komisi platform harus berupa angka." };
+  }
+  if (!Number.isInteger(platformFeePercent)) {
+    return { valid: false, error: "Persentase komisi platform harus berupa bilangan bulat tanpa desimal." };
+  }
+  if (platformFeePercent < 0 || platformFeePercent > 50) {
+    return {
+      valid: false,
+      error: "Persentase komisi platform harus berada dalam rentang 0% hingga 50% (bagian penyelenggara 50% hingga 100%).",
+    };
+  }
+  return { valid: true };
+}
+
+/**
+ * Resolves the effective platform fee percentage for an event.
+ * Uses event.customPlatformFeePercent as the single source of truth,
+ * with lazy fallback to default policy (20%).
+ */
+export function getEventEffectivePlatformFeePercent(
+  event?: Pick<CommunityEvent, "customPlatformFeePercent"> | null,
+  fallbackDefault?: number
+): number {
+  if (
+    event &&
+    typeof event.customPlatformFeePercent === "number" &&
+    !isNaN(event.customPlatformFeePercent)
+  ) {
+    return Math.max(0, Math.min(50, Math.round(event.customPlatformFeePercent)));
+  }
+  const defaultVal =
+    typeof fallbackDefault === "number" ? fallbackDefault : getEventRevenuePolicy().defaultPlatformFeePercent ?? 20;
+  return Math.max(0, Math.min(50, Math.round(defaultVal)));
+}
+
+/**
+ * Checks whether an event's revenue split is permanently locked.
+ * Split is locked as soon as there is at least one booking that is neither CANCELLED nor EXPIRED.
+ */
+export function isEventRevenueSplitLocked(eventId: string, customBookings?: EventTicketOrder[]): boolean {
+  if (!eventId) return false;
+  const normalizedId = eventId.trim().toLowerCase();
+  const bookings = customBookings || loadBookingsFromDisk();
+  return bookings.some(
+    (b) =>
+      (b.eventId || "").trim().toLowerCase() === normalizedId &&
+      b.paymentStatus !== "CANCELLED" &&
+      b.paymentStatus !== "EXPIRED"
+  );
+}
+
+export interface EventRevenueSplitCalculation {
+  grossRevenue: number;
+  platformFeePercent: number;
+  organizerSharePercent: number;
+  platformFeeAmount: number;
+  organizerRevenueAmount: number;
+  organizerShareAmount: number;
+}
+
+/**
+ * Calculates event revenue split with zero-penny integrity.
+ * Formula: platformFeeAmount = Math.round(gross * feePct / 100)
+ *          organizerRevenueAmount = gross - platformFeeAmount
+ * Ensures platformFeeAmount + organizerRevenueAmount === grossRevenue exactly.
+ */
+export function calculateEventRevenueSplit(
+  totalPrice: number,
+  platformFeePercent: number = 20
+): EventRevenueSplitCalculation {
+  const gross = Math.max(0, Math.round(Number(totalPrice) || 0));
+  const rawPct = Number(platformFeePercent) || 0;
+  const feePct = Math.max(0, Math.min(50, Math.round(rawPct)));
+  const platformFeeAmount = Math.round((gross * feePct) / 100);
+  const organizerRevenueAmount = gross - platformFeeAmount;
   return {
-    grossRevenue: totalPrice,
+    grossRevenue: gross,
     platformFeePercent: feePct,
     platformFeeAmount,
     organizerSharePercent: 100 - feePct,
-    organizerShareAmount,
+    organizerShareAmount: organizerRevenueAmount,
+    organizerRevenueAmount,
   };
 }
 
@@ -799,9 +879,27 @@ export const INITIAL_COMMUNITY_EVENTS: CommunityEvent[] = [
  * In-memory cache for high-throughput reads.
  */
 let cachedEvents: CommunityEvent[] | null = null;
+let legacyEventsPendingDbPersistence = false;
 
 // In-process write lock queue to serialize concurrent write operations
 let writeQueue = Promise.resolve();
+
+/**
+ * Ensures that normalized legacy events in memory are permanently written to PostgreSQL SystemSetting.
+ * Only executes if loadEventsFromDisk flagged that legacy events lacked explicit split rates.
+ * Awaited in all async event read/write paths.
+ */
+export async function syncNormalizedEventsToDb(): Promise<void> {
+  if (!legacyEventsPendingDbPersistence || !cachedEvents) return;
+  legacyEventsPendingDbPersistence = false;
+  try {
+    await persistStorageToDb("events.json", JSON.stringify(cachedEvents, null, 2));
+  } catch (err) {
+    // If persistence fails, keep the flag true so the next async operation retries
+    legacyEventsPendingDbPersistence = true;
+    console.warn("[events] Failed to persist normalized legacy events to database:", err);
+  }
+}
 
 export function loadEventsFromDisk(): CommunityEvent[] {
   try {
@@ -818,7 +916,29 @@ export function loadEventsFromDisk(): CommunityEvent[] {
     const raw = fs.readFileSync(eventsFile, "utf-8");
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
-      cachedEvents = parsed;
+      const defaultPlatformFee = getEventRevenuePolicy().defaultPlatformFeePercent ?? 20;
+      let hasLegacyEvents = false;
+      cachedEvents = parsed.map((e) => {
+        // Lazy normalization for legacy events without explicit split
+        if (e.customPlatformFeePercent === undefined || e.customPlatformFeePercent === null) {
+          hasLegacyEvents = true;
+          e.customPlatformFeePercent = defaultPlatformFee;
+          e.organizerFeePercent = 100 - defaultPlatformFee;
+        }
+        return e;
+      });
+
+      // If legacy events were normalized, flag for async DB persistence and attempt disk write
+      if (hasLegacyEvents) {
+        legacyEventsPendingDbPersistence = true;
+        // (a) Isolated disk write block (non-fatal if running on read-only serverless filesystem)
+        try {
+          fs.writeFileSync(eventsFile, JSON.stringify(cachedEvents, null, 2), "utf-8");
+        } catch (err) {
+          console.warn("[events] Filesystem is read-only or replica write failed:", err);
+        }
+      }
+
       return cachedEvents;
     }
     cachedEvents = [...INITIAL_COMMUNITY_EVENTS];
@@ -859,6 +979,9 @@ export async function saveEventsToDisk(events: CommunityEvent[]): Promise<void> 
     // Explicitly await persistence to distributed PostgreSQL SystemSetting
     // Prevents Vercel serverless freeze from dropping updates
     await persistStorageToDb("events.json", JSON.stringify(events, null, 2));
+
+    // Reset pending normalization flag since storage is fully up to date
+    legacyEventsPendingDbPersistence = false;
 
     // Only update in-memory cache once persistence to persistent store succeeds
     cachedEvents = events;
@@ -1036,7 +1159,9 @@ export function toPublicEvent(event: CommunityEvent): PublicCommunityEvent {
  * Strictly ignores any event that is PENDING, REJECTED, or ARCHIVED.
  */
 export async function getApprovedEvents(): Promise<PublicCommunityEvent[]> {
+  await syncStorageFromDb("events.json").catch(() => {});
   const all = loadEventsFromDisk();
+  await syncNormalizedEventsToDb();
   return all
     .filter((e) => e.status === "APPROVED")
     .map(toPublicEvent)
@@ -1104,6 +1229,7 @@ export async function getPublicEventById(id: string): Promise<PublicCommunityEve
   await syncStorageFromDb("events.json").catch(() => {});
   const normalizedId = (id || "").trim().toLowerCase();
   let all = loadEventsFromDisk();
+  await syncNormalizedEventsToDb();
   let event = all.find(
     (e) =>
       ((e.id || "").trim().toLowerCase() === normalizedId || e.id === id) &&
@@ -1382,12 +1508,22 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
       );
     }
 
+    const defaultPlatformFee = getEventRevenuePolicy().defaultPlatformFeePercent ?? 20;
+    if (payload.proposedOrganizerPercent !== undefined) {
+      const orgRaw = Number(payload.proposedOrganizerPercent);
+      const pltRaw = 100 - orgRaw;
+      if (!Number.isInteger(orgRaw) || !Number.isInteger(pltRaw) || pltRaw < 0 || pltRaw > 50) {
+        throw new Error(
+          "Usulan persentase komisi platform harus berupa bilangan bulat antara 0% hingga 50% (bagian penyelenggara 50% - 100%)."
+        );
+      }
+    }
+
     const orgPct =
       typeof payload.proposedOrganizerPercent === "number" &&
-      payload.proposedOrganizerPercent >= 0 &&
-      payload.proposedOrganizerPercent <= 100
-        ? Number(payload.proposedOrganizerPercent)
-        : 80;
+      Number.isInteger(payload.proposedOrganizerPercent)
+        ? payload.proposedOrganizerPercent
+        : 100 - defaultPlatformFee;
     const pltPct = 100 - orgPct;
 
     const newEvent: CommunityEvent = {
@@ -1500,8 +1636,12 @@ export async function updateEventStatus(
       updatedAt: new Date().toISOString(),
     };
 
-    // If approved, ensure organizer profile is registered and active
+    // If approved, ensure organizer profile is registered and active, and write explicit effective revenue split
     if (status === "APPROVED") {
+      const effectivePlatformFee = getEventEffectivePlatformFeePercent(existing);
+      updated.customPlatformFeePercent = effectivePlatformFee;
+      updated.organizerFeePercent = 100 - effectivePlatformFee;
+
       const now = Date.now();
       const endMs = existing.endDate
         ? new Date(existing.endDate).getTime()
@@ -1994,6 +2134,7 @@ export async function createEventBooking(
     await syncStorageFromDb("events.json").catch(() => {});
     await syncStorageFromDb("event_bookings.json").catch(() => {});
     const allEvents = loadEventsFromDisk();
+    await syncNormalizedEventsToDb();
     const event = allEvents.find((e) => e.id === payload.eventId);
     if (!event) {
       throw new Error(`Event dengan ID ${payload.eventId} tidak ditemukan.`);
@@ -2040,14 +2181,11 @@ export async function createEventBooking(
     const unitPrice = event.isPaid ? Number(event.price || 0) : 0;
     const totalPrice = unitPrice * ticketCount;
 
-    // Revenue sharing formula: dynamic platform fee policy with event override support
-    const policy = getEventRevenuePolicy();
-    const platformFeePercent =
-      event.customPlatformFeePercent !== undefined && event.customPlatformFeePercent !== null
-        ? Number(event.customPlatformFeePercent)
-        : policy.defaultPlatformFeePercent;
-    const platformFeeAmount = Math.round((totalPrice * platformFeePercent) / 100);
-    const organizerRevenueAmount = totalPrice - platformFeeAmount;
+    // Revenue sharing formula: per-event platform fee with single shared calculation helper
+    const platformFeePercent = getEventEffectivePlatformFeePercent(event);
+    const split = calculateEventRevenueSplit(totalPrice, platformFeePercent);
+    const platformFeeAmount = split.platformFeeAmount;
+    const organizerRevenueAmount = split.organizerRevenueAmount;
 
     // Determine initial payment status:
     // - FREE tickets are confirmed immediately as PAID.
@@ -2739,6 +2877,7 @@ export async function getEventOperationalStats(): Promise<EventOperationalStats>
   await syncStorageFromDb("events.json").catch(() => {});
   await syncStorageFromDb("event_bookings.json").catch(() => {});
   const events = loadEventsFromDisk();
+  await syncNormalizedEventsToDb();
   const bookings = loadBookingsFromDisk();
 
   const totalEvents = events.length;
@@ -2782,6 +2921,7 @@ export async function getOrganizerPortalData(
   await syncStorageFromDb("events.json").catch(() => {});
   await syncStorageFromDb("event_bookings.json").catch(() => {});
   const allEvents = loadEventsFromDisk();
+  await syncNormalizedEventsToDb();
   const myEvents = (isAdmin && normalizedEmail === "all_admin")
     ? allEvents
     : allEvents.filter(
@@ -3060,14 +3200,15 @@ export async function proposeEventRevenueSplit(
   isAdmin: boolean = false
 ): Promise<CommunityEvent> {
   return withEventLock(async () => {
-    if (organizerPercent + platformPercent !== 100) {
-      throw new Error("Total persentase bagi hasil harus tepat 100%.");
+    if (!Number.isInteger(platformPercent) || platformPercent < 0 || platformPercent > 50) {
+      throw new Error("Persentase komisi platform harus berupa bilangan bulat antara 0% hingga 50%.");
     }
-    if (organizerPercent < 0 || platformPercent < 0 || organizerPercent > 100 || platformPercent > 100) {
-      throw new Error("Persentase harus berada di antara 0% dan 100%.");
+    if (!Number.isInteger(organizerPercent) || organizerPercent !== 100 - platformPercent) {
+      throw new Error("Total persentase bagi hasil harus tepat 100%. Persentase bagian penyelenggara harus berupa bilangan bulat.");
     }
 
     await syncStorageFromDb("events.json").catch(() => {});
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
     const normalizedId = (eventId || "").trim().toLowerCase();
     let all = loadEventsFromDisk();
     let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
@@ -3087,10 +3228,19 @@ export async function proposeEventRevenueSplit(
     const isDagoAdminParty = proposedBy === "DAGO_ADMIN" || (proposedBy as string) === "ADMIN";
 
     if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
-      throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk mengusulkan bagi hasil event ini.");
+      throw new Error("FORBIDDEN: Pelanggaran isolasi data. Anda tidak memiliki izin untuk mengusulkan bagi hasil event milik penyelenggara lain.");
     }
     if (isDagoAdminParty && !isAdmin) {
       throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat mengusulkan bagi hasil atas nama Dago.");
+    }
+
+    // LOCK GUARD: Revenue split is locked once a booking exists (anything other than CANCELLED or EXPIRED)
+    if (isEventRevenueSplitLocked(event.id)) {
+      const err: any = new Error(
+        "EVENT_REVENUE_SPLIT_LOCKED: Ketentuan bagi hasil event ini telah terkunci permanen karena telah terdapat pemesanan tiket aktif. Persentase bagi hasil tidak dapat diubah kembali."
+      );
+      err.code = "EVENT_REVENUE_SPLIT_LOCKED";
+      throw err;
     }
 
     const newProposal: ProposedRevenueSplit = {
@@ -3116,7 +3266,8 @@ export async function proposeEventRevenueSplit(
 
 /**
  * Respond to a pending revenue split proposal (ACCEPT, REJECT, or COUNTER).
- * Only the opposite party or authorized Admin can respond.
+ * Only authorized Admin can finalize/ACCEPT the split.
+ * Organizers may only propose or counter-offer.
  */
 export async function respondToEventRevenueSplit(
   eventId: string,
@@ -3129,6 +3280,7 @@ export async function respondToEventRevenueSplit(
 ): Promise<CommunityEvent> {
   return withEventLock(async () => {
     await syncStorageFromDb("events.json").catch(() => {});
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
     const normalizedId = (eventId || "").trim().toLowerCase();
     let all = loadEventsFromDisk();
     let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
@@ -3148,10 +3300,19 @@ export async function respondToEventRevenueSplit(
     const isDagoAdminParty = respondingParty === "DAGO_ADMIN" || (respondingParty as string) === "ADMIN";
 
     if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
-      throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk merespons bagi hasil event ini.");
+      throw new Error("FORBIDDEN: Pelanggaran isolasi data. Anda tidak memiliki izin untuk merespons bagi hasil event milik penyelenggara lain.");
     }
     if (isDagoAdminParty && !isAdmin) {
       throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat merespons kesepakatan atas nama Dago.");
+    }
+
+    // LOCK GUARD: Revenue split is locked once a booking exists (anything other than CANCELLED or EXPIRED)
+    if (isEventRevenueSplitLocked(event.id)) {
+      const err: any = new Error(
+        "EVENT_REVENUE_SPLIT_LOCKED: Ketentuan bagi hasil event ini telah terkunci permanen karena telah terdapat pemesanan tiket aktif. Persentase bagi hasil tidak dapat diubah kembali."
+      );
+      err.code = "EVENT_REVENUE_SPLIT_LOCKED";
+      throw err;
     }
 
     const pendingProposal = event.proposedRevenueSplit;
@@ -3169,6 +3330,18 @@ export async function respondToEventRevenueSplit(
         throw new Error("Pihak yang mengajukan usulan tidak dapat menyetujui usulannya sendiri. Menunggu tanggapan dari pihak lawan.");
       }
 
+      // Admin can accept any proposal. Organizers may only accept counter-proposals initiated by Admin.
+      if (!isAdmin && !isDagoAdminParty) {
+        const proposerIsAdmin =
+          pendingProposal.proposedBy === "DAGO_ADMIN" ||
+          (pendingProposal.proposedBy as string) === "ADMIN";
+        if (!proposerIsAdmin) {
+          throw new Error(
+            "FORBIDDEN: Hanya Admin Dago yang memiliki wewenang untuk menetapkan atau menyetujui persentase bagi hasil final."
+          );
+        }
+      }
+
       const prevOrganizerPercent = event.organizerFeePercent ?? 80;
       const prevPlatformPercent = event.customPlatformFeePercent ?? 20;
 
@@ -3182,12 +3355,12 @@ export async function respondToEventRevenueSplit(
         agreedPlatformPercent: pendingProposal.platformPercent,
         proposedBy: pendingProposal.proposedBy,
         reason: pendingProposal.reason || "Kesepakatan bagi hasil disetujui",
-        approvedBy: actorName || (isDagoAdminParty ? "Admin Dago" : event.organizerName),
+        approvedBy: actorName || "Admin Dago",
         approvedAt: now,
-        agreedBy: actorName || (isDagoAdminParty ? "Admin Dago" : event.organizerName),
+        agreedBy: actorName || "Admin Dago",
         agreedAt: now,
         effectiveDate: now,
-        notes: pendingProposal.reason || `Disetujui oleh ${isDagoAdminParty ? "Admin Dago" : "Penyelenggara"}`,
+        notes: pendingProposal.reason || "Disetujui oleh Admin Dago",
       };
 
       event.revenueSplitHistory = [historyEntry, ...(event.revenueSplitHistory || [])];
@@ -3206,8 +3379,11 @@ export async function respondToEventRevenueSplit(
       if (!counterOffer) {
         throw new Error("Rincian penawaran tandingan wajib disertakan.");
       }
-      if (counterOffer.organizerPercent + counterOffer.platformPercent !== 100) {
-        throw new Error("Total penawaran tandingan harus tepat 100%.");
+      if (!Number.isInteger(counterOffer.platformPercent) || counterOffer.platformPercent < 0 || counterOffer.platformPercent > 50) {
+        throw new Error("Persentase komisi platform pada penawaran tandingan harus berupa bilangan bulat antara 0% hingga 50%.");
+      }
+      if (!Number.isInteger(counterOffer.organizerPercent) || counterOffer.organizerPercent !== 100 - counterOffer.platformPercent) {
+        throw new Error("Total persentase penawaran tandingan harus tepat 100%.");
       }
 
       event.proposedRevenueSplit = {
