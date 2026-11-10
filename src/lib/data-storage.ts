@@ -168,14 +168,14 @@ export async function syncStorageFromDb(filename: string): Promise<boolean> {
 
     const queryPromise = db.systemSetting.findUnique({ where: { key } });
     const timeoutPromise = new Promise<"TIMEOUT">((resolve) =>
-      setTimeout(() => resolve("TIMEOUT"), 3500)
+      setTimeout(() => resolve("TIMEOUT"), 8000)
     );
 
     const result = await Promise.race([queryPromise, timeoutPromise]);
 
     if (result === "TIMEOUT") {
       storageSyncStatusMap.set(filename, "TIMEOUT");
-      console.warn(`[data-storage] syncStorageFromDb TIMEOUT (15000ms) for ${filename}. Database state unconfirmed.`);
+      console.warn(`[data-storage] syncStorageFromDb TIMEOUT (8000ms) for ${filename}. Database state unconfirmed.`);
       return false;
     }
 
@@ -283,12 +283,12 @@ export async function persistStorageToDb(filename: string, content: string): Pro
         () =>
           reject(
             new DatabasePersistenceError(
-              `Batas waktu (timeout 5000ms) penyimpanan [${filename}] ke database PostgreSQL terlampaui. Operasi belum dapat dikonfirmasi oleh database.`,
+              `Batas waktu (timeout 8000ms) penyimpanan [${filename}] ke database PostgreSQL terlampaui. Operasi belum dapat dikonfirmasi oleh database.`,
               filename,
               true
             )
           ),
-        5000
+        8000
       )
     );
 

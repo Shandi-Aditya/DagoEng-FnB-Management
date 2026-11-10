@@ -1030,8 +1030,24 @@ export function getEventTicketAvailability(eventId: string): EventTicketAvailabi
  * Includes calculated real-time ticket availability.
  */
 export async function getPublicEventById(id: string): Promise<PublicCommunityEvent | null> {
-  const all = loadEventsFromDisk();
-  const event = all.find((e) => e.id === id && e.status === "APPROVED");
+  await syncStorageFromDb("events.json").catch(() => {});
+  const normalizedId = (id || "").trim().toLowerCase();
+  let all = loadEventsFromDisk();
+  let event = all.find(
+    (e) =>
+      ((e.id || "").trim().toLowerCase() === normalizedId || e.id === id) &&
+      e.status === "APPROVED"
+  );
+  if (!event) {
+    // Retry once in case of serverless cold-start sync delay
+    await syncStorageFromDb("events.json").catch(() => {});
+    all = loadEventsFromDisk();
+    event = all.find(
+      (e) =>
+        ((e.id || "").trim().toLowerCase() === normalizedId || e.id === id) &&
+        e.status === "APPROVED"
+    );
+  }
   if (!event) return null;
   const publicEvt = toPublicEvent(event);
   try {
@@ -1059,8 +1075,16 @@ export async function getAdminEvents(statusFilter?: EventStatus): Promise<Commun
  * Get a single event by ID for Admin Moderation.
  */
 export async function getAdminEventById(id: string): Promise<CommunityEvent | null> {
-  const all = loadEventsFromDisk();
-  const found = all.find((e) => e.id === id);
+  await syncStorageFromDb("events.json").catch(() => {});
+  const normalizedId = (id || "").trim().toLowerCase();
+  let all = loadEventsFromDisk();
+  let found = all.find((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
+  if (!found) {
+    // Retry once in case of serverless cold-start sync delay
+    await syncStorageFromDb("events.json").catch(() => {});
+    all = loadEventsFromDisk();
+    found = all.find((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
+  }
   return found || null;
 }
 
@@ -1350,8 +1374,15 @@ export async function updateEventStatus(
 ): Promise<CommunityEvent> {
   return withEventLock(async () => {
     await syncStorageFromDb("events.json").catch(() => {});
-    const all = loadEventsFromDisk();
-    const index = all.findIndex((e) => e.id === id);
+    const normalizedId = (id || "").trim().toLowerCase();
+    let all = loadEventsFromDisk();
+    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
+    if (index === -1) {
+      // Retry once in case of serverless cold-start sync delay
+      await syncStorageFromDb("events.json").catch(() => {});
+      all = loadEventsFromDisk();
+      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
+    }
     if (index === -1) {
       throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
     }
@@ -1395,8 +1426,14 @@ export async function updateEventDetails(
 ): Promise<CommunityEvent> {
   return withEventLock(async () => {
     await syncStorageFromDb("events.json").catch(() => {});
-    const all = loadEventsFromDisk();
-    const index = all.findIndex((e) => e.id === id);
+    const normalizedId = (id || "").trim().toLowerCase();
+    let all = loadEventsFromDisk();
+    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
+    if (index === -1) {
+      await syncStorageFromDb("events.json").catch(() => {});
+      all = loadEventsFromDisk();
+      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
+    }
     if (index === -1) {
       throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
     }
@@ -1464,8 +1501,14 @@ export async function setEventCommissionOverride(
 ): Promise<CommunityEvent> {
   return withEventLock(async () => {
     await syncStorageFromDb("events.json").catch(() => {});
-    const all = loadEventsFromDisk();
-    const index = all.findIndex((e) => e.id === eventId);
+    const normalizedId = (eventId || "").trim().toLowerCase();
+    let all = loadEventsFromDisk();
+    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    if (index === -1) {
+      await syncStorageFromDb("events.json").catch(() => {});
+      all = loadEventsFromDisk();
+      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    }
     if (index === -1) {
       throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
     }
@@ -2810,8 +2853,14 @@ export async function organizerResubmitEvent(
   return withEventLock(async () => {
     const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
     await syncStorageFromDb("events.json").catch(() => {});
-    const all = loadEventsFromDisk();
-    const index = all.findIndex((e) => e.id === eventId);
+    const normalizedId = (eventId || "").trim().toLowerCase();
+    let all = loadEventsFromDisk();
+    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    if (index === -1) {
+      await syncStorageFromDb("events.json").catch(() => {});
+      all = loadEventsFromDisk();
+      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    }
     if (index === -1) {
       throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
     }
@@ -2891,8 +2940,14 @@ export async function proposeEventRevenueSplit(
     }
 
     await syncStorageFromDb("events.json").catch(() => {});
-    const all = loadEventsFromDisk();
-    const index = all.findIndex((e) => e.id === eventId);
+    const normalizedId = (eventId || "").trim().toLowerCase();
+    let all = loadEventsFromDisk();
+    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    if (index === -1) {
+      await syncStorageFromDb("events.json").catch(() => {});
+      all = loadEventsFromDisk();
+      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    }
     if (index === -1) {
       throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
     }
@@ -2946,8 +3001,14 @@ export async function respondToEventRevenueSplit(
 ): Promise<CommunityEvent> {
   return withEventLock(async () => {
     await syncStorageFromDb("events.json").catch(() => {});
-    const all = loadEventsFromDisk();
-    const index = all.findIndex((e) => e.id === eventId);
+    const normalizedId = (eventId || "").trim().toLowerCase();
+    let all = loadEventsFromDisk();
+    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    if (index === -1) {
+      await syncStorageFromDb("events.json").catch(() => {});
+      all = loadEventsFromDisk();
+      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    }
     if (index === -1) {
       throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
     }
@@ -3055,8 +3116,15 @@ export async function requestOrganizerPayout(
 ): Promise<{ event: CommunityEvent; payout: PayoutRecord }> {
   return withEventLock(async () => {
     const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
-    const all = loadEventsFromDisk();
-    const index = all.findIndex((e) => e.id === eventId);
+    await syncStorageFromDb("events.json").catch(() => {});
+    const normalizedId = (eventId || "").trim().toLowerCase();
+    let all = loadEventsFromDisk();
+    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    if (index === -1) {
+      await syncStorageFromDb("events.json").catch(() => {});
+      all = loadEventsFromDisk();
+      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    }
     if (index === -1) {
       throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
     }
@@ -3146,8 +3214,15 @@ export async function processOrganizerPayout(
   actorName: string = "Admin Dago"
 ): Promise<{ event: CommunityEvent; payout: PayoutRecord }> {
   return withEventLock(async () => {
-    const all = loadEventsFromDisk();
-    const index = all.findIndex((e) => e.id === eventId);
+    await syncStorageFromDb("events.json").catch(() => {});
+    const normalizedId = (eventId || "").trim().toLowerCase();
+    let all = loadEventsFromDisk();
+    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    if (index === -1) {
+      await syncStorageFromDb("events.json").catch(() => {});
+      all = loadEventsFromDisk();
+      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+    }
     if (index === -1) {
       throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
     }
