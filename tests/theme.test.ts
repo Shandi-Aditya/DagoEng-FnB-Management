@@ -50,4 +50,33 @@ describe("Theme Management & Design System Logic", () => {
     expect(currentTheme).toBe("light");
     expect(mockLocalStorage.getItem("dagoeng_theme_preference")).toBe("light");
   });
+
+  describe("Typography & Font Best Practices", () => {
+    it("ensures globals.css avoids render-blocking @import and defines DM font variables with tabular numbers", async () => {
+      const fs = await import("fs");
+      const path = await import("path");
+      const cssPath = path.resolve(process.cwd(), "src/app/globals.css");
+      const content = fs.readFileSync(cssPath, "utf-8");
+
+      // Verify no render-blocking @import at top of css
+      expect(content).not.toMatch(/@import\s+url\(.+fonts\.googleapis\.com/);
+
+      // Verify CSS variables and tabular-nums are declared
+      expect(content).toContain("--font-dm-sans");
+      expect(content).toContain("--font-dm-mono");
+      expect(content).toContain("tabular-nums");
+    });
+
+    it("ensures layout.tsx implements preconnect and display=swap for font performance", async () => {
+      const fs = await import("fs");
+      const path = await import("path");
+      const layoutPath = path.resolve(process.cwd(), "src/app/layout.tsx");
+      const content = fs.readFileSync(layoutPath, "utf-8");
+
+      expect(content).toContain('rel="preconnect"');
+      expect(content).toContain('href="https://fonts.googleapis.com"');
+      expect(content).toContain('href="https://fonts.gstatic.com"');
+      expect(content).toContain("display=swap");
+    });
+  });
 });
