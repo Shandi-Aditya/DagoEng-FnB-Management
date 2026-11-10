@@ -49,7 +49,7 @@ import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
 export default function OrdersPage() {
   const { user } = useAuth();
   const { filteredOrders, advanceOrderStatus } = useOrders();
-  const { simulateBOMDeduction } = useInventory();
+  const { simulateBOMDeduction, deductOrderBOM } = useInventory();
   const { members, addPoints } = useLoyalty();
   const { releaseTableToAvailable } = useTables();
   const { logActivity } = useActivityLog();
@@ -116,6 +116,7 @@ export default function OrdersPage() {
       cashierName: user?.name || "Kasir / Petugas",
       timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
       reprintedBy: purpose === "REPRINT" ? user?.name || "Petugas" : undefined,
+      kitchenNotes: order.notes,
     };
   };
 
@@ -291,10 +292,13 @@ export default function OrdersPage() {
           : 0;
     recordShiftTransaction(cashPortion, paymentOrder.total - cashPortion, paymentOrder.outletId, paymentOrder.id);
 
-    // 2. Inventory: Deduct ingredients based on Recipe BOM
-    paymentOrder.items.forEach((item) => {
-      simulateBOMDeduction(item.productName, item.quantity);
-    });
+    // 2. Inventory: Deduct ingredients based on Recipe BOM (POS-36 / B4)
+    const bomItems = paymentOrder.items.map((it) => ({
+      productName: it.productName,
+      quantity: it.quantity,
+      modifiers: it.modifiers,
+    }));
+    deductOrderBOM(bomItems);
 
     // 3. Loyalty: Add points if customer is registered
     const matchingMember = members.find(
@@ -308,7 +312,8 @@ export default function OrdersPage() {
           matchingMember.id,
           pointsAdded,
           `Penyelesaian Pesanan #${paymentOrder.orderNumber}`,
-          paymentOrder.id
+          paymentOrder.id,
+          paymentOrder.total
         );
       }
     }
@@ -830,22 +835,25 @@ export default function OrdersPage() {
       )}
 
       {/* POS Payment Modal Integration */}
-      {paymentOrder && (
-        <PaymentModal
-          isOpen={isPaymentModalOpen}
-          onClose={() => setIsPaymentModalOpen(false)}
-          cartItems={modalCartItems}
-          subtotal={paymentOrder.subtotal}
-          tax={paymentOrder.tax}
-          serviceCharge={0}
-          discount={paymentOrder.discount || 0}
-          grandTotal={paymentOrder.total}
-          tableNumber={paymentOrder.tableNumber}
-          customerName={paymentOrder.customerName}
-          orderType={paymentOrder.orderType === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN"}
-          onPaymentSuccess={handlePaymentSuccess}
-        />
-      )}
+      {paymentOrder && (() => {
+        const pBreakdown = getOrderTaxBreakdown(paymentOrder);
+        return (
+          <PaymentModal
+            isOpen={isPaymentModalOpen}
+            onClose={() => setIsPaymentModalOpen(false)}
+            cartItems={modalCartItems}
+            subtotal={pBreakdown.subtotal}
+            tax={pBreakdown.pb1}
+            serviceCharge={pBreakdown.serviceCharge}
+            discount={pBreakdown.discount}
+            grandTotal={pBreakdown.total}
+            tableNumber={paymentOrder.tableNumber}
+            customerName={paymentOrder.customerName}
+            orderType={paymentOrder.orderType === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN"}
+            onPaymentSuccess={handlePaymentSuccess}
+          />
+        );
+      })()}
 
       {/* PDF Report Modal */}
       <OrdersReportPDFModal

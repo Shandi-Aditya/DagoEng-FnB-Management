@@ -248,11 +248,19 @@ export function calculateOrderPricing(
   };
 }
 
+export type CoworkingTaxType = "NON_TAX" | "PPN" | "PB1";
+
+export interface CoworkingCalculationResult extends OrderCalculationResult {
+  taxType: CoworkingTaxType;
+  taxRatePercent: number;
+}
+
 export function calculateCoworkingPricing(
   basePrice: number,
   promo?: PromoConfig,
-  taxRate: number = 0.1
-): OrderCalculationResult {
+  taxRate: number = 0,
+  taxType?: CoworkingTaxType
+): CoworkingCalculationResult {
   const originalSubtotal = basePrice;
   let discountAmount = 0;
 
@@ -274,8 +282,12 @@ export function calculateCoworkingPricing(
   if (discountAmount < 0) discountAmount = 0;
 
   const subtotalAfterDiscount = originalSubtotal - discountAmount;
-  const tax = subtotalAfterDiscount * taxRate;
+  const effectiveTaxRate = taxRate > 0 ? taxRate : 0;
+  const tax = effectiveTaxRate > 0 ? subtotalAfterDiscount * effectiveTaxRate : 0;
   const total = subtotalAfterDiscount + tax;
+
+  const effectiveTaxType: CoworkingTaxType =
+    taxType || (effectiveTaxRate > 0 ? "PPN" : "NON_TAX");
 
   return {
     originalSubtotal,
@@ -283,6 +295,8 @@ export function calculateCoworkingPricing(
     subtotalAfterDiscount: Math.round(subtotalAfterDiscount),
     tax: Math.round(tax),
     total: Math.round(total),
+    taxType: effectiveTaxType,
+    taxRatePercent: Math.round(effectiveTaxRate * 100),
   };
 }
 

@@ -82,6 +82,7 @@ import {
   HolidayOverrideDate,
   TenantOperationConfig,
 } from "@/lib/operating-hours";
+import { CategoryTaxType } from "@/types/settings";
 import { Button } from "@/components/ui/button";
 import {
   getTenantStatus,
@@ -153,6 +154,15 @@ export default function SettingsPage() {
   const [lowStock, setLowStock] = useState(settings.lowStockThresholdPercent);
   const [taxRate, setTaxRate] = useState(settings.taxRatePercent);
   const [serviceCharge, setServiceCharge] = useState(settings.serviceChargePercent);
+
+  // Category Tax Flexibility (B8 / POS-07 / TC-E02)
+  const [fnbTaxType, setFnbTaxType] = useState<CategoryTaxType>(settings.categoryTax?.fnb?.taxType || "PB1");
+  const [fnbTaxRate, setFnbTaxRate] = useState(settings.categoryTax?.fnb?.taxRatePercent ?? settings.taxRatePercent ?? 10);
+  const [fnbTaxEnabled, setFnbTaxEnabled] = useState(settings.categoryTax?.fnb?.isEnabled ?? true);
+
+  const [cwTaxType, setCwTaxType] = useState<CategoryTaxType>(settings.categoryTax?.coworking?.taxType || "NON_TAX");
+  const [cwTaxRate, setCwTaxRate] = useState(settings.categoryTax?.coworking?.taxRatePercent ?? 0);
+  const [cwTaxEnabled, setCwTaxEnabled] = useState(settings.categoryTax?.coworking?.isEnabled ?? false);
 
   // Loyalty thresholds
   const [silverPts, setSilverPts] = useState(settings.loyaltyTiers.silverMin);
@@ -1223,8 +1233,21 @@ export default function SettingsPage() {
       timezone,
       currency,
       lowStockThresholdPercent: Number(lowStock),
-      taxRatePercent: Number(taxRate),
+      taxRatePercent: Number(fnbTaxRate),
+      isTaxEnabled: fnbTaxEnabled,
       serviceChargePercent: Number(serviceCharge),
+      categoryTax: {
+        fnb: {
+          taxType: fnbTaxType,
+          taxRatePercent: Number(fnbTaxRate),
+          isEnabled: fnbTaxEnabled,
+        },
+        coworking: {
+          taxType: cwTaxType,
+          taxRatePercent: Number(cwTaxRate),
+          isEnabled: cwTaxEnabled,
+        },
+      },
       loyaltyTiers: {
         bronzeMin: 0,
         bronzeMax: Number(silverPts) - 1,
@@ -5184,35 +5207,109 @@ export default function SettingsPage() {
                   </CardContent>
                 </Card>
 
-                {/* Tax & Financial Charges */}
+                {/* Tax & Financial Charges (B8 / POS-07 / TC-E02) */}
                 <Card className="shadow-2xs border border-slate-200">
                   <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
                     <CardTitle className="text-sm font-bold text-slate-800 flex items-center space-x-2">
                       <Receipt className="w-4 h-4 text-purple-600" />
-                      <span>Konfigurasi Pajak PB1 & Service Charge</span>
+                      <span>Konfigurasi Pajak & Service Charge Fleksibel per Kategori</span>
                     </CardTitle>
+                    <CardDescription className="text-xs text-slate-500">
+                      Pengaturan tarif dan perlakuan perpajakan terpisah untuk Kuliner F&B vs Co-working Space.
+                    </CardDescription>
                   </CardHeader>
-                  <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <label className="block text-slate-700 font-semibold mb-1">Pajak Restoran / PB1 (%)</label>
-                      <input
-                        type="number"
-                        value={taxRate}
-                        onChange={(e) => setTaxRate(Number(e.target.value))}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold"
-                      />
-                      <p className="text-[10px] text-slate-400 mt-1">Diterapkan otomatis pada kalkulasi struk POS Kasir.</p>
+                  <CardContent className="p-4 space-y-4 text-xs">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* F&B Tax Settings */}
+                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-slate-800 text-xs">Pajak Kuliner F&B (PB1)</span>
+                          <button
+                            type="button"
+                            onClick={() => setFnbTaxEnabled(!fnbTaxEnabled)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              fnbTaxEnabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+                            }`}
+                          >
+                            {fnbTaxEnabled ? "AKTIF" : "NON-AKTIF"}
+                          </button>
+                        </div>
+                        <div>
+                          <label className="block text-slate-600 font-semibold mb-1">Tarif Pajak Restoran / PB1 (%)</label>
+                          <input
+                            type="number"
+                            disabled={!fnbTaxEnabled}
+                            value={fnbTaxRate}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setFnbTaxRate(val);
+                              setTaxRate(val);
+                            }}
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold bg-white disabled:bg-slate-100"
+                          />
+                          <p className="text-[10px] text-slate-400 mt-1">
+                            Pajak Daerah PB1 10% dipungut atas pesanan makanan dan minuman di kasir.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Coworking Tax Settings */}
+                      <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-blue-900 text-xs">Pajak Co-Working Space</span>
+                          <button
+                            type="button"
+                            onClick={() => setCwTaxEnabled(!cwTaxEnabled)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              cwTaxEnabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+                            }`}
+                          >
+                            {cwTaxEnabled ? "KENA PAJAK" : "BEBAS PAJAK (0%)"}
+                          </button>
+                        </div>
+                        <div className="space-y-2">
+                          <div>
+                            <label className="block text-slate-600 font-semibold mb-1">Jenis Perlakuan Pajak</label>
+                            <select
+                              value={cwTaxType}
+                              onChange={(e) => setCwTaxType(e.target.value as CategoryTaxType)}
+                              disabled={!cwTaxEnabled}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white disabled:bg-slate-100 font-bold"
+                            >
+                              <option value="NON_TAX">Bebas Pajak / Non-PB1 (0%)</option>
+                              <option value="PPN">PPN Jasa Sewa Ruangan</option>
+                              <option value="PB1">PB1 (Opsional Tambahan)</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-slate-600 font-semibold mb-1">Tarif Pajak Co-Working (%)</label>
+                            <input
+                              type="number"
+                              disabled={!cwTaxEnabled}
+                              value={cwTaxRate}
+                              onChange={(e) => setCwTaxRate(Number(e.target.value))}
+                              className="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold bg-white disabled:bg-slate-100"
+                            />
+                            <p className="text-[10px] text-slate-500 mt-1">
+                              Secara regulasi sewa ruangan co-working bukan objek PB1 restoran.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
 
-                    <div>
-                      <label className="block text-slate-700 font-semibold mb-1">Service Charge Gerai (%)</label>
+                    {/* Service Charge */}
+                    <div className="p-3 bg-amber-50/40 border border-amber-200 rounded-xl">
+                      <label className="block text-slate-700 font-semibold mb-1">Service Charge Gerai Dine-In (%)</label>
                       <input
                         type="number"
                         value={serviceCharge}
                         onChange={(e) => setServiceCharge(Number(e.target.value))}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold"
+                        className="w-full max-w-xs px-3 py-2 border border-slate-300 rounded-lg font-bold bg-white"
                       />
-                      <p className="text-[10px] text-slate-400 mt-1">Biaya pelayanan dine-in operasional gerai.</p>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Biaya pelayanan 5% diterapkan khusus pesanan Dine-In sebelum penghitungan PB1.
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
