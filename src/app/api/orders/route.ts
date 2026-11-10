@@ -93,7 +93,7 @@ function canonicalSale(order: OrderRecord): string {
 
 type OrderWriteDecision =
   | { allowed: true; auditPaidChange: boolean }
-  | { allowed: false; error: string };
+  | { allowed: false; error: string; status?: number };
 
 /**
  * Who may write what:
@@ -124,6 +124,16 @@ function decideOrderWrite(
     canonicalSale(existing) === canonicalSale(next) &&
     historyOnlyAppends(existing, next);
   if (workflowOnly) return { allowed: true, auditPaidChange: false };
+
+  if (existing.paymentStatus === "PAID") {
+    if (!isSupervisor) {
+      return {
+        allowed: false,
+        error:
+          "FORBIDDEN: ORDER_ALREADY_PAID: Pesanan ini sudah berstatus lunas. Pembayaran kedua ditolak. Perubahan data atau pembatalan transaksi yang sudah lunas wajib dilakukan oleh supervisor (Manager/Owner).",
+      };
+    }
+  }
 
   if (existing.paymentStatus !== "PAID" && !isClosed) {
     return isPosRole
@@ -293,7 +303,7 @@ export async function POST(req: NextRequest) {
     const existingOrder = (await getPersistentOrders()).find((o) => o.id === orderData.id);
     const decision = decideOrderWrite(auth.role, existingOrder, orderData);
     if (!decision.allowed) {
-      return NextResponse.json({ error: decision.error }, { status: 403 });
+      return NextResponse.json({ error: decision.error }, { status: decision.status || 403 });
     }
     const reversesPaidOrder = decision.auditPaidChange;
 

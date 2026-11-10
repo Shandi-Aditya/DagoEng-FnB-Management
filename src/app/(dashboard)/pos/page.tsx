@@ -11,6 +11,7 @@ import { useLoyalty } from "@/contexts/LoyaltyContext";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { calculateOrderPricing, calculateCoworkingPricing, validateVoucherCode, PromoConfig } from "@/lib/promo";
+import { calculateCartTaxAndService } from "@/lib/tax-breakdown";
 import { LOYALTY_VOUCHERS } from "@/features/pos/mock-data";
 import { useCoworking } from "@/contexts/CoworkingContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
@@ -143,7 +144,7 @@ export default function POSPage() {
   const { activeOutlet, activeOutletId } = useOutlet();
   const { createPosOrder, filteredOrders } = useOrders();
   const { getAvailableTables, occupyTableWithOrder, areas, filteredAreas } = useTables();
-  const { simulateBOMDeduction, checkProductStockStatus } = useInventory();
+  const { simulateBOMDeduction, deductOrderBOM, checkProductStockStatus } = useInventory();
   const { filteredProducts: masterProducts, categories } = useProducts();
   const { filteredMembers: membersList, addPoints, redeemPoints } = useLoyalty();
   const { logActivity } = useActivityLog();
@@ -436,10 +437,23 @@ export default function POSPage() {
   }, [appliedVoucher, subtotal]);
 
   const totalDiscount = promoDiscountAmount + voucherDiscountAmount;
-  const taxableAmount = Math.max(0, subtotal - totalDiscount);
-  const taxPB1 = isTaxEnabled ? Math.round(taxableAmount * ((Number(taxRatePercent) || 0) / 100)) : 0;
-  const serviceCharge = orderType === "DINE_IN" ? Math.round(taxableAmount * ((Number(settings.serviceChargePercent) || 0) / 100)) : 0;
-  const grandTotal = Math.max(0, taxableAmount + taxPB1 + serviceCharge);
+
+  // Single centralized tax & service charge calculation (POS-11, POS-27 / B2)
+  const cartTaxBreakdown = useMemo(() => {
+    return calculateCartTaxAndService({
+      subtotal,
+      discount: totalDiscount,
+      taxRatePercent: Number(taxRatePercent) || 10,
+      serviceChargePercent: Number(settings.serviceChargePercent) || 0,
+      isTaxEnabled,
+      orderType,
+    });
+  }, [subtotal, totalDiscount, taxRatePercent, settings.serviceChargePercent, isTaxEnabled, orderType]);
+
+  const taxableAmount = cartTaxBreakdown.dpp;
+  const taxPB1 = cartTaxBreakdown.pb1;
+  const serviceCharge = cartTaxBreakdown.serviceCharge;
+  const grandTotal = cartTaxBreakdown.total;
 
   // Handle Product Card Click -> Open Customization Modal
   const handleSelectProduct = (product: any) => {
@@ -661,10 +675,16 @@ export default function POSPage() {
       });
     }
 
-    // 2. Cross-Module: Auto-deduct inventory ingredients based on Recipe BOM
-    cartItems.forEach((item) => {
-      simulateBOMDeduction(item.productName, item.quantity);
-    });
+    // 2. Cross-Module: Auto-deduct inventory ingredients based on Recipe BOM (POS-36 / B4)
+    const bomItems = cartItems.map((c) => ({
+      productName: c.productName,
+      quantity: c.quantity,
+      modifiers: [
+        ...(c.selectedVariant ? [c.selectedVariant.name] : []),
+        ...c.selectedModifiers.map((m) => m.name),
+      ],
+    }));
+    deductOrderBOM(bomItems);
 
     // 3. Cross-Module: If Dine-in, occupy table in TableContext
     if (orderType === "DINE_IN" && selectedTable) {
@@ -683,7 +703,7 @@ export default function POSPage() {
         redeemPoints(selectedMember.id, appliedVoucher.pointsCost, `Voucher "${appliedVoucher.title}" pada ${receiptNo}`);
       }
       const earnedPoints = Math.floor(grandTotal / 1000); // 1 pt per Rp 1.000 spend
-      addPoints(selectedMember.id, earnedPoints, `Transaksi POS #${receiptNo}`, createdOrder.id);
+      addPoints(selectedMember.id, earnedPoints, `Transaksi POS #${receiptNo}`, createdOrder.id, grandTotal);
 
       loyaltyReceiptInfo = {
         name: selectedMember.name,
@@ -866,10 +886,14 @@ export default function POSPage() {
     return (selectedSpace.hourlyRate || 15000) * cwDuration;
   }, [selectedSpace, cwDuration]);
 
-  const cwTaxRate = isTaxEnabled ? (taxRatePercent || 10) / 100 : 0;
+  const cwTaxConfig = settings?.categoryTax?.coworking;
+  const cwTaxEnabled = cwTaxConfig !== undefined ? cwTaxConfig.isEnabled : false;
+  const cwTaxRate = cwTaxEnabled && cwTaxConfig ? (cwTaxConfig.taxRatePercent || 0) / 100 : 0;
+  const cwTaxType = cwTaxConfig?.taxType || "NON_TAX";
+
   const cwPricing = useMemo(() => {
-    return calculateCoworkingPricing(cwBaseAmount, cwAppliedPromo || undefined, cwTaxRate);
-  }, [cwBaseAmount, cwAppliedPromo, cwTaxRate]);
+    return calculateCoworkingPricing(cwBaseAmount, cwAppliedPromo || undefined, cwTaxRate, cwTaxType);
+  }, [cwBaseAmount, cwAppliedPromo, cwTaxRate, cwTaxType]);
 
   const handleApplyCoworkVoucher = (codeToApply?: string) => {
     const code = (codeToApply !== undefined ? codeToApply : cwVoucherCode).trim();
@@ -1049,6 +1073,8 @@ export default function POSPage() {
       discount: cwPricing.discountAmount > 0 ? cwPricing.discountAmount : undefined,
       promoTitle: cwAppliedPromo ? (cwAppliedPromo.code ? `[${cwAppliedPromo.code}] ${cwAppliedPromo.name}` : cwAppliedPromo.name) : undefined,
       tax: cwPricing.tax > 0 ? cwPricing.tax : 0,
+      taxType: cwPricing.taxType,
+      taxRatePercent: cwPricing.taxRatePercent,
       serviceCharge: 0,
       totalAmount: cwPricing.total,
       paymentMethod: cwPaymentMethod,

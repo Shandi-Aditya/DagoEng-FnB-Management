@@ -219,7 +219,7 @@ function CustomerPortalContent() {
   const { members, getOrCreateMember, redeemPoints, reverseTransactionPoints, addPoints } = useLoyalty();
   const { orders, createOrder, advanceOrderStatus } = useOrders();
   const { areas, filteredAreas, getAvailableTables, releaseTableToAvailable, occupyTableWithOrder } = useTables();
-  const { simulateBOMDeduction } = useInventory();
+  const { simulateBOMDeduction, deductOrderBOM } = useInventory();
   const { spaces, bookings, bookSpace, confirmBookingPayment, cancelBooking } = useCoworking();
   const { settings, redeemPromo } = useSettings();
 
@@ -1129,10 +1129,13 @@ function CustomerPortalContent() {
       }
     );
 
-    // 2. Inventory: Deduct ingredients based on Recipe BOM
-    targetOrder.items.forEach((ci) => {
-      simulateBOMDeduction(ci.productName, ci.quantity);
-    });
+    // 2. Inventory: Deduct ingredients based on Recipe BOM (POS-36 / B4)
+    const bomItems = targetOrder.items.map((ci) => ({
+      productName: ci.productName,
+      quantity: ci.quantity,
+      modifiers: ci.modifiers,
+    }));
+    deductOrderBOM(bomItems);
 
     // 3. Loyalty: Award points ONLY now upon successful payment
     let pointsEarned = 0;
@@ -1143,7 +1146,8 @@ function CustomerPortalContent() {
           currentMember.id,
           pointsEarned,
           `Pesanan Mandiri #${targetOrder.orderNumber} (Lunas)`,
-          targetOrder.id
+          targetOrder.id,
+          targetOrder.total
         );
       }
     }
@@ -1337,8 +1341,9 @@ function CustomerPortalContent() {
       computedEndTime = "18:00 WITA";
     }
 
-    const taxRate = (settings?.taxRatePercent !== undefined ? settings.taxRatePercent : 10) / 100;
-    const calc = calculateCoworkingPricing(subtotal, appliedCoworkPromo || undefined, taxRate);
+    const cwTaxConfig = settings?.categoryTax?.coworking;
+    const taxRate = cwTaxConfig?.isEnabled ? (cwTaxConfig.taxRatePercent || 0) / 100 : 0;
+    const calc = calculateCoworkingPricing(subtotal, appliedCoworkPromo || undefined, taxRate, cwTaxConfig?.taxType);
 
     // 1. Holiday & Closed Date Validation (Revisi 1)
     const holidayCheck = validateCoworkingDateRange(
@@ -3746,8 +3751,9 @@ function CustomerPortalContent() {
                             baseRate = (selectedSpaceForBooking?.dailyRate || 75000) * effectiveDuration;
                           }
 
-                          const taxRate = (settings?.taxRatePercent !== undefined ? settings.taxRatePercent : 10) / 100;
-                          const calc = calculateCoworkingPricing(baseRate, appliedCoworkPromo || undefined, taxRate);
+                          const cwTaxConfig = settings?.categoryTax?.coworking;
+                          const taxRate = cwTaxConfig?.isEnabled ? (cwTaxConfig.taxRatePercent || 0) / 100 : 0;
+                          const calc = calculateCoworkingPricing(baseRate, appliedCoworkPromo || undefined, taxRate, cwTaxConfig?.taxType);
                           return (
                             <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100 space-y-1.5 text-xs">
                               <div className="flex justify-between text-slate-600">

@@ -1,64 +1,47 @@
-# Bug Fix Playbook — QA Handover POS A1 sampai A6
+# Bug Fix Playbook — QA Handover POS B1 sampai B8
 
 - [ ] 1. Reproduce it yourself on the matching surface via the driver skill
 - [ ] 2. Binary-search the cause
 - [ ] 3. Plan the fix
 - [ ] 4. Verify on the same surface
 - [ ] 5. Stage the commits so the failing repro lands before the fix in git history
-- [ ] 6. Run Opening a PR: skip: local developer task without git push target
+- [ ] 6. Run Opening a PR: skip: local branch development
 
-## Task Checklist (A1 to A6)
-- [x] **A1. Shift Kasir Terbuka Otomatis dan Jatuh ke Akun yang Salah (POS-01, POS-02, POS-32)**
-  - [x] Reproduce: Login triggers unwanted automatic shift creation with hardcoded Rp 500.000 float
-  - [x] Write failing regression test for A1
-  - [x] Remove `useEffect` auto-shift creation in `EmployeeShiftContext.tsx`
-  - [x] Enforce manual shift opening with valid `modal_awal` (starting cash float)
-  - [x] Bind shift exclusively to authenticated cashier user ID
-  - [x] Implement auto-flagging `NEEDS_RECONCILIATION` for unclosed shifts exceeding 16 hours
-  - [x] Integrate POS page UI prompt when no active shift is open
-  - [x] Verify A1 regression test passes
-- [x] **A2. Data Lama Hilang / Resets (POS-33)**
-  - [x] Reproduce: Operational records (shifts, coworking bookings, audit logs) reside only in ephemeral memory/client storage
-  - [x] Write regression test for A2 data persistence & append-only audit trail
-  - [x] Create centralized persistent storage helper `src/lib/persistent-storage.ts` using `data-storage`
-  - [x] Upgrade `/api/shifts/route.ts` to read/write persistent backend records instead of module variable
-  - [x] Create `/api/audit-logs/route.ts` with append-only invariant (DELETE permanently rejected)
-  - [x] Create `/api/coworking/bookings/route.ts` for persistent booking storage
-  - [x] Connect `ActivityLogContext`, `EmployeeShiftContext`, and `CoworkingContext` to backend API endpoints
-  - [x] Verify A2 regression tests pass (4/4 tests green)
-- [x] **A3. Ketidaksesuaian Perhitungan Pajak pada Laporan vs Struk (POS-34)**
-  - [x] Reproduce: Reports recalculate tax from gross/nett revenue (0.1 * totalRevenue) producing Rp 5.635 instead of Rp 4.900 from receipt
-  - [x] Write regression test `tests/tax-reconciliation-a3.test.ts`
-  - [x] Add `serviceCharge`, `taxRatePercent`, `serviceChargePercent` fields to `OrderRecord`
-  - [x] Store final `taxPB1` and `serviceCharge` separately during POS order creation
-  - [x] Update reports page to aggregate stored tax values directly without percentage re-multiplication
-  - [x] Correct closing PDF modal gross/net/tax math (DPP formula)
-  - [x] Verify A3 regression tests pass (2/2 tests green)
-- [x] **A4. Verifikasi Manual Pembayaran QRIS oleh Kasir (POS-25)**
-  - [x] Reproduce: POS PaymentModal allows standard cashiers to unconditionally click confirm payment on unverified QRIS
-  - [x] Write regression test `tests/qris-verification-a4.test.ts`
-  - [x] Create `src/lib/qris-verification.ts` with webhook validation, supervisor PIN authorization, and confirm gate
-  - [x] Lock confirm button on QRIS tab: requires verified gateway webhook or supervisor PIN override
-  - [x] Add supervisor manual override dialog with PIN verification (`1234`) and RRN reference requirement
-  - [x] Dispatch high-severity financial audit trail on supervisor QRIS manual override
-  - [x] Print QRIS reference/RRN on POS receipt
-  - [x] Verify A4 regression tests pass (6/6 tests green)
-- [x] **A5. Implements Otentikasi dan Akses Server-Side Rendah (POS-21, POS-22, POS-23)**
-  - [x] Reproduce: POS route `/pos` lacked server-side middleware and role checks, allowing non-cashier roles (waiter, customer) to open POS via direct URL (POS-21)
-  - [x] Reproduce: Event check-in staff was conflated with WAITER in auth types and seed data (POS-22)
-  - [x] Reproduce: Sessions had unmonitored 7-day default max-age without operational shift expiry (POS-23)
-  - [x] Write regression tests `tests/server-rbac-a5.test.ts` (14/14 tests green)
-  - [x] Separate `CHECKIN_STAFF` as distinct `RoleSlug` in `src/types/auth.ts`, `prisma/seed.ts`, `src/lib/server-auth.ts`, and `src/contexts/AuthContext.tsx`
-  - [x] Create `src/lib/route-guard.ts` defining authoritative route permission matrix and fallback routes
-  - [x] Implement Next.js Edge Middleware `src/middleware.ts` guarding `/pos`, `/kitchen`, `/tables`, `/events/checkin`, etc.
-  - [x] Enforce operational session expiration (16h shift limit) in `src/lib/session.ts` and `src/lib/server-auth.ts`
-  - [x] Add client-side layout fallback guard in `src/app/(dashboard)/layout.tsx` for defense in depth
-  - [x] Verify all 58 Task A suite tests pass
-- [x] **A6. Identitas & Penerbit Struk Tidak Sesuai (POS-03)**
-  - [x] Reproduce: Co-working receipts printed under "Outlet: Kopi Senja — Singaraja" and hardcoded address "Jl. Veteran No. 18, Singaraja, Bali" inconsistent with central master data
-  - [x] Write regression test `tests/receipt-publisher-a6.test.ts` (5/5 tests green)
-  - [x] Create centralized publisher resolver `src/lib/receipt-publisher.ts` defining `MASTER_HQ_OUTLET` ("Jl. Ngurah Rai No. 45, Singaraja, Bali")
-  - [x] Dynamically set co-working publisher to `Dago Creative Hub` in `pos/page.tsx`, `coworking/page.tsx`, and `customer/page.tsx`
-  - [x] Dynamically set single-mitra and multi-mitra publishers for F&B receipts
-  - [x] Eliminate hardcoded "Jl. Veteran No. 18" across `ReceiptModal`, `CoworkingReceiptModal`, `StockOpnameReportPDFModal`, and `OrdersReportPDFModal`
-  - [x] Verify all 63 Task A suite tests pass
+## Task Checklist (B1 to B8)
+
+- [x] **B1. Tombol Bayar Ganda (POS-26, TC-K02, TC-I03)**
+  - [x] Sembunyikan tombol "Proses Pembayaran" pada pesanan dengan `paymentStatus === "PAID"` di tabel dan detail modal `src/app/(dashboard)/orders/page.tsx`.
+  - [x] Tolak upaya pembayaran ganda pada order berstatus PAID di API endpoint `POST /api/orders` dengan pesan `ORDER_ALREADY_PAID`.
+  - [x] Batasi tombol pembayaran di KDS dan Orders hanya untuk role berwenang (Kasir, Admin, Owner).
+
+- [x] **B2. Formulasi Pajak & Service Charge (POS-11, POS-27, TC-B09)**
+  - [x] Pastikan seluruh perhitungan cart kasir, modal tagihan, struk, dan laporan menggunakan fungsi terpusat `getOrderTaxBreakdown` di `src/lib/tax-breakdown.ts`.
+  - [x] Sinkronkan formula subtotal, diskon promo, DPP, PB1 (10%), dan service charge (5% dine-in) agar menghasilkan angka identik sampai satuan rupiah.
+
+- [x] **B3. Perhitungan Bagi Hasil Mitra (POS-35, TC-H05, TC-K06)**
+  - [x] Ubah dasar kalkulasi bagi hasil mitra (85% tenant / 15% Dago) di `src/lib/settlement.ts` agar dihitung dari DPP (`data.gross - allocatedDiscount`) sebelum pajak.
+  - [x] Pisahkan pajak PB1 dan service charge dari porsi bagi hasil merchant.
+
+- [x] **B4. Pengurangan Stok / BOM (POS-36, TC-G01, TC-G02, TC-K07)**
+  - [x] Perbaiki formula resep dan pemotongan bahan baku untuk produk minuman (Kopi Senja Aren, Classic Americano, Artisan Tea) dan makanan di `src/features/inventory/inventory-data.ts`.
+  - [x] Implementasikan substitusi bahan baku modifier (misal Oat Milk menggantikan susu segar Greenfield).
+  - [x] Pastikan pemotongan stok terpanggil otomatis saat transaksi diselesaikan dan tersimpan persisten ke storage/database.
+
+- [x] **B5. Sinkronisasi Ringkasan Dashboard (POS-04, POS-05, POS-06, POS-37, TC-E03, TC-H01, TC-H02, TC-H03, TC-K08)**
+  - [x] Hapus nilai hardcoded `cwkRevenue = 0` pada `src/app/(dashboard)/dashboard/page.tsx` dan agregasikan transaksi co-working secara riil.
+  - [x] Koreksi pendapatan event Dago Hub pada dashboard agar hanya menghitung `platformRevenue` (komisi platform) dan bukan total omzet tiket organizer.
+  - [x] Perbaiki perhitungan Average Order Value (AOV) agar membagi total pendapatan dengan total transaksi valid secara presisi.
+  - [x] Hapus tanggal hardcoded `17 Sep 2026` di `src/features/layout/Header.tsx` dan gunakan rentang tanggal aktif dari `DateFilterContext.tsx`.
+
+- [x] **B6. Sinkronisasi Poin & Member CRM (POS-08, POS-09, POS-28, TC-D03, TC-D04, TC-K11)**
+  - [x] Perbaiki `addPoints` di `src/contexts/LoyaltyContext.tsx` agar mengupdate `totalSpend` dan `totalVisits` member saat transaksi selesai.
+  - [x] Sinkronkan daftar member antara POS kasir dan CRM agar saldo poin historis tidak ter-reset ke 0.
+  - [x] Cegah duplikasi member dengan validasi nomor telepon normalisasi pada portal dan kasir.
+
+- [x] **B7. Routing Pesanan KDS & Catatan Stasiun (POS-38, POS-39, TC-F01, TC-K09, TC-K10)**
+  - [x] Filter item di layar dapur `src/app/(dashboard)/kitchen/page.tsx` berdasarkan `tenantId` akun dapur yang login agar item mitra lain tidak tercampur.
+  - [x] Tampilkan `notes` (catatan khusus per item dan catatan pesanan kasir) pada kartu antrean KDS dan cetakan nota dapur.
+
+- [x] **B8. Konfigurasi Pajak Co-Working (POS-07, TC-E02)**
+  - [x] Sediakan pengaturan tipe dan tarif pajak fleksibel per kategori produk (F&B PB1, Co-working non-pajak/PPN) di konfigurasi sistem dan `calculateCoworkingPricing`.
+  - [x] Cetak jenis pajak yang sesuai pada struk co-working.

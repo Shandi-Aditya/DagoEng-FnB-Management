@@ -15,17 +15,29 @@ export const INITIAL_MEMBERS: LoyaltyMember[] = [
     phone: "+62 819-1122-3344",
     email: "ketut.dian@gmail.com",
     identityNo: "NIK-510801990001",
-    tier: "Bronze",
-    points: 0,
-    totalSpend: 0,
-    totalVisits: 0,
-    favoriteItem: "-",
-    lastVisit: "-",
+    tier: "Silver",
+    points: 55,
+    totalSpend: 550000,
+    totalVisits: 5,
+    favoriteItem: "Kopi Senja Aren",
+    lastVisit: "05 Nov 2026",
     registeredOutletId: "outlet-sgr",
     registeredOutletName: "Singaraja",
     status: "ACTIVE",
     joinedDate: "12 Jan 2026",
-    pointHistory: [],
+    pointHistory: [
+      {
+        id: "ptx-init-1",
+        memberId: "mem-001",
+        type: "EARN",
+        points: 55,
+        balanceAfter: 55,
+        reason: "Saldo Poin Awal CRM",
+        timestamp: "2026-11-05T10:00:00.000Z",
+        actorName: "Sistem Loyalty",
+        outletId: "outlet-sgr",
+      },
+    ],
     tierHistory: [],
   },
   {
@@ -87,13 +99,21 @@ export const INITIAL_MEMBERS: LoyaltyMember[] = [
   },
 ];
 
+export function normalizeLoyaltyPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("62")) {
+    return "0" + digits.slice(2);
+  }
+  return digits;
+}
+
 interface LoyaltyContextType {
   members: LoyaltyMember[];
   filteredMembers: LoyaltyMember[];
   calculateTierForPoints: (points: number) => LoyaltyTier;
   createMember: (memberData: { name: string; phone: string; email?: string; identityNo?: string; initialPoints?: number }) => LoyaltyMember;
   getOrCreateMember: (memberData: { name: string; phone: string; email?: string; identityNo?: string; initialPoints?: number }) => LoyaltyMember;
-  addPoints: (memberId: string, points: number, reason: string, transactionId?: string) => void;
+  addPoints: (memberId: string, points: number, reason: string, transactionId?: string, spendAmount?: number) => void;
   reverseTransactionPoints: (memberId: string, transactionId: string, reason?: string) => void;
   redeemPoints: (memberId: string, points: number, reason: string) => boolean;
   manualOverrideTier: (memberId: string, newTier: LoyaltyTier, reason: string) => void;
@@ -160,6 +180,17 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     identityNo?: string;
     initialPoints?: number;
   }): LoyaltyMember => {
+    // POS-09 / TC-D04: Deduplication guard preventing duplicate customer records
+    const normPhone = normalizeLoyaltyPhone(memberData.phone);
+    const existing = members.find((m) => {
+      const mNorm = normalizeLoyaltyPhone(m.phone);
+      return normPhone && mNorm && normPhone === mNorm;
+    });
+
+    if (existing) {
+      return existing;
+    }
+
     const nowIso = new Date().toISOString();
     const points = memberData.initialPoints || 0;
     const computedTier = calculateTierForPoints(points);
@@ -223,14 +254,14 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     identityNo?: string;
     initialPoints?: number;
   }): LoyaltyMember => {
-    const cleanPhone = memberData.phone.replace(/\D/g, "");
+    const normPhone = normalizeLoyaltyPhone(memberData.phone);
     const cleanEmail = memberData.email?.trim().toLowerCase();
 
     // Deduplication: Check if member already exists by phone or email
     const existing = members.find((m) => {
-      const mPhone = m.phone.replace(/\D/g, "");
+      const mPhone = normalizeLoyaltyPhone(m.phone);
       const mEmail = m.email?.trim().toLowerCase();
-      if (cleanPhone && mPhone && cleanPhone === mPhone) return true;
+      if (normPhone && mPhone && normPhone === mPhone) return true;
       if (cleanEmail && mEmail && cleanEmail === mEmail) return true;
       return false;
     });
@@ -242,7 +273,13 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     return createMember(memberData);
   };
 
-  const addPoints = (memberId: string, pointsEarned: number, reason: string, transactionId?: string) => {
+  const addPoints = (
+    memberId: string,
+    pointsEarned: number,
+    reason: string,
+    transactionId?: string,
+    spendAmount?: number
+  ) => {
     const target = members.find((m) => m.id === memberId);
     if (!target || pointsEarned <= 0) return;
 
@@ -259,6 +296,10 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     const newTier = calculateTierForPoints(newPoints);
     const tierChanged = newTier !== target.tier;
     const nowIso = new Date().toISOString();
+    const effectiveSpend =
+      spendAmount !== undefined && spendAmount > 0
+        ? Math.round(spendAmount)
+        : pointsEarned * 1000;
 
     const ptx: LoyaltyPointTransaction = {
       id: `ptx-${Date.now()}`,
@@ -313,6 +354,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
+    // POS-08 / TC-D03: Atomically increment totalSpend, totalVisits, and lastVisit alongside points and tier
     setMembers((prev) =>
       prev.map((m) =>
         m.id === memberId
@@ -320,6 +362,9 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
               ...m,
               points: newPoints,
               tier: newTier,
+              totalSpend: (m.totalSpend || 0) + effectiveSpend,
+              totalVisits: (m.totalVisits || 0) + 1,
+              lastVisit: new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }),
               pointHistory: [ptx, ...m.pointHistory],
               tierHistory: newTierHistory,
             }
@@ -333,7 +378,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       recordId: memberId,
       previousValue: `Poin: ${target.points}`,
       newValue: `Poin: ${newPoints} (+${pointsEarned})`,
-      description: `Penambahan ${pointsEarned} poin untuk member ${target.name}`,
+      description: `Penambahan ${pointsEarned} poin untuk member ${target.name}. Belanja: Rp ${effectiveSpend.toLocaleString("id-ID")}`,
       reason,
       status: "SUCCESS",
       outletId: target.registeredOutletId,
@@ -390,6 +435,8 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       newTierHistory = [th, ...newTierHistory];
     }
 
+    const refundedSpend = earnTx.points * 1000;
+
     setMembers((prev) =>
       prev.map((m) =>
         m.id === memberId
@@ -397,6 +444,8 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
               ...m,
               points: newPoints,
               tier: newTier,
+              totalSpend: Math.max(0, (m.totalSpend || 0) - refundedSpend),
+              totalVisits: Math.max(0, (m.totalVisits || 0) - 1),
               pointHistory: [ptx, ...m.pointHistory],
               tierHistory: newTierHistory,
             }

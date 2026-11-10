@@ -15,6 +15,8 @@ import {
   INITIAL_RECIPES,
   INITIAL_PURCHASE_ORDERS,
   deductRecipeIngredients,
+  deductOrderItemsBOM,
+  OrderItemBOMInput,
 } from "@/features/inventory/inventory-data";
 import { useOutlet } from "./OutletContext";
 import { useActivityLog } from "./ActivityLogContext";
@@ -38,7 +40,8 @@ interface InventoryContextType {
     record: Omit<StockOpnameRecord, "id" | "opnameNumber" | "variance" | "varianceType" | "createdAt" | "status">
   ) => StockOpnameRecord;
   checkProductStockStatus: (productNameOrId: string) => { status: "SAFE" | "CRITICAL" | "OUT_OF_STOCK"; label?: string };
-  simulateBOMDeduction: (menuId: string, quantity: number) => { success: boolean; message: string };
+  simulateBOMDeduction: (menuId: string, quantity: number, modifiers?: string[]) => { success: boolean; message: string };
+  deductOrderBOM: (items: OrderItemBOMInput[]) => { success: boolean; deductedCount: number };
   upsertRecipe: (recipe: RecipeBOM) => void;
   deleteRecipe: (menuId: string) => void;
   createPurchaseOrder: (po: Omit<PurchaseOrder, "id" | "poNumber">) => void;
@@ -211,25 +214,43 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const simulateBOMDeduction = (menuIdOrName: string, quantity: number) => {
-    const term = menuIdOrName.toLowerCase().trim();
-    const recipe = recipes.find(
-      (r) =>
-        r.menuId.toLowerCase() === term ||
-        r.menuName.toLowerCase() === term ||
-        r.menuName.toLowerCase().includes(term) ||
-        term.includes(r.menuName.toLowerCase())
-    );
-    if (!recipe) return { success: false, message: "Menu tidak ditemukan dalam database resep BOM" };
+  // POS-36 / B4: Atomic deduction for entire orders preventing state clobbering
+  const deductOrderBOM = (items: OrderItemBOMInput[]) => {
+    let count = 0;
+    setIngredients((prevStock) => {
+      const { updatedStock, logs: deductionLogs, deductedCount } = deductOrderItemsBOM(
+        prevStock,
+        recipes,
+        items
+      );
+      count = deductedCount;
+      if (deductionLogs.length > 0) {
+        setLogs((prevLogs) => [...deductionLogs, ...prevLogs]);
+      }
+      return updatedStock;
+    });
+    return { success: count > 0, deductedCount: count };
+  };
 
-    const { updatedStock, logs: deductionLogs } = deductRecipeIngredients(ingredients, recipe, quantity);
-    setIngredients(updatedStock);
-    setLogs((prev) => [...deductionLogs, ...prev]);
-
-    return {
-      success: true,
-      message: `Berhasil: ${quantity}x "${recipe.menuName}" otomatis memotong ${recipe.ingredients.length} bahan baku!`,
-    };
+  const simulateBOMDeduction = (menuIdOrName: string, quantity: number, modifiers?: string[]) => {
+    let result = { success: false, message: "Menu tidak ditemukan dalam database resep BOM" };
+    setIngredients((prevStock) => {
+      const { updatedStock, logs: deductionLogs, deductedCount } = deductOrderItemsBOM(
+        prevStock,
+        recipes,
+        [{ productName: menuIdOrName, quantity, modifiers }]
+      );
+      if (deductedCount > 0) {
+        setLogs((prevLogs) => [...deductionLogs, ...prevLogs]);
+        result = {
+          success: true,
+          message: `Berhasil: ${quantity}x "${menuIdOrName}" otomatis memotong ${deductionLogs.length} bahan baku!`,
+        };
+        return updatedStock;
+      }
+      return prevStock;
+    });
+    return result;
   };
 
   const createPurchaseOrder = (poData: Omit<PurchaseOrder, "id" | "poNumber">) => {
@@ -419,6 +440,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         recordStockOpname,
         checkProductStockStatus,
         simulateBOMDeduction,
+        deductOrderBOM,
         upsertRecipe,
         deleteRecipe,
         createPurchaseOrder,

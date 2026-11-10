@@ -55,6 +55,32 @@ export const DEFAULT_EVENT_REVENUE_POLICY: EventMarketplaceRevenuePolicy = {
   ],
 };
 
+export type CategoryTaxType = "PB1" | "PPN" | "NON_TAX";
+
+export interface CategoryTaxSetting {
+  taxType: CategoryTaxType;
+  taxRatePercent: number;
+  isEnabled: boolean;
+}
+
+export interface CategoryTaxConfig {
+  fnb: CategoryTaxSetting;
+  coworking: CategoryTaxSetting;
+}
+
+export const DEFAULT_CATEGORY_TAX_CONFIG: CategoryTaxConfig = {
+  fnb: {
+    taxType: "PB1",
+    taxRatePercent: 10,
+    isEnabled: true,
+  },
+  coworking: {
+    taxType: "NON_TAX",
+    taxRatePercent: 0,
+    isEnabled: false,
+  },
+};
+
 export interface PlatformSettings {
   language: LanguageCode;
   timezone: string;
@@ -73,6 +99,7 @@ export interface PlatformSettings {
   operationalHours: ServiceOperationalHours;
   tenantOperations: Record<string, TenantOperationConfig>;
   eventRevenueSharing: EventMarketplaceRevenuePolicy;
+  categoryTax?: CategoryTaxConfig;
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -88,6 +115,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   operationalHours: DEFAULT_OPERATIONAL_HOURS,
   tenantOperations: DEFAULT_TENANT_OPERATIONS,
   eventRevenueSharing: DEFAULT_EVENT_REVENUE_POLICY,
+  categoryTax: DEFAULT_CATEGORY_TAX_CONFIG,
   loyaltyTiers: {
     bronzeMin: 0,
     bronzeMax: 499,
