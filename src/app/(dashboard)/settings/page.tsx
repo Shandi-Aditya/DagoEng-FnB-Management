@@ -3616,10 +3616,10 @@ export default function SettingsPage() {
                     <div>
                       <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center space-x-2">
                         <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                        <span>Kebijakan Komisi Bagi Hasil Event Marketplace</span>
+                        <span>Template Komisi Bagi Hasil Event Baru</span>
                       </h4>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                        Konfigurasi persentase komisi bagi hasil platform DAGO Creative Hub dan hak penyelenggara komunitas untuk penjualan tiket event publik.
+                        Konfigurasi persentase komisi awal sebagai template default untuk event baru. Bagi hasil aktual berlaku secara independen per event dan terkunci setelah pemesanan tiket pertama.
                       </p>
                     </div>
 
@@ -3628,7 +3628,7 @@ export default function SettingsPage() {
                       <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
                         <span className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                           <Percent className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                          <span>1. Tarif Komisi Standar Platform (Default Policy)</span>
+                          <span>1. Template Komisi Platform untuk Event Baru (Default Template)</span>
                         </span>
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
                           TOTAL PEMBAGIAN: 100% (SEIMBANG)
@@ -3638,24 +3638,24 @@ export default function SettingsPage() {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">
-                            Komisi Platform DAGO Hub (%)
+                            Komisi Platform Default (%)
                           </label>
                           <div className="flex items-center space-x-1.5">
                             <input
                               type="number"
                               min={0}
-                              max={100}
+                              max={50}
                               step={1}
                               value={eventPlatformFee}
                               onChange={(e) => {
-                                const val = parseFloat(e.target.value);
-                                setEventPlatformFee(isNaN(val) ? 0 : Math.max(0, Math.min(100, val)));
+                                const val = parseInt(e.target.value, 10);
+                                setEventPlatformFee(isNaN(val) ? 0 : Math.max(0, Math.min(50, val)));
                               }}
                               className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-xs"
                             />
                             <span className="font-bold text-slate-500 text-xs">%</span>
                           </div>
-                          <span className="text-[10px] text-slate-400 mt-1 block">Default platform: 20%</span>
+                          <span className="text-[10px] text-slate-400 mt-1 block">Batas: 0% - 50% (Default platform: 20%)</span>
                         </div>
 
                         <div>

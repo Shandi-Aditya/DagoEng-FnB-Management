@@ -805,6 +805,10 @@ export default function CommunityOrganizerPortalPage() {
       setErrorMessage("Total persentase bagi hasil harus tepat 100%.");
       return;
     }
+    if (!Number.isInteger(splitPlatPercent) || splitPlatPercent < 0 || splitPlatPercent > 50) {
+      setErrorMessage("Persentase komisi platform harus berupa bilangan bulat antara 0% hingga 50% (bagian penyelenggara 50% hingga 100%).");
+      return;
+    }
     try {
       setIsSubmittingSplit(true);
       const res = await fetch(`/api/events/${negotiatingEvent.id}/revenue-share`, {
@@ -3929,7 +3933,7 @@ export default function CommunityOrganizerPortalPage() {
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                        Rekening Penampung Bagi Hasil (Payout 80%)
+                        Rekening Penampung Bagi Hasil Event
                       </h3>
                       <p className="text-[11px] text-slate-400">
                         Rekening bank tujuan transfer bagi hasil resmi penjualan tiket Anda
@@ -4211,72 +4215,7 @@ export default function CommunityOrganizerPortalPage() {
                   </form>
                 </Card>
 
-                {/* Card 4: Partnership & Bagi Hasil Rules Info */}
-                <Card className="p-5 sm:p-6 bg-gradient-to-br from-emerald-50/70 via-white to-emerald-50/30 dark:from-emerald-950/20 dark:via-[#0F172A] dark:to-emerald-950/10 border border-emerald-200/80 dark:border-emerald-800/60 rounded-3xl shadow-xs space-y-4">
-                  <div className="flex items-center space-x-2.5 pb-2 border-b border-emerald-100 dark:border-emerald-800/80">
-                    <div className="w-8 h-8 rounded-xl bg-[#3B7A57] text-white flex items-center justify-center font-bold text-sm">
-                      <DollarSign className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-emerald-950 dark:text-emerald-100">
-                        Ketentuan Kerjasama Bagi Hasil Transparan
-                      </h3>
-                      <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                        Kebijakan resmi pembagian revenue ekosistem Dago Creative Hub
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Split Visual Badges */}
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <div className="p-3.5 rounded-2xl bg-white dark:bg-[#0F172A] border border-emerald-200 dark:border-emerald-800 text-center space-y-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Hak Komunitas
-                      </span>
-                      <div className="text-2xl font-black text-[#3B7A57] dark:text-[#52B788]">
-                        80%
-                      </div>
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block">
-                        Dana Masuk ke Rekening Anda
-                      </span>
-                    </div>
-
-                    <div className="p-3.5 rounded-2xl bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 text-center space-y-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                        Platform & Venue
-                      </span>
-                      <div className="text-2xl font-black text-slate-700 dark:text-slate-200">
-                        20%
-                      </div>
-                      <span className="text-[10px] text-slate-400 font-medium block">
-                        Ticketing, Fasilitas & Listrik
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 text-xs text-slate-600 dark:text-slate-300">
-                    <div className="flex items-start space-x-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                      <span>
-                        <strong>Pencairan Tepat Waktu:</strong> Dana bagi hasil dapat diajukan di tab <em>Payout</em> dan ditransfer maksimal H+1 kerja setelah event terselenggara.
-                      </span>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                      <span>
-                        <strong>Tanpa Potongan Tambahan:</strong> Tidak ada biaya pendaftaran awal atau sewa di muka. Bagi hasil dihitung murni dari tiket terbayar.
-                      </span>
-                    </div>
-                    <div className="flex items-start space-x-2">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                      <span>
-                        <strong>Audit & Validasi Transparan:</strong> Seluruh riwayat check-in peserta dan mutasi transaksi dapat diekspor langsung ke format CSV.
-                      </span>
-                    </div>
-                  </div>
-                </Card>
-
-                {/* Card 5: Session Security & Multi-device Protection */}
+                {/* Card 4: Session Security & Multi-device Protection */}
                 <Card className="p-5 sm:p-6 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs space-y-4">
                   <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-100 dark:border-slate-800">
                     <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-sm">
@@ -4445,7 +4384,15 @@ export default function CommunityOrganizerPortalPage() {
         const totalCapacity = capacityRes.capacity;
         const ticketsPaid = paidBookings.reduce((s, b) => s + b.ticketCount, 0);
         const grossSales = paidBookings.reduce((s, b) => s + b.totalPrice, 0);
-        const organizerShare = Math.round(grossSales * 0.8);
+        const platformPercent = evt.customPlatformFeePercent ?? 20;
+        const organizerPercent = 100 - platformPercent;
+        const organizerShare = paidBookings.reduce(
+          (s, b) => s + (b.organizerRevenueAmount ?? (b.totalPrice - Math.round((b.totalPrice * platformPercent) / 100))),
+          0
+        );
+        const hasActiveBooking = eventBookings.some(
+          (b) => b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
+        );
         const occupancyRate = totalCapacity > 0 ? Math.min(100, Math.round((ticketsPaid / totalCapacity) * 100)) : 0;
         const eventDate = new Date(evt.startDate);
         const eventEndDate = evt.endDate ? new Date(evt.endDate) : null;
@@ -4560,9 +4507,21 @@ export default function CommunityOrganizerPortalPage() {
                   </span>
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] text-slate-400 uppercase font-bold block">Hak Komunitas (80%)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">
+                      Hak Komunitas ({organizerPercent}%)
+                    </span>
+                    {hasActiveBooking && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
+                        Terkunci
+                      </span>
+                    )}
+                  </div>
                   <span className="text-sm font-black text-[#3B7A57] dark:text-[#52B788] mt-0.5 block">
                     Rp {organizerShare.toLocaleString("id-ID")}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    Dago Hub: {platformPercent}%
                   </span>
                 </div>
               </div>

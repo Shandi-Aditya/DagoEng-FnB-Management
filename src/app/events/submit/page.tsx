@@ -353,8 +353,11 @@ export default function SubmitEventPage() {
       if (orgPercent + platPercent !== 100) {
         errors.push(`Total usulan bagi hasil harus tepat 100% (saat ini: ${orgPercent + platPercent}%).`);
       }
-      if (orgPercent < 0 || platPercent < 0 || orgPercent > 100 || platPercent > 100) {
-        errors.push("Persentase bagi hasil harus bernilai antara 0% dan 100%.");
+      if (!Number.isInteger(orgPercent) || !Number.isInteger(platPercent)) {
+        errors.push("Persentase bagi hasil harus berupa bilangan bulat tanpa pecahan desimal.");
+      }
+      if (platPercent < 0 || platPercent > 50) {
+        errors.push("Usulan komisi platform harus berada antara 0% hingga 50% (bagian penyelenggara 50% hingga 100%).");
       }
     }
 
