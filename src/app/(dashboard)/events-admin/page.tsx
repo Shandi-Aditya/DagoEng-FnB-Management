@@ -91,6 +91,20 @@ function formatWhatsAppUrl(phone?: string | null): string {
   return `https://wa.me/${cleaned}`;
 }
 
+function isPastUnapproved(e: CommunityEvent): boolean {
+  if (e.status !== "PENDING" && e.status !== "REVISION_REQUESTED") return false;
+  const now = Date.now();
+  const endMs = e.endDate
+    ? new Date(e.endDate).getTime()
+    : new Date(e.startDate).getTime() + 24 * 60 * 60 * 1000;
+  return endMs < now;
+}
+
+function getEffectiveStatus(e: CommunityEvent): EventStatus {
+  if (isPastUnapproved(e)) return "ARCHIVED";
+  return e.status;
+}
+
 export default function AdminEventsPage() {
   const { user } = useAuth();
   const { logActivity } = useActivityLog();
@@ -899,28 +913,37 @@ export default function AdminEventsPage() {
 
   // Status counts for badges
   const pendingCount = useMemo(
-    () => events.filter((e) => e.status === "PENDING").length,
+    () => events.filter((e) => getEffectiveStatus(e) === "PENDING").length,
     [events]
   );
   const pendingSplitCount = useMemo(
-    () => events.filter((e) => e.proposedRevenueSplit?.status === "PENDING").length,
+    () =>
+      events.filter(
+        (e) =>
+          e.proposedRevenueSplit?.status === "PENDING" &&
+          getEffectiveStatus(e) !== "ARCHIVED"
+      ).length,
     [events]
   );
 
   // Filtered events
   const filteredEvents = useMemo(() => {
     return events.filter((e) => {
+      const effectiveStatus = getEffectiveStatus(e);
       let matchStatus = true;
       if (selectedStatusTab === "ALL") {
-        matchStatus = true;
+        // Tab "Semua Pengajuan" excludes ARCHIVED to avoid cluttering with past expired tests
+        matchStatus = effectiveStatus !== "ARCHIVED";
       } else if (selectedStatusTab === "PENDING") {
-        // Strictly events pending initial moderation
-        matchStatus = e.status === "PENDING";
+        // Strictly events pending initial moderation that are not past
+        matchStatus = effectiveStatus === "PENDING";
       } else if (selectedStatusTab === "REVENUE_SPLIT") {
-        // Events with pending custom revenue split negotiations
-        matchStatus = e.proposedRevenueSplit?.status === "PENDING";
+        // Events with pending custom revenue split negotiations that are active
+        matchStatus =
+          e.proposedRevenueSplit?.status === "PENDING" &&
+          effectiveStatus !== "ARCHIVED";
       } else {
-        matchStatus = e.status === selectedStatusTab;
+        matchStatus = effectiveStatus === selectedStatusTab;
       }
 
       const matchSearch =
@@ -1087,7 +1110,14 @@ export default function AdminEventsPage() {
     );
   }
 
-  const renderStatusBadge = (status: EventStatus) => {
+  const renderStatusBadge = (status: EventStatus, isExpiredUnapproved?: boolean) => {
+    if (isExpiredUnapproved || status === "ARCHIVED") {
+      return (
+        <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[10px] font-bold">
+          {isExpiredUnapproved ? "Diarsipkan (Kedaluwarsa)" : "Diarsipkan"}
+        </Badge>
+      );
+    }
     switch (status) {
       case "PENDING":
         return (
@@ -1111,12 +1141,6 @@ export default function AdminEventsPage() {
         return (
           <Badge className="bg-rose-100 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[10px] font-bold">
             Ditolak
-          </Badge>
-        );
-      case "ARCHIVED":
-        return (
-          <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[10px] font-bold">
-            Diarsipkan
           </Badge>
         );
     }
@@ -1263,9 +1287,9 @@ export default function AdminEventsPage() {
               </div>
               <div>
                 <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white leading-tight">
-                  {events.length} <span className="text-xs font-normal text-slate-400">Event</span>
+                  {events.filter((e) => getEffectiveStatus(e) !== "ARCHIVED").length} <span className="text-xs font-normal text-slate-400">Event</span>
                 </div>
-                <span className="text-[10px] text-slate-400 truncate block mt-0.5">Semua agenda terdaftar</span>
+                <span className="text-[10px] text-slate-400 truncate block mt-0.5">Pengajuan & agenda aktif</span>
               </div>
             </Card>
 
@@ -1293,7 +1317,7 @@ export default function AdminEventsPage() {
               </div>
               <div>
                 <div className="text-base sm:text-xl font-black text-amber-600 dark:text-amber-400 leading-tight">
-                  {events.filter((e) => e.status === "PENDING").length} <span className="text-xs font-normal text-slate-400">Antrean</span>
+                  {events.filter((e) => getEffectiveStatus(e) === "PENDING").length} <span className="text-xs font-normal text-slate-400">Antrean</span>
                 </div>
                 <span className="text-[10px] text-slate-400 truncate block mt-0.5">Perlu verifikasi admin</span>
               </div>
@@ -1371,13 +1395,17 @@ export default function AdminEventsPage() {
                   {STATUS_TABS.map((tab) => {
                     const active = selectedStatusTab === tab.key;
                     const count =
-                      tab.key === "PENDING"
-                        ? events.filter((e) => e.status === "PENDING").length
+                      tab.key === "ALL"
+                        ? events.filter((e) => getEffectiveStatus(e) !== "ARCHIVED").length
+                        : tab.key === "PENDING"
+                        ? events.filter((e) => getEffectiveStatus(e) === "PENDING").length
                         : tab.key === "REVENUE_SPLIT"
-                        ? events.filter((e) => e.proposedRevenueSplit?.status === "PENDING").length
+                        ? events.filter((e) => e.proposedRevenueSplit?.status === "PENDING" && getEffectiveStatus(e) !== "ARCHIVED").length
+                        : tab.key === "ARCHIVED"
+                        ? events.filter((e) => getEffectiveStatus(e) === "ARCHIVED").length
                         : tab.status !== undefined
-                        ? events.filter((e) => e.status === tab.status).length
-                        : events.length;
+                        ? events.filter((e) => getEffectiveStatus(e) === tab.status).length
+                        : events.filter((e) => getEffectiveStatus(e) !== "ARCHIVED").length;
 
                     return (
                       <button
@@ -1482,8 +1510,8 @@ export default function AdminEventsPage() {
                               <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-slate-300 dark:border-slate-700">
                                 {evt.category}
                               </Badge>
-                              {renderStatusBadge(evt.status)}
-                              {evt.proposedRevenueSplit?.status === "PENDING" && (
+                              {renderStatusBadge(getEffectiveStatus(evt), isPastUnapproved(evt))}
+                              {evt.proposedRevenueSplit?.status === "PENDING" && getEffectiveStatus(evt) !== "ARCHIVED" && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
                                   Bagi Hasil {evt.proposedRevenueSplit.organizerPercent}/{evt.proposedRevenueSplit.platformPercent}
                                 </span>
@@ -1532,7 +1560,7 @@ export default function AdminEventsPage() {
                             Peserta ({totalTickets})
                           </Button>
 
-                          {evt.status === "PENDING" && (
+                          {getEffectiveStatus(evt) === "PENDING" && (
                             <>
                               <Button
                                 size="sm"
@@ -1556,6 +1584,11 @@ export default function AdminEventsPage() {
                                 Revisi
                               </Button>
                             </>
+                          )}
+                          {isPastUnapproved(evt) && (
+                            <span className="text-[11px] text-slate-400 italic py-1">
+                              Tanggal terlewat (Arsip)
+                            </span>
                           )}
 
                           <Button
@@ -1706,8 +1739,8 @@ export default function AdminEventsPage() {
                           {/* Status Badge */}
                           <td className="py-3.5 px-4 whitespace-nowrap">
                             <div className="space-y-1">
-                              {renderStatusBadge(evt.status)}
-                              {evt.proposedRevenueSplit?.status === "PENDING" && (
+                              {renderStatusBadge(getEffectiveStatus(evt), isPastUnapproved(evt))}
+                              {evt.proposedRevenueSplit?.status === "PENDING" && getEffectiveStatus(evt) !== "ARCHIVED" && (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 block w-fit">
                                   Bagi Hasil: {evt.proposedRevenueSplit.organizerPercent}/{evt.proposedRevenueSplit.platformPercent}
                                 </span>
@@ -1764,8 +1797,8 @@ export default function AdminEventsPage() {
                                 <Edit className="w-3.5 h-3.5" />
                               </Button>
 
-                              {/* Moderation Actions (Approve, Revision, Reject): ONLY for PENDING or REVISION_REQUESTED */}
-                              {(evt.status === "PENDING" || evt.status === "REVISION_REQUESTED") && (
+                              {/* Moderation Actions (Approve, Revision, Reject): ONLY for active PENDING or REVISION_REQUESTED */}
+                              {(getEffectiveStatus(evt) === "PENDING" || getEffectiveStatus(evt) === "REVISION_REQUESTED") && (
                                 <>
                                   <Button
                                     size="sm"
@@ -1809,6 +1842,12 @@ export default function AdminEventsPage() {
                                     <XCircle className="w-3.5 h-3.5" />
                                   </Button>
                                 </>
+                              )}
+
+                              {isPastUnapproved(evt) && (
+                                <span className="text-[11px] text-slate-400 italic px-1">
+                                  Kedaluwarsa (Arsip)
+                                </span>
                               )}
 
                               {/* Revenue Split Quick Review: if there is an active proposal on an approved event */}
@@ -2897,7 +2936,7 @@ export default function AdminEventsPage() {
                 className="w-full h-full object-cover"
               />
               <div className="absolute top-2 left-2 flex space-x-1.5">
-                {renderStatusBadge(selectedEvent.status)}
+                {renderStatusBadge(getEffectiveStatus(selectedEvent), isPastUnapproved(selectedEvent))}
                 <Badge className="bg-slate-900/80 text-white text-[10px]">
                   {selectedEvent.category}
                 </Badge>
@@ -3352,7 +3391,7 @@ export default function AdminEventsPage() {
                   <Ticket className="w-3.5 h-3.5 mr-1" />
                   <span>Daftar Peserta</span>
                 </Button>
-                {selectedEvent.status !== "APPROVED" && (
+                {selectedEvent.status !== "APPROVED" && !isPastUnapproved(selectedEvent) && (
                   <Button
                     size="sm"
                     onClick={() => handleUpdateStatus(selectedEvent.id, "APPROVED")}
@@ -3361,6 +3400,11 @@ export default function AdminEventsPage() {
                   >
                     Setujui & Publikasikan
                   </Button>
+                )}
+                {isPastUnapproved(selectedEvent) && (
+                  <span className="text-xs text-slate-400 italic">
+                    Acara telah terlewat (Arsip)
+                  </span>
                 )}
               </div>
             </div>
