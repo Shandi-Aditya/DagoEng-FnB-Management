@@ -31,14 +31,6 @@ export async function PATCH(
     }
 
     const { id } = params;
-    const existing = await getAdminEventById(id);
-    if (!existing) {
-      return NextResponse.json(
-        { success: false, error: `Event dengan ID ${id} tidak ditemukan.` },
-        { status: 404 }
-      );
-    }
-
     const body = await req.json();
     const { status, adminNotes, rejectionReason, revisionNotes } = body;
 

@@ -234,6 +234,15 @@ export async function POST(req: NextRequest) {
         sameSite: "lax",
         secure: process.env.NODE_ENV === "production",
       });
+      response.cookies.set({
+        name: "dagoeng_active_persona",
+        value: "",
+        path: "/",
+        maxAge: 0,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+      response.cookies.delete("dagoeng_active_persona");
     }
 
     return response;

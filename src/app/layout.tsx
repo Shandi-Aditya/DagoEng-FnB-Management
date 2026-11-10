@@ -31,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" className="bg-[#F8FAFC] dark:bg-[#0F172A] m-0 p-0 border-0" suppressHydrationWarning>
+    <html lang="id" className="bg-[#F8FAFC] dark:bg-[#0F172A] m-0 p-0 border-0 w-full max-w-full overflow-x-hidden" suppressHydrationWarning>
       <head>
         <link rel="icon" href="/logo-dago.png" type="image/png" />
         <link rel="shortcut icon" href="/logo-dago.png" type="image/png" />
@@ -57,7 +57,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E2E8F0] antialiased font-sans transition-colors duration-200">
+      <body className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F8FAFC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E2E8F0] antialiased font-sans transition-colors duration-200">
         <AppProviders>
           {children}
         </AppProviders>
