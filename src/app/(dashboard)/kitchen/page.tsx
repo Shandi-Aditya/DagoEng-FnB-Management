@@ -27,11 +27,13 @@ import { Button } from "@/components/ui/button";
 import { soundChime } from "@/lib/audio-chime";
 import { ProFeatureBadge } from "@/components/premium";
 import { isAddonActive } from "@/lib/subscription";
+import { useAuth } from "@/contexts/AuthContext";
 import { usePrinter } from "@/contexts/PrinterContext";
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
 import { KitchenTicketData } from "@/types/printer";
 
 export default function KitchenKDSPage() {
+  const { user } = useAuth();
   const { activeOutlet, activeOutletId } = useOutlet();
   const { filteredOrders, advanceOrderStatus, createOrder } = useOrders();
   const [selectedTicketForPrint, setSelectedTicketForPrint] = useState<KitchenTicketData | null>(null);
@@ -49,7 +51,9 @@ export default function KitchenKDSPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // Filter kitchen active orders
+  const userTenantId = user?.scopeLevel === "TENANT" ? user?.tenant?.id : undefined;
+
+  // Filter kitchen active orders (POS-38 / TC-K09: Scoped to logged in tenant)
   const activeOrders = useMemo(() => {
     return filteredOrders
       .filter(
@@ -61,9 +65,19 @@ export default function KitchenKDSPage() {
           o.status === "READY"
       )
       .filter((o) => {
+        // POS-38 / TC-K09: If logged in as a specific tenant kitchen, only show tickets containing that tenant's items
+        if (userTenantId && !o.items.some((it) => it.tenantId === userTenantId)) {
+          return false;
+        }
+
         if (selectedTypeFilter !== "ALL" && o.orderType !== selectedTypeFilter) return false;
+
         if (isMultiStationActive && selectedStationFilter !== "ALL") {
-          const hasStationItem = o.items.some((it) => {
+          const stationItems = userTenantId
+            ? o.items.filter((it) => it.tenantId === userTenantId)
+            : o.items;
+
+          const hasStationItem = stationItems.some((it) => {
             const name = it.productName.toLowerCase();
             if (selectedStationFilter === "BARISTA") {
               return name.includes("kopi") || name.includes("tea") || name.includes("latte") || name.includes("espresso") || name.includes("ice") || name.includes("matcha");
@@ -80,7 +94,7 @@ export default function KitchenKDSPage() {
         }
         return true;
       });
-  }, [filteredOrders, selectedTypeFilter, isMultiStationActive, selectedStationFilter]);
+  }, [filteredOrders, userTenantId, selectedTypeFilter, isMultiStationActive, selectedStationFilter]);
 
   // Ring bell when new ticket arrives
   useEffect(() => {
@@ -366,6 +380,13 @@ export default function KitchenKDSPage() {
                     </div>
                   ) : (
                     ticketsInCol.map((order) => {
+                      // POS-38 / TC-K09: Filter items on ticket strictly to logged in tenant
+                      const displayItems = userTenantId
+                        ? order.items.filter((it) => it.tenantId === userTenantId)
+                        : order.items;
+
+                      if (displayItems.length === 0) return null;
+
                       const metrics = calculateOrderMetrics(order, currentTime);
                       const isDelayed = metrics.slaStatus === "DELAYED";
                       const isAtRisk = metrics.slaStatus === "AT_RISK";
@@ -431,9 +452,17 @@ export default function KitchenKDSPage() {
                             </div>
                           </div>
 
-                          {/* Items List with Modifiers */}
+                          {/* Order-level special notes (POS-39 / TC-K10) */}
+                          {order.notes && order.notes.trim() && (
+                            <div className="mb-2 p-1.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-900 font-semibold flex items-start space-x-1">
+                              <span className="shrink-0">📌</span>
+                              <span><strong>Catatan:</strong> {order.notes.trim()}</span>
+                            </div>
+                          )}
+
+                          {/* Items List with Modifiers & Item-level Notes */}
                           <div className="py-2 space-y-1.5 text-xs border-y border-slate-100 max-h-44 overflow-y-auto">
-                            {order.items.map((it, itIdx) => (
+                            {displayItems.map((it, itIdx) => (
                               <div key={itIdx} className="flex flex-col bg-slate-50/60 p-1.5 rounded">
                                 <div className="flex justify-between font-bold text-slate-800">
                                   <span>{it.quantity}x {it.productName}</span>
@@ -448,6 +477,11 @@ export default function KitchenKDSPage() {
                                         ↳ {mod}
                                       </span>
                                     ))}
+                                  </div>
+                                )}
+                                {it.notes && it.notes.trim() && (
+                                  <div className="mt-1 text-[11px] font-semibold text-amber-900 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded">
+                                    📝 <strong>Catatan:</strong> {it.notes.trim()}
                                   </div>
                                 )}
                               </div>
@@ -470,7 +504,7 @@ export default function KitchenKDSPage() {
                                   customerName: order.customerName,
                                   orderType: order.orderType,
                                   purpose: "REPRINT",
-                                  items: (order.items || []).map((it) => ({
+                                  items: displayItems.map((it) => ({
                                     id: it.id,
                                     productName: it.productName,
                                     quantity: it.quantity,
@@ -480,6 +514,7 @@ export default function KitchenKDSPage() {
                                   cashierName: "Dapur KDS",
                                   timestamp: new Date().toLocaleTimeString("id-ID") + " WITA",
                                   reprintedBy: "Kitchen Staff",
+                                  kitchenNotes: order.notes,
                                 });
                                 setIsKitchenReceiptModalOpen(true);
                               }}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useNotifications } from "@/contexts/NotificationContext";
+import { useDateFilter } from "@/contexts/DateFilterContext";
 import { RoleAwareStatusPill } from "./RoleAwareStatusPill";
 import {
   Store,
@@ -36,6 +37,7 @@ export function Header({
   const { user } = useAuth();
   const { activeOutletId, outlets, isAllOutlets, setOutlet } = useOutlet();
   const { filteredNotifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { formattedRangeLabel } = useDateFilter();
 
   const [isOutletDropdownOpen, setIsOutletDropdownOpen] = useState(false);
   const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
@@ -94,7 +96,7 @@ export function Header({
 
         <div className="hidden sm:flex items-center space-x-1.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
           <Calendar className="w-3.5 h-3.5 text-slate-400 dark:text-slate-400" />
-          <span>17 Sep 2026</span>
+          <span>{isMounted && formattedRangeLabel ? formattedRangeLabel : "17 Sep 2026"}</span>
         </div>
 
         {/* Global Theme Toggle Button */}

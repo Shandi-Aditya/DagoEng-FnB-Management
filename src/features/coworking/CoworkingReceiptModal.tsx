@@ -28,6 +28,8 @@ export interface CoworkingReceiptData {
   discount?: number;
   promoTitle?: string;
   tax?: number;
+  taxType?: "PB1" | "PPN" | "NON_TAX" | string;
+  taxRatePercent?: number;
   serviceCharge?: number;
   totalAmount: number;
   paymentMethod: string;
@@ -196,7 +198,7 @@ export function CoworkingReceiptModal({
                   <div className="flex justify-between">
                     <span className="text-slate-500">Waktu / Jam:</span>
                     <span className="font-bold text-slate-800">
-                      {receiptData.startTime} — {receiptData.endTime} WITA
+                      {receiptData.startTime} s/d {receiptData.endTime} WITA
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -230,10 +232,18 @@ export function CoworkingReceiptModal({
                   </div>
                 )}
 
-                {receiptData.tax !== undefined && receiptData.tax > 0 && (
+                {receiptData.tax !== undefined && receiptData.tax > 0 ? (
                   <div className="flex justify-between">
-                    <span>Pajak (PB1):</span>
+                    <span>
+                      Pajak ({receiptData.taxType || "PPN"}
+                      {receiptData.taxRatePercent !== undefined ? ` ${receiptData.taxRatePercent}%` : ""}):
+                    </span>
                     <span>{formatCurrencyIDR(receiptData.tax)}</span>
+                  </div>
+                ) : (
+                  <div className="flex justify-between text-slate-500">
+                    <span>Pajak (Bebas PB1 / Non-Pajak):</span>
+                    <span>Rp 0</span>
                   </div>
                 )}
 

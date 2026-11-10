@@ -97,6 +97,18 @@ export const INITIAL_INGREDIENTS: IngredientItem[] = [
     status: "SAFE",
     lastUpdated: "Stok Awal",
   },
+  {
+    id: "ing-9",
+    name: "Susu Oat Milk Barista Edition (1L)",
+    category: "Dairy",
+    stockNumber: 15.0,
+    unit: "Liter",
+    min: 5,
+    costPerUnit: 35000,
+    supplier: "Oatside Official Distributor",
+    status: "SAFE",
+    lastUpdated: "Stok Awal",
+  },
 ];
 
 export const INITIAL_RECIPES: RecipeBOM[] = [
@@ -165,26 +177,63 @@ export const INITIAL_RECIPES: RecipeBOM[] = [
 
 export const INITIAL_PURCHASE_ORDERS: PurchaseOrder[] = [];
 
+export interface OrderItemBOMInput {
+  productId?: string;
+  productName: string;
+  quantity: number;
+  modifiers?: string[];
+}
+
 /**
- * Deducts ingredient stock when a menu item is ordered based on its Recipe BOM formula.
+ * Deducts ingredient stock when a menu item is ordered based on its Recipe BOM formula (POS-36 / B4).
+ * Supports modifier substitutions such as Oat Milk replacing fresh milk (TC-G02) and extra shots.
  */
 export function deductRecipeIngredients(
   currentStock: IngredientItem[],
   recipe: RecipeBOM,
-  quantity: number = 1
+  quantity: number = 1,
+  modifiers?: string[]
 ): { updatedStock: IngredientItem[]; logs: StockAdjustmentLog[] } {
   const logs: StockAdjustmentLog[] = [];
+  const normalizedMods = (modifiers || []).map((m) => m.toLowerCase());
+  const isOatMilk = normalizedMods.some((m) => m.includes("oat"));
+  const hasExtraShot = normalizedMods.some((m) => m.includes("extra") && m.includes("shot"));
+
+  // Build effective ingredient requirements for this item
+  // If Oat Milk modifier is selected (TC-G02), substitute Susu Fresh Milk (ing-1) with Susu Oat Milk (ing-9)
+  const effectiveIngredients = recipe.ingredients.map((ing) => {
+    if (isOatMilk && (ing.ingredientId === "ing-1" || ing.ingredientName.toLowerCase().includes("fresh milk"))) {
+      return {
+        ...ing,
+        ingredientId: "ing-9",
+        ingredientName: "Susu Oat Milk Barista Edition (1L)",
+      };
+    }
+    return { ...ing };
+  });
+
+  // If Extra Espresso Shot is added, add 0.018 kg of House Blend (ing-2)
+  if (hasExtraShot) {
+    const coffeeIndex = effectiveIngredients.findIndex((ing) => ing.ingredientId === "ing-2");
+    if (coffeeIndex > -1) {
+      effectiveIngredients[coffeeIndex] = {
+        ...effectiveIngredients[coffeeIndex],
+        quantityRequired: effectiveIngredients[coffeeIndex].quantityRequired + 0.018,
+      };
+    }
+  }
+
   const updatedStock = currentStock.map((item) => {
-    const matchedIng = recipe.ingredients.find((ing) => ing.ingredientId === item.id);
+    const matchedIng = effectiveIngredients.find((ing) => ing.ingredientId === item.id);
     if (!matchedIng) return item;
 
-    const totalReduction = matchedIng.quantityRequired * quantity;
+    const totalReduction = Number((matchedIng.quantityRequired * quantity).toFixed(3));
     const nextStock = Math.max(0, Number((item.stockNumber - totalReduction).toFixed(3)));
     const nextStatus: StockStatus =
       nextStock <= item.min * 0.4 ? "CRITICAL" : nextStock <= item.min ? "LOW" : "SAFE";
 
     logs.push({
-      id: `log-${Date.now()}-${item.id}`,
+      id: `log-${Date.now()}-${item.id}-${Math.random().toString(36).slice(2, 6)}`,
       ingredientId: item.id,
       ingredientName: item.name,
       delta: -totalReduction,
@@ -204,4 +253,48 @@ export function deductRecipeIngredients(
   });
 
   return { updatedStock, logs };
+}
+
+/**
+ * Atomically deducts inventory stock for an entire list of order items in a single pass (POS-36 / B4).
+ * Eliminates race conditions and React state staleness when an order contains multiple items (e.g. Kopi Senja + Croissant).
+ */
+export function deductOrderItemsBOM(
+  currentStock: IngredientItem[],
+  recipes: RecipeBOM[],
+  items: OrderItemBOMInput[]
+): { updatedStock: IngredientItem[]; logs: StockAdjustmentLog[]; deductedCount: number } {
+  let runningStock = [...currentStock];
+  const allLogs: StockAdjustmentLog[] = [];
+  let deductedCount = 0;
+
+  for (const item of items) {
+    const term = item.productName.toLowerCase().trim();
+    const recipe = recipes.find(
+      (r) =>
+        r.menuId.toLowerCase() === term ||
+        r.menuName.toLowerCase() === term ||
+        r.menuName.toLowerCase().includes(term) ||
+        term.includes(r.menuName.toLowerCase()) ||
+        (term.includes("croissant") && r.menuName.toLowerCase().includes("croissant")) ||
+        (term.includes("senja") && r.menuName.toLowerCase().includes("senja")) ||
+        (term.includes("americano") && r.menuName.toLowerCase().includes("americano")) ||
+        (term.includes("tea") && r.menuName.toLowerCase().includes("tea")) ||
+        (term.includes("wagyu") && r.menuName.toLowerCase().includes("wagyu"))
+    );
+
+    if (recipe) {
+      const { updatedStock, logs } = deductRecipeIngredients(
+        runningStock,
+        recipe,
+        item.quantity,
+        item.modifiers
+      );
+      runningStock = updatedStock;
+      allLogs.push(...logs);
+      deductedCount++;
+    }
+  }
+
+  return { updatedStock: runningStock, logs: allLogs, deductedCount };
 }

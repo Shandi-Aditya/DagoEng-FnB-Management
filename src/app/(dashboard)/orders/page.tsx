@@ -49,7 +49,7 @@ import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
 export default function OrdersPage() {
   const { user } = useAuth();
   const { filteredOrders, advanceOrderStatus } = useOrders();
-  const { simulateBOMDeduction } = useInventory();
+  const { simulateBOMDeduction, deductOrderBOM } = useInventory();
   const { members, addPoints } = useLoyalty();
   const { releaseTableToAvailable } = useTables();
   const { logActivity } = useActivityLog();
@@ -57,6 +57,13 @@ export default function OrdersPage() {
 
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
   const userTenantId = user?.tenant?.id;
+
+  const roleSlug = user?.role?.slug || (typeof user?.role === "string" ? user.role : "");
+  const canProcessPayment =
+    roleSlug === "CASHIER" ||
+    roleSlug === "SUPER_ADMIN" ||
+    roleSlug === "OWNER" ||
+    roleSlug === "MANAGER";
 
   // Strict tenant-aware order list
   const displayedOrders = useMemo(() => {
@@ -109,6 +116,7 @@ export default function OrdersPage() {
       cashierName: user?.name || "Kasir / Petugas",
       timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
       reprintedBy: purpose === "REPRINT" ? user?.name || "Petugas" : undefined,
+      kitchenNotes: order.notes,
     };
   };
 
@@ -239,6 +247,14 @@ export default function OrdersPage() {
   };
 
   const handleOpenPayment = (order: OrderRecord) => {
+    if (order.paymentStatus === "PAID") {
+      setSuccessToast("Pesanan ini sudah berstatus LUNAS. Pembayaran kedua tidak dapat diproses.");
+      return;
+    }
+    if (!canProcessPayment) {
+      setSuccessToast("Role Anda tidak memiliki akses untuk memproses pembayaran.");
+      return;
+    }
     setPaymentOrder(order);
     setIsPaymentModalOpen(true);
   };
@@ -276,10 +292,13 @@ export default function OrdersPage() {
           : 0;
     recordShiftTransaction(cashPortion, paymentOrder.total - cashPortion, paymentOrder.outletId, paymentOrder.id);
 
-    // 2. Inventory: Deduct ingredients based on Recipe BOM
-    paymentOrder.items.forEach((item) => {
-      simulateBOMDeduction(item.productName, item.quantity);
-    });
+    // 2. Inventory: Deduct ingredients based on Recipe BOM (POS-36 / B4)
+    const bomItems = paymentOrder.items.map((it) => ({
+      productName: it.productName,
+      quantity: it.quantity,
+      modifiers: it.modifiers,
+    }));
+    deductOrderBOM(bomItems);
 
     // 3. Loyalty: Add points if customer is registered
     const matchingMember = members.find(
@@ -293,7 +312,8 @@ export default function OrdersPage() {
           matchingMember.id,
           pointsAdded,
           `Penyelesaian Pesanan #${paymentOrder.orderNumber}`,
-          paymentOrder.id
+          paymentOrder.id,
+          paymentOrder.total
         );
       }
     }
@@ -524,7 +544,7 @@ export default function OrdersPage() {
                         </td>
                         <td className="p-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap shrink-0">
-                            {!isCompleted && o.status !== "CANCELLED" && (
+                            {!isCompleted && o.status !== "CANCELLED" && o.paymentStatus !== "PAID" && canProcessPayment && (
                               <Button
                                 size="sm"
                                 onClick={() => handleOpenPayment(o)}
@@ -740,7 +760,7 @@ export default function OrdersPage() {
             {/* Modal Actions */}
             <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
               <div className="flex items-center space-x-2">
-                {selectedOrder.status !== "COMPLETED" && selectedOrder.status !== "CANCELLED" && selectedOrder.paymentStatus !== "PAID" && (
+                {selectedOrder.status !== "COMPLETED" && selectedOrder.status !== "CANCELLED" && selectedOrder.paymentStatus !== "PAID" && canProcessPayment && (
                   <Button
                     size="sm"
                     onClick={() => {
@@ -815,22 +835,25 @@ export default function OrdersPage() {
       )}
 
       {/* POS Payment Modal Integration */}
-      {paymentOrder && (
-        <PaymentModal
-          isOpen={isPaymentModalOpen}
-          onClose={() => setIsPaymentModalOpen(false)}
-          cartItems={modalCartItems}
-          subtotal={paymentOrder.subtotal}
-          tax={paymentOrder.tax}
-          serviceCharge={0}
-          discount={paymentOrder.discount || 0}
-          grandTotal={paymentOrder.total}
-          tableNumber={paymentOrder.tableNumber}
-          customerName={paymentOrder.customerName}
-          orderType={paymentOrder.orderType === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN"}
-          onPaymentSuccess={handlePaymentSuccess}
-        />
-      )}
+      {paymentOrder && (() => {
+        const pBreakdown = getOrderTaxBreakdown(paymentOrder);
+        return (
+          <PaymentModal
+            isOpen={isPaymentModalOpen}
+            onClose={() => setIsPaymentModalOpen(false)}
+            cartItems={modalCartItems}
+            subtotal={pBreakdown.subtotal}
+            tax={pBreakdown.pb1}
+            serviceCharge={pBreakdown.serviceCharge}
+            discount={pBreakdown.discount}
+            grandTotal={pBreakdown.total}
+            tableNumber={paymentOrder.tableNumber}
+            customerName={paymentOrder.customerName}
+            orderType={paymentOrder.orderType === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN"}
+            onPaymentSuccess={handlePaymentSuccess}
+          />
+        );
+      })()}
 
       {/* PDF Report Modal */}
       <OrdersReportPDFModal

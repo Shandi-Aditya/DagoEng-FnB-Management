@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useOrders } from "@/contexts/OrderContext";
+import { useCoworking } from "@/contexts/CoworkingContext";
 import { KPICard } from "@/features/dashboard/KPICard";
 import { RevenueChartPreview } from "@/features/dashboard/RevenueChartPreview";
 import { OutletCompareCard } from "@/features/dashboard/OutletCompareCard";
@@ -41,6 +42,7 @@ export default function DashboardPage() {
   const { isAllOutlets, activeOutlet } = useOutlet();
   const { formattedRangeLabel, isDateInRange } = useDateFilter();
   const { filteredOrders } = useOrders();
+  const { bookings: cwkBookings } = useCoworking();
 
   const [isMounted, setIsMounted] = React.useState(false);
   const [allBookings, setAllBookings] = React.useState<any[]>([]);
@@ -188,8 +190,6 @@ export default function DashboardPage() {
   }, [filteredOrders, scopedOrders, isTenantOwner, userTenantId]);
 
   const totalOrdersCount = scopedOrders.length;
-  const averageOrderValue =
-    totalOrdersCount > 0 ? Math.round(totalRevenue / totalOrdersCount) : 0;
   const completedOrdersCount =
     scopedOrders.filter((o) => o.status === "COMPLETED" || o.status === "SERVED").length;
 
@@ -199,11 +199,37 @@ export default function DashboardPage() {
     adminActionAlerts.pendingRevenueSplitCount +
     adminActionAlerts.pendingManualPaymentsCount;
 
-  // Multi-Business Breakdown for Dago Organization Owner
+  // POS-04 / TC-E03: Real aggregation of co-working bookings
+  const cwkBookingsFiltered = React.useMemo(() => {
+    return cwkBookings.filter((b) => {
+      if (b.paymentStatus !== "PAID" || b.checkInStatus === "CANCELLED") return false;
+      return isDateInRange(b.date);
+    });
+  }, [cwkBookings, isDateInRange]);
+
+  const cwkRevenue = React.useMemo(() => {
+    if (isTenantOwner) return 0;
+    return cwkBookingsFiltered.reduce((sum, b) => sum + (b.paidAmount || b.totalAmount || 0), 0);
+  }, [cwkBookingsFiltered, isTenantOwner]);
+
+  // POS-37 / TC-K08: Dago Organization revenue from events is platform fee (20%), NOT total ticket turnover
+  const eventRevenue = isDagoOwner ? eventStats.platformRevenue : 0;
   const fnbRevenue = totalRevenue;
-  const cwkRevenue = 0;
-  const eventRevenue = isDagoOwner ? eventStats.totalRevenue : 0;
   const consolidatedTotal = fnbRevenue + cwkRevenue + eventRevenue;
+
+  // POS-05 / TC-H03: Total valid transactions across all business units
+  const totalTransactionsCount =
+    totalOrdersCount +
+    (isDagoOwner ? cwkBookingsFiltered.length + eventStats.paidBookingsCount : 0);
+
+  const effectiveConsolidatedRevenue = isDagoOwner ? consolidatedTotal : totalRevenue;
+
+  // Accurate Average Order Value dividing total revenue by all valid transactions
+  const averageOrderValue =
+    totalTransactionsCount > 0
+      ? Math.round(effectiveConsolidatedRevenue / totalTransactionsCount)
+      : 0;
+
   const fnbShare = consolidatedTotal > 0 ? `${Math.round((fnbRevenue / consolidatedTotal) * 100)}%` : "0%";
   const cwkShare = consolidatedTotal > 0 ? `${Math.round((cwkRevenue / consolidatedTotal) * 100)}%` : "0%";
   const eventShare = consolidatedTotal > 0 ? `${Math.round((eventRevenue / consolidatedTotal) * 100)}%` : "0%";
@@ -214,7 +240,7 @@ export default function DashboardPage() {
       name: "Dago Co-working Space",
       revenue: cwkRevenue,
       share: cwkShare,
-      tenants: "1 Hub (30 Desk, 4 Meeting Room)",
+      tenants: `${cwkBookingsFiltered.length} Booking (${formatCurrencyIDR(cwkRevenue)})`,
       status: activeOrgModules.includes("CO_WORKING") ? "AKTIF" : "NON-AKTIF",
       icon: <Laptop className="w-4 h-4 text-sky-600 dark:text-sky-400" />,
       color: "border-sky-500",
@@ -464,8 +490,8 @@ export default function DashboardPage() {
         />
         <KPICard
           title="Total Transaksi"
-          value={`${(totalOrdersCount + (isDagoOwner ? eventStats.paidBookingsCount : 0)).toLocaleString("id-ID")} Transaksi`}
-          trendText={isDagoOwner ? "F&B + Tiket Event Komunitas" : "Transaksi pesanan tenant"}
+          value={`${totalTransactionsCount.toLocaleString("id-ID")} Transaksi`}
+          trendText={isDagoOwner ? "F&B, Co-Working & Tiket Event" : "Transaksi pesanan tenant"}
           accentColor="cyan"
           icon={<ShoppingBag className="w-5 h-5 text-sky-600 dark:text-sky-400" />}
         />

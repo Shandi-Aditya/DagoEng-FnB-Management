@@ -111,6 +111,18 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
             ...(parsed.eventRevenueSharing || {}),
             history: parsed.eventRevenueSharing?.history || DEFAULT_PLATFORM_SETTINGS.eventRevenueSharing.history,
           },
+          categoryTax: {
+            ...DEFAULT_PLATFORM_SETTINGS.categoryTax,
+            ...(parsed.categoryTax || {}),
+            fnb: {
+              ...(DEFAULT_PLATFORM_SETTINGS.categoryTax?.fnb || { taxType: "PB1", taxRatePercent: 10, isEnabled: true }),
+              ...(parsed.categoryTax?.fnb || {}),
+            },
+            coworking: {
+              ...(DEFAULT_PLATFORM_SETTINGS.categoryTax?.coworking || { taxType: "NON_TAX", taxRatePercent: 0, isEnabled: false }),
+              ...(parsed.categoryTax?.coworking || {}),
+            },
+          },
         });
       }
     } catch (e) {

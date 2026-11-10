@@ -238,6 +238,16 @@ export function KitchenOrderReceiptModal({
               )}
             </div>
 
+            {/* Order Level Special Notes (POS-39 / TC-K10) */}
+            {ticketData.kitchenNotes && ticketData.kitchenNotes.trim() && (
+              <div className="p-2 bg-amber-50 border border-amber-300 rounded text-[11px] text-amber-950 font-semibold space-y-0.5">
+                <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
+                  Catatan Khusus Pesanan:
+                </span>
+                <p className="text-slate-900">{ticketData.kitchenNotes.trim()}</p>
+              </div>
+            )}
+
             {/* Kitchen Instructions / Footer */}
             <div className="text-center pt-1 text-[11px] font-black uppercase text-slate-700 tracking-wider">
               {settings.kitchenFooterNote || "MOHON DIPROSES"}

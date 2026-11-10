@@ -13,6 +13,55 @@ export interface OrderTaxBreakdown {
   total: number;
 }
 
+export interface CartTaxCalculationInput {
+  subtotal: number;
+  discount?: number;
+  taxRatePercent?: number;
+  serviceChargePercent?: number;
+  isTaxEnabled?: boolean;
+  orderType?: "DINE_IN" | "TAKEAWAY";
+}
+
+export interface CartTaxCalculationResult {
+  subtotal: number;
+  discount: number;
+  dpp: number;
+  pb1: number;
+  serviceCharge: number;
+  totalTaxAndService: number;
+  total: number;
+}
+
+/**
+ * Centralized calculation helper for live POS carts, bill modals, and checkout previews (POS-11, POS-27 / B2).
+ * Guarantees that cart calculations align down to the rupiah with stored order records and reports.
+ */
+export function calculateCartTaxAndService(input: CartTaxCalculationInput): CartTaxCalculationResult {
+  const subtotal = Math.max(0, Math.round(input.subtotal || 0));
+  const discount = Math.max(0, Math.min(subtotal, Math.round(input.discount ?? 0)));
+  const dpp = Math.max(0, subtotal - discount);
+
+  const isTaxEnabled = input.isTaxEnabled !== false;
+  const taxRate = isTaxEnabled ? (Number(input.taxRatePercent) || 0) / 100 : 0;
+  const serviceRate =
+    input.orderType === "TAKEAWAY" ? 0 : (Number(input.serviceChargePercent) || 0) / 100;
+
+  const pb1 = Math.round(dpp * taxRate);
+  const serviceCharge = Math.round(dpp * serviceRate);
+  const totalTaxAndService = pb1 + serviceCharge;
+  const total = dpp + totalTaxAndService;
+
+  return {
+    subtotal,
+    discount,
+    dpp,
+    pb1,
+    serviceCharge,
+    totalTaxAndService,
+    total,
+  };
+}
+
 /**
  * Single source of truth for resolving an order's subtotal, discount, DPP, PB1 tax,
  * and service charge across POS receipts, order details, financial reports, closing shift reports,

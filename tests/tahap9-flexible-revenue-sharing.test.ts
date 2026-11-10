@@ -211,25 +211,26 @@ describe("Tahap 9 — Flexible Revenue Sharing & Settlement System", () => {
       const kitchen = settlement.find((s) => s.tenantId === "tenant-kitchen");
       const bakery = settlement.find((s) => s.tenantId === "tenant-bakery");
 
-      // Tenant A (80:20 of 40.000): Tenant = 32.000, DAGO = 8.000
-      expect(ks?.tenantShareAmount).toBe(32000);
-      expect(ks?.dagoShareAmount).toBe(8000);
+      // B3 / POS-35: Revenue share is calculated strictly from DPP (gross - discount), excluding tax and service charge
+      // Tenant A (80:20 of DPP 36.000): Tenant = 28.800, DAGO = 7.200
+      expect(ks?.tenantShareAmount).toBe(28800);
+      expect(ks?.dagoShareAmount).toBe(7200);
 
-      // Tenant B (90:10 of 40.000): Tenant = 36.000, DAGO = 4.000
-      expect(kitchen?.tenantShareAmount).toBe(36000);
-      expect(kitchen?.dagoShareAmount).toBe(4000);
+      // Tenant B (90:10 of DPP 36.000): Tenant = 32.400, DAGO = 3.600
+      expect(kitchen?.tenantShareAmount).toBe(32400);
+      expect(kitchen?.dagoShareAmount).toBe(3600);
 
-      // Tenant C (85:15 of 20.000): Tenant = 17.000, DAGO = 3.000
-      expect(bakery?.tenantShareAmount).toBe(17000);
-      expect(bakery?.dagoShareAmount).toBe(3000);
+      // Tenant C (85:15 of DPP 18.000): Tenant = 15.300, DAGO = 2.700
+      expect(bakery?.tenantShareAmount).toBe(15300);
+      expect(bakery?.dagoShareAmount).toBe(2700);
 
-      // Sum of all settlements
+      // Sum of all settlements matches total DPP (90.000)
       const totalTenantShare = (ks?.tenantShareAmount || 0) + (kitchen?.tenantShareAmount || 0) + (bakery?.tenantShareAmount || 0);
       const totalDagoShare = (ks?.dagoShareAmount || 0) + (kitchen?.dagoShareAmount || 0) + (bakery?.dagoShareAmount || 0);
 
-      expect(totalTenantShare).toBe(85000);
-      expect(totalDagoShare).toBe(15000);
-      expect(totalTenantShare + totalDagoShare).toBe(100000);
+      expect(totalTenantShare).toBe(76500);
+      expect(totalDagoShare).toBe(13500);
+      expect(totalTenantShare + totalDagoShare).toBe(90000);
     });
 
     it("should ignore unpaid and cancelled orders in settlement", () => {

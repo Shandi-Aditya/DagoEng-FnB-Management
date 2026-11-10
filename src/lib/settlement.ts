@@ -6,6 +6,7 @@ export interface SettlementSummary {
   tenantName: string;
   grossRevenue: number;
   discount: number;
+  dpp?: number;                // Base revenue (gross - discount) before tax and service charge (POS-35 / B3)
   tax: number;
   serviceCharge: number;
   paymentFee: number;
@@ -14,8 +15,8 @@ export interface SettlementSummary {
   itemCount: number;
   tenantSharePercent?: number; // e.g. 85 or 90
   dagoSharePercent?: number;   // e.g. 15 or 10
-  tenantShareAmount?: number;  // e.g. netRevenue * (tenantSharePercent / 100)
-  dagoShareAmount?: number;    // e.g. netRevenue * (dagoSharePercent / 100)
+  tenantShareAmount?: number;  // e.g. dpp * (tenantSharePercent / 100)
+  dagoShareAmount?: number;    // e.g. dpp * (dagoSharePercent / 100)
 }
 
 export const REVENUE_SPLIT_STORAGE_KEY = "dagoeng_tenant_revenue_splits_v1";
@@ -147,6 +148,9 @@ export function calculateSettlement(
         const allocatedServiceCharge = breakdown.serviceCharge * ratio;
         const allocatedPaymentFee = 0;
 
+        // DPP per tenant = data.gross - allocatedDiscount (POS-35 / B3 / TC-K06)
+        const tenantDpp = Math.max(0, data.gross - allocatedDiscount);
+
         const netRevenue =
           data.gross - allocatedDiscount + allocatedTax + allocatedServiceCharge;
 
@@ -171,6 +175,7 @@ export function calculateSettlement(
             (tenantId === "DAGO_HUB" ? "Dago Hub" : tenantId),
           grossRevenue: 0,
           discount: 0,
+          dpp: 0,
           tax: 0,
           serviceCharge: 0,
           paymentFee: 0,
@@ -183,13 +188,15 @@ export function calculateSettlement(
           dagoShareAmount: 0,
         };
 
-        const addedTenantShare = Math.round(netRevenue * (tenantSharePct / 100));
-        const addedDagoShare = netRevenue - addedTenantShare;
+        // B3: Partner revenue share (85/15) is calculated strictly from DPP (before tax and service charge).
+        const addedTenantShare = Math.round(tenantDpp * (tenantSharePct / 100));
+        const addedDagoShare = tenantDpp - addedTenantShare;
 
         settlementMap.set(tenantId, {
           ...current,
           grossRevenue: current.grossRevenue + data.gross,
           discount: current.discount + allocatedDiscount,
+          dpp: (current.dpp || 0) + tenantDpp,
           tax: current.tax + allocatedTax,
           serviceCharge: current.serviceCharge + allocatedServiceCharge,
           netRevenue: current.netRevenue + netRevenue,
@@ -208,6 +215,7 @@ export function calculateSettlement(
   result.forEach((r) => {
     r.grossRevenue = Math.round(r.grossRevenue);
     r.discount = Math.round(r.discount);
+    if (r.dpp !== undefined) r.dpp = Math.round(r.dpp);
     r.tax = Math.round(r.tax);
     r.serviceCharge = Math.round(r.serviceCharge);
     r.netRevenue = Math.round(r.netRevenue);
