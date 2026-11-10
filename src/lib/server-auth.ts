@@ -1,0 +1,920 @@
+import fs from "fs";
+import { NextRequest } from "next/server";
+import { BusinessModuleCode, RoleSlug, ScopeLevel } from "@/types/auth";
+import { db } from "./db";
+import { hashSessionToken, SESSION_COOKIE_NAME } from "./session";
+import { isOrganizerActive, getOrganizerById, getOrganizerByEmail } from "./organizers";
+import { getDataFilePath } from "@/lib/data-storage";
+import {
+  getOrganizerSession,
+  withDbTimeout,
+  isLocalDevFallbackAllowed,
+} from "./organizer-activation";
+import {
+  EDGE_SESSION_COOKIE_NAME,
+  verifyEdgeSessionToken,
+  isPersonaCookieAllowedInEnv,
+} from "./edge-session";
+import { getLatestRevocation, isSessionRevoked } from "./session-revocation";
+import { findUnifiedUserByEmail, findUnifiedUserById } from "./unified-account";
+
+export interface ServerAuthResult {
+  isAuthenticated: boolean;
+  role: RoleSlug | null;
+  userId: string | null;
+  scopeLevel: ScopeLevel | null;
+  email?: string | null;
+  name?: string;
+  permissions?: string[];
+  tenantId?: string | null;
+  businessModule?: BusinessModuleCode | null;
+  error?: string;
+}
+
+const AUTHORIZED_ADMIN_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
+const AUTHORIZED_MODERATION_SCOPES: ScopeLevel[] = ["PLATFORM", "ORGANIZATION"];
+
+/**
+ * Evaluates whether a demo persona account can be authenticated via login.
+ * Security enforcement:
+ * - Permitted in automated test suites (NODE_ENV === "test") and local dev (NODE_ENV === "development").
+ * - In production:
+ *   - Strictly disabled by default. URL parameters (?demo=true, ?demo=1) NEVER enable demo access.
+ *   - Static public passwords for privileged roles (SUPER_ADMIN, OWNER, MANAGER) are completely FORBIDDEN.
+ */
+export function isDemoLoginAllowed(personaKey: string): { allowed: boolean; reason?: string } {
+  if (process.env.DISABLE_DEMO_LOGIN === "true") {
+    return {
+      allowed: false,
+      reason: "FORBIDDEN: Akun demo dinonaktifkan oleh administrator.",
+    };
+  }
+
+  // Allow UAT / internal team review login for all demo personas when ALLOW_DEMO_UAT is enabled
+  if (process.env.ALLOW_DEMO_UAT === "true") {
+    return { allowed: true };
+  }
+
+  const isProduction =
+    process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
+
+  if (isProduction) {
+    const isExplicitDemo =
+      process.env.ENABLE_DEMO_LOGIN === "true" ||
+      process.env.ALLOW_DEMO_LOGIN === "true" ||
+      process.env.ENABLE_ROLE_SIMULATOR === "true";
+
+    if (!isExplicitDemo) {
+      return {
+        allowed: false,
+        reason: "FORBIDDEN: Akun demo dan password statis dinonaktifkan di environment production. Gunakan kredensial resmi terdaftar.",
+      };
+    }
+
+    const persona = TRUSTED_PERSONAS[personaKey];
+    const isPrivileged =
+      persona?.role === "SUPER_ADMIN" ||
+      persona?.role === "OWNER" ||
+      persona?.role === "MANAGER" ||
+      persona?.scopeLevel === "PLATFORM" ||
+      persona?.scopeLevel === "ORGANIZATION";
+
+    if (isPrivileged) {
+      return {
+        allowed: false,
+        reason: "FORBIDDEN: Akses administratif (Super Admin, Owner, Manager) tidak dapat diakses melalui password statis demo di environment production.",
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  return { allowed: true };
+}
+
+/**
+ * Trusted in-memory persona definitions.
+ * Immutable map from persona cookie keys to authenticated server identities.
+ */
+export const TRUSTED_PERSONAS: Record<
+  string,
+  {
+    role: RoleSlug;
+    scopeLevel: ScopeLevel;
+    userId: string;
+    email: string;
+    name: string;
+    permissions?: string[];
+    tenantId?: string | null;
+    businessModule?: BusinessModuleCode | null;
+  }
+> = {
+  DAGO_OWNER: {
+    role: "OWNER",
+    scopeLevel: "ORGANIZATION",
+    userId: "user-dago-owner",
+    email: "owner.dago@dagoeng.com",
+    name: "Hendra Wijaya (Owner Dago Hub)",
+    permissions: ["*"],
+    tenantId: null,
+    businessModule: "CORE",
+  },
+  SUPER_ADMIN: {
+    role: "SUPER_ADMIN",
+    scopeLevel: "PLATFORM",
+    userId: "user-admin",
+    email: "admin@dagoeng.com",
+    name: "Platform Super Admin",
+    permissions: ["*"],
+    tenantId: null,
+    businessModule: "CORE",
+  },
+  COMMERCIAL_MANAGER: {
+    role: "MANAGER",
+    scopeLevel: "ORGANIZATION",
+    userId: "user-manager-commercial",
+    email: "manager.commercial@dagoeng.com",
+    name: "Commercial Manager",
+    permissions: ["dashboard:view", "reports:view"],
+    tenantId: null,
+    businessModule: "COMMERCIAL",
+  },
+  COWORK_MANAGER: {
+    role: "MANAGER",
+    scopeLevel: "ORGANIZATION",
+    userId: "user-manager-cowork",
+    email: "manager.cowork@dagoeng.com",
+    name: "Co-working Manager",
+    permissions: ["dashboard:view", "tables:view"],
+    tenantId: null,
+    businessModule: "CO_WORKING",
+  },
+  TENANT_OWNER_KS: {
+    role: "OWNER",
+    scopeLevel: "TENANT",
+    userId: "user-owner-ks",
+    email: "owner.kopisenja@dagoeng.com",
+    name: "I Wayan Pratama (Owner Kopi Senja)",
+    permissions: ["dashboard:view", "pos:operate", "orders:view", "tables:view", "menu:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
+  },
+  TENANT_OWNER_KITCHEN: {
+    role: "OWNER",
+    scopeLevel: "TENANT",
+    userId: "user-owner-kitchen",
+    email: "owner.dapurmama@dagoeng.com",
+    name: "Dapur Mama Owner",
+    permissions: ["dashboard:view", "orders:view", "kitchen:kds", "menu:view"],
+    tenantId: "tenant-dapur-mama",
+    businessModule: "FNB",
+  },
+  TENANT_OWNER_BAKERY: {
+    role: "OWNER",
+    scopeLevel: "TENANT",
+    userId: "user-owner-bakery",
+    email: "owner.manisbakery@dagoeng.com",
+    name: "Manis Bakery Owner",
+    permissions: ["dashboard:view", "orders:view", "menu:view"],
+    tenantId: "tenant-manis-bakery",
+    businessModule: "FNB",
+  },
+  TENANT_OWNER_TEA: {
+    role: "OWNER",
+    scopeLevel: "TENANT",
+    userId: "user-owner-tea",
+    email: "owner.warungbunarti@dagoeng.com",
+    name: "Teh Nusantara Owner",
+    permissions: ["dashboard:view", "orders:view", "menu:view"],
+    tenantId: "tenant-teh-nusantara",
+    businessModule: "FNB",
+  },
+  CASHIER_SGR: {
+    role: "CASHIER",
+    scopeLevel: "OUTLET",
+    userId: "user-cashier-sgr",
+    email: "cashier.sgr@kopisenja.com",
+    name: "Ni Kadek Sri (Kasir)",
+    permissions: ["pos:operate", "orders:view", "tables:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
+  },
+  KITCHEN_SGR: {
+    role: "KITCHEN_STAFF",
+    scopeLevel: "OUTLET",
+    userId: "user-kitchen-sgr",
+    email: "kitchen.sgr@kopisenja.com",
+    name: "Kitchen Staff",
+    permissions: ["kitchen:kds", "orders:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
+  },
+  WAITER_SGR: {
+    role: "WAITER",
+    scopeLevel: "OUTLET",
+    userId: "user-waiter-sgr",
+    email: "waiter.sgr@kopisenja.com",
+    name: "Waiter",
+    permissions: ["tables:view", "tables:manage", "orders:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
+  },
+  CUSTOMER_DEMO: {
+    role: "CUSTOMER",
+    scopeLevel: "OUTLET",
+    userId: "user-customer-demo",
+    email: "customer@gmail.com",
+    name: "Customer Demo",
+    permissions: ["menu:view"],
+    tenantId: null,
+    businessModule: null,
+  },
+  // Community Organizer Personas (matching demo organizer emails)
+  COMMUNITY_BARISTA: {
+    role: "CUSTOMER",
+    scopeLevel: "OUTLET",
+    userId: "user-comm-barista",
+    email: "baristaguild@dagocreative.id",
+    name: "Dago Barista Guild",
+    permissions: ["events:manage_own"],
+    tenantId: null,
+    businessModule: "COMMERCIAL",
+  },
+  COMMUNITY_BANDUNGDEV: {
+    role: "CUSTOMER",
+    scopeLevel: "OUTLET",
+    userId: "user-comm-bandungdev",
+    email: "halo@bandungdev.org",
+    name: "Bandung Game Creators Collective",
+    permissions: ["events:manage_own"],
+    tenantId: null,
+    businessModule: "COMMERCIAL",
+  },
+  COMMUNITY_AKSARAPRIANGAN: {
+    role: "CUSTOMER",
+    scopeLevel: "OUTLET",
+    userId: "user-comm-aksara",
+    email: "info@aksarapriangan.id",
+    name: "Aksara Priangan Studio",
+    permissions: ["events:manage_own"],
+    tenantId: null,
+    businessModule: "COMMERCIAL",
+  },
+  // Event Staff with explicit check-in permission
+  EVENT_STAFF: {
+    role: "CHECKIN_STAFF",
+    scopeLevel: "ORGANIZATION",
+    userId: "user-event-staff-demo",
+    email: "eventstaff@dagoeng.com",
+    name: "Bagus Pratama (Petugas Check-In Dago)",
+    permissions: ["events:checkin"],
+    tenantId: null,
+    businessModule: "CORE",
+  },
+  // Convenient aliases for tests and common role lookups
+  HUB_OWNER: {
+    role: "OWNER",
+    scopeLevel: "ORGANIZATION",
+    userId: "user-dago-owner",
+    email: "owner.dago@dagoeng.com",
+    name: "Hendra Wijaya (Owner Dago Hub)",
+    permissions: ["*"],
+    tenantId: null,
+    businessModule: "CORE",
+  },
+  HUB_MANAGER: {
+    role: "MANAGER",
+    scopeLevel: "ORGANIZATION",
+    userId: "user-manager-commercial",
+    email: "manager.commercial@dagoeng.com",
+    name: "Commercial Manager",
+    permissions: ["dashboard:view", "reports:view"],
+    tenantId: null,
+    businessModule: "COMMERCIAL",
+  },
+  TENANT_OWNER: {
+    role: "OWNER",
+    scopeLevel: "TENANT",
+    userId: "user-owner-ks",
+    email: "owner.kopisenja@dagoeng.com",
+    name: "I Wayan Pratama (Owner Kopi Senja)",
+    permissions: ["dashboard:view", "pos:operate", "orders:view", "menu:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
+  },
+  CASHIER: {
+    role: "CASHIER",
+    scopeLevel: "OUTLET",
+    userId: "user-cashier-sgr",
+    email: "cashier.sgr@kopisenja.com",
+    name: "Ni Kadek Sri (Kasir)",
+    permissions: ["pos:operate", "orders:view"],
+    tenantId: "tenant-kopi-senja",
+    businessModule: "FNB",
+  },
+  CUSTOMER: {
+    role: "CUSTOMER",
+    scopeLevel: "OUTLET",
+    userId: "user-customer-demo",
+    email: "customer@gmail.com",
+    name: "Customer Demo",
+    permissions: ["menu:view"],
+    tenantId: null,
+    businessModule: null,
+  },
+};
+
+/**
+ * Validates user identity and role from server request.
+ * SECURITY ENFORCEMENT:
+ * - NEVER trusts raw client headers (x-user-role, x-user-id, x-user-scope).
+ * - Validates cryptographic session cookie (dagoeng_session) against database.
+ * - Or validates authenticated persona cookie (dagoeng_active_persona) against server whitelist.
+ */
+export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthResult> {
+  // 1. Check database session cookie
+  const sessionCookie = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+  if (sessionCookie) {
+    const sessionTokenHash = hashSessionToken(sessionCookie);
+    try {
+      const session = await withDbTimeout(() =>
+        db.session.findUnique({
+          where: { sessionTokenHash },
+          include: {
+            user: {
+              include: {
+                userRoles: {
+                  include: {
+                    role: true,
+                    organization: true,
+                    outlet: true,
+                  },
+                },
+              },
+            },
+          },
+        })
+      );
+      if (session) {
+        if (session.expiresAt <= new Date()) {
+          return {
+            isAuthenticated: false,
+            role: null,
+            userId: session.user?.id || null,
+            email: session.user?.email || null,
+            scopeLevel: null,
+            permissions: [],
+            tenantId: null,
+            businessModule: null,
+            error: "SESSION_EXPIRED",
+          };
+        }
+
+        if (session.user.isActive) {
+          const primaryRole = session.user.userRoles[0];
+          const scopeLevel: ScopeLevel =
+            (primaryRole?.scopeLevel as ScopeLevel) ||
+            (primaryRole?.outlet
+              ? "OUTLET"
+              : primaryRole?.organization
+                ? "ORGANIZATION"
+                : "PLATFORM");
+
+          return {
+            isAuthenticated: true,
+            role: (primaryRole?.role?.slug as RoleSlug) || "CUSTOMER",
+            userId: session.user.id,
+            email: session.user.email,
+            name: session.user.name,
+            scopeLevel,
+            permissions: (session.user as any).permissions || [],
+            tenantId: (session.user as any).tenantId || (primaryRole as any)?.tenantId || null,
+            businessModule: (primaryRole?.organization as any)?.businessModule || null,
+          };
+        }
+      }
+    } catch {
+      // Database unavailable or query error, fall through to session store
+    }
+
+    // Check dynamic organizer session store (allowed ONLY in local dev/test fallback mode)
+    if (isLocalDevFallbackAllowed()) {
+      const orgSession = getOrganizerSession(sessionTokenHash);
+      if (orgSession && orgSession.expiresAt > new Date()) {
+        const revokedAt = await getLatestRevocation(orgSession.userId, orgSession.email);
+        if (revokedAt > 0) {
+          return {
+            isAuthenticated: false,
+            role: null,
+            userId: null,
+            email: null,
+            scopeLevel: null,
+            permissions: [],
+            tenantId: null,
+            businessModule: null,
+            error: "SESSION_REVOKED",
+          };
+        }
+
+        // Resolve latest role from unified user record if available
+        const unifiedUser = findUnifiedUserByEmail(orgSession.email) || findUnifiedUserById(orgSession.userId);
+        const currentRole: RoleSlug =
+          unifiedUser?.role === "ADMIN"
+            ? "OWNER"
+            : unifiedUser?.role === "STAFF"
+              ? "CASHIER"
+              : "CUSTOMER";
+
+        return {
+          isAuthenticated: true,
+          role: currentRole,
+          userId: unifiedUser?.id || orgSession.userId,
+          email: orgSession.email,
+          name: unifiedUser?.name || orgSession.name,
+          scopeLevel: "TENANT",
+          permissions: ["events:manage_own"],
+          tenantId: null,
+          businessModule: "CORE",
+        };
+      }
+    }
+  }
+
+  // 1b. Check signed edge token cookie (dagoeng_edge_token)
+  const edgeToken = req.cookies.get(EDGE_SESSION_COOKIE_NAME)?.value;
+  if (edgeToken) {
+    const verification = verifyEdgeSessionToken(edgeToken);
+    const isRevoked =
+      verification.valid &&
+      verification.payload !== null &&
+      (await isSessionRevoked({
+        issuedAtMs: verification.payload.iat,
+        identities: [verification.payload.userId, verification.payload.email],
+      }));
+    if (isRevoked || verification.expired) {
+      return {
+        isAuthenticated: false,
+        role: null,
+        userId: null,
+        email: null,
+        scopeLevel: null,
+        permissions: [],
+        tenantId: null,
+        businessModule: null,
+        error: isRevoked ? "SESSION_REVOKED" : "SESSION_EXPIRED",
+      };
+    }
+    if (verification.valid && verification.payload) {
+      return {
+        isAuthenticated: true,
+        role: verification.payload.role,
+        userId: verification.payload.userId,
+        email: verification.payload.email || null,
+        scopeLevel: verification.payload.scopeLevel || "OUTLET",
+        permissions: [],
+        tenantId: null,
+        businessModule: null,
+      };
+    }
+  }
+
+  // 2. Check verified active persona cookie (only permitted in dev/test or when role simulator explicitly enabled)
+  const personaCookie = req.cookies.get("dagoeng_active_persona")?.value;
+  if (personaCookie && TRUSTED_PERSONAS[personaCookie]) {
+    const persona = TRUSTED_PERSONAS[personaCookie];
+    if (!isPersonaCookieAllowedInEnv(persona.role, persona.scopeLevel)) {
+      return {
+        isAuthenticated: false,
+        role: null,
+        userId: null,
+        email: null,
+        scopeLevel: null,
+        permissions: [],
+        tenantId: null,
+        businessModule: null,
+        error: "UNAUTHORIZED: Simulasi persona administratif tidak diizinkan di production. Gunakan sesi kredensial resmi.",
+      };
+    }
+
+    const revokedAt = await getLatestRevocation(persona.userId, persona.email);
+    if (revokedAt > 0) {
+      return {
+        isAuthenticated: false,
+        role: null,
+        userId: null,
+        email: null,
+        scopeLevel: null,
+        permissions: [],
+        tenantId: null,
+        businessModule: null,
+        error: "SESSION_REVOKED",
+      };
+    }
+
+    return {
+      isAuthenticated: true,
+      role: persona.role,
+      userId: persona.userId,
+      email: persona.email,
+      scopeLevel: persona.scopeLevel,
+      name: persona.name,
+      permissions: persona.permissions || [],
+      tenantId: persona.tenantId || null,
+      businessModule: persona.businessModule || null,
+    };
+  }
+
+  // 3. Fallback: Unauthenticated
+  return {
+    isAuthenticated: false,
+    role: null,
+    userId: null,
+    email: null,
+    scopeLevel: null,
+    permissions: [],
+    tenantId: null,
+    businessModule: null,
+    error: "UNAUTHORIZED: Autentikasi sesi server diperlukan. Silakan login terlebih dahulu.",
+  };
+}
+
+export interface OrganizerAuthResult {
+  authorized: boolean;
+  error?: string;
+  email: string | null;
+  isAdmin: boolean;
+  userId: string | null;
+  name?: string;
+}
+
+/**
+ * Validates Community Organizer access and enforces strict server-side cross-community isolation.
+ * Security enforcement:
+ * 1. Rejects unauthenticated requests (HTTP 401).
+ * 2. If user is Hub Admin (SUPER_ADMIN, Hub OWNER/MANAGER), grants Hub oversight access.
+ * 3. If user is a community organizer, binds identity strictly to server session email (auth.email).
+ *    Any mismatch between request target email and server session email is REJECTED (HTTP 403).
+ * 4. NEVER trusts raw client headers (x-user-role, x-user-id, etc.).
+ */
+export async function assertOrganizerAuth(
+  req: NextRequest,
+  targetEmailOrId?: string | null
+): Promise<OrganizerAuthResult> {
+  const auth = await getRequestAuthUser(req);
+
+  if (!auth.isAuthenticated || !auth.userId) {
+    return {
+      authorized: false,
+      error: "UNAUTHORIZED: Autentikasi sesi server diperlukan. Silakan login ke sistem Dago Hub terlebih dahulu.",
+      email: null,
+      isAdmin: false,
+      userId: null,
+    };
+  }
+
+  const isHubAdmin =
+    (auth.role === "SUPER_ADMIN" && auth.scopeLevel === "PLATFORM") ||
+    ((auth.role === "OWNER" || auth.role === "MANAGER") && auth.scopeLevel === "ORGANIZATION");
+
+  if (isHubAdmin) {
+    // Hub Admin is permitted to supervise any community event
+    const effectiveEmail = (targetEmailOrId || auth.email || "").toLowerCase().trim();
+    return {
+      authorized: true,
+      email: effectiveEmail,
+      isAdmin: true,
+      userId: auth.userId,
+      name: auth.name,
+    };
+  }
+
+  // Regular Community User / Organizer:
+  // Strict identity binding: the user CANNOT act on behalf of any other email!
+  const sessionEmail = (auth.email || "").toLowerCase().trim();
+  if (!sessionEmail) {
+    return {
+      authorized: false,
+      error: "UNAUTHORIZED: Akun sesi tidak memiliki alamat email terdaftar.",
+      email: null,
+      isAdmin: false,
+      userId: auth.userId,
+    };
+  }
+
+  let targetEmailResolved = targetEmailOrId ? targetEmailOrId.toLowerCase().trim() : null;
+  if (targetEmailResolved && targetEmailResolved.startsWith("org-")) {
+    const orgRecord = getOrganizerById(targetEmailOrId!);
+    if (orgRecord) {
+      targetEmailResolved = orgRecord.email.toLowerCase().trim();
+    }
+  }
+
+  // If client specified a target email that differs from authenticated session email, REJECT!
+  if (targetEmailResolved && targetEmailResolved !== sessionEmail) {
+    return {
+      authorized: false,
+      error: `FORBIDDEN: Pelanggaran isolasi data. Akun terautentikasi Anda (${sessionEmail}) tidak memiliki izin mengakses data milik ${targetEmailOrId}.`,
+      email: sessionEmail,
+      isAdmin: false,
+      userId: auth.userId,
+    };
+  }
+
+  // Check if organizer account has been deactivated by Platform Admin
+  if (!isOrganizerActive(sessionEmail)) {
+    const existingOrg = getOrganizerByEmail(sessionEmail);
+    if (existingOrg && existingOrg.status === "INACTIVE") {
+      return {
+        authorized: false,
+        error: `FORBIDDEN: Akun penyelenggara [${sessionEmail}] saat ini dinonaktifkan oleh Administrator Platform. Silakan hubungi manajemen DAGO Creative Hub.`,
+        email: sessionEmail,
+        isAdmin: false,
+        userId: auth.userId,
+      };
+    }
+
+    // Allow user who submitted a proposal to monitor their proposal review in the portal
+    let hasSubmittedProposal = false;
+    try {
+      const eventsFile = getDataFilePath("events.json");
+      if (fs.existsSync(eventsFile)) {
+        const raw = fs.readFileSync(eventsFile, "utf-8");
+        const events = JSON.parse(raw);
+        if (Array.isArray(events)) {
+          hasSubmittedProposal = events.some(
+            (e: any) =>
+              (e.organizerEmail || "").toLowerCase() === sessionEmail &&
+              (e.status === "PENDING" || e.status === "REVISION_REQUESTED")
+          );
+        }
+      }
+    } catch { }
+
+    if (hasSubmittedProposal) {
+      return {
+        authorized: true,
+        email: sessionEmail,
+        isAdmin: false,
+        userId: auth.userId,
+        name: auth.name,
+      };
+    }
+
+    return {
+      authorized: false,
+      error: `FORBIDDEN: Akun [${sessionEmail}] belum terdaftar sebagai penyelenggara aktif. Silakan ajukan event proposal terlebih dahulu.`,
+      email: sessionEmail,
+      isAdmin: false,
+      userId: auth.userId,
+    };
+  }
+
+  return {
+    authorized: true,
+    email: sessionEmail,
+    isAdmin: false,
+    userId: auth.userId,
+    name: auth.name,
+  };
+}
+
+/**
+ * Validates that the request has an admin role and scope authorized to moderate events.
+ * Crucial: Only Hub Management (PLATFORM and ORGANIZATION) can moderate events.
+ * Tenant Owners (TENANT scope) and Outlet staff (OUTLET scope) are strictly forbidden.
+ */
+export async function assertEventAdmin(req: NextRequest): Promise<{
+  authorized: boolean;
+  error?: string;
+  role?: RoleSlug;
+  scopeLevel?: ScopeLevel;
+  userId?: string;
+  name?: string;
+}> {
+  const auth = await getRequestAuthUser(req);
+
+  if (!auth.isAuthenticated || !auth.role) {
+    return {
+      authorized: false,
+      error: auth.error || "UNAUTHORIZED: Anda harus login untuk mengakses panel manajemen event.",
+    };
+  }
+
+  // 1. Check Role
+  if (!AUTHORIZED_ADMIN_ROLES.includes(auth.role)) {
+    return {
+      authorized: false,
+      error: `FORBIDDEN: Role [${auth.role}] tidak memiliki izin untuk mengelola atau memoderasi event.`,
+    };
+  }
+
+  // 2. Check Scope: Community events are shared hub amenities
+  // Tenant stall owners only govern their individual stall, not the creative hub's public events!
+  const userScope: ScopeLevel =
+    auth.scopeLevel || (auth.role === "SUPER_ADMIN" ? "PLATFORM" : "TENANT");
+
+  if (!AUTHORIZED_MODERATION_SCOPES.includes(userScope)) {
+    return {
+      authorized: false,
+      error: `FORBIDDEN: Pengguna dengan cakupan [${userScope}] tidak berhak memoderasi event publik Dago Creative Hub. Hak moderasi terbatas pada pengelola tingkat ORGANIZATION atau PLATFORM.`,
+    };
+  }
+
+  return {
+    authorized: true,
+    role: auth.role,
+    scopeLevel: userScope,
+    userId: auth.userId || undefined,
+    name: auth.name,
+  };
+}
+
+/**
+ * Validates check-in authorization for field officers, staff, organizers, and hub management.
+ * Security enforcement:
+ * 1. Hub Management (SUPER_ADMIN, Hub OWNER, Hub MANAGER) has full event oversight.
+ * 2. Field Staff / Panitia: MUST have an explicit "events:checkin" permission OR valid event assignment.
+ *    WAITER and CASHIER roles do NOT automatically grant check-in access based on role/scope alone.
+ * 3. Community Organizers can validate attendees ONLY on events they own (matching event.organizerEmail).
+ * 4. F&B Tenant Owners and Tenant Staff are STRICTLY EXCLUDED (HTTP 403).
+ * 5. Other roles (unauthenticated, unrelated guests, customers) are rejected with HTTP 403.
+ */
+export async function assertCheckInAuth(
+  req: NextRequest,
+  eventId?: string
+): Promise<{
+  authorized: boolean;
+  error?: string;
+  role?: RoleSlug;
+  email?: string;
+  userId?: string;
+  name?: string;
+  isFieldOfficer?: boolean;
+}> {
+  const auth = await getRequestAuthUser(req);
+
+  if (!auth.isAuthenticated || !auth.userId) {
+    return {
+      authorized: false,
+      error: "UNAUTHORIZED: Autentikasi sesi server diperlukan untuk melakukan check-in peserta.",
+    };
+  }
+
+  // Strict Tenant & F&B Exclusion:
+  // Strictly attribute-based, no email domain substring checks.
+  // F&B Tenant Owners and Staff MUST NEVER access event check-in.
+  if (
+    auth.scopeLevel === "TENANT" ||
+    Boolean(auth.tenantId) ||
+    auth.businessModule === "FNB"
+  ) {
+    return {
+      authorized: false,
+      error: "FORBIDDEN: Mitra F&B / Tenant tidak memiliki wewenang untuk operasional Event Hub.",
+    };
+  }
+
+  // Customers without organizer rights are excluded
+  if (auth.role === "CUSTOMER" && !auth.permissions?.includes("events:manage_own")) {
+    return {
+      authorized: false,
+      error: "FORBIDDEN: Akun pelanggan tidak memiliki wewenang untuk operasional Event Check-in.",
+    };
+  }
+
+  const normalizedUserEmail = (auth.email || "").trim().toLowerCase();
+
+  // Load and validate event status and assignments if eventId is provided
+  let isEventOrganizer = false;
+  let isAssignedToEvent = false;
+
+  if (eventId) {
+    try {
+      const eventsFile = getDataFilePath("events.json");
+      if (fs.existsSync(eventsFile)) {
+        const raw = fs.readFileSync(eventsFile, "utf-8");
+        const events = JSON.parse(raw);
+        if (Array.isArray(events)) {
+          const eventRecord = events.find((e: any) => e.id === eventId);
+          if (eventRecord) {
+            // Priority C: Event Inactivity Guard
+            // Block check-in if event status is NOT APPROVED (e.g. PENDING, REVISION_REQUESTED, REJECTED, ARCHIVED)
+            if (eventRecord.status && eventRecord.status !== "APPROVED") {
+              return {
+                authorized: false,
+                error: `FORBIDDEN: Event "${eventRecord.title || eventId}" tidak berstatus aktif atau belum disetujui (Status: ${eventRecord.status}). Check-in ditolak.`,
+              };
+            }
+
+            if (normalizedUserEmail && (eventRecord.organizerEmail || "").trim().toLowerCase() === normalizedUserEmail) {
+              isEventOrganizer = true;
+            }
+
+            const assignedList: string[] = Array.isArray(eventRecord.assignedStaffEmails)
+              ? eventRecord.assignedStaffEmails.map((e: string) => String(e).trim().toLowerCase())
+              : [];
+            if (normalizedUserEmail && assignedList.includes(normalizedUserEmail)) {
+              isAssignedToEvent = true;
+            }
+          }
+        }
+      }
+    } catch { }
+  }
+
+  // 1. Hub Management Oversight (SUPER_ADMIN with PLATFORM scope, or Hub OWNER/MANAGER with ORGANIZATION scope)
+  // Must NOT be tied to a tenant and must NOT be FNB
+  const isHubAdmin =
+    (auth.role === "SUPER_ADMIN" && auth.scopeLevel === "PLATFORM") ||
+    ((auth.role === "OWNER" || auth.role === "MANAGER") &&
+      auth.scopeLevel === "ORGANIZATION" &&
+      !auth.tenantId);
+
+  if (isHubAdmin) {
+    return {
+      authorized: true,
+      role: auth.role || undefined,
+      email: auth.email || undefined,
+      userId: auth.userId,
+      name: auth.name,
+    };
+  }
+
+  // Check explicit permission code (e.g. from Hub Event Staff)
+  const hasExplicitCheckInPerm =
+    Boolean(auth.permissions?.includes("events:checkin") || auth.permissions?.includes("*"));
+
+  // 2. Organizer can ONLY check in attendees on their OWN approved event
+  if (isEventOrganizer) {
+    return {
+      authorized: true,
+      role: auth.role || undefined,
+      email: auth.email || undefined,
+      userId: auth.userId,
+      name: auth.name,
+    };
+  }
+
+  // 3. Event Staff assigned to this specific event
+  if (isAssignedToEvent) {
+    return {
+      authorized: true,
+      role: auth.role || undefined,
+      email: auth.email || undefined,
+      userId: auth.userId,
+      name: auth.name,
+      isFieldOfficer: true,
+    };
+  }
+
+  // 4. Check-in Staff or Hub Staff with explicit check-in permission
+  if (
+    auth.role === "CHECKIN_STAFF" ||
+    (hasExplicitCheckInPerm && auth.scopeLevel === "ORGANIZATION" && !auth.tenantId)
+  ) {
+    return {
+      authorized: true,
+      role: auth.role || undefined,
+      email: auth.email || undefined,
+      userId: auth.userId,
+      name: auth.name,
+      isFieldOfficer: true,
+    };
+  }
+
+  // 5. WAITER, CASHIER, and KITCHEN_STAFF are STRICTLY REJECTED from check-in!
+  if (auth.role === "WAITER" || auth.role === "CASHIER" || auth.role === "KITCHEN_STAFF") {
+    return {
+      authorized: false,
+      error: `FORBIDDEN: Staf [${auth.role}] tidak memiliki penugasan atau wewenang check-in pada event ini.`,
+    };
+  }
+
+  // Customer or other unassigned roles are rejected
+  return {
+    authorized: false,
+    error: `FORBIDDEN: Akun [${auth.email || auth.role}] tidak memiliki penugasan atau izin check-in pada event ini.`,
+  };
+}
+
+/**
+ * PII Data Masking utility for guest privacy
+ */
+export function maskEmail(email: string): string {
+  if (!email || !email.includes("@")) return "***@***";
+  const [local, domain] = email.split("@");
+  if (local.length <= 2) {
+    return `${local[0]}***@${domain}`;
+  }
+  return `${local.slice(0, 2)}***${local.slice(-1)}@${domain}`;
+}
+
+export function maskPhoneNumber(phone: string): string {
+  if (!phone) return "••••••••";
+  const clean = phone.trim();
+  if (clean.length < 8) return "••••••••";
+  return `${clean.slice(0, 4)}••••${clean.slice(-4)}`;
+}
+
+// Alias for getRequestAuthUser
+export const getServerAuthSession = getRequestAuthUser;

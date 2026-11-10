@@ -1,93 +1,156 @@
-# DagoEng Management
+# DagoEng F&B Management & Coworking Hub
 
+> **Brand**: DagoEng Creative Hub  
+> **Tagline**: *Smarter F&B. Better Operations.*  
+> **Product**: Integrated Multi-Tenant F&B, Coworking & Retail Space Management
 
+---
 
-## Getting started
+## 📌 Product Overview & Prioritas Modul Sistem
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+**DagoEng F&B Management** adalah platform all-in-one enterprise terpadu yang dirancang untuk mengelola seluruh ekosistem bisnis dengan hierarki prioritas sistem sebagai berikut:
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+### 🏆 Prioritas Arsitektur & Modul Sistem:
+1. **Prioritas 1 — Co-Working Space**: Reservasi Hot Desk/Dedicated Nomad Desk, VIP Meeting Room hourly booking, pass harian/bulanan, dan integrasi voucher Wi-Fi Mikrotik.
+2. **Prioritas 2 — F&B Culinary & POS**: POS Kasir multi-payment, Kitchen Display System (KDS) SLA, Table Floor Plan, BOM Recipe stock deduction, dan AI inventory procurement.
+3. **Prioritas 3 — Event Marketplace & Community**: Pengajuan proposal event, kurasi kurator, pemesanan tiket, live attendee check-in, dan negosiasi bagi hasil transparan.
 
-## Add your files
+Modul pendukung lainnya meliputi **Commercial Retail Space**, **Customer CRM & Loyalty**, serta **Executive Dashboard & Export Suite** (PDF, Excel .xlsx, CSV).
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+---
 
+## 🚀 Quick Start / Menjalankan Proyek
+
+Proyek ini dibangun menggunakan Next.js (App Router) fullstack yang menghubungkan antarmuka frontend dan API route backend secara terintegrasi dengan database online Neon PostgreSQL.
+
+```bash
+# 1. Pasang dependensi
+npm install
+
+# 2. Sinkronkan dan generate Prisma Client ke database Neon
+npx prisma db push
+npm run db:seed
+
+# 3. Jalankan server pengembangan
+npm run dev
+
+# 4. Atau jalankan mode produksi
+npm run build
+npm run start
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/devdagoeng/dagoeng-management.git
-git branch -M main
-git push -uf origin main
+
+---
+
+## 📂 Struktur Direktori & Modul Proyek (Clean Architecture)
+
+```text
+dagoeng-fnb-management/
+├── prisma/                          # Database ORM schema & seed data
+│   ├── schema.prisma                # Multi-tenant relational schema (PostgreSQL)
+│   └── seed.ts                      # Demo seeders (8 personas, products, tables, spaces)
+│
+├── docs/                            # Dokumentasi teknis & spesifikasi sistem
+│   ├── ARCHITECTURE.md              # Blueprint arsitektur multi-tenant & state machine
+│   ├── DATABASE.md                  # Skema database, relasi tabel & index
+│   ├── RBAC.md                      # Role-Based Access Control matrix
+│   ├── DESIGN_SYSTEM.md             # Color tokens, typography, glassmorphism standards
+│   ├── TESTING.md                   # Panduan unit test & quality gate
+│   ├── implementation_plan.md       # Catatan roadmap & implementasi teknis
+│   └── prd_sistem_working_space.md  # Dokumen PRD sistem working space
+│
+├── src/
+│   ├── app/                         # Next.js 14 App Router (Pages & Routes)
+│   │   ├── (auth)/login/            # Multi-persona quick switcher & login modal
+│   │   ├── (dashboard)/             # Protected admin/staff dashboard routes
+│   │   │   ├── dashboard/           # Executive KPI, chart trend & AI insights
+│   │   │   ├── pos/                 # Kasir POS & split payment
+│   │   │   ├── kitchen/             # Kitchen Display System (KDS) live timers
+│   │   │   ├── orders/              # Riwayat pesanan & rekap modal PDF/Excel
+│   │   │   ├── tables/              # Denah meja interaktif & status dine-in
+│   │   │   ├── menu/                # Manajemen katalog menu & recipe linking
+│   │   │   ├── inventory/           # Stok bahan baku, BOM recipe & AI assistant
+│   │   │   ├── customers/           # CRM database & tier membership
+│   │   │   ├── coworking/           # Reservasi Hot Desk & VIP Meeting Room
+│   │   │   ├── commercial/          # Retail tenant lease contract & billing
+│   │   │   ├── employees/           # Shift kasir, cash drawer float & clock in/out
+│   │   │   ├── activity-log/        # Audit trail aktivitas pengguna
+│   │   │   ├── reports/             # Laporan penjualan, laba rugi & traffic
+│   │   │   ├── ai-insight/          # AI business advisor & revenue forecasting
+│   │   │   └── settings/            # Konfigurasi sistem & profil outlet
+│   │   ├── (mobile)/                # Mobile-first customer & waiter portal
+│   │   │   ├── customer/            # Self-order digital menu & loyalty card
+│   │   │   └── waiter/              # Waiter table handheld order taker
+│   │   ├── globals.css              # Styling utama Tailwind & glassmorphism
+│   │   ├── layout.tsx               # Root application wrapper & providers
+│   │   └── page.tsx                 # Landing page publik Dago Creative Hub
+│   │
+│   ├── components/                  # Reusable shared UI primitives
+│   │   ├── providers/               # AppProviders context composition root
+│   │   └── ui/                      # Base atoms (Button, Card, Badge, Input, Table, Tabs, Skeleton)
+│   │
+│   ├── contexts/                    # Global state management & business engines
+│   │   ├── AuthContext.tsx          # Multi-role authentication & session state
+│   │   ├── OutletContext.tsx        # Multi-outlet switcher & tenant isolation
+│   │   ├── OrderContext.tsx         # Transaksi pesanan, billing & payment state
+│   │   ├── TableContext.tsx         # Denah meja & dine-in occupancy
+│   │   ├── InventoryContext.tsx     # Stok bahan baku & BOM recipe deduction
+│   │   ├── ProductContext.tsx       # Katalog menu makanan/minuman
+│   │   ├── LoyaltyContext.tsx       # Tier membership & point redemption
+│   │   ├── CoworkingContext.tsx     # Workspace space availability & check-in
+│   │   ├── CommercialContext.tsx    # Tenant contracts, lease & rent invoices
+│   │   ├── EmployeeShiftContext.tsx # Shift schedule, cash float & drawer closing
+│   │   ├── ActivityLogContext.tsx   # Security audit trail logging
+│   │   ├── NotificationContext.tsx  # Toast & alert notifications
+│   │   ├── SettingsContext.tsx      # Business profiles, tax & receipt settings
+│   │   └── DateFilterContext.tsx    # Filter rentang tanggal laporan global
+│   │
+│   ├── features/                    # Domain-driven feature components & export modals
+│   │   ├── activity-log/            # ActivityLogPDFModal
+│   │   ├── commercial/              # CommercialReportPDFModal
+│   │   ├── coworking/               # CoworkingReportPDFModal
+│   │   ├── customers/               # CustomersReportPDFModal
+│   │   ├── dashboard/               # KPICard, RevenueChart, AIInsightCard, OutletCompare
+│   │   ├── employees/               # EmployeesReportPDFModal
+│   │   ├── inventory/               # BOMRecipeModal, InventoryReportPDFModal
+│   │   ├── layout/                  # Sidebar, Header, RoleAwareStatusPill, DevRoleBar
+│   │   ├── orders/                  # OrdersReportPDFModal
+│   │   ├── payment/                 # PaymentWaitingModal
+│   │   ├── pos/                     # PaymentModal, ModifierModal, ReceiptModal, DailyClosingPDFModal
+│   │   └── reports/                 # StructuredReportPDFModal
+│   │
+│   ├── lib/                         # Core utilities, helpers & calculation engines
+│   │   ├── rbac.ts                  # Role & permission matrix enforcement
+│   │   ├── tenant.ts                # Tenant security isolation helpers
+│   │   ├── settlement.ts            # Payment fee, service tax & net payout
+│   │   ├── promo.ts                 # Promo code calculation & discounting
+│   │   ├── export-utils.ts          # Universal Excel (.xlsx) & CSV export engine
+│   │   ├── order-analytics.ts       # Hourly traffic & sales velocity analytics
+│   │   ├── audio-chime.ts           # Sound notification synthesizer (Web Audio API)
+│   │   ├── session.ts               # Secure cookie session helper
+│   │   ├── utils.ts                 # Formatting currency (IDR), dates & CN class helper
+│   │   └── db.ts                    # Prisma client singleton
+│   │
+│   └── types/                       # TypeScript interfaces & domain type definitions
+│       └── index.ts                 # Clean barrel export of all models
+│
+└── tests/                           # Vitest / Jest comprehensive test suite (89 passing tests)
+    ├── auth.test.ts
+    ├── rbac.test.ts
+    ├── multi-business-rbac.test.ts
+    ├── tenant-isolation.test.ts
+    ├── outlet-isolation.test.ts
+    ├── pos-transaction.test.ts
+    ├── pos-promo-integration.test.ts
+    ├── promo-calculation.test.ts
+    ├── settlement.test.ts
+    ├── revenue-split-and-tax.test.ts
+    ├── order-lifecycle.test.ts
+    ├── core-operational-flow.test.ts
+    ├── inventory-cogs.test.ts
+    ├── coworking-booking.test.ts
+    ├── customer-loyalty.test.ts
+    ├── customer-portal-payment.test.ts
+    └── activity-log.test.ts
 ```
 
-## Integrate with your tools
-
-* [Set up project integrations](https://gitlab.com/devdagoeng/dagoeng-management/-/settings/integrations)
-
-## Collaborate with your team
-
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+---
