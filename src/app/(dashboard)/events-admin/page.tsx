@@ -43,6 +43,7 @@ import {
   Wallet,
   Copy,
   ChevronDown,
+  TrendingUp,
   ChevronUp,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
@@ -61,6 +62,7 @@ import {
 const STATUS_TABS: { key: string; label: string; status?: EventStatus }[] = [
   { key: "ALL", label: "Semua Pengajuan" },
   { key: "PENDING", label: "Menunggu Review", status: "PENDING" },
+  { key: "REVENUE_SPLIT", label: "Usulan Bagi Hasil" },
   { key: "APPROVED", label: "Disetujui", status: "APPROVED" },
   { key: "REVISION_REQUESTED", label: "Perlu Revisi", status: "REVISION_REQUESTED" },
   { key: "REJECTED", label: "Ditolak", status: "REJECTED" },
@@ -895,9 +897,13 @@ export default function AdminEventsPage() {
     setIsEditModalOpen(true);
   };
 
-  // Status counts for badges (includes both event moderation and revenue split review)
+  // Status counts for badges
   const pendingCount = useMemo(
-    () => events.filter((e) => e.status === "PENDING" || e.proposedRevenueSplit?.status === "PENDING").length,
+    () => events.filter((e) => e.status === "PENDING").length,
+    [events]
+  );
+  const pendingSplitCount = useMemo(
+    () => events.filter((e) => e.proposedRevenueSplit?.status === "PENDING").length,
     [events]
   );
 
@@ -908,8 +914,11 @@ export default function AdminEventsPage() {
       if (selectedStatusTab === "ALL") {
         matchStatus = true;
       } else if (selectedStatusTab === "PENDING") {
-        // Unified Menunggu Review: covers both pending event moderation & revenue split proposals
-        matchStatus = e.status === "PENDING" || e.proposedRevenueSplit?.status === "PENDING";
+        // Strictly events pending initial moderation
+        matchStatus = e.status === "PENDING";
+      } else if (selectedStatusTab === "REVENUE_SPLIT") {
+        // Events with pending custom revenue split negotiations
+        matchStatus = e.proposedRevenueSplit?.status === "PENDING";
       } else {
         matchStatus = e.status === selectedStatusTab;
       }
@@ -1284,7 +1293,7 @@ export default function AdminEventsPage() {
               </div>
               <div>
                 <div className="text-base sm:text-xl font-black text-amber-600 dark:text-amber-400 leading-tight">
-                  {events.filter((e) => e.status === "PENDING" || e.proposedRevenueSplit?.status === "PENDING").length} <span className="text-xs font-normal text-slate-400">Antrean</span>
+                  {events.filter((e) => e.status === "PENDING").length} <span className="text-xs font-normal text-slate-400">Antrean</span>
                 </div>
                 <span className="text-[10px] text-slate-400 truncate block mt-0.5">Perlu verifikasi admin</span>
               </div>
@@ -1363,7 +1372,9 @@ export default function AdminEventsPage() {
                     const active = selectedStatusTab === tab.key;
                     const count =
                       tab.key === "PENDING"
-                        ? events.filter((e) => e.status === "PENDING" || e.proposedRevenueSplit?.status === "PENDING").length
+                        ? events.filter((e) => e.status === "PENDING").length
+                        : tab.key === "REVENUE_SPLIT"
+                        ? events.filter((e) => e.proposedRevenueSplit?.status === "PENDING").length
                         : tab.status !== undefined
                         ? events.filter((e) => e.status === tab.status).length
                         : events.length;
@@ -1753,58 +1764,72 @@ export default function AdminEventsPage() {
                                 <Edit className="w-3.5 h-3.5" />
                               </Button>
 
-                              {/* Approve Quick Button */}
-                              {evt.status !== "APPROVED" && (
-                                <Button
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleUpdateStatus(evt.id, "APPROVED");
-                                  }}
-                                  disabled={isProcessingAction}
-                                  className="h-8 px-2.5 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] font-bold rounded-lg shadow-xs"
-                                >
-                                  <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                                  Setujui
-                                </Button>
+                              {/* Moderation Actions (Approve, Revision, Reject): ONLY for PENDING or REVISION_REQUESTED */}
+                              {(evt.status === "PENDING" || evt.status === "REVISION_REQUESTED") && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUpdateStatus(evt.id, "APPROVED");
+                                    }}
+                                    disabled={isProcessingAction}
+                                    className="h-8 px-2.5 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] font-bold rounded-lg shadow-xs"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                    Setujui
+                                  </Button>
+
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedEvent(evt);
+                                      setModalNotes(evt.revisionNotes || "");
+                                      setIsRevisionModalOpen(true);
+                                    }}
+                                    className="h-8 px-2.5 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-800 hover:bg-sky-50 text-[11px] font-semibold rounded-lg"
+                                  >
+                                    Revisi
+                                  </Button>
+
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedEvent(evt);
+                                      setModalNotes(evt.rejectionReason || "");
+                                      setIsRejectModalOpen(true);
+                                    }}
+                                    className="h-8 px-2 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-50 text-[11px] rounded-lg"
+                                    title="Tolak Pengajuan"
+                                  >
+                                    <XCircle className="w-3.5 h-3.5" />
+                                  </Button>
+                                </>
                               )}
 
-                              {/* Request Revision */}
-                              {evt.status === "PENDING" && (
+                              {/* Revenue Split Quick Review: if there is an active proposal on an approved event */}
+                              {evt.proposedRevenueSplit?.status === "PENDING" && evt.status === "APPROVED" && (
                                 <Button
-                                  variant="outline"
                                   size="sm"
+                                  variant="outline"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setSelectedEvent(evt);
-                                    setModalNotes(evt.revisionNotes || "");
-                                    setIsRevisionModalOpen(true);
+                                    setIsDetailModalOpen(true);
                                   }}
-                                  className="h-8 px-2.5 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-800 hover:bg-sky-50 text-[11px] font-semibold rounded-lg"
+                                  className="h-8 px-2 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-800 hover:bg-purple-50 text-[11px] font-bold rounded-lg"
+                                  title="Tinjau Usulan Bagi Hasil"
                                 >
-                                  Revisi
+                                  <TrendingUp className="w-3.5 h-3.5 mr-1" />
+                                  <span>Bagi Hasil</span>
                                 </Button>
                               )}
 
-                              {/* Reject */}
-                              {evt.status === "PENDING" && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedEvent(evt);
-                                    setModalNotes(evt.rejectionReason || "");
-                                    setIsRejectModalOpen(true);
-                                  }}
-                                  className="h-8 px-2 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-50 text-[11px] rounded-lg"
-                                  title="Tolak Pengajuan"
-                                >
-                                  <XCircle className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-
-                              {/* Archive (for approved/rejected) */}
+                              {/* Archive (for approved active events that are done/archived) */}
                               {evt.status === "APPROVED" && (
                                 <Button
                                   variant="ghost"

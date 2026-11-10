@@ -379,7 +379,7 @@ export default function DashboardPage() {
 
             {adminActionAlerts.pendingRevenueSplitCount > 0 && (
               <Link
-                href="/events-admin?section=MODERATION&tab=PENDING"
+                href="/events-admin?section=MODERATION&tab=REVENUE_SPLIT"
                 className="group flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-900/60 hover:border-purple-400 dark:hover:border-purple-500 transition-all shadow-2xs cursor-pointer hover:shadow-xs"
               >
                 <div className="flex items-center space-x-2.5 min-w-0">
@@ -391,7 +391,7 @@ export default function DashboardPage() {
                       Usulan Bagi Hasil
                     </div>
                     <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                      {adminActionAlerts.pendingRevenueSplitCount} proposal menunggu
+                      {adminActionAlerts.pendingRevenueSplitCount} proposal komisi
                     </div>
                   </div>
                 </div>
