@@ -12,12 +12,36 @@ export {
   INITIAL_ORGANIZERS,
 };
 
-import { getDataFilePath } from "@/lib/data-storage";
+import { getDataFilePath, syncStorageFromDb, persistStorageToDb } from "@/lib/data-storage";
 
 const getDataFile = () => getDataFilePath("organizers.json");
 
-
 let cachedOrganizers: CommunityOrganizerProfile[] | null = null;
+
+export function clearOrganizersCache(): void {
+  cachedOrganizers = null;
+}
+
+/**
+ * Synchronizes organizers data from PostgreSQL SystemSetting (STORAGE_organizers.json).
+ * Safe against slow/offline database: never clobbers local data with empty if DB unconfirmed.
+ */
+export async function syncOrganizersFromDb(): Promise<boolean> {
+  const synced = await syncStorageFromDb("organizers.json").catch(() => false);
+  if (synced) {
+    cachedOrganizers = null;
+  }
+  return synced;
+}
+
+/**
+ * Persists organizers data to PostgreSQL SystemSetting (STORAGE_organizers.json).
+ */
+export async function persistOrganizersToDb(organizers?: CommunityOrganizerProfile[]): Promise<boolean> {
+  const all = organizers || getAllOrganizers();
+  const content = JSON.stringify(all, null, 2);
+  return persistStorageToDb("organizers.json", content);
+}
 
 export function loadOrganizersFromDisk(): CommunityOrganizerProfile[] {
   const dataFile = getDataFile();
@@ -65,15 +89,21 @@ export function saveOrganizersToDisk(organizers: CommunityOrganizerProfile[]): v
     }
     const nonce = Math.random().toString(36).slice(2, 8);
     const tmpFile = path.join(dir, `.organizers.json.tmp.${process.pid}.${Date.now()}.${nonce}`);
-    fs.writeFileSync(tmpFile, JSON.stringify(organizers, null, 2), "utf-8");
+    const content = JSON.stringify(organizers, null, 2);
+    fs.writeFileSync(tmpFile, content, "utf-8");
     try {
       fs.renameSync(tmpFile, dataFile);
     } catch {
-      fs.writeFileSync(dataFile, JSON.stringify(organizers, null, 2), "utf-8");
+      fs.writeFileSync(dataFile, content, "utf-8");
       try {
         fs.unlinkSync(tmpFile);
       } catch {}
     }
+
+    // Persist to PostgreSQL SystemSetting (STORAGE_organizers.json)
+    persistStorageToDb("organizers.json", content).catch((err) => {
+      console.warn("[organizers] Background persist organizers.json to DB warning:", err);
+    });
   } catch (err) {
     console.error("Failed to write organizers to disk", err);
   }
@@ -94,14 +124,23 @@ export function getOrganizerById(id: string): CommunityOrganizerProfile | null {
   return all.find((o) => o.id === id) || null;
 }
 
-export function ensureOrganizerActive(payload: {
-  email: string;
-  name?: string;
-  category?: string;
-  contactPerson?: string;
-  phone?: string;
-  notes?: string;
-}): CommunityOrganizerProfile {
+export function ensureOrganizerActive(
+  payloadOrEmail:
+    | string
+    | {
+        email: string;
+        name?: string;
+        category?: string;
+        contactPerson?: string;
+        phone?: string;
+        notes?: string;
+      },
+  optionalName?: string
+): CommunityOrganizerProfile {
+  const payload =
+    typeof payloadOrEmail === "string"
+      ? { email: payloadOrEmail, name: optionalName }
+      : payloadOrEmail;
   const normalizedEmail = (payload.email || "").trim().toLowerCase();
   const all = getAllOrganizers();
   const existing = all.find((o) => o.email.toLowerCase() === normalizedEmail);
@@ -128,6 +167,10 @@ export function ensureOrganizerActive(payload: {
     scopeLevel: "TENANT",
     roleName: "Penyelenggara Event",
     notes: payload.notes || "Penyelenggara terdaftar resmi DAGO Creative Hub",
+    bankName: null,
+    accountNumber: null,
+    accountHolder: null,
+    branch: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -252,12 +295,25 @@ export function updateOrganizerStatus(id: string, status: "ACTIVE" | "INACTIVE")
 
 export function updateOrganizerDetails(
   id: string,
-  updates: Partial<Pick<CommunityOrganizerProfile, "name" | "category" | "contactPerson" | "phone" | "notes">>
+  updates: Partial<
+    Pick<
+      CommunityOrganizerProfile,
+      | "name"
+      | "category"
+      | "contactPerson"
+      | "phone"
+      | "notes"
+      | "bankName"
+      | "accountNumber"
+      | "accountHolder"
+      | "branch"
+    >
+  >
 ): CommunityOrganizerProfile {
   const all = getAllOrganizers();
-  const idx = all.findIndex((o) => o.id === id);
+  const idx = all.findIndex((o) => o.id === id || o.email.toLowerCase() === id.toLowerCase());
   if (idx === -1) {
-    throw new Error(`Penyelenggara dengan ID [${id}] tidak ditemukan.`);
+    throw new Error(`Penyelenggara dengan ID/Email [${id}] tidak ditemukan.`);
   }
 
   all[idx] = {
@@ -268,4 +324,78 @@ export function updateOrganizerDetails(
 
   saveOrganizersToDisk(all);
   return all[idx];
+}
+
+/**
+ * Updates organizer's bank account credentials on server storage.
+ */
+export function updateOrganizerBankDetails(
+  emailOrId: string,
+  bankDetails: {
+    bankName: string;
+    accountNumber: string;
+    accountHolder: string;
+    branch?: string;
+  }
+): CommunityOrganizerProfile {
+  const all = getAllOrganizers();
+  const normalized = (emailOrId || "").trim().toLowerCase();
+  const idx = all.findIndex(
+    (o) => o.id === emailOrId || o.email.toLowerCase() === normalized
+  );
+  if (idx === -1) {
+    throw new Error(`Penyelenggara [${emailOrId}] tidak ditemukan.`);
+  }
+
+  all[idx] = {
+    ...all[idx],
+    bankName: bankDetails.bankName.trim(),
+    accountNumber: bankDetails.accountNumber.trim(),
+    accountHolder: bankDetails.accountHolder.trim(),
+    branch: bankDetails.branch ? bankDetails.branch.trim() : all[idx].branch || null,
+    updatedAt: new Date().toISOString(),
+  };
+
+  saveOrganizersToDisk(all);
+  return all[idx];
+}
+
+/**
+ * Async version of updateOrganizerBankDetails: syncs with DB before read, persists after write.
+ */
+export async function updateOrganizerBankDetailsAsync(
+  emailOrId: string,
+  bankDetails: {
+    bankName: string;
+    accountNumber: string;
+    accountHolder: string;
+    branch?: string;
+  }
+): Promise<CommunityOrganizerProfile> {
+  await syncOrganizersFromDb().catch(() => {});
+  const res = updateOrganizerBankDetails(emailOrId, bankDetails);
+  await persistOrganizersToDb().catch(() => {});
+  return res;
+}
+
+/**
+ * Async version of ensureOrganizerActive: syncs with DB before read, persists after write.
+ */
+export async function ensureOrganizerActiveAsync(
+  payloadOrEmail:
+    | string
+    | {
+        email: string;
+        name?: string;
+        category?: string;
+        contactPerson?: string;
+        phone?: string;
+        notes?: string;
+      },
+  optionalName?: string
+): Promise<CommunityOrganizerProfile> {
+  await syncOrganizersFromDb().catch(() => {});
+  const res = ensureOrganizerActive(payloadOrEmail, optionalName);
+  await persistOrganizersToDb().catch(() => {});
+  return res;
 }

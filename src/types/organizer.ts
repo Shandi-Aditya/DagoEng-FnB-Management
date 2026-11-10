@@ -12,6 +12,10 @@ export interface CommunityOrganizerProfile {
   scopeLevel: ScopeLevel; // "TENANT"
   roleName: string; // "Penyelenggara Event"
   notes?: string | null;
+  bankName?: string | null;
+  accountNumber?: string | null;
+  accountHolder?: string | null;
+  branch?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,6 +34,10 @@ export const INITIAL_ORGANIZERS: CommunityOrganizerProfile[] = [
     scopeLevel: "TENANT",
     roleName: "Penyelenggara Event",
     notes: "Penyelenggara resmi Latte Art Throwdown & workshop kopi berkala.",
+    bankName: "BCA",
+    accountNumber: "8420192831",
+    accountHolder: "Dago Specialty Coffee Society",
+    branch: "KCU Singaraja",
     createdAt: "2026-01-15T08:00:00.000Z",
     updatedAt: "2026-01-15T08:00:00.000Z",
   },
@@ -45,6 +53,10 @@ export const INITIAL_ORGANIZERS: CommunityOrganizerProfile[] = [
     scopeLevel: "TENANT",
     roleName: "Penyelenggara Event",
     notes: "Komunitas inkubasi developer game indie se-Bandung Raya.",
+    bankName: "Mandiri",
+    accountNumber: "1310019283741",
+    accountHolder: "Bandung Game Creators Collective",
+    branch: "KC Singaraja",
     createdAt: "2026-02-01T10:00:00.000Z",
     updatedAt: "2026-02-01T10:00:00.000Z",
   },
@@ -60,6 +72,10 @@ export const INITIAL_ORGANIZERS: CommunityOrganizerProfile[] = [
     scopeLevel: "TENANT",
     roleName: "Penyelenggara Event",
     notes: "Studio workshop cetak risograph dan pelestarian aksara Nusantara.",
+    bankName: "BCA",
+    accountNumber: "7720194821",
+    accountHolder: "Studio Aksara Priangan",
+    branch: "KCU Singaraja",
     createdAt: "2026-02-10T11:00:00.000Z",
     updatedAt: "2026-02-10T11:00:00.000Z",
   },
@@ -75,6 +91,10 @@ export const INITIAL_ORGANIZERS: CommunityOrganizerProfile[] = [
     scopeLevel: "TENANT",
     roleName: "Penyelenggara Event",
     notes: "Inisiatif sirkular ekonomi, pengelolaan sampah kafe, dan eco-walk.",
+    bankName: "BRI",
+    accountNumber: "002101928374501",
+    accountHolder: "Dago Hijau Berkelanjutan",
+    branch: "KC Singaraja",
     createdAt: "2026-02-15T09:00:00.000Z",
     updatedAt: "2026-02-15T09:00:00.000Z",
   },

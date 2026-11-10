@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requestOrganizerPayout, processOrganizerPayout } from "@/lib/events";
+import {
+  requestOrganizerPayout,
+  processOrganizerPayout,
+  getOrganizerServerBankAccount,
+} from "@/lib/events";
 import { assertOrganizerAuth, assertEventAdmin } from "@/lib/server-auth";
+import { getMissingPayoutFields, maskAccountNumber } from "@/lib/payout";
 import { OrganizerPayoutStatus } from "@/types/event";
 
 export const dynamic = "force-dynamic";
@@ -8,6 +13,7 @@ export const dynamic = "force-dynamic";
 /**
  * POST /api/events/[id]/payout
  * Organizer requests payout of accumulated ticket revenue for an event.
+ * Server guard: verifies that organizer bank account in server storage is complete & valid.
  */
 export async function POST(
   req: NextRequest,
@@ -18,12 +24,11 @@ export async function POST(
     const body = await req.json();
     const {
       amount,
-      bankDetails,
       notes,
       email,
     }: {
       amount: number;
-      bankDetails: { bankName: string; accountNumber: string; accountHolder: string };
+      bankDetails?: { bankName: string; accountNumber: string; accountHolder: string };
       notes?: string;
       email?: string;
     } = body;
@@ -36,9 +41,25 @@ export async function POST(
       );
     }
 
-    if (!amount || amount <= 0 || !bankDetails) {
+    if (!amount || Number(amount) <= 0) {
       return NextResponse.json(
-        { success: false, error: "Nominal pencairan dan informasi rekening bank wajib diisi." },
+        { success: false, error: "Nominal pencairan harus lebih besar dari Rp 0." },
+        { status: 400 }
+      );
+    }
+
+    // SERVER STORAGE GUARD: Check organizer registered bank account from server storage
+    const serverBank = getOrganizerServerBankAccount(auth.email);
+    const validation = getMissingPayoutFields(serverBank);
+    if (!validation.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "PAYOUT_BANK_INCOMPLETE",
+          error: "Lengkapi data rekening terlebih dahulu sebelum mengajukan pencairan dana.",
+          missingFields: validation.missingFields,
+          errors: validation.errors,
+        },
         { status: 400 }
       );
     }
@@ -47,17 +68,32 @@ export async function POST(
       auth.email,
       id,
       Number(amount),
-      bankDetails,
+      body.bankDetails,
       notes,
       auth.isAdmin
     );
 
     return NextResponse.json({
       success: true,
-      message: "Permintaan pencairan dana berhasil diajukan dan sedang menunggu verifikasi DAGO Finance.",
+      message: `Permintaan pencairan dana berhasil diajukan ke rekening ${result.payout.bankName} (${maskAccountNumber(result.payout.accountNumber)}) dan sedang menunggu verifikasi DAGO Finance.`,
       data: result,
     });
   } catch (error: any) {
+    if (
+      error?.code === "PAYOUT_BANK_INCOMPLETE" ||
+      error?.message?.startsWith("PAYOUT_BANK_INCOMPLETE")
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "PAYOUT_BANK_INCOMPLETE",
+          error: error.message.replace(/^PAYOUT_BANK_INCOMPLETE:\s*/, ""),
+          missingFields: error.missingFields || ["bankName", "accountNumber", "accountHolder"],
+          errors: error.errors || [],
+        },
+        { status: 400 }
+      );
+    }
     if (error?.name === "DatabasePersistenceError") {
       return NextResponse.json(
         {
@@ -77,6 +113,7 @@ export async function POST(
 /**
  * PATCH /api/events/[id]/payout
  * Admin verifies, processes, or rejects organizer payout request.
+ * Server guard: destination bank must be complete & valid to approve.
  */
 export async function PATCH(
   req: NextRequest,
@@ -127,6 +164,21 @@ export async function PATCH(
       data: result,
     });
   } catch (error: any) {
+    if (
+      error?.code === "PAYOUT_BANK_INCOMPLETE" ||
+      error?.message?.startsWith("PAYOUT_BANK_INCOMPLETE")
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "PAYOUT_BANK_INCOMPLETE",
+          error: error.message.replace(/^PAYOUT_BANK_INCOMPLETE:\s*/, ""),
+          missingFields: error.missingFields || ["bankName", "accountNumber", "accountHolder"],
+          errors: error.errors || [],
+        },
+        { status: 400 }
+      );
+    }
     if (error?.name === "DatabasePersistenceError") {
       return NextResponse.json(
         {

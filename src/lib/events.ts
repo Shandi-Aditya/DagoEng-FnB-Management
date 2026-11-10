@@ -52,7 +52,16 @@ export {
 };
 
 import { getDataFilePath, syncStorageFromDb, persistStorageToDb } from "@/lib/data-storage";
-import { ensureOrganizerActive } from "@/lib/organizers";
+import {
+  ensureOrganizerActive,
+  getOrganizerByEmail,
+  updateOrganizerBankDetails,
+} from "@/lib/organizers";
+import {
+  getMissingPayoutFields,
+  maskAccountNumber,
+  BankAccountHolderCandidate,
+} from "@/lib/payout";
 
 const getEventsFile = () => getDataFilePath("events.json");
 const getBookingsFile = () => getDataFilePath("event_bookings.json");
@@ -462,13 +471,59 @@ export function createEventBankAccount(
     throw new Error("Nomor rekening bank harus terdiri dari minimal 5 digit angka.");
   }
 
+  // If an organizer is updating their existing registered account, update it in place
+  if (data.accountType === "ORGANIZER" && data.organizerEmail) {
+    const existingIndex = currentAccounts.findIndex(
+      (b) =>
+        b.accountType === "ORGANIZER" &&
+        b.organizerEmail?.toLowerCase() === data.organizerEmail?.toLowerCase()
+    );
+    if (existingIndex !== -1) {
+      const now = new Date().toISOString();
+      const updatedAccount: EventBankAccount = {
+        ...currentAccounts[existingIndex],
+        label: data.label.trim(),
+        bankName: data.bankName.trim(),
+        accountNumber: cleanNumber,
+        accountHolder: data.accountHolder.trim(),
+        branch: data.branch ? data.branch.trim() : undefined,
+        updatedAt: now,
+      };
+      currentAccounts[existingIndex] = updatedAccount;
+
+      // Also persist to organizer profile on disk
+      try {
+        updateOrganizerBankDetails(data.organizerEmail, {
+          bankName: updatedAccount.bankName,
+          accountNumber: updatedAccount.accountNumber,
+          accountHolder: updatedAccount.accountHolder,
+          branch: updatedAccount.branch,
+        });
+      } catch (_) {}
+
+      const historyEntry: EventBankAccountHistoryEntry = {
+        id: `bhist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        changedAt: now,
+        changedBy: actorName,
+        action: "UPDATE",
+        bankId: updatedAccount.id,
+        details: `Pembaruan rekening mitra: ${updatedAccount.bankName} - ${maskAccountNumber(updatedAccount.accountNumber)} a.n. ${updatedAccount.accountHolder}`,
+      };
+
+      policy.bankAccounts = currentAccounts;
+      policy.bankHistory = [historyEntry, ...(policy.bankHistory || [])];
+      saveEventSettingsToDisk(policy);
+      return updatedAccount;
+    }
+  }
+
   const isDuplicate = currentAccounts.some(
     (b) =>
       b.bankName.toLowerCase() === data.bankName.trim().toLowerCase() &&
       b.accountNumber.replace(/[^0-9]/g, "") === cleanNumber
   );
   if (isDuplicate) {
-    throw new Error(`Rekening ${data.bankName} dengan nomor ${cleanNumber} sudah terdaftar.`);
+    throw new Error(`Rekening ${data.bankName} dengan nomor ${maskAccountNumber(cleanNumber)} sudah terdaftar.`);
   }
 
   const now = new Date().toISOString();
@@ -500,13 +555,24 @@ export function createEventBankAccount(
 
   currentAccounts.push(newAccount);
 
+  if (data.accountType === "ORGANIZER" && data.organizerEmail) {
+    try {
+      updateOrganizerBankDetails(data.organizerEmail, {
+        bankName: newAccount.bankName,
+        accountNumber: newAccount.accountNumber,
+        accountHolder: newAccount.accountHolder,
+        branch: newAccount.branch,
+      });
+    } catch (_) {}
+  }
+
   const historyEntry: EventBankAccountHistoryEntry = {
     id: `bhist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     changedAt: now,
     changedBy: actorName,
     action: "CREATE",
     bankId: newAccount.id,
-    details: `Menambahkan rekening baru: ${newAccount.bankName} - ${newAccount.accountNumber} a.n. ${newAccount.accountHolder} (${newAccount.label})`,
+    details: `Menambahkan rekening baru: ${newAccount.bankName} - ${maskAccountNumber(newAccount.accountNumber)} a.n. ${newAccount.accountHolder} (${newAccount.label})`,
   };
 
   policy.bankAccounts = currentAccounts;
@@ -546,13 +612,18 @@ export function updateEventBankAccount(
 
   currentAccounts[index] = updated;
 
+  const safeUpdates = { ...updates };
+  if (safeUpdates.accountNumber) {
+    safeUpdates.accountNumber = maskAccountNumber(safeUpdates.accountNumber);
+  }
+
   const historyEntry: EventBankAccountHistoryEntry = {
     id: `bhist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     changedAt: now,
     changedBy: actorName,
     action: updates.isDefault ? "SET_DEFAULT" : updates.isActive !== undefined ? "TOGGLE_ACTIVE" : "UPDATE",
     bankId,
-    details: `Pembaruan rekening ${updated.bankName} - ${updated.accountNumber}: ${JSON.stringify(updates)}`,
+    details: `Pembaruan rekening ${updated.bankName} - ${maskAccountNumber(updated.accountNumber)}: ${JSON.stringify(safeUpdates)}`,
   };
 
   policy.bankAccounts = currentAccounts;
@@ -585,7 +656,7 @@ export function setDefaultEventBankAccount(bankId: string, actorName = "Admin Da
     changedBy: actorName,
     action: "SET_DEFAULT",
     bankId,
-    details: `Menetapkan rekening ${target.bankName} - ${target.accountNumber} a.n. ${target.accountHolder} sebagai default platform.`,
+    details: `Menetapkan rekening ${target.bankName} - ${maskAccountNumber(target.accountNumber)} a.n. ${target.accountHolder} sebagai default platform.`,
   };
 
   policy.bankAccounts = currentAccounts;
@@ -615,7 +686,7 @@ export function deleteEventBankAccount(bankId: string, actorName = "Admin Dago")
     changedBy: actorName,
     action: "DELETE",
     bankId,
-    details: `Menghapus rekening ${target.bankName} - ${target.accountNumber} (${target.label}) dari sistem.`,
+    details: `Menghapus rekening ${target.bankName} - ${maskAccountNumber(target.accountNumber)} (${target.label}) dari sistem.`,
   };
 
   policy.bankHistory = [historyEntry, ...(policy.bankHistory || [])];
@@ -2803,14 +2874,29 @@ export async function getOrganizerPortalData(
     events: myEvents,
     bookings: myBookings,
     registeredBankAccount: (() => {
-      const policy = getEventRevenuePolicy();
-      return (
-        (policy.bankAccounts || []).find(
-          (b) =>
-            b.accountType === "ORGANIZER" &&
-            (b.organizerEmail || "").toLowerCase() === normalizedEmail
-        ) || null
-      );
+      const serverBank = getOrganizerServerBankAccount(normalizedEmail);
+      if (
+        serverBank &&
+        serverBank.bankName &&
+        serverBank.accountNumber &&
+        serverBank.accountHolder
+      ) {
+        return {
+          id: `bank-org-${normalizedEmail.replace(/[^a-zA-Z0-9]/g, "")}`,
+          label: `Rekening Mitra ${organizerName || "Komunitas"}`,
+          bankName: serverBank.bankName,
+          accountNumber: serverBank.accountNumber,
+          accountHolder: serverBank.accountHolder,
+          branch: serverBank.branch || "",
+          accountType: "ORGANIZER" as const,
+          organizerEmail: normalizedEmail,
+          isDefault: false,
+          isActive: true,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return null;
     })(),
   };
 }
@@ -3145,14 +3231,55 @@ export async function respondToEventRevenueSplit(
 }
 
 /**
+ * Resolves the organizer's bank account credentials directly from server storage.
+ * Reads first from the organizer's profile in organizers.json, then from event_settings.json.
+ */
+export function getOrganizerServerBankAccount(
+  organizerEmail: string
+): BankAccountHolderCandidate | null {
+  const normalized = (organizerEmail || "").trim().toLowerCase();
+  if (!normalized) return null;
+
+  // 1. Check profile in organizers.json
+  const org = getOrganizerByEmail(normalized);
+  if (org && (org.bankName || org.accountNumber || org.accountHolder)) {
+    return {
+      bankName: org.bankName || null,
+      accountNumber: org.accountNumber || null,
+      accountHolder: org.accountHolder || null,
+      branch: org.branch || null,
+    };
+  }
+
+  // 2. Check event revenue policy bankAccounts
+  const policy = getEventRevenuePolicy();
+  const registered = (policy.bankAccounts || []).find(
+    (b) =>
+      b.accountType === "ORGANIZER" &&
+      (b.organizerEmail || "").toLowerCase() === normalized
+  );
+  if (registered) {
+    return {
+      bankName: registered.bankName || null,
+      accountNumber: registered.accountNumber || null,
+      accountHolder: registered.accountHolder || null,
+      branch: registered.branch || null,
+    };
+  }
+
+  return null;
+}
+
+/**
  * Request a payout for an event.
  * Calculates available balance and records payout request.
+ * Server-side guard: strictly verifies that organizer bank account is registered in server storage.
  */
 export async function requestOrganizerPayout(
   organizerEmail: string,
   eventId: string,
   amount: number,
-  bankDetails: { bankName: string; accountNumber: string; accountHolder: string },
+  bankDetails?: { bankName?: string; accountNumber?: string; accountHolder?: string },
   notes?: string,
   isAdmin: boolean = false
 ): Promise<{ event: CommunityEvent; payout: PayoutRecord }> {
@@ -3186,6 +3313,21 @@ export async function requestOrganizerPayout(
       );
     }
 
+    // SERVER STORAGE GUARD:
+    // Read organizer bank credentials directly from server storage (never trust client payload blindly)
+    const serverBank = getOrganizerServerBankAccount(event.organizerEmail || normalizedEmail);
+    const effectiveBank = serverBank || bankDetails;
+    const validation = getMissingPayoutFields(effectiveBank);
+    if (!validation.isValid) {
+      const err: any = new Error(
+        `PAYOUT_BANK_INCOMPLETE: Lengkapi data rekening terlebih dahulu pada menu Pengaturan sebelum mengajukan pencairan dana. ${validation.errorSummary}`
+      );
+      err.code = "PAYOUT_BANK_INCOMPLETE";
+      err.missingFields = validation.missingFields;
+      err.errors = validation.errors;
+      throw err;
+    }
+
     // Calculate event available earnings strictly from verified PAID bookings
     const allBookings = loadBookingsFromDisk();
     const eventPaidBookings = allBookings.filter(
@@ -3215,19 +3357,17 @@ export async function requestOrganizerPayout(
         `Nominal pencairan (Rp ${amount.toLocaleString("id-ID")}) melebihi saldo yang tersedia untuk event ini (Rp ${availableAmount.toLocaleString("id-ID")}).`
       );
     }
-    if (!bankDetails.bankName || !bankDetails.accountNumber || !bankDetails.accountHolder) {
-      throw new Error("Informasi rekening bank penerima wajib diisi lengkap.");
-    }
 
     const now = new Date().toISOString();
+    const targetBank = effectiveBank!;
     const newPayout: PayoutRecord = {
       id: `pay-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       eventId,
       amount,
       status: "REQUESTED",
-      bankName: bankDetails.bankName.trim(),
-      accountNumber: bankDetails.accountNumber.trim(),
-      accountHolder: bankDetails.accountHolder.trim(),
+      bankName: targetBank.bankName!.trim(),
+      accountNumber: targetBank.accountNumber!.trim(),
+      accountHolder: targetBank.accountHolder!.trim(),
       requestedAt: now,
       notes: notes ? sanitizeHtmlText(notes) : undefined,
     };
@@ -3246,6 +3386,7 @@ export async function requestOrganizerPayout(
 /**
  * Process a payout request (by Admin).
  * Updates payout status (PROCESSING, PAID, or REJECTED) with reference number or reason.
+ * Server-side guard: validates destination bank before approving/paying.
  */
 export async function processOrganizerPayout(
   eventId: string,
@@ -3288,6 +3429,21 @@ export async function processOrganizerPayout(
     if (payout.status === "REJECTED") {
       throw new Error("Pengajuan pencairan ini telah ditolak sebelumnya.");
     }
+
+    // SERVER GUARD: Admin cannot process or pay payout if recipient bank details are invalid/incomplete
+    if (newStatus === "PAID" || newStatus === "PROCESSING") {
+      const validation = getMissingPayoutFields(payout);
+      if (!validation.isValid) {
+        const err: any = new Error(
+          `PAYOUT_BANK_INCOMPLETE: Rekening tujuan pencairan pada pengajuan ini tidak lengkap atau tidak valid (${maskAccountNumber(payout.accountNumber)}). ${validation.errorSummary}`
+        );
+        err.code = "PAYOUT_BANK_INCOMPLETE";
+        err.missingFields = validation.missingFields;
+        err.errors = validation.errors;
+        throw err;
+      }
+    }
+
     if (newStatus === "PAID" && (!referenceNo || !referenceNo.trim())) {
       throw new Error("Nomor referensi transfer bank wajib disertakan untuk konfirmasi status PAID.");
     }
