@@ -1605,12 +1605,23 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
 export async function updateEventStatus(
   id: string,
   status: EventStatus,
-  options?: {
-    adminNotes?: string | null;
-    rejectionReason?: string | null;
-    revisionNotes?: string | null;
-  }
+  options?:
+    | string
+    | {
+        adminNotes?: string | null;
+        rejectionReason?: string | null;
+        revisionNotes?: string | null;
+      }
 ): Promise<CommunityEvent> {
+  const resolvedOptions =
+    typeof options === "string"
+      ? status === "REJECTED"
+        ? { rejectionReason: options }
+        : status === "REVISION_REQUESTED"
+        ? { revisionNotes: options }
+        : { adminNotes: options }
+      : options;
+
   return withEventLock(async () => {
     await syncStorageFromDb("events.json").catch(() => {});
     const normalizedId = (id || "").trim().toLowerCase();
@@ -1630,9 +1641,9 @@ export async function updateEventStatus(
     const updated: CommunityEvent = {
       ...existing,
       status,
-      adminNotes: options?.adminNotes !== undefined ? options.adminNotes : existing.adminNotes,
-      rejectionReason: options?.rejectionReason !== undefined ? options.rejectionReason : existing.rejectionReason,
-      revisionNotes: options?.revisionNotes !== undefined ? options.revisionNotes : existing.revisionNotes,
+      adminNotes: resolvedOptions?.adminNotes !== undefined ? resolvedOptions.adminNotes : existing.adminNotes,
+      rejectionReason: resolvedOptions?.rejectionReason !== undefined ? resolvedOptions.rejectionReason : existing.rejectionReason,
+      revisionNotes: resolvedOptions?.revisionNotes !== undefined ? resolvedOptions.revisionNotes : existing.revisionNotes,
       updatedAt: new Date().toISOString(),
     };
 

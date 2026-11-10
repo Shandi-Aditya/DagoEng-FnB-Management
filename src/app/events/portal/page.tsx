@@ -71,8 +71,12 @@ import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pa
 import { CommunityEvent, EventTicketOrder, OrganizerPortalData, AttendeeCheckInStatus, PayoutRecord, EventCategory } from "@/types/event";
 import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNotifications } from "@/contexts/NotificationContext";
 import { EventSearchInput } from "@/components/events/EventSearchInput";
 import { getMissingPayoutFields, maskAccountNumber } from "@/lib/payout";
+import { useUnifiedSettingsForm } from "@/hooks/useUnifiedSettingsForm";
+import { UnifiedSettingsActionBar } from "@/components/settings/UnifiedSettingsActionBar";
+import { SettingsSectionHandler } from "@/lib/unified-settings";
 import {
   EventDateRangeFilter,
   DateRange,
@@ -200,35 +204,208 @@ export default function CommunityOrganizerPortalPage() {
   const [isBankIncompleteModalOpen, setIsBankIncompleteModalOpen] = useState(false);
   const [missingBankErrors, setMissingBankErrors] = useState<Array<{ field: string; message: string }>>([]);
 
-  // Organizer Settings state (payout bank account & community profile)
-  // New organizers default to empty/null, without preset demo values
-  const [bankSettings, setBankSettings] = useState({
-    bankName: "",
-    accountNumber: "",
-    accountHolder: "",
-    branch: "",
-  });
-  const [profileSettings, setProfileSettings] = useState({
-    communityName: "Dago Specialty Coffee Society",
-    contactPhone: "+62 812-9876-5432",
-    contactEmail: "baristaguild@dagocreative.id",
-    description: "Komunitas Barista & Pecinta Kopi Spesialti di Dago Creative Hub. Rutin mengadakan latte art throwdown, sensory workshop, dan cupping session.",
-    instagram: "@dagobaristaguild",
-    website: "https://dagocreative.id/community/barista",
-  });
-  const [notifSettings, setNotifSettings] = useState({
-    emailOnTicket: true,
-    waOnTicket: true,
-    instantCheckInAlert: false,
-  });
+  // Organizer Settings state (unified form with dirty tracking, pre-flight validation, and single action bar)
+  const { addNotification } = useNotifications();
+  const [isConfirmBankSaveModalOpen, setIsConfirmBankSaveModalOpen] = useState(false);
   const [isSavedFeedback, setIsSavedFeedback] = useState<string | null>(null);
+
+  const initialSettingsValues = useMemo(
+    () => ({
+      bank: {
+        bankName: "",
+        accountNumber: "",
+        accountHolder: "",
+        branch: "",
+      },
+      profile: {
+        communityName: "Dago Specialty Coffee Society",
+        contactPhone: "+62 812-9876-5432",
+        contactEmail: "baristaguild@dagocreative.id",
+        description: "Komunitas Barista & Pecinta Kopi Spesialti di Dago Creative Hub. Rutin mengadakan latte art throwdown, sensory workshop, dan cupping session.",
+        instagram: "@dagobaristaguild",
+        website: "https://dagocreative.id/community/barista",
+      },
+      notif: {
+        emailOnTicket: true,
+        waOnTicket: true,
+        instantCheckInAlert: false,
+      },
+    }),
+    []
+  );
+
+  const settingsHandlers = useMemo<SettingsSectionHandler[]>(
+    () => [
+      {
+        id: "bank",
+        label: "Rekening Payout",
+        validate: (data) => {
+          const check = getMissingPayoutFields(data);
+          const errors: Record<string, string> = {};
+          check.errors.forEach((e) => {
+            errors[e.field] = e.message;
+          });
+          return {
+            isValid: check.isValid,
+            errors,
+            errorSummary: check.errorSummary,
+          };
+        },
+        save: async (data) => {
+          const res = await fetch("/api/events/admin/settings/banks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              label: `Rekening Mitra ${initialSettingsValues.profile.communityName || "Komunitas"}`,
+              bankName: data.bankName,
+              accountNumber: data.accountNumber,
+              accountHolder: data.accountHolder,
+              branch: data.branch,
+              accountType: "ORGANIZER",
+              organizerEmail: activeEmail,
+            }),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok || !json.success) {
+            return {
+              success: false,
+              error: json.error || "Gagal mendaftarkan rekening ke server.",
+            };
+          }
+          if (typeof window !== "undefined") {
+            localStorage.removeItem(`dago_org_bank_${activeEmail}`);
+          }
+          await loadPortalData(activeEmail);
+          return {
+            success: true,
+            message: "Rekening penampung bagi hasil resmi berhasil didaftarkan dan tersimpan aman di server.",
+          };
+        },
+      },
+      {
+        id: "profile",
+        label: "Profil Komunitas",
+        validate: (data) => {
+          const errors: Record<string, string> = {};
+          if (!data.communityName || !data.communityName.trim()) {
+            errors.communityName = "Nama komunitas / brand penyelenggara wajib diisi.";
+            return {
+              isValid: false,
+              errors,
+              errorSummary: "Profil Komunitas: Nama komunitas wajib diisi.",
+            };
+          }
+          return { isValid: true, errors };
+        },
+        save: async (data) => {
+          localStorage.setItem(`dago_org_profile_${activeEmail}`, JSON.stringify(data));
+          if (portalData) {
+            setPortalData({
+              ...portalData,
+              summary: {
+                ...portalData.summary,
+                organizerName: data.communityName,
+              },
+            });
+          }
+          return {
+            success: true,
+            message: "Profil komunitas berhasil diperbarui di perangkat ini.",
+          };
+        },
+      },
+      {
+        id: "notif",
+        label: "Preferensi Notifikasi",
+        save: async (data) => {
+          localStorage.setItem(`dago_org_notif_${activeEmail}`, JSON.stringify(data));
+          return {
+            success: true,
+            message: "Preferensi notifikasi berhasil disimpan di perangkat ini.",
+          };
+        },
+      },
+    ],
+    [activeEmail, portalData, initialSettingsValues.profile]
+  );
+
+  const {
+    values: unifiedSettings,
+    isDirty: isSettingsDirty,
+    dirtySectionIds,
+    validationErrors,
+    isSubmitting: isSettingsSubmitting,
+    setSectionValue,
+    setSectionBaseline,
+    resetAll: resetSettings,
+    submitUnifiedSave,
+  } = useUnifiedSettingsForm({
+    initialValues: initialSettingsValues,
+    handlers: settingsHandlers,
+    onSaveSuccess: () => {
+      try {
+        addNotification({
+          type: "SYSTEM_ALERT",
+          title: "Pengaturan Disimpan",
+          detail: "Seluruh perubahan pengaturan berhasil disimpan.",
+          relatedModule: "EVENTS",
+          outletId: "GLOBAL",
+          outletName: "Dago Creative Hub",
+        });
+      } catch (_) {}
+      setIsSavedFeedback("Seluruh perubahan pengaturan berhasil disimpan.");
+      setTimeout(() => setIsSavedFeedback(null), 3500);
+    },
+    onSaveError: (res) => {
+      try {
+        addNotification({
+          type: "SYSTEM_ALERT",
+          title: "Gagal Menyimpan Pengaturan",
+          detail: res.errorMessages.join(" • ") || "Sebagian pengaturan gagal disimpan.",
+          relatedModule: "EVENTS",
+          outletId: "GLOBAL",
+          outletName: "Dago Creative Hub",
+        });
+      } catch (_) {}
+      setIsSavedFeedback(null);
+    },
+  });
+
+  const bankSettings = unifiedSettings.bank;
+  const profileSettings = unifiedSettings.profile;
+  const notifSettings = unifiedSettings.notif;
+
+  const handleTriggerSave = async () => {
+    // If bank section is dirty, perform client-side bank validation with getMissingPayoutFields
+    if (dirtySectionIds.includes("bank")) {
+      const check = getMissingPayoutFields(unifiedSettings.bank);
+      if (!check.isValid) {
+        // Pre-check failed: let submitUnifiedSave run so errors show and focus is applied
+        await submitUnifiedSave();
+        const el = document.getElementById("rekening-section");
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      // Bank is dirty and valid: ask for confirmation with masked account number
+      setIsConfirmBankSaveModalOpen(true);
+      return;
+    }
+
+    // Bank not dirty: save directly
+    await submitUnifiedSave();
+  };
+
+  const handleConfirmBankSave = async () => {
+    setIsConfirmBankSaveModalOpen(false);
+    await submitUnifiedSave();
+  };
 
   // Restore settings from server data per active organizer email (purge sensitive data from localStorage)
   useEffect(() => {
     if (activeEmail) {
       try {
         if (portalData?.registeredBankAccount) {
-          setBankSettings({
+          setSectionBaseline("bank", {
             bankName: portalData.registeredBankAccount.bankName || "",
             accountNumber: portalData.registeredBankAccount.accountNumber || "",
             accountHolder: portalData.registeredBankAccount.accountHolder || "",
@@ -238,7 +415,7 @@ export default function CommunityOrganizerPortalPage() {
           localStorage.removeItem(`dago_org_bank_${activeEmail}`);
         } else {
           // Penyelenggara baru atau belum mengisi rekening: kosongkan form
-          setBankSettings({
+          setSectionBaseline("bank", {
             bankName: "",
             accountNumber: "",
             accountHolder: "",
@@ -247,19 +424,21 @@ export default function CommunityOrganizerPortalPage() {
         }
         const savedProfile = localStorage.getItem(`dago_org_profile_${activeEmail}`);
         if (savedProfile) {
-          setProfileSettings(JSON.parse(savedProfile));
+          setSectionBaseline("profile", JSON.parse(savedProfile));
         } else if (portalData?.summary?.organizerName) {
-          setProfileSettings((prev) => ({
-            ...prev,
+          setSectionBaseline("profile", {
+            ...initialSettingsValues.profile,
             communityName: portalData.summary.organizerName,
             contactEmail: activeEmail,
-          }));
+          });
         }
         const savedNotif = localStorage.getItem(`dago_org_notif_${activeEmail}`);
-        if (savedNotif) setNotifSettings(JSON.parse(savedNotif));
+        if (savedNotif) {
+          setSectionBaseline("notif", JSON.parse(savedNotif));
+        }
       } catch (_) {}
     }
-  }, [activeEmail, portalData?.summary?.organizerName, portalData?.registeredBankAccount]);
+  }, [activeEmail, portalData?.summary?.organizerName, portalData?.registeredBankAccount, setSectionBaseline, initialSettingsValues.profile]);
 
   // Lock body scroll whenever any modal is open
   useEffect(() => {
@@ -278,65 +457,6 @@ export default function CommunityOrganizerPortalPage() {
       };
     }
   }, [viewingDetailEvent, revisionEvent, negotiatingEvent, isPayoutModalOpen, isBankIncompleteModalOpen]);
-
-  const handleSaveBankSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      // Save bank account securely to server API
-      const res = await fetch("/api/events/admin/settings/banks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          label: `Rekening Mitra ${profileSettings.communityName || "Komunitas"}`,
-          bankName: bankSettings.bankName,
-          accountNumber: bankSettings.accountNumber,
-          accountHolder: bankSettings.accountHolder,
-          branch: bankSettings.branch,
-          accountType: "ORGANIZER",
-          organizerEmail: activeEmail,
-        }),
-      });
-
-      // Purge any residual plaintext bank credential from localStorage
-      if (typeof window !== "undefined") {
-        localStorage.removeItem(`dago_org_bank_${activeEmail}`);
-      }
-
-      setIsSavedFeedback("Rekening penampung bagi hasil resmi berhasil didaftarkan dan tersimpan aman di server!");
-      setTimeout(() => setIsSavedFeedback(null), 3500);
-      await loadPortalData(activeEmail);
-    } catch (_) {
-      setIsSavedFeedback("Rekening penampung bagi hasil berhasil diperbarui.");
-      setTimeout(() => setIsSavedFeedback(null), 3500);
-    }
-  };
-
-  const handleSaveProfileSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      localStorage.setItem(`dago_org_profile_${activeEmail}`, JSON.stringify(profileSettings));
-      if (portalData) {
-        setPortalData({
-          ...portalData,
-          summary: {
-            ...portalData.summary,
-            organizerName: profileSettings.communityName,
-          },
-        });
-      }
-      setIsSavedFeedback("Profil komunitas berhasil diperbarui!");
-      setTimeout(() => setIsSavedFeedback(null), 3500);
-    } catch (_) {}
-  };
-
-  const handleSaveNotifSettings = (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      localStorage.setItem(`dago_org_notif_${activeEmail}`, JSON.stringify(notifSettings));
-      setIsSavedFeedback("Preferensi notifikasi berhasil disimpan!");
-      setTimeout(() => setIsSavedFeedback(null), 3500);
-    } catch (_) {}
-  };
 
   // Computed Executive Metrics for Home Dashboard
   const myEventsList = portalData?.events || [];
@@ -3941,7 +4061,7 @@ export default function CommunityOrganizerPortalPage() {
                     </div>
                   </div>
 
-                  <form onSubmit={handleSaveBankSettings} className="space-y-4 pt-1">
+                  <form onSubmit={(e) => { e.preventDefault(); handleTriggerSave(); }} className="space-y-4 pt-1">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                       <div className="space-y-1.5">
                         <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -3949,7 +4069,7 @@ export default function CommunityOrganizerPortalPage() {
                         </label>
                         <select
                           value={bankSettings.bankName}
-                          onChange={(e) => setBankSettings({ ...bankSettings, bankName: e.target.value })}
+                          onChange={(e) => setSectionValue("bank", { ...bankSettings, bankName: e.target.value })}
                           className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white font-medium"
                         >
                           <option value="">-- Pilih Bank Rekening --</option>
@@ -3962,6 +4082,9 @@ export default function CommunityOrganizerPortalPage() {
                           <option value="Bank Jago">Bank Jago</option>
                           <option value="Permata">Bank Permata</option>
                         </select>
+                        {validationErrors.bank?.bankName && (
+                          <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">{validationErrors.bank.bankName}</p>
+                        )}
                       </div>
 
                       <div className="space-y-1.5">
@@ -3972,10 +4095,13 @@ export default function CommunityOrganizerPortalPage() {
                           type="text"
                           required
                           value={bankSettings.accountNumber}
-                          onChange={(e) => setBankSettings({ ...bankSettings, accountNumber: e.target.value })}
+                          onChange={(e) => setSectionValue("bank", { ...bankSettings, accountNumber: e.target.value })}
                           placeholder="Contoh: 8420192831"
                           className="w-full text-xs font-mono bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white"
                         />
+                        {validationErrors.bank?.accountNumber && (
+                          <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">{validationErrors.bank.accountNumber}</p>
+                        )}
                       </div>
                     </div>
 
@@ -3987,10 +4113,13 @@ export default function CommunityOrganizerPortalPage() {
                         type="text"
                         required
                         value={bankSettings.accountHolder}
-                        onChange={(e) => setBankSettings({ ...bankSettings, accountHolder: e.target.value })}
+                        onChange={(e) => setSectionValue("bank", { ...bankSettings, accountHolder: e.target.value })}
                         placeholder="Contoh: Dago Specialty Coffee Society"
                         className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white"
                       />
+                      {validationErrors.bank?.accountHolder && (
+                        <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">{validationErrors.bank.accountHolder}</p>
+                      )}
                     </div>
 
                     <div className="space-y-1.5">
@@ -4000,7 +4129,7 @@ export default function CommunityOrganizerPortalPage() {
                       <input
                         type="text"
                         value={bankSettings.branch}
-                        onChange={(e) => setBankSettings({ ...bankSettings, branch: e.target.value })}
+                        onChange={(e) => setSectionValue("bank", { ...bankSettings, branch: e.target.value })}
                         placeholder="Contoh: KCU Singaraja / KCP Dewi Sartika"
                         className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white"
                       />
@@ -4015,15 +4144,6 @@ export default function CommunityOrganizerPortalPage() {
                         Setiap pencairan bagi hasil diverifikasi oleh tim Finance Dago Creative Hub dan ditransfer langsung ke rekening ini.
                       </p>
                     </div>
-
-                    <Button
-                      type="submit"
-                      size="sm"
-                      className="w-full h-9 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>Simpan Rekening Payout</span>
-                    </Button>
                   </form>
                 </Card>
 
@@ -4043,7 +4163,7 @@ export default function CommunityOrganizerPortalPage() {
                     </div>
                   </div>
 
-                  <form onSubmit={handleSaveProfileSettings} className="space-y-4 pt-1">
+                  <form onSubmit={(e) => { e.preventDefault(); handleTriggerSave(); }} className="space-y-4 pt-1">
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                         Nama Komunitas / Brand Penyelenggara
@@ -4052,9 +4172,12 @@ export default function CommunityOrganizerPortalPage() {
                         type="text"
                         required
                         value={profileSettings.communityName}
-                        onChange={(e) => setProfileSettings({ ...profileSettings, communityName: e.target.value })}
+                        onChange={(e) => setSectionValue("profile", { ...profileSettings, communityName: e.target.value })}
                         className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white"
                       />
+                      {validationErrors.profile?.communityName && (
+                        <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">{validationErrors.profile.communityName}</p>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -4077,7 +4200,7 @@ export default function CommunityOrganizerPortalPage() {
                         <input
                           type="text"
                           value={profileSettings.contactPhone}
-                          onChange={(e) => setProfileSettings({ ...profileSettings, contactPhone: e.target.value })}
+                          onChange={(e) => setSectionValue("profile", { ...profileSettings, contactPhone: e.target.value })}
                           placeholder="+62 812-xxxx-xxxx"
                           className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white"
                         />
@@ -4092,7 +4215,7 @@ export default function CommunityOrganizerPortalPage() {
                         <input
                           type="text"
                           value={profileSettings.instagram}
-                          onChange={(e) => setProfileSettings({ ...profileSettings, instagram: e.target.value })}
+                          onChange={(e) => setSectionValue("profile", { ...profileSettings, instagram: e.target.value })}
                           placeholder="@komunitasanda"
                           className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white"
                         />
@@ -4105,7 +4228,7 @@ export default function CommunityOrganizerPortalPage() {
                         <input
                           type="url"
                           value={profileSettings.website}
-                          onChange={(e) => setProfileSettings({ ...profileSettings, website: e.target.value })}
+                          onChange={(e) => setSectionValue("profile", { ...profileSettings, website: e.target.value })}
                           placeholder="https://..."
                           className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white"
                         />
@@ -4119,20 +4242,11 @@ export default function CommunityOrganizerPortalPage() {
                       <textarea
                         rows={3}
                         value={profileSettings.description}
-                        onChange={(e) => setProfileSettings({ ...profileSettings, description: e.target.value })}
+                        onChange={(e) => setSectionValue("profile", { ...profileSettings, description: e.target.value })}
                         placeholder="Jelaskan bidang, kegiatan rutin, atau visi komunitas Anda..."
                         className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white resize-none"
                       />
                     </div>
-
-                    <Button
-                      type="submit"
-                      size="sm"
-                      className="w-full h-9 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-slate-200 dark:text-slate-900 text-white font-bold rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>Simpan Profil Komunitas</span>
-                    </Button>
                   </form>
                 </Card>
 
@@ -4152,7 +4266,7 @@ export default function CommunityOrganizerPortalPage() {
                     </div>
                   </div>
 
-                  <form onSubmit={handleSaveNotifSettings} className="space-y-3.5 pt-1">
+                  <form onSubmit={(e) => { e.preventDefault(); handleTriggerSave(); }} className="space-y-3.5 pt-1">
                     <label className="flex items-center justify-between p-3 rounded-2xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900/50 cursor-pointer transition-all">
                       <div className="space-y-0.5 pr-3">
                         <span className="text-xs font-bold text-slate-900 dark:text-white block">
@@ -4165,7 +4279,7 @@ export default function CommunityOrganizerPortalPage() {
                       <input
                         type="checkbox"
                         checked={notifSettings.emailOnTicket}
-                        onChange={(e) => setNotifSettings({ ...notifSettings, emailOnTicket: e.target.checked })}
+                        onChange={(e) => setSectionValue("notif", { ...notifSettings, emailOnTicket: e.target.checked })}
                         className="w-4 h-4 text-[#3B7A57] rounded border-slate-300 focus:ring-[#3B7A57] cursor-pointer"
                       />
                     </label>
@@ -4182,7 +4296,7 @@ export default function CommunityOrganizerPortalPage() {
                       <input
                         type="checkbox"
                         checked={notifSettings.waOnTicket}
-                        onChange={(e) => setNotifSettings({ ...notifSettings, waOnTicket: e.target.checked })}
+                        onChange={(e) => setSectionValue("notif", { ...notifSettings, waOnTicket: e.target.checked })}
                         className="w-4 h-4 text-[#3B7A57] rounded border-slate-300 focus:ring-[#3B7A57] cursor-pointer"
                       />
                     </label>
@@ -4199,19 +4313,10 @@ export default function CommunityOrganizerPortalPage() {
                       <input
                         type="checkbox"
                         checked={notifSettings.instantCheckInAlert}
-                        onChange={(e) => setNotifSettings({ ...notifSettings, instantCheckInAlert: e.target.checked })}
+                        onChange={(e) => setSectionValue("notif", { ...notifSettings, instantCheckInAlert: e.target.checked })}
                         className="w-4 h-4 text-[#3B7A57] rounded border-slate-300 focus:ring-[#3B7A57] cursor-pointer"
                       />
                     </label>
-
-                    <Button
-                      type="submit"
-                      size="sm"
-                      className="w-full h-9 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
-                    >
-                      <Save className="w-3.5 h-3.5" />
-                      <span>Simpan Preferensi Notifikasi</span>
-                    </Button>
                   </form>
                 </Card>
 
@@ -4278,6 +4383,19 @@ export default function CommunityOrganizerPortalPage() {
                   </div>
                 </Card>
               </div>
+
+              {/* Sticky Unified Settings Action Bar */}
+              <UnifiedSettingsActionBar
+                isDirty={isSettingsDirty}
+                isSubmitting={isSettingsSubmitting}
+                onSave={handleTriggerSave}
+                onCancel={resetSettings}
+                saveLabel="Simpan Perubahan"
+                cancelLabel="Batalkan"
+                dirtyText="Ada perubahan yang belum disimpan"
+                cleanText="Semua pengaturan tersimpan"
+                positionClassName="bottom-16 lg:bottom-0"
+              />
             </div>
           )}
             </>
@@ -5439,6 +5557,87 @@ export default function CommunityOrganizerPortalPage() {
               >
                 <span>Ke Pengaturan Rekening</span>
                 <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* =========================================================================
+          7. CONFIRMATION MODAL FOR PAYOUT BANK UPDATES
+         ========================================================================= */}
+      {isConfirmBankSaveModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSettingsSubmitting) {
+              setIsConfirmBankSaveModalOpen(false);
+            }
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 cursor-default"
+          >
+            <div className="flex items-start space-x-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center shrink-0 border border-emerald-200/60 dark:border-emerald-800 shadow-xs">
+                <ShieldCheck className="w-6 h-6" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
+                  Konfirmasi Perubahan Rekening Payout
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  Anda mengubah rekening penampung bagi hasil event resmi. Seluruh hasil pencairan dana (payout) mendatang akan ditransfer ke rekening ini:
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 font-medium">Nama Bank:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">
+                  {unifiedSettings.bank.bankName || "-"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 font-medium">Nomor Rekening:</span>
+                <span className="font-mono font-bold text-slate-900 dark:text-white bg-slate-200/70 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                  {maskAccountNumber(unifiedSettings.bank.accountNumber)}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 font-medium">Nama Pemilik:</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                  {unifiedSettings.bank.accountHolder || "-"}
+                </span>
+              </div>
+              {unifiedSettings.bank.branch && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400 font-medium">Kantor Cabang:</span>
+                  <span className="text-slate-600 dark:text-slate-300">
+                    {unifiedSettings.bank.branch}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 flex items-center justify-end space-x-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSettingsSubmitting}
+                onClick={() => setIsConfirmBankSaveModalOpen(false)}
+                className="text-xs border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer"
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                disabled={isSettingsSubmitting}
+                onClick={handleConfirmBankSave}
+                className="text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl cursor-pointer flex items-center space-x-1.5 shadow-sm"
+              >
+                <span>{isSettingsSubmitting ? "Menyimpan..." : "Ya, Simpan Perubahan"}</span>
               </Button>
             </div>
           </div>

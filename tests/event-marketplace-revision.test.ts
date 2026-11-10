@@ -122,7 +122,9 @@ describe("Event Marketplace Revision, Negotiation & Payout Integrity Test Suite"
 
   it("4. Revisi proposal dan pengajuan ulang tidak menghilangkan data dan tidak membuat duplikat", async () => {
     // Put event B into REVISION_REQUESTED
-    await updateEventStatus(eventB.id, "REVISION_REQUESTED", "Mohon sertakan panduan membawa laptop dan kapasitas meja.");
+    await updateEventStatus(eventB.id, "REVISION_REQUESTED", {
+      revisionNotes: "Mohon sertakan panduan membawa laptop dan kapasitas meja.",
+    });
 
     // Resubmit event B
     const resubmitted = await organizerResubmitEvent(orgEmailB, eventB.id, {
