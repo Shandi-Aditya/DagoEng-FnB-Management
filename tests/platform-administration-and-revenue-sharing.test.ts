@@ -294,11 +294,11 @@ describe("Platform Administration & Event Marketplace Revenue Sharing", () => {
     it("should reject invalid platform fee percentages", () => {
       expect(() => {
         updateEventRevenuePolicy({ defaultPlatformFeePercent: -5 });
-      }).toThrow(/antara 0% hingga 100%/);
+      }).toThrow(/0% hingga 50%/);
 
       expect(() => {
         updateEventRevenuePolicy({ defaultPlatformFeePercent: 120 });
-      }).toThrow(/antara 0% hingga 100%/);
+      }).toThrow(/0% hingga 50%/);
     });
 
     async function getOrCreateValidPaidEventFixture() {
