@@ -1061,10 +1061,42 @@ export async function getPublicEventById(id: string): Promise<PublicCommunityEve
 /**
  * Get all events for Admin Moderation with optional status filter.
  * Internal only: Includes full organizer contact and moderation fields.
+ * Automatically archives unapproved events whose scheduled dates have already passed,
+ * keeping the moderation queue clean and focused only on upcoming/actionable event proposals.
  */
 export async function getAdminEvents(statusFilter?: EventStatus): Promise<CommunityEvent[]> {
   await syncStorageFromDb("events.json").catch(() => {});
-  const all = loadEventsFromDisk();
+  let all = loadEventsFromDisk();
+
+  const now = Date.now();
+  let hasArchivedUpdates = false;
+
+  all = all.map((e) => {
+    if (e.status === "PENDING" || e.status === "REVISION_REQUESTED") {
+      const endMs = e.endDate
+        ? new Date(e.endDate).getTime()
+        : new Date(e.startDate).getTime() + 24 * 60 * 60 * 1000;
+      if (endMs < now) {
+        hasArchivedUpdates = true;
+        return {
+          ...e,
+          status: "ARCHIVED" as EventStatus,
+          adminNotes:
+            e.adminNotes ||
+            "Otomatis diarsipkan: tanggal pelaksanaan acara telah terlewat sebelum disetujui.",
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    }
+    return e;
+  });
+
+  if (hasArchivedUpdates) {
+    saveEventsToDisk(all).catch((err) =>
+      console.error("[events] Failed to persist auto-archived events:", err)
+    );
+  }
+
   const filtered = statusFilter ? all.filter((e) => e.status === statusFilter) : all;
   return [...filtered].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -1399,6 +1431,16 @@ export async function updateEventStatus(
 
     // If approved, ensure organizer profile is registered and active
     if (status === "APPROVED") {
+      const now = Date.now();
+      const endMs = existing.endDate
+        ? new Date(existing.endDate).getTime()
+        : new Date(existing.startDate).getTime() + 24 * 60 * 60 * 1000;
+      if (endMs < now) {
+        throw new Error(
+          "Tidak dapat menyetujui event: tanggal pelaksanaan acara telah terlewat. Event ini otomatis diarahkan ke Arsip."
+        );
+      }
+
       ensureOrganizerActive({
         email: existing.organizerEmail,
         name: existing.organizerName,
