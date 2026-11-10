@@ -111,7 +111,9 @@ const config: Config = {
         dropdown: "0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04)",
       },
       fontFamily: {
-        sans: ["var(--font-inter)", "Inter", "system-ui", "sans-serif"],
+        sans: ["'DM Sans'", "var(--font-dm-sans)", "-apple-system", "BlinkMacSystemFont", "system-ui", "sans-serif"],
+        mono: ["'DM Mono'", "var(--font-dm-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"],
+        serif: ["'DM Serif Display'", "var(--font-dm-serif)", "Georgia", "serif"],
       },
     },
   },
