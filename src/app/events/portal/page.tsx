@@ -60,6 +60,7 @@ import {
   Save,
   Menu,
   Bell,
+  Landmark,
 } from "lucide-react";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
@@ -71,6 +72,7 @@ import { CommunityEvent, EventTicketOrder, OrganizerPortalData, AttendeeCheckInS
 import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { useAuth } from "@/contexts/AuthContext";
 import { EventSearchInput } from "@/components/events/EventSearchInput";
+import { getMissingPayoutFields, maskAccountNumber } from "@/lib/payout";
 import {
   EventDateRangeFilter,
   DateRange,
@@ -188,18 +190,23 @@ export default function CommunityOrganizerPortalPage() {
   const [isPayoutModalOpen, setIsPayoutModalOpen] = useState(false);
   const [payoutTargetEventId, setPayoutTargetEventId] = useState<string>("");
   const [payoutAmount, setPayoutAmount] = useState<number>(0);
-  const [payoutBankName, setPayoutBankName] = useState("BCA");
+  const [payoutBankName, setPayoutBankName] = useState("");
   const [payoutAccountNumber, setPayoutAccountNumber] = useState("");
   const [payoutAccountHolder, setPayoutAccountHolder] = useState("");
   const [payoutNotes, setPayoutNotes] = useState("");
   const [isSubmittingPayout, setIsSubmittingPayout] = useState(false);
 
-  // Organizer Settings state (rekening penampung & profil komunitas)
+  // Guard modal for incomplete bank credentials
+  const [isBankIncompleteModalOpen, setIsBankIncompleteModalOpen] = useState(false);
+  const [missingBankErrors, setMissingBankErrors] = useState<Array<{ field: string; message: string }>>([]);
+
+  // Organizer Settings state (payout bank account & community profile)
+  // New organizers default to empty/null, without preset demo values
   const [bankSettings, setBankSettings] = useState({
-    bankName: "BCA",
-    accountNumber: "8420192831",
-    accountHolder: "Dago Specialty Coffee Society",
-    branch: "KCU Singaraja",
+    bankName: "",
+    accountNumber: "",
+    accountHolder: "",
+    branch: "",
   });
   const [profileSettings, setProfileSettings] = useState({
     communityName: "Dago Specialty Coffee Society",
@@ -222,13 +229,21 @@ export default function CommunityOrganizerPortalPage() {
       try {
         if (portalData?.registeredBankAccount) {
           setBankSettings({
-            bankName: portalData.registeredBankAccount.bankName,
-            accountNumber: portalData.registeredBankAccount.accountNumber,
-            accountHolder: portalData.registeredBankAccount.accountHolder,
+            bankName: portalData.registeredBankAccount.bankName || "",
+            accountNumber: portalData.registeredBankAccount.accountNumber || "",
+            accountHolder: portalData.registeredBankAccount.accountHolder || "",
             branch: portalData.registeredBankAccount.branch || "",
           });
           // Security purge: remove sensitive financial credentials from browser localStorage
           localStorage.removeItem(`dago_org_bank_${activeEmail}`);
+        } else {
+          // Penyelenggara baru atau belum mengisi rekening: kosongkan form
+          setBankSettings({
+            bankName: "",
+            accountNumber: "",
+            accountHolder: "",
+            branch: "",
+          });
         }
         const savedProfile = localStorage.getItem(`dago_org_profile_${activeEmail}`);
         if (savedProfile) {
@@ -248,7 +263,13 @@ export default function CommunityOrganizerPortalPage() {
 
   // Lock body scroll whenever any modal is open
   useEffect(() => {
-    const isAnyModalOpen = Boolean(viewingDetailEvent || revisionEvent || negotiatingEvent || isPayoutModalOpen);
+    const isAnyModalOpen = Boolean(
+      viewingDetailEvent ||
+      revisionEvent ||
+      negotiatingEvent ||
+      isPayoutModalOpen ||
+      isBankIncompleteModalOpen
+    );
     if (isAnyModalOpen) {
       const originalStyle = window.getComputedStyle(document.body).overflow;
       document.body.style.overflow = "hidden";
@@ -256,7 +277,7 @@ export default function CommunityOrganizerPortalPage() {
         document.body.style.overflow = originalStyle;
       };
     }
-  }, [viewingDetailEvent, revisionEvent, negotiatingEvent, isPayoutModalOpen]);
+  }, [viewingDetailEvent, revisionEvent, negotiatingEvent, isPayoutModalOpen, isBankIncompleteModalOpen]);
 
   const handleSaveBankSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -571,6 +592,7 @@ export default function CommunityOrganizerPortalPage() {
       Boolean(revisionEvent) ||
       Boolean(negotiatingEvent) ||
       isPayoutModalOpen ||
+      isBankIncompleteModalOpen ||
       isMobileMenuOpen;
 
     if (isAnyModalOpen) {
@@ -585,6 +607,7 @@ export default function CommunityOrganizerPortalPage() {
     revisionEvent,
     negotiatingEvent,
     isPayoutModalOpen,
+    isBankIncompleteModalOpen,
     isMobileMenuOpen,
   ]);
 
@@ -596,12 +619,26 @@ export default function CommunityOrganizerPortalPage() {
         setRevisionEvent(null);
         setNegotiatingEvent(null);
         setIsPayoutModalOpen(false);
+        setIsBankIncompleteModalOpen(false);
         setIsMobileMenuOpen(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  const handleGoToBankSettings = () => {
+    setIsBankIncompleteModalOpen(false);
+    setActiveNav("SETTINGS");
+    setTimeout(() => {
+      const el = document.getElementById("rekening-section");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        el.classList.add("ring-2", "ring-[#3B7A57]", "transition-all");
+        setTimeout(() => el.classList.remove("ring-2", "ring-[#3B7A57]"), 2000);
+      }
+    }, 150);
+  };
 
   const loadPortalData = async (email?: string) => {
     try {
@@ -851,6 +888,12 @@ export default function CommunityOrganizerPortalPage() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
+        if (data.code === "PAYOUT_BANK_INCOMPLETE") {
+          setIsPayoutModalOpen(false);
+          setMissingBankErrors(data.errors || [{ field: "rekening", message: data.error }]);
+          setIsBankIncompleteModalOpen(true);
+          return;
+        }
         throw new Error(data.error || "Gagal mengajukan pencairan dana.");
       }
       setSuccessMessage("Pengajuan pencairan saldo berhasil dikirim. DAGO Finance akan memverifikasi dan mentransfer manual.");
@@ -2794,6 +2837,16 @@ export default function CommunityOrganizerPortalPage() {
                 setErrorMessage("Belum ada event untuk diajukan pencairan.");
                 return;
               }
+
+              // Guard organizer bank credentials before initiating payout
+              const currentBank = portalData.registeredBankAccount || bankSettings;
+              const missingCheck = getMissingPayoutFields(currentBank);
+              if (!missingCheck.isValid) {
+                setMissingBankErrors(missingCheck.errors);
+                setIsBankIncompleteModalOpen(true);
+                return;
+              }
+
               const eventsWithBalance = portalData.events.map((e) => {
                 const paidBookings = (portalData.bookings || []).filter(
                   (b) => b.eventId === e.id && b.paymentStatus === "PAID"
@@ -2817,9 +2870,9 @@ export default function CommunityOrganizerPortalPage() {
 
               setPayoutTargetEventId(targetId);
               setPayoutAmount(initialAmount);
-              setPayoutBankName(bankSettings.bankName || "BCA");
-              setPayoutAccountNumber(bankSettings.accountNumber || "");
-              setPayoutAccountHolder(bankSettings.accountHolder || "");
+              setPayoutBankName(currentBank.bankName || "");
+              setPayoutAccountNumber(currentBank.accountNumber || "");
+              setPayoutAccountHolder(currentBank.accountHolder || "");
               setIsPayoutModalOpen(true);
             };
 
@@ -2902,7 +2955,11 @@ export default function CommunityOrganizerPortalPage() {
                             Rekening Penampung Payout:
                           </span>
                           <span className="text-xs font-bold text-white truncate block">
-                            {bankSettings.bankName} • {bankSettings.accountNumber || "Belum Dikonfigurasi"} ({bankSettings.accountHolder})
+                            {bankSettings.accountNumber ? (
+                              `${bankSettings.bankName || "Bank"} • ${maskAccountNumber(bankSettings.accountNumber)} (${bankSettings.accountHolder || "-"})`
+                            ) : (
+                              <span className="text-amber-300 font-semibold">Belum Dikonfigurasi (Wajib sebelum Payout)</span>
+                            )}
                           </span>
                         </div>
                       </div>
@@ -3610,18 +3667,26 @@ export default function CommunityOrganizerPortalPage() {
                           Rekening Penampung
                         </span>
                       </div>
-                      <span className="text-[9.5px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold border border-emerald-500/30">
-                        Aktif
-                      </span>
+                      {bankSettings.accountNumber ? (
+                        <span className="text-[9.5px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold border border-emerald-500/30">
+                          Aktif
+                        </span>
+                      ) : (
+                        <span className="text-[9.5px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-bold border border-amber-500/30">
+                          Belum Lengkap
+                        </span>
+                      )}
                     </div>
 
                     <div>
-                      <div className="text-xs text-slate-400">Bank {bankSettings.bankName}</div>
+                      <div className="text-xs text-slate-400">
+                        {bankSettings.bankName ? `Bank ${bankSettings.bankName}` : "Rekening Bank"}
+                      </div>
                       <div className="text-lg font-mono font-bold tracking-wider mt-0.5">
-                        {bankSettings.accountNumber || "Belum Dikonfigurasi"}
+                        {bankSettings.accountNumber ? maskAccountNumber(bankSettings.accountNumber) : "Belum Dikonfigurasi"}
                       </div>
                       <div className="text-xs text-slate-300 mt-1 truncate">
-                        A/N: {bankSettings.accountHolder}
+                        A/N: {bankSettings.accountHolder || "-"}
                       </div>
                     </div>
 
@@ -3857,7 +3922,7 @@ export default function CommunityOrganizerPortalPage() {
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Form 1: Payout Bank Account Settings */}
-                <Card className="p-5 sm:p-6 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs space-y-4">
+                <Card id="rekening-section" className="p-5 sm:p-6 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs space-y-4 scroll-mt-24">
                   <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-100 dark:border-slate-800">
                     <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center font-bold text-sm">
                       <CreditCard className="w-4 h-4" />
@@ -3883,6 +3948,7 @@ export default function CommunityOrganizerPortalPage() {
                           onChange={(e) => setBankSettings({ ...bankSettings, bankName: e.target.value })}
                           className="w-full text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white font-medium"
                         >
+                          <option value="">-- Pilih Bank Rekening --</option>
                           <option value="BCA">BCA (Bank Central Asia)</option>
                           <option value="Mandiri">Bank Mandiri</option>
                           <option value="BNI">BNI (Bank Negara Indonesia)</option>
@@ -5344,6 +5410,81 @@ export default function CommunityOrganizerPortalPage() {
           </div>
         );
       })()}
+
+      {/* =========================================================================
+          6. INCOMPLETE BANK CREDENTIALS GUARD MODAL
+         ========================================================================= */}
+      {isBankIncompleteModalOpen && (
+        <div
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setIsBankIncompleteModalOpen(false);
+          }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in cursor-pointer"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-white dark:bg-[#0F172A] border border-amber-300 dark:border-amber-700/60 rounded-3xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95 cursor-default"
+          >
+            <div className="flex items-start space-x-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 shadow-xs">
+                <Landmark className="w-6 h-6" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white leading-tight">
+                  Lengkapi data rekening terlebih dahulu
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                  Untuk keamanan dan kelancaran pencairan bagi hasil tiket (payout), Anda wajib melengkapi data rekening bank penampung pada pengaturan akun.
+                </p>
+              </div>
+            </div>
+
+            {missingBankErrors.length > 0 && (
+              <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 space-y-2">
+                <p className="text-xs font-bold text-amber-900 dark:text-amber-300">
+                  Data rekening yang belum lengkap / tidak valid:
+                </p>
+                <ul className="text-xs text-amber-800 dark:text-amber-300/90 space-y-1.5 list-disc list-inside">
+                  {missingBankErrors.map((err, idx) => (
+                    <li key={idx}>
+                      <span className="font-semibold">
+                        {err.field === "bankName"
+                          ? "Nama Bank"
+                          : err.field === "accountNumber"
+                          ? "Nomor Rekening"
+                          : err.field === "accountHolder"
+                          ? "Nama Pemilik Rekening"
+                          : err.field}
+                        :
+                      </span>{" "}
+                      {err.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="pt-2 flex items-center justify-end space-x-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsBankIncompleteModalOpen(false)}
+                className="text-xs border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer"
+              >
+                Tutup
+              </Button>
+              <Button
+                type="button"
+                onClick={handleGoToBankSettings}
+                className="text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl cursor-pointer flex items-center space-x-1.5 shadow-sm"
+              >
+                <span>Ke Pengaturan Rekening</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
