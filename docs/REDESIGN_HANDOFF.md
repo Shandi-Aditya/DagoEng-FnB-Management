@@ -2,12 +2,13 @@
 
 Dokumen ini untuk agent atau developer yang melanjutkan redesign. Isinya status terakhir, tracker fase, aturan yang sudah disepakati, dan cara kerja per halaman yang dipakai sejauh ini. Baca sampai habis sebelum menyentuh kode.
 
-Terakhir diperbarui: 11 November 2026, branch `feat/shadcn-foundation`.
+Terakhir diperbarui: 12 November 2026, branch `feat/shadcn-foundation`.
 
 ## 1. Dokumen acuan
 
 | Dokumen | Isi | Kapan dibaca |
 | --- | --- | --- |
+| [REDESIGN_PLAYBOOK.md](./REDESIGN_PLAYBOOK.md) | Langkah 0–10 untuk me-redesign satu halaman (P3), dengan contoh `/orders` dan `/inventory` | **Setiap mulai halaman baru** |
 | [UNSLOP_AUDIT.md](./UNSLOP_AUDIT.md) | Temuan audit UI lama dan alasannya | Sekali, untuk konteks |
 | [SHADCN_UI_IMPLEMENTATION_PLAN.md](./SHADCN_UI_IMPLEMENTATION_PLAN.md) | Rencana fase 0–8, pemetaan komponen lama ke shadcn (bagian 6), checklist per halaman (bagian 13) | Sebelum mulai fase atau halaman baru |
 | [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) | Preset, token warna, tipografi, komponen app, pengecualian tombol | Setiap kali ragu soal warna, ukuran, atau komponen |
@@ -42,9 +43,9 @@ Urutan mengikuti seberapa sering staf memakai halaman. Kerjakan satu halaman sam
 | `/pos` mode F&B + kerangka | 2856 → 2329 | selesai (`5f98197`) | `src/features/pos/{PosToolbar,ProductCatalog,ProductCard,Cart*}.tsx`, `pos-catalog.ts` |
 | `/pos` mode co-working | 2329 → 1493 | struktur selesai, redesign belum | `src/features/pos/{CoworkingToolbar,CoworkingRoomCard,CoworkingPhotoModal,CoworkingBookingPanel}.tsx`, `pos-coworking.ts`, test `pos-coworking.test.ts` |
 | Modal POS | 2765 total | berjalan | Import sudah ke shadcn, tapi isinya masih gaya lama (mis. `PaymentModal` 278 kelas lama, `DailyClosingPDFModal` 170). `PosVoucherModal` dan `PosOpenShiftModal` baru dipisah dari `pos/page.tsx`. Lihat review P4. |
-| `/orders` | 896 → 325 | selesai, belum commit (P3) | **Tugas:** menemukan pesanan yang perlu ditindak, lalu bayar atau cetak. **Keputusan:** antrean `Tabs` (Perlu dibayar, Diproses, Selesai, Dibatalkan, Semua) dengan jumlah, default "Perlu dibayar" untuk peran kasir; antrean tunggu diurutkan dari yang terlama, riwayat dari yang terbaru; pencarian nomor/meja/nama; tabel 9 → 6 kolom (target waktu jadi titik di kolom waktu, metode bayar di bawah status bayar, waktu disembunyikan untuk pesanan yang sudah ditutup); detail di `Sheet` samping (`OrderDetailSheet`) supaya daftar tetap terlihat; ekspor dalam satu `DropdownMenu`; `DataPagination`; di mobile hanya pesanan, status, total, dan Bayar. Logika di `orders-queue.ts` + test. `lint:ui` 0 di file yang disentuh (sisa di `OrdersReportPDFModal`, menunggu `ReportPreviewDialog`). |
+| `/orders` | 896 → 325 | selesai (`80ec405`, P3) | **Tugas:** menemukan pesanan yang perlu ditindak, lalu bayar atau cetak. **Keputusan:** antrean `Tabs` (Perlu dibayar, Diproses, Selesai, Dibatalkan, Semua) dengan jumlah, default "Perlu dibayar" untuk peran kasir; antrean tunggu diurutkan dari yang terlama, riwayat dari yang terbaru; pencarian nomor/meja/nama; tabel 9 → 6 kolom (target waktu jadi titik di kolom waktu, metode bayar di bawah status bayar, waktu disembunyikan untuk pesanan yang sudah ditutup); detail di `Sheet` samping (`OrderDetailSheet`) supaya daftar tetap terlihat; ekspor dalam satu `DropdownMenu`; `DataPagination`; di mobile hanya pesanan, status, total, dan Bayar. Logika di `orders-queue.ts` + test. `lint:ui` 0 di file yang disentuh (sisa di `OrdersReportPDFModal`, menunggu `ReportPreviewDialog`). |
 | `/tables` | 910 → 225 | struktur selesai, redesign belum | `src/features/tables/{TablesToolbar,FloorPlanView,ReservationsView,TableDetailModal,AddTableModal,AddAreaModal,AddReservationModal}.tsx`, `tables-domain.ts`, test `tables-domain.test.ts` |
-| `/inventory` | 2038 → 466 | struktur selesai, redesign belum | `src/features/inventory/{InventoryToolbar,InventoryStockTab,InventoryRecipesTab,InventoryPurchaseOrdersTab,InventoryOpnameTab,RestockAlertModal,StockAdjustmentModal,BOMSimulatorModal,CreatePOModal,PODetailModal,StockOpnameModal}.tsx`, `inventory-domain.ts`, test `inventory-domain.test.ts` |
+| `/inventory` | 2038 → 466 | selesai (`c808b01`, P3) | **Tugas:** tahu bahan apa yang harus dibeli, lalu buat PO. **Keputusan:** panel "Perlu dibeli" langsung di bawah judul (`ReorderPanel`, menggantikan `RestockAlertModal` yang tersembunyi di balik tombol), bahan habis dulu lalu yang paling jauh di bawah minimum, dengan saran jumlah (kembali ke 2× minimum) dan tombol "Buat PO" per bahan yang membuka form terisi; kalau tidak ada yang perlu dibeli, cukup satu baris tenang. "Buat PO" satu-satunya aksi primary; simulasi resep, laporan nilai stok, dan ekspor masuk menu "Lainnya". Tiga angka saja (nilai stok, menipis, perlu dibeli). Tab Stok, Resep, Pesanan pembelian ("PO" di mobile), dan Opname dengan jumlah. Tabel stok: kategori dan alasan perubahan memakai label bahasa Indonesia, bukan enum; bilah stok terhadap 2× minimum; HPP dan nilai disembunyikan di tablet, status di mobile. Kartu resep: takaran jadi kolom sendiri supaya nama panjang tidak memotong angkanya. Opname: kartu angka baru muncul setelah ada data, ekspor dalam satu menu. Perkiraan tiba PO berupa tanggal nyata (`deliveryDateLabel`), bukan "2 Hari ke Depan". Logika di `inventory-reorder.ts` + test. `lint:ui` 0 di file yang disentuh (sisa 171 di `BOMRecipeModal` dan dua modal PDF, menunggu P4 dan `ReportPreviewDialog`). Catatan: label navigasi "Smart Inventory" berasal dari `src/lib/rbac.ts` dan dikunci test, jadi ikut sapuan label navigasi. |
 | `/menu` | 21 | struktur selesai, redesign belum | Hanya pembungkus redirect ke `/settings`, token dibersihkan |
 | `/customers` | 727 → 197 | struktur selesai, redesign belum | `src/features/customers/{CustomersToolbar,CustomersTable,AddCustomerModal,CustomerHistoryModal,TierOverrideModal,CustomersReportPDFModal}.tsx`, `customers-domain.ts`, test `customers-domain.test.ts` |
 | `/coworking` | 1579 → 404 | struktur selesai, redesign belum | `src/features/coworking/{CoworkingToolbar,CoworkingSpacesTab,CoworkingBookingsTab,CoworkingMembersTab,CoworkingLogsTab,NewBookingModal,NewMemberModal}.tsx`, `coworking-domain.ts`, test `coworking-domain.test.ts` |
@@ -59,7 +60,7 @@ Masih ada 20 file yang meng-import `components/legacy`. Cek dengan `grep -rl "co
 
 ## 3. Kondisi working tree saat handoff
 
-Pemecahan struktural halaman Fase 6 oleh Gemini (`src/features/*`, `*-domain.ts`, test domain, modal POS) masih belum di-commit; lihat `REDESIGN_REVIEW_GEMINI.md` P0. Swap import setengah jadi di halaman Fase 7 sudah dikembalikan. Yang tersisa di working tree bukan bagian redesign dan **tidak boleh ikut di-commit**: `data/*`, `.audit/`, `Laporan_Settlement_Mingguan_Dago_Mitra.xlsx`, `docs/KLARIFIKASI_SETTLEMENT_MITRA.md`, `panduan.md`. Stage file satu per satu, jangan `git add -A`.
+Pemecahan struktural Fase 6 sudah di-commit (`64964f4`), begitu juga `lint:ui` (`37105c0`), pass copy (`4c88aa1`), dan `/orders` (`80ec405`). Cek `git status` untuk pekerjaan yang belum di-commit. Yang ada di working tree bukan bagian redesign dan **tidak boleh ikut di-commit**: `data/*`, `.audit/`, `Laporan_Settlement_Mingguan_Dago_Mitra.xlsx`, `docs/KLARIFIKASI_SETTLEMENT_MITRA.md`, `panduan.md`, `.claude/`, `data/*.json` baru (`audit_logs`, `loyalty_points`, `pos_orders`, `shifts`). Stage file satu per satu, jangan `git add -A`.
 
 ## 4. Aturan yang sudah disepakati
 
@@ -85,9 +86,9 @@ Pemecahan struktural halaman Fase 6 oleh Gemini (`src/features/*`, `*-domain.ts`
 - Format: `feat(ui): …`, `fix: …`, dan sejenisnya (lihat `git log`).
 - Tanpa atribusi AI dan tanpa `Co-Authored-By`. Pakai identitas git user. Jangan memposting komentar PR/MR atau men-tag orang.
 
-## 5. Workflow per halaman
+## 5. Workflow pemecahan struktur
 
-Ini cara kerja yang dipakai untuk KDS dan POS. Ikuti urutannya.
+Ini cara kerja untuk **memecah** file besar (dipakai untuk KDS dan POS, dan nanti Fase 7). Untuk **me-redesign** halaman yang sudah dipecah (P3), ikuti [REDESIGN_PLAYBOOK.md](./REDESIGN_PLAYBOOK.md).
 
 1. **Petakan dulu, jangan langsung menulis.**
    - Ukur file dan pemakaian legacy:
@@ -120,11 +121,14 @@ Ini cara kerja yang dipakai untuk KDS dan POS. Ikuti urutannya.
    npx vitest run tests/<file-terkait>.test.ts
    ```
 7. **Cek di browser** (dev server di `localhost:3000`, browser pane sudah login sebagai Super Admin). Lihat bagian 6 untuk batasannya.
-8. **Verifikasi penuh.** Hentikan dev server dulu karena build memakai `.next` yang sama:
+8. **Verifikasi penuh.** Build memakai `.next` yang sama dengan dev server. Jalankan build hanya kalau tidak ada dev server milik user yang hidup; **jangan mematikan dev server user**. Kalau ada, lewati build dan laporkan.
    ```bash
-   pkill -f "next dev"; npx vitest run; npm run build
+   npx vitest run
    ```
-   Baseline: **4 test gagal sejak sebelum redesign** dan tidak terkait UI (`etl-data-validation`, `final-demo-readiness`, `organizer-activation-hardening`, `storage-sync-safety`). Selain 4 itu harus lulus semua. Terakhir: 1010 lulus dari 1014 (test `unified-account` sesekali timeout saat suite penuh; jalankan ulang sendiri sebelum dianggap gagal). Setelah selesai, jalankan lagi dev server (`npm run dev` di background).
+   ```bash
+   npm run build
+   ```
+   Baseline: **4 test gagal sejak sebelum redesign** dan tidak terkait UI (`etl-data-validation`, `final-demo-readiness`, `organizer-activation-hardening`, `storage-sync-safety`). Selain 4 itu harus lulus semua. Terakhir: 1028 lulus dari 1032 (test `unified-account` sesekali timeout saat suite penuh; jalankan ulang sendiri sebelum dianggap gagal). Setelah selesai, jalankan lagi dev server (`npm run dev` di background).
 9. **Cek Definition of Done** (bagian 5a). Status `selesai` hanya boleh dipakai kalau semua butirnya terpenuhi.
 10. **Catat progres** di tabel bagian 2 dokumen ini dan di blok progres Fase 6 pada rencana. Tulis apa yang dipindah ke mana, bug yang ikut diperbaiki, dan apa yang belum.
 11. **Tutup sesi:** ringkas ke user, jangan commit sebelum diminta.
@@ -147,7 +151,7 @@ Baseline `lint:ui` saat Definition of Done ini dibuat (11 November 2026), sebaga
 | --- | --- |
 | `features/pos` (termasuk modal) | 713 |
 | `features/activity-log` | 239 |
-| `features/inventory` | 219 |
+| `features/inventory` | 219 → 171 (sisa di BOMRecipeModal dan modal PDF) |
 | `features/coworking` | 208 |
 | `features/customers` | 184 |
 | `features/commercial` | 161 |
@@ -173,7 +177,7 @@ Baseline `lint:ui` saat Definition of Done ini dibuat (11 November 2026), sebaga
 - Gambar `loading="lazy"` belum termuat saat screenshot cepat. Cek `img.complete` dan `naturalWidth` sebelum menyimpulkan gambar rusak.
 - Base UI: `Tabs` `onValueChange` memberi `unknown`, jadi cast ke union-nya. `DropdownMenuItem` dan `Button` memakai prop `render`.
 - Tailwind v4: pakai `bg-linear-to-b`, `inset-shadow-[…]`, dan variabel `(--nama)`. Utility kustom ditambahkan dengan `@utility` di `globals.css`.
-- Hook "Fact-Forcing Gate" menolak `Write` pertama pada file baru. Sebutkan importer, API, skema, dan instruksi user, lalu ulangi.
+- Hook "Fact-Forcing Gate" (khusus Claude Code dengan ECC) menolak `Write` pertama pada file baru. Sebutkan importer, API, skema, dan instruksi user, lalu ulangi.
 - zsh: `grep --include=*.ts` gagal karena glob. Pakai kutip atau `grep -rn … src/lib/*.ts`.
 - Codemod Tailwind pernah mengubah warna `#1E293B` dan varian `outline`. Kalau menjalankan codemod lagi, periksa diff-nya.
 - Test D6, C2, D2, dan D5 sudah diarahkan ke file baru. Pola yang sama berlaku untuk test lain yang membaca sumber.
@@ -182,7 +186,7 @@ Baseline `lint:ui` saat Definition of Done ini dibuat (11 November 2026), sebaga
 
 Ikuti rencana di [REDESIGN_REVIEW_GEMINI.md](./REDESIGN_REVIEW_GEMINI.md) bagian 4. P0 (pulihkan branch) dan P1 (`lint:ui`, glosarium, Definition of Done) sudah selesai.
 
-1. **P2 — pass copy** di semua `src/features/*` Fase 6 sesuai glosarium.
-2. **P3 — redesign per halaman** mulai dari `/orders`, `/inventory`, `/tables`, `/coworking`, dengan Definition of Done di bagian 5a.
+1. P2 (pass copy) selesai. P3: `/orders` dan `/inventory` selesai.
+2. **P3 berikutnya: `/tables`**, lalu `/coworking`, `/customers`/`/employees`/`/commercial`, `/reports`/`/activity-log`, `/ai-insight`. Ikuti [REDESIGN_PLAYBOOK.md](./REDESIGN_PLAYBOOK.md).
 3. **P4 — modal POS** sebagai `Dialog`/`AlertDialog` sungguhan. Test yang mengunci teks modal: D1 (`ModifierModal`, semantik radio untuk grup sekali pilih), C3 (`PaymentModal`, nominal tunai tidak terisi otomatis), C4 (`ReceiptModal`, tanpa password Wi-Fi statis). Lalu Fase 7 dengan pola pecah dulu, baru migrasi.
 4. Fase 8: hapus legacy, lalu jalankan `npm run lint:ui -- --strict` di CI.

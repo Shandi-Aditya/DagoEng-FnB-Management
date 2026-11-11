@@ -70,7 +70,7 @@ Tidak ada bukti bahwa halaman-halaman ini sudah dicek di terang, gelap, dan mobi
 
 ## 4. Rencana perbaikan
 
-> Status: **P0 selesai** (`64964f4`, `799780c`), **P1 selesai** (`npm run lint:ui`, glosarium di `DESIGN_SYSTEM.md` bagian 8, Definition of Done di `REDESIGN_HANDOFF.md` bagian 5a). **P2 selesai** (belum di-commit): copy di semua fitur Fase 6 disunting sesuai glosarium. P3 berjalan: `/orders` selesai (lihat tracker di handoff). Berikutnya `/inventory`.
+> Status: **P0 selesai** (`64964f4`, `799780c`), **P1 selesai** (`npm run lint:ui`, glosarium di `DESIGN_SYSTEM.md` bagian 8, Definition of Done di `REDESIGN_HANDOFF.md` bagian 5a). **P2 selesai** (belum di-commit): copy di semua fitur Fase 6 disunting sesuai glosarium. P3 berjalan: `/orders` selesai (`80ec405`), `/inventory` selesai (`c808b01`); lihat tracker di handoff. Berikutnya `/tables`. Celah yang ditemukan: aturan `button-size-override` di `lint:ui` tidak menangkap `<Button>` yang atributnya ditulis multi-baris.
 
 > Catatan P2:
 > - Label domain baru: `slaStatusLabel`, `paymentMethodLabel` (orders), `getEmployeeStatusLabel`, `OPNAME_REASONS` sebagai satu sumber daftar alasan opname.
