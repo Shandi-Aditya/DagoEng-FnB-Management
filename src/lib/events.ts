@@ -51,7 +51,7 @@ export {
   type PayoutRecord,
 };
 
-import { getDataFilePath, syncStorageFromDb, persistStorageToDb } from "@/lib/data-storage";
+import { getDataFilePath, syncStorageFromDb, persistStorageToDb, isReconciliationGateActive } from "@/lib/data-storage";
 import {
   ensureOrganizerActive,
   getOrganizerByEmail,
@@ -81,7 +81,14 @@ function withEventLock<T>(fn: () => Promise<T> | T): Promise<T> {
 
 let cachedPolicy: EventRevenueSharingPolicy | null = null;
 
-export function saveEventSettingsToDisk(policy: EventRevenueSharingPolicy): void {
+export function saveEventSettingsToDisk(
+  policy: EventRevenueSharingPolicy,
+  options?: { persistToDb?: boolean }
+): void {
+  if (isReconciliationGateActive("event_settings.json")) {
+    console.warn("[events] saveEventSettingsToDisk dibatalkan: Reconciliation gate sedang aktif untuk event_settings.json.");
+    return;
+  }
   try {
     cachedPolicy = policy;
     const settingsFile = getEventSettingsFile();
@@ -89,7 +96,7 @@ export function saveEventSettingsToDisk(policy: EventRevenueSharingPolicy): void
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const content = JSON.stringify(policy, null, 2);
     fs.writeFileSync(settingsFile, content, "utf-8");
-    if (process.env.NODE_ENV !== "test") {
+    if (options?.persistToDb && process.env.NODE_ENV !== "test") {
       persistStorageToDb("event_settings.json", content).catch((err) => {
         console.warn("[events] Background persist event_settings.json to DB warning:", err);
       });
@@ -163,6 +170,9 @@ export function updateEventRevenuePolicy(
   },
   actorName = "Admin Dago"
 ): EventRevenueSharingPolicy {
+  if (isReconciliationGateActive("event_settings.json")) {
+    throw new Error("Gagal memperbarui kebijakan event: Proses sinkronisasi database sedang berlangsung.");
+  }
   const current = getEventRevenuePolicy();
   const fee =
     updates.defaultPlatformFeePercent !== undefined
@@ -539,6 +549,9 @@ export function createEventBankAccount(
   },
   actorName = "Admin Dago"
 ): EventBankAccount {
+  if (isReconciliationGateActive("event_settings.json")) {
+    throw new Error("Gagal menambahkan rekening bank: Proses sinkronisasi database sedang berlangsung.");
+  }
   if (!data.label || !data.bankName || !data.accountNumber || !data.accountHolder) {
     throw new Error("Label rekening, nama bank, nomor rekening, dan nama pemilik rekening wajib diisi.");
   }
@@ -662,11 +675,16 @@ export function createEventBankAccount(
   return newAccount;
 }
 
+export const addEventBankAccount = createEventBankAccount;
+
 export function updateEventBankAccount(
   bankId: string,
   updates: Partial<EventBankAccount>,
   actorName = "Admin Dago"
 ): EventBankAccount {
+  if (isReconciliationGateActive("event_settings.json")) {
+    throw new Error("Gagal memperbarui rekening bank: Proses sinkronisasi database sedang berlangsung.");
+  }
   const policy = getEventRevenuePolicy();
   const currentAccounts = Array.isArray(policy.bankAccounts) ? [...policy.bankAccounts] : [...DEFAULT_EVENT_BANK_ACCOUNTS];
   const index = currentAccounts.findIndex((b) => b.id === bankId);
@@ -714,6 +732,9 @@ export function updateEventBankAccount(
 }
 
 export function setDefaultEventBankAccount(bankId: string, actorName = "Admin Dago"): EventBankAccount {
+  if (isReconciliationGateActive("event_settings.json")) {
+    throw new Error("Gagal menetapkan rekening default: Proses sinkronisasi database sedang berlangsung.");
+  }
   const policy = getEventRevenuePolicy();
   const currentAccounts = Array.isArray(policy.bankAccounts) ? [...policy.bankAccounts] : [...DEFAULT_EVENT_BANK_ACCOUNTS];
   const target = currentAccounts.find((b) => b.id === bankId);
@@ -747,6 +768,9 @@ export function setDefaultEventBankAccount(bankId: string, actorName = "Admin Da
 }
 
 export function deleteEventBankAccount(bankId: string, actorName = "Admin Dago"): boolean {
+  if (isReconciliationGateActive("event_settings.json")) {
+    throw new Error("Gagal menghapus rekening bank: Proses sinkronisasi database sedang berlangsung.");
+  }
   const policy = getEventRevenuePolicy();
   const currentAccounts = Array.isArray(policy.bankAccounts) ? [...policy.bankAccounts] : [...DEFAULT_EVENT_BANK_ACCOUNTS];
   const target = currentAccounts.find((b) => b.id === bankId);

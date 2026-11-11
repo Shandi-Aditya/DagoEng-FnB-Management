@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useOutlet } from "@/contexts/OutletContext";
@@ -3623,107 +3624,68 @@ export default function SettingsPage() {
                       </p>
                     </div>
 
-                    {/* Section 1: Default Platform Policy Form */}
+                    {/* Section 1: Default Platform Policy Form (Read-Only Info & Link to Event Admin) */}
                     <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-4">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
                         <span className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                           <Percent className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                          <span>1. Template Komisi Platform untuk Event Baru (Default Template)</span>
+                          <span>1. Kebijakan Komisi Platform untuk Event Baru (Terpusat di Event Admin)</span>
                         </span>
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300">
-                          TOTAL PEMBAGIAN: 100% (SEIMBANG)
+                          READ-ONLY • TOTAL 100%
                         </span>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">
-                            Komisi Platform Default (%)
-                          </label>
-                          <div className="flex items-center space-x-1.5">
-                            <input
-                              type="number"
-                              min={0}
-                              max={50}
-                              step={1}
-                              value={eventPlatformFee}
-                              onChange={(e) => {
-                                const val = parseInt(e.target.value, 10);
-                                setEventPlatformFee(isNaN(val) ? 0 : Math.max(0, Math.min(50, val)));
-                              }}
-                              className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-xs"
-                            />
-                            <span className="font-bold text-slate-500 text-xs">%</span>
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700/60">
+                          <span className="block text-slate-500 dark:text-slate-400 font-medium text-xs mb-1">
+                            Komisi Platform Default
+                          </span>
+                          <div className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                            {eventPlatformFee}%
                           </div>
-                          <span className="text-[10px] text-slate-400 mt-1 block">Batas: 0% - 50% (Default platform: 20%)</span>
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">Bagian platform DagoEng</span>
                         </div>
 
-                        <div>
-                          <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">
-                            Bagian Penyelenggara Komunitas (%)
-                          </label>
-                          <div className="flex items-center space-x-1.5">
-                            <input
-                              type="number"
-                              disabled
-                              value={100 - eventPlatformFee}
-                              className="w-full px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 cursor-not-allowed text-xs"
-                            />
-                            <span className="font-bold text-slate-500 text-xs">%</span>
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700/60">
+                          <span className="block text-slate-500 dark:text-slate-400 font-medium text-xs mb-1">
+                            Bagian Penyelenggara Komunitas
+                          </span>
+                          <div className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                            {100 - eventPlatformFee}%
                           </div>
-                          <span className="text-[10px] text-slate-400 mt-1 block">Otomatis dihitung (100% - Komisi)</span>
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">Otomatis seimbang (100% - Komisi)</span>
                         </div>
 
-                        <div>
-                          <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700/60">
+                          <span className="block text-slate-500 dark:text-slate-400 font-medium text-xs mb-1">
                             Tanggal Efektif Berlaku
-                          </label>
-                          <input
-                            type="date"
-                            value={eventPolicyEffectiveDate.split("T")[0]}
-                            onChange={(e) => setEventPolicyEffectiveDate(new Date(e.target.value).toISOString())}
-                            className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 text-xs"
-                          />
-                          <span className="text-[10px] text-slate-400 mt-1 block">Mulai berlaku untuk tiket baru</span>
+                          </span>
+                          <div className="text-xs font-bold text-slate-900 dark:text-slate-100 mt-1">
+                            {eventPolicyEffectiveDate ? new Date(eventPolicyEffectiveDate).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" }) : "-"}
+                          </div>
+                          <span className="text-[10px] text-slate-400 mt-0.5 block">Mulai berlaku untuk tiket baru</span>
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1 text-xs">
-                          Catatan / Alasan Penetapan Kebijakan
-                        </label>
-                        <input
-                          type="text"
-                          value={eventPolicyNotes}
-                          onChange={(e) => setEventPolicyNotes(e.target.value)}
-                          placeholder="Contoh: Penyesuaian komisi platform semester gasal 2026..."
-                          className="w-full px-3 py-1.5 border border-slate-300 dark:border-slate-700 rounded-lg text-xs text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-900"
-                        />
-                      </div>
-
-                      {eventPolicyFeedback && (
-                        <div
-                          className={`p-2.5 rounded-lg text-xs font-semibold ${
-                            eventPolicyFeedback.startsWith("Error")
-                              ? "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
-                              : "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
-                          }`}
-                        >
-                          {eventPolicyFeedback}
+                      {eventPolicyNotes && (
+                        <div className="text-xs text-slate-600 dark:text-slate-400 bg-slate-50/70 dark:bg-slate-800/40 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">Catatan Penetapan: </span>
+                          {eventPolicyNotes}
                         </div>
                       )}
 
-                      <div className="flex justify-end pt-2">
-                        <Button
-                          type="button"
-                          onClick={handleSaveEventRevenuePolicy}
-                          disabled={isSavingEventPolicy}
-                          size="sm"
-                          className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold px-4 text-xs rounded-xl shadow-xs"
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                          Perubahan tarif komisi default dikelola secara terpusat melalui portal Event Admin oleh Super Admin atau Owner Platform.
+                        </div>
+                        <Link
+                          href="/events-admin?tab=SETTINGS"
+                          className="inline-flex items-center justify-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs shadow-xs transition-colors shrink-0"
                         >
-                          <Save className="w-3.5 h-3.5 mr-1.5" />
-                          <span>{isSavingEventPolicy ? "Menyimpan..." : "Simpan Kebijakan Komisi Platform"}</span>
-                        </Button>
+                          <span>Kelola di Event Admin</span>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </Link>
                       </div>
                     </div>
 

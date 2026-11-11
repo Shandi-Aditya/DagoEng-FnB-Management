@@ -115,6 +115,64 @@ export interface StorageSyncResult {
 
 const storageSyncStatusMap = new Map<string, StorageSyncStatus>();
 const lastSyncedUpdatedAtMap = new Map<string, Date>();
+const inFlightWriteTracker = new Map<string, Set<Promise<any>>>();
+const reconciliationGateSet = new Set<string>();
+const activeReconciliationPromises = new Map<string, Promise<boolean>>();
+
+export function isReconciliationGateActive(filename: string): boolean {
+  return reconciliationGateSet.has(filename);
+}
+
+export function setReconciliationGateForTest(filename: string, active: boolean): void {
+  if (active) {
+    reconciliationGateSet.add(filename);
+  } else {
+    reconciliationGateSet.delete(filename);
+  }
+}
+
+let reconciliationTimeoutMs = 10000;
+export function setReconciliationTimeoutForTest(ms: number): void {
+  reconciliationTimeoutMs = ms;
+}
+
+export type DatabaseReadHandler = (filename: string, key: string) => Promise<{ value: string; updatedAt?: Date | string } | null>;
+let testDatabaseReadHandler: DatabaseReadHandler | null = null;
+let testDiskWriteHandler: ((filename: string, content: string) => Promise<void> | void) | null = null;
+
+export function setTestDatabaseReadHandler(handler: DatabaseReadHandler | null): void {
+  testDatabaseReadHandler = handler;
+}
+
+export function setTestDiskWriteHandler(handler: ((filename: string, content: string) => Promise<void> | void) | null): void {
+  testDiskWriteHandler = handler;
+}
+
+export function getInFlightWriteCount(filename: string): number {
+  return inFlightWriteTracker.get(filename)?.size || 0;
+}
+
+export function registerInFlightWrite(filename: string, promise: Promise<any>): void {
+  let fileInFlight = inFlightWriteTracker.get(filename);
+  if (!fileInFlight) {
+    fileInFlight = new Set<Promise<any>>();
+    inFlightWriteTracker.set(filename, fileInFlight);
+  }
+  fileInFlight.add(promise);
+  promise.finally(() => {
+    const currentSet = inFlightWriteTracker.get(filename);
+    if (currentSet) {
+      currentSet.delete(promise);
+      if (currentSet.size === 0) {
+        inFlightWriteTracker.delete(filename);
+      }
+    }
+  }).catch(() => {});
+}
+
+export function clearInFlightWrites(): void {
+  inFlightWriteTracker.clear();
+}
 
 export function getStorageSyncStatus(filename: string): StorageSyncStatus {
   if (process.env.NODE_ENV === "test" && !storageSyncStatusMap.has(filename)) {
@@ -135,6 +193,12 @@ export function setStorageSyncStatus(filename: string, status: StorageSyncStatus
 export function resetStorageSyncStatus(): void {
   storageSyncStatusMap.clear();
   lastSyncedUpdatedAtMap.clear();
+  clearInFlightWrites();
+  reconciliationGateSet.clear();
+  activeReconciliationPromises.clear();
+  testDatabaseReadHandler = null;
+  testDiskWriteHandler = null;
+  reconciliationTimeoutMs = 10000;
 }
 
 /**
@@ -147,76 +211,149 @@ export function resetStorageSyncStatus(): void {
  * 2. Unconfirmed or timed-out reads flag the storage state so write operations cannot
  *    clobber existing production records with local seed defaults.
  * 3. JSON payloads are strictly validated before writing to disk replicas.
+ * 4. Reconciliation Gate per filename prevents new writes from arriving during reconciliation.
  */
-export async function syncStorageFromDb(filename: string): Promise<boolean> {
-  if (process.env.NODE_ENV === "test") {
-    // In test environment, if test explicitly mocked status to non-SYNCED, respect it
-    if (storageSyncStatusMap.has(filename) && storageSyncStatusMap.get(filename) !== "SYNCED") {
-      return false;
-    }
-    storageSyncStatusMap.set(filename, "SYNCED");
-    return true;
-  }
-  if (!process.env.DATABASE_URL) {
-    storageSyncStatusMap.set(filename, "UNAVAILABLE");
-    return false;
+export function syncStorageFromDb(filename: string): Promise<boolean> {
+  // Concurrent reconciliation guard for the same filename:
+  // If a reconciliation is already running for this filename, await and reuse the same promise.
+  const existingReconciliation = activeReconciliationPromises.get(filename);
+  if (existingReconciliation) {
+    return existingReconciliation;
   }
 
-  try {
-    const { db } = await import("./db");
-    const key = `STORAGE_${filename}`;
+  // 1. Synchronously activate reconciliation gate before any asynchronous operations
+  reconciliationGateSet.add(filename);
 
-    const queryPromise = db.systemSetting.findUnique({ where: { key } });
-    const timeoutPromise = new Promise<"TIMEOUT">((resolve) =>
-      setTimeout(() => resolve("TIMEOUT"), 8000)
-    );
-
-    const result = await Promise.race([queryPromise, timeoutPromise]);
-
-    if (result === "TIMEOUT") {
-      storageSyncStatusMap.set(filename, "TIMEOUT");
-      console.warn(`[data-storage] syncStorageFromDb TIMEOUT (8000ms) for ${filename}. Database state unconfirmed.`);
-      return false;
-    }
-
-    const setting = result;
-    if (!setting || !setting.value || setting.value.trim().length === 0) {
-      storageSyncStatusMap.set(filename, "EMPTY");
-      lastSyncedUpdatedAtMap.delete(filename);
-      return false;
-    }
-
-    // Integrity check: Validate that data in PostgreSQL is valid JSON before writing to disk
+  const reconPromise = (async () => {
     try {
-      const parsed = JSON.parse(setting.value);
-      if (typeof parsed !== "object" || parsed === null) {
-        storageSyncStatusMap.set(filename, "INVALID_DATA");
-        console.error(`[data-storage] syncStorageFromDb INVALID_DATA for ${filename}: Root JSON must be an object or array.`);
+      // 2. Drain all in-flight write queries that started before gate activation
+      const startReconTime = Date.now();
+      const maxBudgetMs = reconciliationTimeoutMs;
+
+      while (getInFlightWriteCount(filename) > 0) {
+        const elapsed = Date.now() - startReconTime;
+        const remainingBudget = maxBudgetMs - elapsed;
+        if (remainingBudget <= 0) {
+          storageSyncStatusMap.set(filename, "UNAVAILABLE");
+          lastSyncedUpdatedAtMap.delete(filename);
+          console.warn(`[data-storage] syncStorageFromDb rekonsiliasi timeout (${maxBudgetMs}ms) menunggu operasi tulis [${filename}]. Status dipertahankan UNAVAILABLE.`);
+          return false;
+        }
+
+        const currentPending = Array.from(inFlightWriteTracker.get(filename) || []);
+        const drainTimeout = new Promise<"DRAIN_TIMEOUT">((resolve) =>
+          setTimeout(() => resolve("DRAIN_TIMEOUT"), Math.min(remainingBudget, 50))
+        );
+        const waitResult = await Promise.race([
+          Promise.allSettled(currentPending),
+          drainTimeout,
+        ]);
+
+        if (waitResult === "DRAIN_TIMEOUT") {
+          continue;
+        }
+      }
+
+      // Fast path in test environment when not explicitly simulating DB reconciliation
+      if (process.env.NODE_ENV === "test" && !testDatabaseReadHandler) {
+        if (storageSyncStatusMap.has(filename) && storageSyncStatusMap.get(filename) !== "SYNCED") {
+          return false;
+        }
+        if (getInFlightWriteCount(filename) > 0) {
+          storageSyncStatusMap.set(filename, "UNAVAILABLE");
+          return false;
+        }
+        storageSyncStatusMap.set(filename, "SYNCED");
+        return true;
+      }
+
+      if (!testDatabaseReadHandler && !process.env.DATABASE_URL) {
+        storageSyncStatusMap.set(filename, "UNAVAILABLE");
         return false;
       }
-    } catch (parseErr) {
-      storageSyncStatusMap.set(filename, "INVALID_DATA");
-      console.error(`[data-storage] syncStorageFromDb INVALID_DATA for ${filename}: Corrupted JSON payload in database.`, parseErr);
+
+      // 3. Database Reconciliation
+      const key = `STORAGE_${filename}`;
+      let setting: { value: string; updatedAt?: Date | string } | null = null;
+
+      if (testDatabaseReadHandler) {
+        setting = await testDatabaseReadHandler(filename, key);
+      } else {
+        const { db } = await import("./db");
+        const queryPromise = db.systemSetting.findUnique({ where: { key } });
+        const timeoutPromise = new Promise<"TIMEOUT">((resolve) =>
+          setTimeout(() => resolve("TIMEOUT"), 8000)
+        );
+
+        const result = await Promise.race([queryPromise, timeoutPromise]);
+        if (result === "TIMEOUT") {
+          storageSyncStatusMap.set(filename, "TIMEOUT");
+          console.warn(`[data-storage] syncStorageFromDb TIMEOUT (8000ms) for ${filename}. Database state unconfirmed.`);
+          return false;
+        }
+        setting = result;
+      }
+
+      if (!setting || !setting.value || setting.value.trim().length === 0) {
+        storageSyncStatusMap.set(filename, "EMPTY");
+        lastSyncedUpdatedAtMap.delete(filename);
+        return false;
+      }
+
+      // Integrity check: Validate that data in PostgreSQL is valid JSON before writing to disk
+      try {
+        const parsed = JSON.parse(setting.value);
+        if (typeof parsed !== "object" || parsed === null) {
+          storageSyncStatusMap.set(filename, "INVALID_DATA");
+          console.error(`[data-storage] syncStorageFromDb INVALID_DATA for ${filename}: Root JSON must be an object or array.`);
+          return false;
+        }
+      } catch (parseErr) {
+        storageSyncStatusMap.set(filename, "INVALID_DATA");
+        console.error(`[data-storage] syncStorageFromDb INVALID_DATA for ${filename}: Corrupted JSON payload in database.`, parseErr);
+        return false;
+      }
+
+      // Write to local disk replica
+      if (testDiskWriteHandler) {
+        await testDiskWriteHandler(filename, setting.value);
+      } else {
+        const filePath = getDataFilePath(filename);
+        const dir = path.dirname(filePath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(filePath, setting.value, "utf-8");
+      }
+
+      // Pre-commit check: pastikan tidak ada write aktif sebelum menetapkan SYNCED
+      if (getInFlightWriteCount(filename) > 0) {
+        storageSyncStatusMap.set(filename, "UNAVAILABLE");
+        return false;
+      }
+
+      storageSyncStatusMap.set(filename, "SYNCED");
+      if (setting.updatedAt) {
+        lastSyncedUpdatedAtMap.set(filename, new Date(setting.updatedAt));
+      }
+      return true;
+    } catch (err) {
+      storageSyncStatusMap.set(filename, "UNAVAILABLE");
+      lastSyncedUpdatedAtMap.delete(filename);
+      console.warn(`[data-storage] syncStorageFromDb UNAVAILABLE for ${filename}:`, err);
       return false;
+    } finally {
+      // Ensure gate is unconditionally released
+      reconciliationGateSet.delete(filename);
+      activeReconciliationPromises.delete(filename);
     }
+  })();
 
-    // Valid JSON payload confirmed: safely write to local disk replica
-    const filePath = getDataFilePath(filename);
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(filePath, setting.value, "utf-8");
+  activeReconciliationPromises.set(filename, reconPromise);
+  reconPromise.finally(() => {
+    reconciliationGateSet.delete(filename);
+    activeReconciliationPromises.delete(filename);
+  }).catch(() => {});
 
-    storageSyncStatusMap.set(filename, "SYNCED");
-    if (setting.updatedAt) {
-      lastSyncedUpdatedAtMap.set(filename, new Date(setting.updatedAt));
-    }
-    return true;
-  } catch (err) {
-    storageSyncStatusMap.set(filename, "UNAVAILABLE");
-    lastSyncedUpdatedAtMap.delete(filename);
-    console.warn(`[data-storage] syncStorageFromDb UNAVAILABLE for ${filename}:`, err);
-    return false;
-  }
+  return reconPromise;
 }
 
 export class DatabasePersistenceError extends Error {
@@ -233,6 +370,16 @@ export class DatabasePersistenceError extends Error {
 }
 
 export async function persistStorageToDb(filename: string, content: string): Promise<boolean> {
+  // 1. RECONCILIATION GATE GUARD:
+  // Operasi tulis ditolak jika rekonsiliasi database sedang berlangsung untuk filename ini demi integritas data
+  if (isReconciliationGateActive(filename)) {
+    throw new DatabasePersistenceError(
+      `RECONCILIATION_IN_PROGRESS: Operasi penyimpanan [${filename}] ditolak karena proses rekonsiliasi database sedang berlangsung. Silakan coba beberapa saat lagi.`,
+      filename,
+      true
+    );
+  }
+
   if (process.env.NODE_ENV === "test") {
     // If test explicitly sets status to TIMEOUT, INVALID_DATA, or UNAVAILABLE, guard against data loss
     const testStatus = storageSyncStatusMap.get(filename);
@@ -297,16 +444,15 @@ export async function persistStorageToDb(filename: string, content: string): Pro
     // If another node created the record concurrently, Prisma unique constraint (P2002) is triggered.
     if (currentSyncStatus === "EMPTY") {
       try {
-        const created = await Promise.race([
-          db.systemSetting.create({
-            data: {
-              key,
-              value: content,
-              description: `Distributed persistent cloud store for ${filename}`,
-            },
-          }),
-          timeoutPromise,
-        ]);
+        const createQuery = db.systemSetting.create({
+          data: {
+            key,
+            value: content,
+            description: `Distributed persistent cloud store for ${filename}`,
+          },
+        });
+        registerInFlightWrite(filename, createQuery);
+        const created = await Promise.race([createQuery, timeoutPromise]);
         storageSyncStatusMap.set(filename, "SYNCED");
         if (created?.updatedAt) {
           lastSyncedUpdatedAtMap.set(filename, new Date(created.updatedAt));
@@ -329,8 +475,8 @@ export async function persistStorageToDb(filename: string, content: string): Pro
     // 2. OPTIMISTIC CONCURRENCY CHECK (Preventing Lost Updates on SYNCED state):
     const lastUpdatedAt = lastSyncedUpdatedAtMap.get(filename);
     if (lastUpdatedAt && typeof db.systemSetting.updateMany === "function") {
-      const updateResult = await Promise.race([
-        db.systemSetting.updateMany({
+      const updateQuery = (async () => {
+        const updateResult = await db.systemSetting.updateMany({
           where: {
             key,
             updatedAt: lastUpdatedAt,
@@ -338,26 +484,28 @@ export async function persistStorageToDb(filename: string, content: string): Pro
           data: {
             value: content,
           },
-        }),
-        timeoutPromise,
-      ]);
+        });
 
-      if (updateResult.count === 0) {
-        // Record was modified by another node between sync and write!
-        storageSyncStatusMap.set(filename, "UNAVAILABLE");
-        lastSyncedUpdatedAtMap.delete(filename);
-        throw new DatabasePersistenceError(
-          `LOST_UPDATE_PREVENTED: Rekaman [${filename}] telah diperbarui di PostgreSQL oleh instance lain. Re-sync diperlukan sebelum menimpa data.`,
-          filename,
-          true
-        );
-      }
+        if (updateResult.count === 0) {
+          storageSyncStatusMap.set(filename, "UNAVAILABLE");
+          lastSyncedUpdatedAtMap.delete(filename);
+          throw new DatabasePersistenceError(
+            `LOST_UPDATE_PREVENTED: Rekaman [${filename}] telah diperbarui di PostgreSQL oleh instance lain. Re-sync diperlukan sebelum menimpa data.`,
+            filename,
+            true
+          );
+        }
 
-      // Fetch refreshed updatedAt
-      const refreshed = await db.systemSetting.findUnique({
-        where: { key },
-        select: { updatedAt: true },
-      });
+        const refreshed = await db.systemSetting.findUnique({
+          where: { key },
+          select: { updatedAt: true },
+        });
+        return refreshed;
+      })();
+
+      registerInFlightWrite(filename, updateQuery);
+      const refreshed = await Promise.race([updateQuery, timeoutPromise]);
+
       if (refreshed?.updatedAt) {
         lastSyncedUpdatedAtMap.set(filename, new Date(refreshed.updatedAt));
       }
@@ -366,20 +514,19 @@ export async function persistStorageToDb(filename: string, content: string): Pro
     }
 
     // 3. FALLBACK UPSERT:
-    const upserted = await Promise.race([
-      db.systemSetting.upsert({
-        where: { key },
-        create: {
-          key,
-          value: content,
-          description: `Distributed persistent cloud store for ${filename}`,
-        },
-        update: {
-          value: content,
-        },
-      }),
-      timeoutPromise,
-    ]);
+    const upsertQuery = db.systemSetting.upsert({
+      where: { key },
+      create: {
+        key,
+        value: content,
+        description: `Distributed persistent cloud store for ${filename}`,
+      },
+      update: {
+        value: content,
+      },
+    });
+    registerInFlightWrite(filename, upsertQuery);
+    const upserted = await Promise.race([upsertQuery, timeoutPromise]);
 
     if (upserted?.updatedAt) {
       lastSyncedUpdatedAtMap.set(filename, new Date(upserted.updatedAt));

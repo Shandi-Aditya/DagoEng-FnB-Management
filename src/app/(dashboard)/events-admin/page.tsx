@@ -202,6 +202,7 @@ export default function AdminEventsPage() {
 
   // Bank & Business Settings State
   const [businessPolicy, setBusinessPolicy] = useState<any>(null);
+  const [baselinePolicy, setBaselinePolicy] = useState<any>(null);
   const [bankAccountsList, setBankAccountsList] = useState<any[]>([]);
   const [bankChangeHistory, setBankChangeHistory] = useState<any[]>([]);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -269,6 +270,7 @@ export default function AdminEventsPage() {
       const settingsData = await settingsRes.json();
       if (settingsData.success) {
         setBusinessPolicy(settingsData.data);
+        setBaselinePolicy(settingsData.data);
       }
       const banksData = await banksRes.json();
       if (banksData.success) {
@@ -336,13 +338,20 @@ export default function AdminEventsPage() {
   const handleSaveBusinessSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!businessPolicy) return;
+
+    const fee = Number(businessPolicy.defaultPlatformFeePercent);
+    if (isNaN(fee) || !Number.isInteger(fee) || fee < 0 || fee > 50) {
+      setActionErrorMessage("Komisi platform default harus berupa bilangan bulat antara 0% sampai 50%.");
+      return;
+    }
+
     try {
       setIsSavingSettings(true);
       const res = await fetch("/api/events/admin/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          defaultPlatformFeePercent: businessPolicy.defaultPlatformFeePercent,
+          defaultPlatformFeePercent: fee,
           maxTicketsPerBooking: businessPolicy.maxTicketsPerBooking,
           activePaymentMethod: businessPolicy.activePaymentMethod,
           bookingPaymentExpiryMinutes: businessPolicy.bookingPaymentExpiryMinutes,
@@ -357,6 +366,9 @@ export default function AdminEventsPage() {
       }
       setActionSuccessMessage("Pengaturan kebijakan bisnis & pembayaran event berhasil disimpan!");
       setBusinessPolicy(data.data);
+      setBaselinePolicy(data.data);
+      // Verifikasi ulang dari server untuk memastikan persistensi nyata
+      await loadBusinessSettings();
     } catch (err: any) {
       setActionErrorMessage(err.message || "Gagal menyimpan pengaturan.");
     } finally {
@@ -2679,18 +2691,20 @@ export default function AdminEventsPage() {
                     <input
                       type="number"
                       min={0}
-                      max={100}
+                      max={50}
+                      step={1}
                       value={businessPolicy.defaultPlatformFeePercent ?? 20}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const parsed = parseInt(e.target.value, 10);
                         setBusinessPolicy({
                           ...businessPolicy,
-                          defaultPlatformFeePercent: parseFloat(e.target.value) || 0,
-                        })
-                      }
+                          defaultPlatformFeePercent: isNaN(parsed) ? 0 : Math.max(0, Math.min(50, parsed)),
+                        });
+                      }}
                       className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
                     />
                     <span className="text-[10px] text-slate-400 block">
-                      Bagian platform (20%), bagian penyelenggara (80%).
+                      Platform ({businessPolicy.defaultPlatformFeePercent ?? 20}%), Penyelenggara ({100 - (businessPolicy.defaultPlatformFeePercent ?? 20)}%). Maksimal 50% (bilangan bulat).
                     </span>
                   </div>
                 </div>
@@ -2710,11 +2724,25 @@ export default function AdminEventsPage() {
                   />
                 </div>
 
-                <div className="pt-2 flex justify-end">
+                <div className="pt-2 flex items-center justify-between">
+                  <div>
+                    {Boolean(businessPolicy && baselinePolicy && JSON.stringify(businessPolicy) !== JSON.stringify(baselinePolicy)) ? (
+                      <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2.5 py-1 rounded-lg">
+                        • Terdapat perubahan yang belum disimpan
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-slate-400">
+                        Pengaturan tersinkronisasi dengan server
+                      </span>
+                    )}
+                  </div>
                   <Button
                     type="submit"
-                    disabled={isSavingSettings}
-                    className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer"
+                    disabled={
+                      isSavingSettings ||
+                      !Boolean(businessPolicy && baselinePolicy && JSON.stringify(businessPolicy) !== JSON.stringify(baselinePolicy))
+                    }
+                    className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSavingSettings ? "Menyimpan..." : "Simpan Pengaturan Bisnis"}
                   </Button>

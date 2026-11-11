@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertEventAdmin, assertOrganizerAuth } from "@/lib/server-auth";
-import { syncStorageFromDb } from "@/lib/data-storage";
+import {
+  syncStorageFromDb,
+  persistStorageToDb,
+  isReconciliationGateActive,
+} from "@/lib/data-storage";
 import { maskAccountNumber } from "@/lib/payout";
 import {
   getEventBankAccounts,
@@ -9,6 +13,7 @@ import {
   setDefaultEventBankAccount,
   deleteEventBankAccount,
   getEventRevenuePolicy,
+  saveEventSettingsToDisk,
 } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
@@ -99,7 +104,37 @@ export async function POST(req: NextRequest) {
       actorName = adminAuth.name || "Admin Dago";
     }
 
+    // Pastikan tidak ada rekonsiliasi database yang sedang aktif sebelum memodifikasi memori atau disk
+    if (isReconciliationGateActive("event_settings.json")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Gagal memproses rekening bank: Proses sinkronisasi database sedang berlangsung. Silakan coba beberapa saat lagi demi integritas data.",
+        },
+        { status: 503 }
+      );
+    }
+
+    const previousPolicy = JSON.parse(JSON.stringify(getEventRevenuePolicy()));
     const account = createEventBankAccount(body, actorName);
+
+    // Persistensi wajib ke database PostgreSQL. Jika gagal, rollback disk dan batalkan perubahan.
+    const currentPolicy = getEventRevenuePolicy();
+    try {
+      await persistStorageToDb("event_settings.json", JSON.stringify(currentPolicy, null, 2));
+    } catch (dbErr: any) {
+      if (!isReconciliationGateActive("event_settings.json")) {
+        saveEventSettingsToDisk(previousPolicy);
+      }
+      console.error("[banks] Gagal menyimpan ke PostgreSQL, rollback disk dijalankan:", dbErr?.message || dbErr);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Gagal mengamankan penyimpanan ke database cloud (PostgreSQL): ${dbErr?.message || "Koneksi database terputus"}. Perubahan rekening bank dibatalkan demi integritas data.`,
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(
       {
@@ -141,11 +176,42 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
+    // Pastikan tidak ada rekonsiliasi database yang sedang aktif sebelum memodifikasi memori atau disk
+    if (isReconciliationGateActive("event_settings.json")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Gagal memperbarui rekening bank: Proses sinkronisasi database sedang berlangsung. Silakan coba beberapa saat lagi demi integritas data.",
+        },
+        { status: 503 }
+      );
+    }
+
+    const previousPolicy = JSON.parse(JSON.stringify(getEventRevenuePolicy()));
+
     let updated;
     if (action === "SET_DEFAULT") {
       updated = setDefaultEventBankAccount(id, auth.name || "Admin Dago");
     } else {
       updated = updateEventBankAccount(id, updates, auth.name || "Admin Dago");
+    }
+
+    // Persistensi wajib ke database PostgreSQL. Jika gagal, rollback disk dan batalkan perubahan.
+    const currentPolicy = getEventRevenuePolicy();
+    try {
+      await persistStorageToDb("event_settings.json", JSON.stringify(currentPolicy, null, 2));
+    } catch (dbErr: any) {
+      if (!isReconciliationGateActive("event_settings.json")) {
+        saveEventSettingsToDisk(previousPolicy);
+      }
+      console.error("[banks] Gagal menyimpan ke PostgreSQL, rollback disk dijalankan:", dbErr?.message || dbErr);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Gagal mengamankan penyimpanan ke database cloud (PostgreSQL): ${dbErr?.message || "Koneksi database terputus"}. Perubahan rekening bank dibatalkan demi integritas data.`,
+        },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
@@ -185,7 +251,37 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
+    // Pastikan tidak ada rekonsiliasi database yang sedang aktif sebelum memodifikasi memori atau disk
+    if (isReconciliationGateActive("event_settings.json")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Gagal menghapus rekening bank: Proses sinkronisasi database sedang berlangsung. Silakan coba beberapa saat lagi demi integritas data.",
+        },
+        { status: 503 }
+      );
+    }
+
+    const previousPolicy = JSON.parse(JSON.stringify(getEventRevenuePolicy()));
     deleteEventBankAccount(id, auth.name || "Admin Dago");
+
+    // Persistensi wajib ke database PostgreSQL. Jika gagal, rollback disk dan batalkan perubahan.
+    const currentPolicy = getEventRevenuePolicy();
+    try {
+      await persistStorageToDb("event_settings.json", JSON.stringify(currentPolicy, null, 2));
+    } catch (dbErr: any) {
+      if (!isReconciliationGateActive("event_settings.json")) {
+        saveEventSettingsToDisk(previousPolicy);
+      }
+      console.error("[banks] Gagal menyimpan ke PostgreSQL, rollback disk dijalankan:", dbErr?.message || dbErr);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Gagal mengamankan penyimpanan ke database cloud (PostgreSQL): ${dbErr?.message || "Koneksi database terputus"}. Perubahan rekening bank dibatalkan demi integritas data.`,
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
