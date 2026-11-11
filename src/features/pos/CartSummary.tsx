@@ -59,7 +59,7 @@ export function CartSummary({
           <dd className="font-mono text-xl font-semibold tabular-nums">{formatCurrencyIDR(grandTotal)}</dd>
         </div>
       </dl>
-      <Button size="lg" className="h-10 w-full text-sm" disabled={!canPay} onClick={onPay}>
+      <Button size="lg" className="w-full" disabled={!canPay} onClick={onPay}>
         <CreditCard />
         Bayar {formatCurrencyIDR(grandTotal)}
       </Button>

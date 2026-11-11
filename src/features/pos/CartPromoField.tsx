@@ -72,6 +72,7 @@ export function CartPromoField({
             }
           }}
           placeholder="Kode, misalnya DAGO20"
+          // lint-ui-ignore: voucher codes are always upper case
           className="font-mono uppercase placeholder:font-sans placeholder:normal-case"
           aria-invalid={message?.type === "ERROR"}
         />

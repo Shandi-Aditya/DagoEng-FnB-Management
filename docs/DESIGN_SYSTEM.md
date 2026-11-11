@@ -184,6 +184,8 @@ Komponen lama ada di `src/components/legacy/ui/` hanya selama migrasi. **Kode ba
 | `outline`, `secondary` | Garis `border`, `shadow-xs`; di mode gelap ada highlight putih 6% di tepi atas. |
 | `ghost`, `link` | Datar seperti bawaan shadcn. |
 
+Ukuran tombol hanya lewat prop `size` (`sm`, `default`, `lg`, `icon*`). Jangan menimpa `h-*` atau `text-*` lewat `className`; `npm run lint:ui` menandainya.
+
 Token `--button-*` ada di `globals.css` dan diturunkan dari `--primary`/`--destructive` dengan `color-mix`, jadi ikut berubah saat warna tema diganti. Saat memperbarui tombol lewat `npx shadcn add button --overwrite`, terapkan ulang kelas varian ini. Tombol di `components/legacy/ui` belum memakai gaya ini; halaman lama mendapatkannya saat dimigrasi.
 
 Catatan style Mira: `Badge` bawaan memakai teks 10px. Untuk badge yang harus dibaca cepat (status pesanan, pembayaran), tambahkan `className="text-xs"` saat dipakai, jangan mengubah file `ui/badge.tsx`.
@@ -196,6 +198,45 @@ Catatan style Mira: `Badge` bawaan memakai teks 10px. Untuk badge yang harus dib
 - Tidak ada salam pembuka sebagai judul, tanda seru, atau titik di label dan tombol.
 - Persentase selalu menyebut pembandingnya (`+12% vs bulan lalu`).
 - Format Rupiah konsisten (`Rp 432.200`) dengan `tabular-nums`.
+- Sentence case untuk semua teks: judul, label, kolom tabel, tombol, tab (`Status pembayaran`, bukan `Status Pembayaran`). Nama diri tetap kapital (`Kopi Senja`, `QRIS`).
+- Judul halaman menyebut konteks dalam 1–2 kata (`Pesanan`, `Inventori`, `Karyawan`). Outlet dan periode sudah tampil di header, jadi tidak diulang di judul. Penjelasan masuk ke deskripsi.
+- Kode enum tidak pernah tampil ke user (`ON_TIME`, `KITCHEN_RECEIVED`, `DINE_IN`). Selalu lewat fungsi label di modul domain.
+- Angka dan satuan dipisah: nilai `12`, keterangan `bahan`, bukan `12 Bahan` di satu string.
+
+### Glosarium
+
+Pakai istilah di kolom kiri. Kolom kanan adalah bentuk yang harus diganti.
+
+| Pakai | Jangan |
+| --- | --- |
+| Ekspor | Export, Download (untuk data) |
+| Cetak | Print |
+| Riwayat | Timeline, History, Log (untuk user) |
+| Tagihan / Total | Total Tagihan (judul kolom cukup `Total`) |
+| Bayar | Proses Pembayaran, Checkout |
+| Metode bayar | Payment Method |
+| Bahan | Bahan Baku (kecuali di judul tab), Ingredient |
+| Pemasok | Supplier, Vendor |
+| Pesanan pembelian (PO) | Purchase Order, Buat PO Baru (cukup `Buat PO`) |
+| Opname | Stock Opname, Audit Fisik Opname |
+| Limbah | Waste, Waste Operasional |
+| Penyesuaian stok | Stock Adjustment |
+| Resep | BOM, Bill of Material (BOM boleh di teks bantuan) |
+| Tepat waktu / Mendekati target / Lewat target | ON TIME / AT RISK / DELAYED, SLA Status |
+| Dine in / Takeaway / Delivery | DINE_IN, Makan di tempat (pilih satu, konsisten) |
+| Shift | Sesi Shift, Shift Penugasan |
+| Manajer outlet | Store Manager |
+| Member | Pelanggan Loyalty, Customer (untuk pemegang poin) |
+| Tamu | Guest, Walk-in Guest (boleh `tamu walk-in`) |
+| Ruang kerja | Workspace (di copy UI) |
+
+### Pesan dan toast
+
+- Toast memakai `notify()`. Judul berupa pernyataan pendek tentang hasil (`Pesanan dibayar`, `Shift dibuka`). Deskripsi opsional berisi satu fakta yang berguna (`Rp 55.200 via QRIS`).
+- Tanpa `Berhasil!`, `Sukses`, `Mohon`, `Silakan`, `Harap`, atau tanda seru. Validasi langsung menyebut yang harus dilakukan: `Isi nama tamu`, bukan `Mohon lengkapi nama tamu.`
+- Tanpa jargon sistem di copy kasir atau staf (`Stok BOM dipotong`, `sinkronisasi outbox`, `payload`). Kalau perlu, tulis efeknya: `Stok bahan sudah dikurangi`.
+- Pesan error menyebut apa yang terjadi dan langkah berikutnya: `Pembayaran ditolak server. Coba lagi atau pakai metode lain.`
+- Tanpa copy marketing di layar kerja (`Smart`, `Terintegrasi`, `Enterprise`, `Real-time`, `Otomatis` sebagai pujian). Nama fitur cukup kata bendanya (`Inventori`, bukan `Smart Inventory`).
 
 ---
 
