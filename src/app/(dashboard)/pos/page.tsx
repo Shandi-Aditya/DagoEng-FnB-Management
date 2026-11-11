@@ -35,6 +35,7 @@ import { KitchenTicketData } from "@/types/printer";
 import { CashDrawerShiftModal } from "@/features/pos/CashDrawerShiftModal";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { isTenantActive, DEFAULT_FNB_TENANTS, getAllFnbTenants, getTenantName } from "@/lib/tenant";
+import { resolveProductModifierGroups } from "@/lib/pos-modifiers";
 import { resolvePosReceiptPublisher, resolveCoworkingReceiptPublisher } from "@/lib/receipt-publisher";
 import {
   isCoworkingDateOpen,
@@ -300,13 +301,9 @@ export default function POSPage() {
     return getAvailableTables(activeOutletId);
   }, [getAvailableTables, activeOutletId, areas]);
 
-  // Set default table when available tables change
+  // POS-14: Do not auto-select table. Only reset if current selection is no longer available.
   useEffect(() => {
-    if (availableTables.length > 0) {
-      if (!selectedTable || !availableTables.some((t) => t.id === selectedTable || t.number === selectedTable)) {
-        setSelectedTable(availableTables[0].number || availableTables[0].id);
-      }
-    } else {
+    if (selectedTable && !availableTables.some((t) => t.id === selectedTable || t.number === selectedTable)) {
       setSelectedTable("");
     }
   }, [availableTables, selectedTable]);
@@ -344,31 +341,7 @@ export default function POSPage() {
           { name: "Regular", priceAdjustment: 0 },
           { name: "Large (+5k)", priceAdjustment: 5000 },
         ],
-        modifierGroups: [
-          {
-            id: "mod-sugar",
-            name: "Level Gula",
-            isRequired: false,
-            minSelect: 0,
-            maxSelect: 1,
-            options: [
-              { name: "Normal Sugar (100%)", price: 0, priceAdjustment: 0 },
-              { name: "Less Sugar (50%)", price: 0, priceAdjustment: 0 },
-              { name: "No Sugar (0%)", price: 0, priceAdjustment: 0 },
-            ],
-          },
-          {
-            id: "mod-milk",
-            name: "Pilihan Susu",
-            isRequired: false,
-            minSelect: 0,
-            maxSelect: 1,
-            options: [
-              { name: "Fresh Milk Standard", price: 0, priceAdjustment: 0 },
-              { name: "Oat Milk (+Rp 8.000)", price: 8000, priceAdjustment: 8000 },
-            ],
-          },
-        ],
+        modifierGroups: resolveProductModifierGroups(prod),
       };
     });
   }, [masterProducts, checkProductStockStatus, tenantSettingsVersion]);
@@ -785,6 +758,21 @@ export default function POSPage() {
       qrisVerification: paymentData.qrisVerification,
       loyaltyMember: loyaltyReceiptInfo,
     };
+
+    if (totalDiscount > 0) {
+      logActivity({
+        module: "POS",
+        action: "APPLY_DISCOUNT",
+        recordId: receiptNo,
+        previousValue: `Subtotal: Rp ${subtotal.toLocaleString("id-ID")}`,
+        newValue: `Diskon: -Rp ${totalDiscount.toLocaleString("id-ID")} (Grand Total: Rp ${grandTotal.toLocaleString("id-ID")})`,
+        description: `Diskon Rp ${totalDiscount.toLocaleString("id-ID")} diterapkan pada pesanan ${receiptNo}${receipt.promoName ? ` via ${receipt.promoName}` : ""}`,
+        reason: receipt.promoName || "Penerapan diskon kasir",
+        status: "SUCCESS",
+        outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
+        outletName: activeOutlet?.name || "Singaraja",
+      });
+    }
 
     setLastReceiptData(receipt);
     setIsReceiptModalOpen(true);
@@ -1387,6 +1375,7 @@ export default function POSPage() {
                           onChange={(e) => setSelectedTable(e.target.value)}
                           className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-white focus:outline-none focus:ring-1 focus:ring-brand-orange"
                         >
+                          <option value="">-- Pilih Meja --</option>
                           {filteredAreas.map((area) => {
                             const areaAvailableTables = area.tables.filter((t) => t.status === "AVAILABLE");
                             if (areaAvailableTables.length === 0) return null;
@@ -1696,8 +1685,12 @@ export default function POSPage() {
                 {/* Pay Button */}
                 <Button
                   type="button"
-                  disabled={cartItems.length === 0 || (orderType === "DINE_IN" && availableTables.length === 0)}
+                  disabled={cartItems.length === 0 || (orderType === "DINE_IN" && (!selectedTable || availableTables.length === 0))}
                   onClick={() => {
+                    if (orderType === "DINE_IN" && !selectedTable) {
+                      setPosToast("Harap pilih meja sebelum memproses pembayaran Dine In.");
+                      return;
+                    }
                     if (!activeShift) {
                       setPosToast("Harap buka shift kasir dengan modal awal sebelum memproses pembayaran.");
                       setIsPosOpenShiftModalOpen(true);

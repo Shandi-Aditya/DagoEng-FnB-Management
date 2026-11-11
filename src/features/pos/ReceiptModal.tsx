@@ -401,7 +401,6 @@ export function ReceiptModal({
                 )}
 
                 <p className="font-bold text-slate-800">{footerMessage}</p>
-                <p className="text-[10px] text-slate-500">Wi-Fi: DagoCreativeHub • Pass: smarterfnb2026</p>
                 <div className="pt-2 border-t border-dashed border-slate-200 flex flex-col items-center justify-center space-y-1 text-slate-400">
                   <span className="text-[10px] font-semibold tracking-wider">Powered by</span>
                   <div className="w-6 h-8 relative opacity-85">

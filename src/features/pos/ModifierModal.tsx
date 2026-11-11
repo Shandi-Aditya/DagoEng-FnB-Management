@@ -203,13 +203,19 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
                     >
                       <div className="flex items-center space-x-2">
                         <div
-                          className={`w-4 h-4 rounded flex items-center justify-center border text-[10px] ${
+                          className={`w-4 h-4 ${group.maxSelect === 1 ? "rounded-full" : "rounded"} flex items-center justify-center border text-[10px] ${
                             isChecked
                               ? "bg-primary border-primary text-white"
                               : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
                           }`}
                         >
-                          {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                          {isChecked && (
+                            group.maxSelect === 1 ? (
+                              <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                            ) : (
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            )
+                          )}
                         </div>
                         <span className="text-xs font-medium">{opt.name}</span>
                       </div>

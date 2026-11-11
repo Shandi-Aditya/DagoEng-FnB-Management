@@ -278,7 +278,6 @@ export function CoworkingReceiptModal({
               <div className="text-center text-[10px] text-slate-500 space-y-1 pt-1">
                 <p className="font-bold text-slate-700">Fasilitas Termasuk:</p>
                 <p>High-Speed Wi-Fi • Free Flow Mineral Water • Power Outlet</p>
-                <p>Wi-Fi: DagoCoworking • Pass: dagospace2026</p>
                 <p className="text-[9px] text-slate-400 pt-1">
                   Powered by DagoEng Co-Working Management
                 </p>

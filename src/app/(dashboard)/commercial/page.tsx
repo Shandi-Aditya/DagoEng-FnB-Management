@@ -139,16 +139,9 @@ export default function CommercialPage() {
         <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 text-left">
           <p className="font-semibold text-slate-800">Keamanan Server-Side:</p>
           <p className="text-[11px] text-slate-500 mt-0.5">
-            Saat modul non-aktif, seluruh rute, widget, dan transaksi komersial otomatis ditolak.
+            Saat modul non-aktif, seluruh rute, widget, dan transaksi komersial otomatis ditolak. Hubungi Super Admin atau konfigurasi via Pengaturan Organisasi.
           </p>
         </div>
-        <Button
-          size="sm"
-          onClick={() => toggleOrgModule("COMMERCIAL")}
-          className="text-xs bg-purple-600 hover:bg-purple-700 space-x-1"
-        >
-          <span>Aktifkan Modul Commercial (Demo Mode)</span>
-        </Button>
       </div>
     );
   }
