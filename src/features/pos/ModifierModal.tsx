@@ -185,13 +185,19 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div
+                role={group.maxSelect === 1 ? "radiogroup" : "group"}
+                aria-label={group.name}
+                className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+              >
                 {group.options.map((opt, optIdx) => {
                   const isChecked = selectedModifiers.some((m) => m.name === opt.name);
                   return (
                     <button
                       key={optIdx}
                       type="button"
+                      role={group.maxSelect === 1 ? "radio" : "checkbox"}
+                      aria-checked={isChecked}
                       onClick={() =>
                         handleToggleModifier(group.maxSelect, group.isRequired, opt)
                       }

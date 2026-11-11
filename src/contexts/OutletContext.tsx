@@ -2,9 +2,9 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useAuth } from "./AuthContext";
-import { DEMO_OUTLETS, OutletItem } from "@/lib/receipt-publisher";
+import { DEMO_OUTLETS, ACTIVE_OUTLETS, OutletItem } from "@/lib/receipt-publisher";
 
-export { DEMO_OUTLETS };
+export { DEMO_OUTLETS, ACTIVE_OUTLETS };
 export type { OutletItem };
 
 interface OutletContextType {
@@ -48,7 +48,7 @@ export function OutletProvider({ children }: { children: React.ReactNode }) {
       value={{
         activeOutletId,
         activeOutlet,
-        outlets: DEMO_OUTLETS,
+        outlets: ACTIVE_OUTLETS,
         isAllOutlets,
         setOutlet,
       }}
