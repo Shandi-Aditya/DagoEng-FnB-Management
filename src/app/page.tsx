@@ -539,26 +539,26 @@ export default function PublicLandingPage() {
               {HERO_SLIDES[currentSlide].subtitle}
             </p>
 
-            {/* Dual Core CTA Buttons (Direct to F&B and Co-Working) */}
+            {/* Dual Core CTA Buttons (Direct to Co-Working, F&B, and Events) */}
             <div className="pt-2 flex flex-wrap items-center gap-3.5">
-              <Link href="/customer?tab=MENU">
+              <Link href="/customer?tab=COWORKING">
                 <Button
                   size="lg"
                   className="h-12 px-7 font-bold bg-[#3B7A57] text-white hover:bg-[#2E6044] rounded-2xl text-xs shadow-xl shadow-[#3B7A57]/25 transition-all hover:scale-105 active:scale-95 border border-[#52B788]/30 flex items-center space-x-2"
                 >
-                  <UtensilsCrossed className="w-4 h-4" />
-                  <span>Explore F&B</span>
+                  <Laptop className="w-4 h-4 text-[#52B788]" />
+                  <span>Explore Co-Working</span>
                 </Button>
               </Link>
 
-              <Link href="/customer?tab=COWORKING">
+              <Link href="/customer?tab=MENU">
                 <Button
                   size="lg"
                   variant="outline"
                   className="h-12 px-7 font-bold bg-white/10 backdrop-blur-md border-white/20 text-white hover:bg-white/20 rounded-2xl text-xs transition-all hover:scale-105 active:scale-95 flex items-center space-x-2 shadow-sm"
                 >
-                  <Laptop className="w-4 h-4 text-[#52B788]" />
-                  <span>Explore Co-Working</span>
+                  <UtensilsCrossed className="w-4 h-4" />
+                  <span>Explore F&B</span>
                 </Button>
               </Link>
             </div>
@@ -605,97 +605,7 @@ export default function PublicLandingPage() {
           {/* 2 Core Service Cards Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
 
-            {/* Service 1: F&B & Culinary (Compact & Modern) */}
-            <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#131B2B] border border-slate-200 dark:border-white/10 space-y-4 flex flex-col justify-between hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-white dark:hover:to-[#131B2B] transition-all duration-300 shadow-sm dark:shadow-lg group">
-              <div className="space-y-3.5">
-                <div className="flex items-center justify-between">
-                  <div className="w-10 h-10 rounded-xl bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 flex items-center justify-center font-bold">
-                    <UtensilsCrossed className="w-5 h-5" />
-                  </div>
-                  <Badge className="bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 text-[10px] font-bold uppercase">
-                    Kuliner & Kopi Spesialti
-                  </Badge>
-                </div>
-
-                <div>
-                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
-                    Sajian Kuliner Artisan Multi-Mitra
-                  </h3>
-                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-1.5">
-                    Nikmati aneka hidangan lezat dan kopi berkualitas dari mitra artisan terpercaya DAGO (Kopi Senja, Dapur Mama, Manis Bakery, Bu Narti) dengan pemesanan mandiri via scan QR Meja.
-                  </p>
-                </div>
-
-                {/* Tenant Badges */}
-                <div className="flex flex-wrap gap-1.5">
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
-                    ☕ Kopi Senja
-                  </span>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
-                    🍲 Dapur Mama
-                  </span>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
-                    🥐 Manis Bakery
-                  </span>
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
-                    🍛 Warung Bu Narti
-                  </span>
-                </div>
-
-                {/* Key Features */}
-                <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
-                    <span>Pemesanan mandiri via scan QR Meja tanpa antrean kasir</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
-                    <span>Pesanan otomatis terhubung ke KDS & cetak struk dapur mitra</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
-                    <span>Struk digital transparan & penambahan loyalty points otomatis</span>
-                  </div>
-                </div>
-
-                {/* Compact Popular Menu Preview */}
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
-                    <span className="flex items-center space-x-1">
-                      <Flame className="w-3.5 h-3.5 text-amber-500" />
-                      <span>Menu Favorit Pengunjung:</span>
-                    </span>
-                    <span className="text-slate-400 font-normal text-[10px]">Harga Transparan</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
-                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Kopi Senja</span>
-                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">{formatCurrencyIDR(24000)}</span>
-                    </div>
-                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
-                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Beef Bowl</span>
-                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">{formatCurrencyIDR(45000)}</span>
-                    </div>
-                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
-                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Croissant</span>
-                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">{formatCurrencyIDR(20000)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-100 dark:border-white/10">
-                <Link href="/customer?tab=MENU">
-                  <Button className="w-full h-10 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-md shadow-[#3B7A57]/20 transition-all hover:scale-[1.01] active:scale-95 flex items-center justify-center space-x-2 border border-[#52B788]/30 cursor-pointer">
-                    <UtensilsCrossed className="w-3.5 h-3.5" />
-                    <span>Explore F&B & Pesan Mandiri</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Button>
-                </Link>
-              </div>
-            </div>
-
-            {/* Service 2: Co-Working & Workspace (Compact & Modern) */}
+            {/* Service 1: Co-Working & Workspace (Compact & Modern) */}
             <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#131B2B] border border-slate-200 dark:border-white/10 space-y-4 flex flex-col justify-between hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-white dark:hover:to-[#131B2B] transition-all duration-300 shadow-sm dark:shadow-lg group">
               <div className="space-y-3.5">
                 <div className="flex items-center justify-between">
@@ -779,6 +689,96 @@ export default function PublicLandingPage() {
                   <Button className="w-full h-10 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-md shadow-[#3B7A57]/20 transition-all hover:scale-[1.01] active:scale-95 flex items-center justify-center space-x-2 border border-[#52B788]/30 cursor-pointer">
                     <Laptop className="w-3.5 h-3.5" />
                     <span>Explore Co-Working & Reservasi Ruang</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+
+            {/* Service 2: F&B & Culinary (Compact & Modern) */}
+            <div className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-[#131B2B] border border-slate-200 dark:border-white/10 space-y-4 flex flex-col justify-between hover:border-[#52B788] hover:bg-gradient-to-b hover:from-emerald-50/40 dark:hover:from-emerald-950/20 hover:to-white dark:hover:to-[#131B2B] transition-all duration-300 shadow-sm dark:shadow-lg group">
+              <div className="space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="w-10 h-10 rounded-xl bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 flex items-center justify-center font-bold">
+                    <UtensilsCrossed className="w-5 h-5" />
+                  </div>
+                  <Badge className="bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#52B788]/20 dark:text-[#52B788] border border-[#3B7A57]/20 dark:border-[#52B788]/30 text-[10px] font-bold uppercase">
+                    Kuliner & Kopi Spesialti
+                  </Badge>
+                </div>
+
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                    Sajian Kuliner Artisan Multi-Mitra
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed mt-1.5">
+                    Nikmati aneka hidangan lezat dan kopi berkualitas dari mitra artisan terpercaya DAGO (Kopi Senja, Dapur Mama, Manis Bakery, Bu Narti) dengan pemesanan mandiri via scan QR Meja.
+                  </p>
+                </div>
+
+                {/* Tenant Badges */}
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    ☕ Kopi Senja
+                  </span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    🍲 Dapur Mama
+                  </span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    🥐 Manis Bakery
+                  </span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-300">
+                    🍛 Warung Bu Narti
+                  </span>
+                </div>
+
+                {/* Key Features */}
+                <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <span>Pemesanan mandiri via scan QR Meja tanpa antrean kasir</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <span>Pesanan otomatis terhubung ke KDS & cetak struk dapur mitra</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+                    <span>Struk digital transparan & penambahan loyalty points otomatis</span>
+                  </div>
+                </div>
+
+                {/* Compact Popular Menu Preview */}
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                    <span className="flex items-center space-x-1">
+                      <Flame className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Menu Favorit Pengunjung:</span>
+                    </span>
+                    <span className="text-slate-400 font-normal text-[10px]">Harga Transparan</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Kopi Senja</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">{formatCurrencyIDR(24000)}</span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Beef Bowl</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">{formatCurrencyIDR(45000)}</span>
+                    </div>
+                    <div className="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 text-center">
+                      <span className="font-bold text-slate-800 dark:text-white block truncate text-[11px]">Croissant</span>
+                      <span className="text-[#3B7A57] dark:text-[#52B788] font-bold text-[10px]">{formatCurrencyIDR(20000)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 dark:border-white/10">
+                <Link href="/customer?tab=MENU">
+                  <Button className="w-full h-10 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-md shadow-[#3B7A57]/20 transition-all hover:scale-[1.01] active:scale-95 flex items-center justify-center space-x-2 border border-[#52B788]/30 cursor-pointer">
+                    <UtensilsCrossed className="w-3.5 h-3.5" />
+                    <span>Explore F&B & Pesan Mandiri</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </Button>
                 </Link>
@@ -1139,10 +1139,10 @@ export default function PublicLandingPage() {
             <div className="space-y-2 text-xs">
               <h4 className="font-bold text-white uppercase tracking-wider text-xs">Navigasi Langsung</h4>
               <div className="flex flex-col space-y-1.5 text-slate-400">
-                <Link href="/customer?tab=MENU" className="hover:text-[#52B788] transition-colors">Layanan Kuliner (F&B)</Link>
                 <Link href="/customer?tab=COWORKING" className="hover:text-[#52B788] transition-colors">Layanan Co-Working Space</Link>
+                <Link href="/customer?tab=MENU" className="hover:text-[#52B788] transition-colors">Layanan Kuliner (F&B)</Link>
+                <Link href="/events" className="hover:text-[#52B788] transition-colors">Event Marketplace Komunitas</Link>
                 <Link href="/customer?tab=LOYALTY" className="hover:text-[#52B788] transition-colors">Program Member Loyalty</Link>
-                <Link href="/events" className="hover:text-[#52B788] transition-colors">Event Komunitas</Link>
                 <Link href="/login" className="text-left hover:text-[#52B788] transition-colors cursor-pointer">
                   Akses Staf & Manajemen
                 </Link>

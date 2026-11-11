@@ -5880,8 +5880,8 @@ function CustomerPortalContent() {
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200/90 dark:border-slate-800 py-2 px-3 sm:hidden flex justify-around items-center shadow-lg transition-colors">
         {[
           { key: "HOME", label: "Home", icon: <Home className="w-4 h-4" /> },
-          { key: "MENU", label: "Menu", icon: <UtensilsCrossed className="w-4 h-4" /> },
           { key: "COWORKING", label: "Ruang", icon: <Laptop className="w-4 h-4" /> },
+          { key: "MENU", label: "Menu", icon: <UtensilsCrossed className="w-4 h-4" /> },
           {
             key: "ORDERS",
             label: "Pesanan",
