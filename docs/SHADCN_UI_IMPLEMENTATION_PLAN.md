@@ -284,6 +284,14 @@ Gunakan `--dry-run` atau `--view` dulu untuk melihat dependensi yang ditambahkan
 
 ## 9. Fase 5: Login dan landing (1 MR)
 
+> **Status: selesai.** Catatan implementasi:
+>
+> - **Login** (`src/app/(auth)/login/page.tsx`): `Card` + `FieldGroup` + `Input`, password memakai `InputGroup` dengan tombol tampil/sembunyi, error memakai `Alert`, loading memakai `Spinner`, toggle tema memakai `ModeToggle`. Konteks event (`?from=events`) jadi `Alert` dengan dua tombol. Logika login, register, dan `sanitizeReturnTo` tidak berubah.
+> - **Landing** dipecah dari 1167 baris jadi `src/features/landing/` (header, hero, layanan, event, tentang, footer) dan `src/app/page.tsx` hanya merangkai section. Copy ada di `landing-content.ts`.
+> - Carousel 3 slide diganti satu hero tetap. Blob, Sparkles berputar, emoji tenant, badge di atas judul, gradien, dan `hover:scale` dihapus. Scroll-spy diganti link anchor biasa; nav mobile memakai `Sheet`, menu akun memakai `DropdownMenu`.
+> - Logika murni di `landing-logic.ts` (event mendatang, label peran, akses dashboard, label kategori event) dengan test di `tests/landing-content.test.ts`. Kategori event kini tampil sebagai label, bukan enum mentah.
+> - Foto hero masih dari Unsplash. Ganti dengan foto asli DAGO di `HERO.image` saat tersedia.
+
 - **Login**: pola blok login shadcn (`Card` + `Field` + `Input` + `Button`), logo flat, tanpa blob latar.
 - **Landing**: shadcn tidak punya komponen landing, jadi dibangun dari token + `Button`, `Card`, `Badge`, dan `NavigationMenu`/`Sheet` untuk nav mobile. Ikuti pass unslop:
   - Satu hero tetap (bukan carousel) dengan foto asli DAGO. Judul menyebut apa yang bisa dilakukan pengunjung. Satu tombol utama dan satu sekunder.
