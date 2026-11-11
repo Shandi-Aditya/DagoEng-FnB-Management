@@ -342,8 +342,8 @@ describe("Platform Administration & Event Marketplace Revenue Sharing", () => {
       expect(booking.platformFeeAmount).toBe(expectedPlatformFee);
       expect(booking.organizerRevenueAmount).toBe(booking.totalPrice - expectedPlatformFee);
 
-      // Clean up override: reset to null (default)
-      await setEventCommissionOverride(paidEvent.id, null);
+      // Guard penguncian mutasi: override terkunci permanen setelah terdapat booking tiket
+      await expect(setEventCommissionOverride(paidEvent.id, null)).rejects.toThrow(/EVENT_REVENUE_SPLIT_LOCKED/);
     });
 
     it("should fallback to platform default commission when event override is null", async () => {

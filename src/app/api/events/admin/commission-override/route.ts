@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     const auth = await assertEventAdmin(req);
     if (!auth.authorized) {
       return NextResponse.json(
-        { success: false, error: auth.error },
+        { success: false, error: auth.error || "FORBIDDEN: Akses Admin Dago ditolak." },
         { status: 403 }
       );
     }
@@ -39,9 +39,22 @@ export async function POST(req: NextRequest) {
       data: updated,
     });
   } catch (error: any) {
+    if (
+      error?.code === "EVENT_REVENUE_SPLIT_LOCKED" ||
+      error?.message?.includes("EVENT_REVENUE_SPLIT_LOCKED")
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "EVENT_REVENUE_SPLIT_LOCKED",
+          error: error.message.replace(/^EVENT_REVENUE_SPLIT_LOCKED:\s*/, ""),
+        },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: error.message || "Gagal mengatur override komisi event." },
-      { status: 400 }
+      { status: error.message?.includes("FORBIDDEN") ? 403 : 400 }
     );
   }
 }

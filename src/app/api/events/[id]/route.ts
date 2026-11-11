@@ -102,10 +102,23 @@ export async function PUT(
       data: updated,
     });
   } catch (error: any) {
+    if (
+      error?.code === "EVENT_REVENUE_SPLIT_LOCKED" ||
+      error?.message?.includes("EVENT_REVENUE_SPLIT_LOCKED")
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "EVENT_REVENUE_SPLIT_LOCKED",
+          error: error.message.replace(/^EVENT_REVENUE_SPLIT_LOCKED:\s*/, ""),
+        },
+        { status: 400 }
+      );
+    }
     console.error(`PUT /api/events/${params.id} error:`, error);
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memperbarui detail event." },
-      { status: 500 }
+      { status: error?.message?.includes("tidak valid") ? 400 : 500 }
     );
   }
 }

@@ -1731,14 +1731,25 @@ export async function updateEventDetails(
     if (updates.organizerName !== undefined) sanitizedUpdates.organizerName = sanitizeHtmlText(updates.organizerName);
     if (updates.guidelines !== undefined) sanitizedUpdates.guidelines = parseGuidelinesInput(updates.guidelines);
     if (updates.customPlatformFeePercent !== undefined) {
+      if (isEventRevenueSplitLocked(id)) {
+        const lockErr = new Error(
+          "EVENT_REVENUE_SPLIT_LOCKED: Skema bagi hasil untuk event ini telah terkunci permanen karena telah terdapat transaksi tiket. Commission override tidak dapat diubah."
+        );
+        (lockErr as any).code = "EVENT_REVENUE_SPLIT_LOCKED";
+        throw lockErr;
+      }
       if (updates.customPlatformFeePercent === null) {
         sanitizedUpdates.customPlatformFeePercent = null;
+        const defaultPlatformFee = getEventRevenuePolicy().defaultPlatformFeePercent ?? 20;
+        sanitizedUpdates.organizerFeePercent = 100 - defaultPlatformFee;
       } else {
         const num = Number(updates.customPlatformFeePercent);
-        if (isNaN(num) || num < 0 || num > 100) {
-          throw new Error("Persentase komisi override harus berupa angka antara 0% hingga 100%.");
+        const validation = validateRevenueSplitPercentage(num);
+        if (!validation.valid) {
+          throw new Error(validation.error || "Persentase komisi override tidak valid.");
         }
         sanitizedUpdates.customPlatformFeePercent = num;
+        sanitizedUpdates.organizerFeePercent = 100 - num;
       }
     }
 
@@ -1777,18 +1788,37 @@ export async function setEventCommissionOverride(
       throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
     }
 
+    const event = all[index];
+    if (event.status === "REJECTED" || event.status === "ARCHIVED") {
+      throw new Error(`Tidak dapat mengatur override komisi untuk event berstatus ${event.status}.`);
+    }
+
+    if (isEventRevenueSplitLocked(eventId)) {
+      const lockErr = new Error(
+        "EVENT_REVENUE_SPLIT_LOCKED: Skema bagi hasil untuk event ini telah terkunci permanen karena telah terdapat transaksi tiket. Commission override tidak dapat diubah."
+      );
+      (lockErr as any).code = "EVENT_REVENUE_SPLIT_LOCKED";
+      throw lockErr;
+    }
+
     let finalPercent: number | null = null;
     if (customFeePercent !== null) {
       const num = Number(customFeePercent);
-      if (isNaN(num) || num < 0 || num > 100) {
-        throw new Error("Persentase komisi override harus berupa angka antara 0% hingga 100%.");
+      const validation = validateRevenueSplitPercentage(num);
+      if (!validation.valid) {
+        throw new Error(validation.error || "Persentase komisi override tidak valid.");
       }
       finalPercent = num;
     }
 
+    const defaultPlatformFee = getEventRevenuePolicy().defaultPlatformFeePercent ?? 20;
+    const effectivePlatformFee = finalPercent !== null ? finalPercent : defaultPlatformFee;
+    const updatedOrganizerFee = 100 - effectivePlatformFee;
+
     const updated: CommunityEvent = {
       ...all[index],
       customPlatformFeePercent: finalPercent,
+      organizerFeePercent: updatedOrganizerFee,
       updatedAt: new Date().toISOString(),
     };
 
