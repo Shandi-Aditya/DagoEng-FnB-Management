@@ -1,15 +1,26 @@
+"use client";
+
 import Link from "next/link";
 import {
-  FileSpreadsheet,
+  ChevronDown,
   Download,
+  FileSpreadsheet,
   FileText,
+  Plus,
   Settings,
   UserPlus,
-  Plus,
 } from "lucide-react";
+
 import { PageHeader } from "@/components/app/page-header";
 import { StatCard } from "@/components/app/stat-card";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export interface CoworkingToolbarProps {
   outletName: string;
@@ -39,82 +50,76 @@ export function CoworkingToolbar({
   onOpenNewBookingModal,
 }: CoworkingToolbarProps) {
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Co-working"
-        description="Ruang, booking, member, dan check-in."
+        description={`Ruang kerja, booking harian dan per jam, member, dan check-in di ${outletName}.`}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onExportExcel}
-              className="gap-1.5 text-xs"
-            >
-              <FileSpreadsheet className="size-3.5 text-success" />
-              <span>Ekspor Excel</span>
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" />}>
+                Lainnya
+                <ChevronDown className="text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-48">
+                <DropdownMenuItem onClick={onExportExcel}>
+                  <FileSpreadsheet />
+                  Ekspor Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onExportCSV}>
+                  <Download />
+                  Ekspor CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenPDF}>
+                  <FileText />
+                  Laporan PDF
+                </DropdownMenuItem>
+                {canManageSettings ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem render={<Link href="/settings" />}>
+                      <Settings />
+                      Pengaturan ruang
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button variant="outline" onClick={onOpenNewMemberModal}>
+              <UserPlus />
+              Tambah member
             </Button>
 
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onExportCSV}
-              className="gap-1.5 text-xs"
-            >
-              <Download className="size-3.5 text-muted-foreground" />
-              <span>Ekspor CSV</span>
-            </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onOpenPDF}
-              className="gap-1.5 text-xs"
-            >
-              <FileText className="size-3.5 text-muted-foreground" />
-              <span>Cetak PDF</span>
-            </Button>
-
-            {canManageSettings ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5 text-xs"
-                render={<Link href="/settings" />}
-                nativeButton={false}
-              >
-                <Settings className="size-3.5 text-muted-foreground" />
-                <span>Master data</span>
-              </Button>
-            ) : null}
-
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onOpenNewMemberModal}
-              className="gap-1.5 text-xs"
-            >
-              <UserPlus className="size-3.5" />
-              <span>Tambah member</span>
-            </Button>
-
-            <Button
-              size="sm"
-              onClick={onOpenNewBookingModal}
-              className="gap-1.5 text-xs"
-            >
-              <Plus className="size-3.5" />
-              <span>Buat booking</span>
+            <Button onClick={onOpenNewBookingModal}>
+              <Plus />
+              Buat booking
             </Button>
           </div>
         }
       />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Total ruang dan meja" value={String(totalSpaces)} />
-        <StatCard label="Tersedia" value={String(availableSpaces)} />
-        <StatCard label="Sedang digunakan" value={String(occupiedSpaces)} />
-        <StatCard label="Member aktif" value={String(activeMembers)} />
+        <StatCard
+          label="Tersedia"
+          value={String(availableSpaces)}
+          hint="ruang dan meja siap pakai"
+        />
+        <StatCard
+          label="Sedang digunakan"
+          value={String(occupiedSpaces)}
+          hint="sesi kerja aktif"
+        />
+        <StatCard
+          label="Total ruang"
+          value={String(totalSpaces)}
+          hint={`di ${outletName}`}
+        />
+        <StatCard
+          label="Member aktif"
+          value={String(activeMembers)}
+          hint="membership berjalan"
+        />
       </div>
     </div>
   );

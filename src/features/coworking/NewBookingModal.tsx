@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Laptop, Calendar, Clock, AlertTriangle, CheckCircle2, MapPin } from "lucide-react";
+import { Laptop, Calendar, Clock, AlertTriangle, MapPin } from "lucide-react";
 import type { CoworkingSpaceItem, CoworkingBooking } from "@/types/coworking";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
@@ -15,7 +15,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import {
-  isCoworkingDateOpen,
   validateCoworkingDateRange,
   checkCoworkingBookingConflict,
   type CoworkingHolidayConfig,
@@ -23,7 +22,7 @@ import {
 import {
   computeBookingPricing,
   calculateHourlyEndTime,
-  calculateDaysCount,
+  spaceTypeLabel,
   type DailyPreset,
 } from "./coworking-domain";
 
@@ -87,7 +86,7 @@ export function NewBookingModal({
   const [bookPhone, setBookPhone] = useState("");
   const [bookEmail, setBookEmail] = useState("");
   const [bookCompany, setBookCompany] = useState("");
-  const [bookPaymentMethod, setBookPaymentMethod] = useState("QRIS DagoPay");
+  const [bookPaymentMethod, setBookPaymentMethod] = useState("QRIS");
   const [bookIsImmediateCheckIn, setBookIsImmediateCheckIn] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -97,7 +96,7 @@ export function NewBookingModal({
     } else if (spaces[0]?.id && !bookSpaceId) {
       setBookSpaceId(spaces[0].id);
     }
-  }, [defaultSpaceId, spaces]);
+  }, [defaultSpaceId, spaces, bookSpaceId]);
 
   const selectedSpace = useMemo(
     () => spaces.find((s) => s.id === bookSpaceId) || spaces[0],
@@ -150,7 +149,7 @@ export function NewBookingModal({
     setErrorMessage("");
 
     if (!bookGuestName.trim() || !bookPhone.trim() || !selectedSpace) {
-      setErrorMessage("Mohon lengkapi nama dan nomor WhatsApp tamu.");
+      setErrorMessage("Isi nama dan nomor WhatsApp tamu.");
       return;
     }
 
@@ -163,7 +162,7 @@ export function NewBookingModal({
     if (!holidayCheck.isValid) {
       const firstClosed = holidayCheck.closedDates[0];
       setErrorMessage(
-        `Booking Ditolak: ${firstClosed.reason} (${firstClosed.date}). Co-working tutup kecuali dibuka via Override di Pengaturan.`
+        `Booking ditolak: ${firstClosed.reason} (${firstClosed.date}). Co-working tutup kecuali dibuka via override di Pengaturan.`
       );
       return;
     }
@@ -179,7 +178,7 @@ export function NewBookingModal({
       endTime: pricing.computedEndTime,
     });
     if (conflict.hasConflict) {
-      setErrorMessage(`Booking Ditolak: ${conflict.message}`);
+      setErrorMessage(`Booking ditolak: ${conflict.message}`);
       return;
     }
 
@@ -199,7 +198,7 @@ export function NewBookingModal({
     onSubmit({
       guestName: bookGuestName.trim(),
       guestPhone: bookPhone.trim(),
-      guestEmail: bookEmail.trim() || "guest@nomad.com",
+      guestEmail: bookEmail.trim() || "-",
       company: bookCompany.trim() || undefined,
       space: selectedSpace,
       bookingType: bookType,
@@ -218,47 +217,47 @@ export function NewBookingModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-lg">
         <DialogHeader className="shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <Laptop className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-base font-medium">
+            <Laptop className="size-4 text-primary" />
             <span>Buat booking</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Pilih paket durasi, slot jam operasional, atau rentang tanggal sewa.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto space-y-4 pr-1 py-1">
+        <form onSubmit={handleSubmit} className="flex-1 space-y-4 overflow-y-auto py-1 pr-1 text-xs">
           {errorMessage && (
-            <div className="p-3 rounded-lg border bg-destructive/10 border-destructive/30 text-destructive text-xs font-medium flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs font-medium text-destructive">
+              <AlertTriangle className="size-4 shrink-0" />
               <span>{errorMessage}</span>
             </div>
           )}
 
           {/* Selected Space Preview */}
           {selectedSpace && (
-            <div className="p-3 rounded-lg border bg-muted/40 space-y-1.5 text-xs">
+            <div className="space-y-1.5 rounded-lg border bg-muted/40 p-3 text-xs">
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <span className="text-[10px] font-medium text-muted-foreground uppercase">
-                    {selectedSpace.type.replace("_", " ")}
+                  <span className="block text-xs font-medium text-muted-foreground">
+                    {spaceTypeLabel(selectedSpace.type)}
                   </span>
-                  <h4 className="font-medium text-sm text-foreground mt-0.5">
+                  <h4 className="mt-0.5 text-sm font-medium text-foreground">
                     {selectedSpace.name}
                   </h4>
-                  <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
-                    <MapPin className="w-3 h-3" />
-                    <span>{selectedSpace.area} • Kapasitas: {selectedSpace.capacity} Orang</span>
+                  <p className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                    <MapPin className="size-3 text-muted-foreground" />
+                    <span>{selectedSpace.area} · Kapasitas: {selectedSpace.capacity} orang</span>
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-muted-foreground block">Tarif</span>
-                  <p className="font-mono font-medium text-xs text-foreground">
+                  <span className="block text-xs text-muted-foreground">Tarif</span>
+                  <p className="font-mono text-xs font-medium tabular-nums text-foreground">
                     {formatCurrencyIDR(selectedSpace.hourlyRate)} / jam
                   </p>
-                  <p className="font-mono text-[11px] text-muted-foreground">
+                  <p className="font-mono text-xs tabular-nums text-muted-foreground">
                     {formatCurrencyIDR(selectedSpace.dailyRate)} / hari
                   </p>
                 </div>
@@ -268,18 +267,18 @@ export function NewBookingModal({
 
           {/* Space Selection */}
           <div className="space-y-1.5">
-            <Label htmlFor="booking-space" className="text-xs">
-              Pilih Ruang / Meja Kerja
+            <Label htmlFor="booking-space" className="text-xs font-medium text-foreground">
+              Pilih ruang atau meja
             </Label>
             <NativeSelect
               id="booking-space"
               value={bookSpaceId}
               onChange={(e) => setBookSpaceId(e.target.value)}
-              className="w-full text-xs font-medium"
+              className="w-full text-xs"
             >
               {spaces.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({s.type.replace("_", " ")} • {s.status === "AVAILABLE" ? "Tersedia" : "Terisi"})
+                  {s.name} ({spaceTypeLabel(s.type)} · {s.status === "AVAILABLE" ? "Tersedia" : "Terisi"})
                 </option>
               ))}
             </NativeSelect>
@@ -287,8 +286,8 @@ export function NewBookingModal({
 
           {/* Booking Type Switcher */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Paket</Label>
-            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-lg border bg-muted/40">
+            <Label className="text-xs font-medium text-foreground">Paket sewa</Label>
+            <div className="grid grid-cols-3 gap-1.5 rounded-lg border bg-muted/40 p-1">
               <Button
                 type="button"
                 size="sm"
@@ -297,9 +296,8 @@ export function NewBookingModal({
                   setBookType("HOURLY");
                   setBookDurationHours(2);
                 }}
-                className="text-xs h-8"
               >
-                Paket Jam
+                Per jam
               </Button>
               <Button
                 type="button"
@@ -309,7 +307,6 @@ export function NewBookingModal({
                   setBookType("DAILY");
                   setBookDailyPreset("1_DAY");
                 }}
-                className="text-xs h-8"
               >
                 Harian
               </Button>
@@ -318,20 +315,19 @@ export function NewBookingModal({
                 size="sm"
                 variant={bookType === "MONTHLY" ? "default" : "ghost"}
                 onClick={() => setBookType("MONTHLY")}
-                className="text-xs h-8"
               >
-                Bulanan (30 Hari)
+                Bulanan (30 hari)
               </Button>
             </div>
           </div>
 
           {/* Hourly Mode Details */}
           {bookType === "HOURLY" && (
-            <div className="p-3 rounded-lg border bg-muted/20 space-y-3 text-xs">
+            <div className="space-y-3 rounded-lg border bg-muted/20 p-3 text-xs">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="hourly-date" className="text-xs flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                  <Label htmlFor="hourly-date" className="flex items-center gap-1 text-xs text-foreground">
+                    <Calendar className="size-3.5 text-muted-foreground" />
                     <span>Tanggal</span>
                   </Label>
                   <Input
@@ -342,15 +338,15 @@ export function NewBookingModal({
                       setBookStartDate(e.target.value);
                       setBookEndDate(e.target.value);
                     }}
-                    className="text-xs"
+                    className="text-xs font-mono"
                     required
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="hourly-dur" className="text-xs">Durasi (jam)</Label>
-                    <span className="text-[10px] text-muted-foreground">Minimal 2 jam</span>
+                    <Label htmlFor="hourly-dur" className="text-xs text-foreground">Durasi (jam)</Label>
+                    <span className="text-xs text-muted-foreground">Minimal 2 jam</span>
                   </div>
                   <Input
                     id="hourly-dur"
@@ -368,11 +364,11 @@ export function NewBookingModal({
               {/* Time Slots */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5 text-primary" />
+                  <Label className="flex items-center gap-1 text-xs text-foreground">
+                    <Clock className="size-3.5 text-primary" />
                     <span>Jam mulai (09:00–18:00)</span>
                   </Label>
-                  <span className="text-[11px] font-mono text-muted-foreground">
+                  <span className="font-mono text-xs tabular-nums text-muted-foreground">
                     Selesai: {calculateHourlyEndTime(bookStartTime, bookDurationHours)} WITA
                   </span>
                 </div>
@@ -384,7 +380,7 @@ export function NewBookingModal({
                       size="sm"
                       variant={bookStartTime === slot ? "default" : "outline"}
                       onClick={() => setBookStartTime(slot)}
-                      className="text-xs h-7 font-mono"
+                      className="font-mono"
                     >
                       {slot}
                     </Button>
@@ -396,10 +392,10 @@ export function NewBookingModal({
 
           {/* Daily Mode Details */}
           {bookType === "DAILY" && (
-            <div className="p-3 rounded-lg border bg-muted/20 space-y-3 text-xs">
+            <div className="space-y-3 rounded-lg border bg-muted/20 p-3 text-xs">
               <div className="space-y-1.5">
-                <Label className="text-xs">Durasi harian</Label>
-                <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                <Label className="text-xs text-foreground">Durasi harian</Label>
+                <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
                   {[
                     { key: "1_DAY", label: "1 Hari" },
                     { key: "3_DAYS", label: "3 Hari" },
@@ -413,7 +409,6 @@ export function NewBookingModal({
                       size="sm"
                       variant={bookDailyPreset === item.key ? "default" : "outline"}
                       onClick={() => setBookDailyPreset(item.key as DailyPreset)}
-                      className="text-xs h-7"
                     >
                       {item.label}
                     </Button>
@@ -423,18 +418,18 @@ export function NewBookingModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="daily-start" className="text-xs">Mulai</Label>
+                  <Label htmlFor="daily-start" className="text-xs text-foreground">Mulai</Label>
                   <Input
                     id="daily-start"
                     type="date"
                     value={bookStartDate}
                     onChange={(e) => setBookStartDate(e.target.value)}
-                    className="text-xs"
+                    className="text-xs font-mono"
                     required
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="daily-end" className="text-xs">Selesai</Label>
+                  <Label htmlFor="daily-end" className="text-xs text-foreground">Selesai</Label>
                   <Input
                     id="daily-end"
                     type="date"
@@ -442,7 +437,7 @@ export function NewBookingModal({
                     disabled={bookDailyPreset !== "CUSTOM_RANGE"}
                     value={pricing.computedEndDate || bookStartDate}
                     onChange={(e) => setBookEndDate(e.target.value)}
-                    className="text-xs"
+                    className="text-xs font-mono"
                     required
                   />
                 </div>
@@ -452,27 +447,27 @@ export function NewBookingModal({
 
           {/* Monthly Mode Details */}
           {bookType === "MONTHLY" && (
-            <div className="p-3 rounded-lg border bg-muted/20 space-y-2 text-xs">
-              <Label htmlFor="monthly-start" className="text-xs">Mulai (akses 30 hari)</Label>
+            <div className="space-y-2 rounded-lg border bg-muted/20 p-3 text-xs">
+              <Label htmlFor="monthly-start" className="text-xs text-foreground">Mulai (akses 30 hari)</Label>
               <Input
                 id="monthly-start"
                 type="date"
                 value={bookStartDate}
                 onChange={(e) => setBookStartDate(e.target.value)}
-                className="text-xs"
+                className="text-xs font-mono"
                 required
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Termasuk dedicated desk, loker pribadi, dan kuota ruang rapat.
               </p>
             </div>
           )}
 
           {/* Customer Details */}
-          <div className="space-y-3 pt-2 border-t">
+          <div className="space-y-3 border-t pt-2">
             <div className="space-y-1.5">
-              <Label htmlFor="guest-name" className="text-xs">
-                Nama Tamu / Penyewa <span className="text-destructive">*</span>
+              <Label htmlFor="guest-name" className="text-xs font-medium text-foreground">
+                Nama tamu <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="guest-name"
@@ -486,7 +481,7 @@ export function NewBookingModal({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="guest-phone" className="text-xs">
+                <Label htmlFor="guest-phone" className="text-xs font-medium text-foreground">
                   Nomor WhatsApp <span className="text-destructive">*</span>
                 </Label>
                 <Input
@@ -500,8 +495,8 @@ export function NewBookingModal({
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="guest-email" className="text-xs">
-                  Email (Opsional)
+                <Label htmlFor="guest-email" className="text-xs font-medium text-foreground">
+                  Email (opsional)
                 </Label>
                 <Input
                   id="guest-email"
@@ -509,14 +504,14 @@ export function NewBookingModal({
                   placeholder="nomad@example.com"
                   value={bookEmail}
                   onChange={(e) => setBookEmail(e.target.value)}
-                  className="text-xs"
+                  className="text-xs font-mono"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="guest-company" className="text-xs">
-                Perusahaan / Catatan Khusus
+              <Label htmlFor="guest-company" className="text-xs font-medium text-foreground">
+                Perusahaan atau catatan
               </Label>
               <Input
                 id="guest-company"
@@ -529,30 +524,30 @@ export function NewBookingModal({
           </div>
 
           {/* Payment & Check-In */}
-          <div className="space-y-3 pt-2 border-t">
+          <div className="space-y-3 border-t pt-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="booking-payment" className="text-xs">Metode bayar</Label>
+                <Label htmlFor="booking-payment" className="text-xs font-medium text-foreground">Metode bayar</Label>
                 <NativeSelect
                   id="booking-payment"
                   value={bookPaymentMethod}
                   onChange={(e) => setBookPaymentMethod(e.target.value)}
                   className="w-full text-xs"
                 >
-                  <option value="QRIS DagoPay">QRIS</option>
+                  <option value="QRIS">QRIS</option>
                   <option value="CASH">Tunai</option>
-                  <option value="EDC / Debit Card">Kartu (EDC)</option>
-                  <option value="Bank Transfer">Transfer bank</option>
+                  <option value="EDC">Kartu (EDC)</option>
+                  <option value="TRANSFER">Transfer bank</option>
                 </NativeSelect>
               </div>
 
               <div className="flex flex-col justify-end pb-1.5">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium text-foreground">
+                <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
                   <input
                     type="checkbox"
                     checked={bookIsImmediateCheckIn}
                     onChange={(e) => setBookIsImmediateCheckIn(e.target.checked)}
-                    className="w-4 h-4 rounded text-primary"
+                    className="size-4 rounded text-primary"
                   />
                   <span>Langsung check-in</span>
                 </label>
@@ -560,36 +555,35 @@ export function NewBookingModal({
             </div>
 
             {/* Bill Preview Card */}
-            <div className="p-3 rounded-lg border bg-card flex items-center justify-between">
+            <div className="flex items-center justify-between rounded-lg border bg-card p-3">
               <div>
-                <span className="text-[10px] text-muted-foreground uppercase font-medium block">
-                  Total Tagihan
+                <span className="block text-xs font-medium text-muted-foreground">
+                  Total tagihan
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {bookType === "HOURLY"
-                    ? `${pricing.computedDuration} Jam (${bookStartTime} – ${pricing.computedEndTime})`
+                    ? `${pricing.computedDuration} jam (${bookStartTime} – ${pricing.computedEndTime})`
                     : bookType === "DAILY"
-                    ? `${pricing.computedDuration} Hari (${bookStartDate})`
-                    : "Paket Bulanan 30 Hari"}
+                    ? `${pricing.computedDuration} hari (${bookStartDate})`
+                    : "Paket bulanan 30 hari"}
                 </span>
               </div>
-              <span className="text-base font-bold font-mono tabular-nums text-foreground">
+              <span className="font-mono text-base font-semibold tabular-nums text-foreground">
                 {formatCurrencyIDR(pricing.computedTotal)}
               </span>
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+          <DialogFooter className="gap-2 border-t pt-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={handleClose}
-              className="text-xs"
             >
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs font-medium">
+            <Button type="submit" size="sm">
               {bookIsImmediateCheckIn ? "Simpan dan check-in" : "Simpan booking"}
             </Button>
           </DialogFooter>

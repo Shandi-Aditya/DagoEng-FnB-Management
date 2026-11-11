@@ -254,3 +254,89 @@ export function buildCoworkingExportData(
     rows,
   };
 }
+
+const SPACE_TYPE_LABELS: Record<string, string> = {
+  HOT_DESK: "Hot desk",
+  PRIVATE_POD: "Pod privat",
+  MEETING_ROOM: "Ruang rapat",
+  DEDICATED_DESK: "Meja khusus",
+  EVENT_SPACE: "Ruang acara",
+};
+
+export function spaceTypeLabel(type: string): string {
+  return SPACE_TYPE_LABELS[type] ?? type.replace(/_/g, " ");
+}
+
+const CHECK_IN_STATUS_LABELS: Record<string, string> = {
+  CHECKED_IN: "Sedang aktif",
+  RESERVED: "Menunggu",
+  COMPLETED: "Selesai",
+  CANCELLED: "Dibatalkan",
+};
+
+export function bookingCheckInStatusLabel(status: string): string {
+  return CHECK_IN_STATUS_LABELS[status] ?? status;
+}
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  PAID: "Lunas",
+  UNPAID: "Menunggu bayar",
+  PARTIAL: "Sebagian",
+  REFUNDED: "Dikembalikan",
+};
+
+export function bookingPaymentStatusLabel(status: string): string {
+  return PAYMENT_STATUS_LABELS[status] ?? status;
+}
+
+const EMPTY_COWORKING_COPY: Record<string, { empty: { title: string; description: string }; filtered: { title: string; description: string } }> = {
+  SPACES: {
+    empty: {
+      title: "Belum ada ruang",
+      description: "Tambahkan ruang kerja baru melalui menu Pengaturan.",
+    },
+    filtered: {
+      title: "Tidak ada ruang yang cocok",
+      description: "Ubah kata kunci pencarian atau pilih filter status lain.",
+    },
+  },
+  BOOKINGS: {
+    empty: {
+      title: "Belum ada booking",
+      description: "Pemesanan ruang baru yang dibuat akan tercatat di sini.",
+    },
+    filtered: {
+      title: "Tidak ada booking yang cocok",
+      description: "Ubah kata kunci pencarian atau pilih filter status lain.",
+    },
+  },
+  MEMBERS: {
+    empty: {
+      title: "Belum ada member",
+      description: "Daftarkan pelanggan tetap sebagai member co-working.",
+    },
+    filtered: {
+      title: "Tidak ada member yang cocok",
+      description: "Ubah kata kunci pencarian atau pilih status member lain.",
+    },
+  },
+  LOGS: {
+    empty: {
+      title: "Belum ada aktivitas",
+      description: "Aktivitas check-in dan check-out tamu akan tercatat di sini.",
+    },
+    filtered: {
+      title: "Tidak ada aktivitas yang cocok",
+      description: "Ubah kata kunci pencarian atau rentang tanggal.",
+    },
+  },
+};
+
+export function emptyCoworkingMessage(
+  tab: string,
+  hasFilter: boolean
+): { title: string; description: string } {
+  const item = EMPTY_COWORKING_COPY[tab] ?? EMPTY_COWORKING_COPY.SPACES;
+  return hasFilter ? item.filtered : item.empty;
+}
+

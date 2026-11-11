@@ -124,7 +124,7 @@ Kerjakan per halaman, mulai dari `/orders`, `/inventory`, `/tables`, lalu `/cowo
 | `/orders` | Menemukan pesanan yang perlu ditindak | `Tabs` status (Perlu bayar, Diproses, Selesai, Batal) dengan jumlah per tab, pencarian nomor/meja/nama, kolom diringkas jadi pesanan, meja, status, waktu (dengan titik SLA), dan total. Detail dibuka di `Sheet` samping. Ekspor masuk `DropdownMenu`. Pagination memakai `DataPagination`. |
 | `/inventory` | Tahu bahan apa yang harus dibeli | Ringkasan "perlu dibeli" di paling atas (daftar bahan kritis + tombol "Buat PO" sebagai satu-satunya aksi primary). Tab Stok, Resep, PO, dan Opname. Aksi sekunder masuk menu. Hanya KPI yang butuh perhatian yang diberi warna. |
 | `/tables` | Melihat meja kosong sekarang (selesai P3) | Denah sebagai tampilan utama, status meja semantik, detail di modal Dialog terpusat, reservasi di tab dengan antrean badge, aksi fisik meja di dropdown. |
-| `/coworking` | Melihat dan mengatur pemakaian ruang hari ini | Linimasa ruang × jam untuk hari ini, booking baru dibuka dari slot kosong. |
+| `/coworking` | Melihat dan mengatur pemakaian ruang hari ini (selesai P3) | Toolbar bersih 1 primary + dropdown ekspor, tabel booking & member memakai DataPagination standar, data palsu dihapus. |
 | `/employees`, `/customers`, `/commercial` | Mencari orang atau kontrak lalu bertindak | Pola tabel yang sama dengan `/orders` (pencarian, filter, `Sheet` detail), sehingga satu komponen `DataTableToolbar` bisa dipakai bersama. |
 | `/reports`, `/activity-log` | Membaca dan mengekspor data | Satu `ReportPreviewDialog` menggantikan 8 modal PDF yang hampir sama. Pratinjau dibuat seperti kertas laporan sungguhan. |
 

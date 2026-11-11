@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { UserPlus } from "lucide-react";
 import {
@@ -36,7 +38,7 @@ export function NewMemberModal({
   const [email, setEmail] = useState("");
   const [packageName, setPackageName] = useState("Dedicated Nomad Monthly");
   const [amount, setAmount] = useState(1850000);
-  const [paymentMethod, setPaymentMethod] = useState("QRIS DagoPay");
+  const [paymentMethod, setPaymentMethod] = useState("QRIS");
 
   const resetForm = () => {
     setName("");
@@ -44,7 +46,7 @@ export function NewMemberModal({
     setEmail("");
     setPackageName("Dedicated Nomad Monthly");
     setAmount(1850000);
-    setPaymentMethod("QRIS DagoPay");
+    setPaymentMethod("QRIS");
   };
 
   const handleClose = () => {
@@ -70,7 +72,7 @@ export function NewMemberModal({
     onSubmit({
       name: name.trim(),
       contact: phone.trim(),
-      email: email.trim() || "member@nomad.com",
+      email: email.trim() || "-",
       packageName,
       totalSpent: amount,
       paymentMethod,
@@ -83,19 +85,19 @@ export function NewMemberModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-base font-medium">
+            <UserPlus className="size-4 text-primary" />
             <span>Tambah member co-working</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Pilih paket membership dan metode pembayaran untuk pendaftaran member.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div className="space-y-1.5">
-            <Label htmlFor="member-name" className="text-xs">
-              Nama Lengkap Member <span className="text-destructive">*</span>
+            <Label htmlFor="member-name" className="text-xs font-medium text-foreground">
+              Nama lengkap member <span className="text-destructive">*</span>
             </Label>
             <Input
               id="member-name"
@@ -109,7 +111,7 @@ export function NewMemberModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="member-phone" className="text-xs">
+              <Label htmlFor="member-phone" className="text-xs font-medium text-foreground">
                 Kontak WhatsApp <span className="text-destructive">*</span>
               </Label>
               <Input
@@ -123,8 +125,8 @@ export function NewMemberModal({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="member-email" className="text-xs">
-                Email Member
+              <Label htmlFor="member-email" className="text-xs font-medium text-foreground">
+                Email member (opsional)
               </Label>
               <Input
                 id="member-email"
@@ -132,20 +134,20 @@ export function NewMemberModal({
                 placeholder="email@nomad.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="text-xs"
+                className="text-xs font-mono"
               />
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="member-package" className="text-xs">
-              Pilih Paket Membership
+            <Label htmlFor="member-package" className="text-xs font-medium text-foreground">
+              Paket membership
             </Label>
             <NativeSelect
               id="member-package"
               value={packageName}
               onChange={(e) => handlePackageChange(e.target.value)}
-              className="w-full text-xs font-medium"
+              className="w-full text-xs"
             >
               <option value="Dedicated Nomad Monthly">
                 Dedicated Nomad Monthly (Rp 1.850.000 / bln)
@@ -160,8 +162,8 @@ export function NewMemberModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="member-payment" className="text-xs">
-              Metode Pembayaran
+            <Label htmlFor="member-payment" className="text-xs font-medium text-foreground">
+              Metode bayar
             </Label>
             <NativeSelect
               id="member-payment"
@@ -169,25 +171,24 @@ export function NewMemberModal({
               onChange={(e) => setPaymentMethod(e.target.value)}
               className="w-full text-xs"
             >
-              <option value="QRIS DagoPay">QRIS</option>
-              <option value="Bank Transfer">Transfer bank</option>
-              <option value="Credit Card">Kartu kredit</option>
+              <option value="QRIS">QRIS</option>
+              <option value="TRANSFER">Transfer bank</option>
+              <option value="CARD">Kartu kredit</option>
               <option value="CASH">Tunai</option>
             </NativeSelect>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+          <DialogFooter className="gap-2 border-t pt-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={handleClose}
-              className="text-xs"
             >
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs font-medium">
-              Simpan & Aktifkan Member
+            <Button type="submit" size="sm">
+              Simpan member
             </Button>
           </DialogFooter>
         </form>

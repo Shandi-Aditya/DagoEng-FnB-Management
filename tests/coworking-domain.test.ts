@@ -9,6 +9,10 @@ import {
   getBookingCheckInTone,
   getMemberStatusTone,
   buildCoworkingExportData,
+  spaceTypeLabel,
+  bookingCheckInStatusLabel,
+  bookingPaymentStatusLabel,
+  emptyCoworkingMessage,
 } from "@/features/coworking/coworking-domain";
 import type {
   CoworkingSpaceItem,
@@ -167,4 +171,31 @@ describe("coworking-domain", () => {
     expect(bookingExport.headers).toHaveLength(10);
     expect(bookingExport.rows).toHaveLength(0);
   });
+
+  it("converts raw space type enums to readable Indonesian labels", () => {
+    expect(spaceTypeLabel("HOT_DESK")).toBe("Hot desk");
+    expect(spaceTypeLabel("PRIVATE_POD")).toBe("Pod privat");
+    expect(spaceTypeLabel("MEETING_ROOM")).toBe("Ruang rapat");
+    expect(spaceTypeLabel("DEDICATED_DESK")).toBe("Meja khusus");
+  });
+
+  it("converts check-in and payment statuses to human readable labels", () => {
+    expect(bookingCheckInStatusLabel("CHECKED_IN")).toBe("Sedang aktif");
+    expect(bookingCheckInStatusLabel("RESERVED")).toBe("Menunggu");
+    expect(bookingCheckInStatusLabel("COMPLETED")).toBe("Selesai");
+    expect(bookingCheckInStatusLabel("CANCELLED")).toBe("Dibatalkan");
+
+    expect(bookingPaymentStatusLabel("PAID")).toBe("Lunas");
+    expect(bookingPaymentStatusLabel("UNPAID")).toBe("Menunggu bayar");
+  });
+
+  it("provides distinct empty-state copy for tabs when filtered vs empty data", () => {
+    const spacesEmpty = emptyCoworkingMessage("SPACES", false);
+    expect(spacesEmpty.title).toBe("Belum ada ruang");
+
+    const bookingsFiltered = emptyCoworkingMessage("BOOKINGS", true);
+    expect(bookingsFiltered.title).toBe("Tidak ada booking yang cocok");
+    expect(bookingsFiltered.description).toContain("Ubah kata kunci");
+  });
 });
+

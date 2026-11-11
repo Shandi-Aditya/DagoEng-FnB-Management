@@ -1,5 +1,8 @@
 import { History } from "lucide-react";
-import type { CheckInOutLog } from "@/contexts/CoworkingContext";
+
+import { EmptyState } from "@/components/app/empty-state";
+import { StatusBadge } from "@/components/app/status-badge";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -8,9 +11,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
-import { StatusBadge } from "@/components/app/status-badge";
-import { EmptyState } from "@/components/app/empty-state";
+import type { CheckInOutLog } from "@/contexts/CoworkingContext";
+
+import { emptyCoworkingMessage } from "./coworking-domain";
 
 export interface CoworkingLogsTabProps {
   logs: CheckInOutLog[];
@@ -18,11 +21,12 @@ export interface CoworkingLogsTabProps {
 
 export function CoworkingLogsTab({ logs }: CoworkingLogsTabProps) {
   if (logs.length === 0) {
+    const emptyCopy = emptyCoworkingMessage("LOGS", false);
     return (
       <EmptyState
         icon={<History className="size-8 text-muted-foreground" />}
-        title="Belum ada aktivitas"
-        description="Check-in dan check-out tamu tercatat di sini."
+        title={emptyCopy.title}
+        description={emptyCopy.description}
       />
     );
   }
@@ -50,11 +54,11 @@ export function CoworkingLogsTab({ logs }: CoworkingLogsTabProps) {
                   <TableCell className="font-medium">
                     <div className="space-y-0.5">
                       <p className="text-foreground">{log.guestName}</p>
-                      <p className="font-mono text-primary text-[11px]">{log.bookingCode}</p>
+                      <p className="font-mono text-xs text-primary">{log.bookingCode}</p>
                     </div>
                   </TableCell>
 
-                  <TableCell className="font-medium text-foreground text-xs">
+                  <TableCell className="text-xs font-medium text-foreground">
                     {log.spaceName}
                   </TableCell>
 
@@ -63,7 +67,7 @@ export function CoworkingLogsTab({ logs }: CoworkingLogsTabProps) {
                       <p className="font-medium text-foreground">
                         {log.checkInDate} · {log.checkInTime}
                       </p>
-                      <p className="text-[10px] text-muted-foreground">Oleh {log.checkInBy}</p>
+                      <p className="text-xs text-muted-foreground">Oleh {log.checkInBy}</p>
                     </div>
                   </TableCell>
 
@@ -73,13 +77,13 @@ export function CoworkingLogsTab({ logs }: CoworkingLogsTabProps) {
                         <p className="font-medium text-foreground">
                           {log.checkoutDate} · {log.checkoutTime}
                         </p>
-                        <p className="text-[10px] text-muted-foreground">
+                        <p className="text-xs text-muted-foreground">
                           Oleh {log.checkoutBy}
                         </p>
                       </div>
                     ) : (
-                      <span className="text-xs text-primary font-medium italic">
-                        Sedang Aktif
+                      <span className="font-medium text-xs text-primary">
+                        Sedang aktif
                       </span>
                     )}
                   </TableCell>
@@ -90,7 +94,7 @@ export function CoworkingLogsTab({ logs }: CoworkingLogsTabProps) {
 
                   <TableCell className="text-center">
                     <StatusBadge status={isActive ? "info" : "success"} className="text-xs">
-                      {isActive ? "Aktif di Lokasi" : "Selesai"}
+                      {isActive ? "Aktif" : "Selesai"}
                     </StatusBadge>
                   </TableCell>
                 </TableRow>

@@ -1,35 +1,37 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { Laptop, Users, Calendar, History } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useOutlet } from "@/contexts/OutletContext";
-import { useCoworking } from "@/contexts/CoworkingContext";
-import { useSettings } from "@/contexts/SettingsContext";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { buttonVariants } from "@/components/ui/button";
+import { Calendar, History, Laptop, Users } from "lucide-react";
+
 import { notify } from "@/components/app/notify";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCoworking } from "@/contexts/CoworkingContext";
+import { useOutlet } from "@/contexts/OutletContext";
+import { useSettings } from "@/contexts/SettingsContext";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { resolveCoworkingReceiptPublisher } from "@/lib/receipt-publisher";
-import { CoworkingBooking } from "@/types/coworking";
-import {
-  calculateCoworkingKPIs,
-  buildCoworkingExportData,
-} from "@/features/coworking/coworking-domain";
-import { CoworkingToolbar } from "@/features/coworking/CoworkingToolbar";
-import { CoworkingSpacesTab } from "@/features/coworking/CoworkingSpacesTab";
+import type { CoworkingBooking } from "@/types/coworking";
+
 import { CoworkingBookingsTab } from "@/features/coworking/CoworkingBookingsTab";
-import { CoworkingMembersTab } from "@/features/coworking/CoworkingMembersTab";
+import {
+  buildCoworkingExportData,
+  calculateCoworkingKPIs,
+} from "@/features/coworking/coworking-domain";
 import { CoworkingLogsTab } from "@/features/coworking/CoworkingLogsTab";
+import { CoworkingMembersTab } from "@/features/coworking/CoworkingMembersTab";
+import {
+  type CoworkingReceiptData,
+  CoworkingReceiptModal,
+} from "@/features/coworking/CoworkingReceiptModal";
+import { CoworkingReportPDFModal } from "@/features/coworking/CoworkingReportPDFModal";
+import { CoworkingSpacesTab } from "@/features/coworking/CoworkingSpacesTab";
+import { CoworkingToolbar } from "@/features/coworking/CoworkingToolbar";
 import { NewBookingModal } from "@/features/coworking/NewBookingModal";
 import { NewMemberModal } from "@/features/coworking/NewMemberModal";
-import { CoworkingReportPDFModal } from "@/features/coworking/CoworkingReportPDFModal";
-import {
-  CoworkingReceiptModal,
-  CoworkingReceiptData,
-} from "@/features/coworking/CoworkingReceiptModal";
-import { cn } from "@/lib/utils";
 
 export default function CoworkingPage() {
   const { user } = useAuth();
@@ -61,23 +63,23 @@ export default function CoworkingPage() {
   // Cashier redirection
   if (user?.role?.slug === "CASHIER") {
     return (
-      <div className="p-8 max-w-lg mx-auto text-center space-y-4 bg-card border border-border rounded-2xl shadow-xs my-12">
-        <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 text-primary flex items-center justify-center mx-auto">
-          <Laptop className="w-6 h-6" />
+      <div className="mx-auto my-12 max-w-lg space-y-4 rounded-2xl border border-border bg-card p-8 text-center shadow-xs">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
+          <Laptop className="size-6" />
         </div>
         <div className="space-y-1">
-          <h2 className="text-base font-bold text-foreground">Operasional Terintegrasi di POS Kasir</h2>
-          <p className="text-xs text-muted-foreground leading-relaxed">
+          <h2 className="text-base font-medium text-foreground">Operasional terintegrasi di POS kasir</h2>
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Untuk staf kasir, seluruh transaksi dan pemesanan co-working dilayani langsung melalui modul <strong className="text-foreground">POS Kasir</strong>.
           </p>
         </div>
         <div className="pt-2">
-          <Link
-            href="/pos"
-            className={cn(buttonVariants({ size: "sm" }), "px-5 font-semibold text-xs")}
+          <Button
+            render={<Link href="/pos" />}
+            nativeButton={false}
           >
-            Buka Modul POS Kasir
-          </Link>
+            Buka modul POS kasir
+          </Button>
         </div>
       </div>
     );
@@ -272,22 +274,34 @@ export default function CoworkingPage() {
         onValueChange={(val) => setActiveTab(val as "SPACES" | "BOOKINGS" | "MEMBERS" | "LOGS")}
         className="space-y-4"
       >
-        <TabsList>
-          <TabsTrigger value="SPACES" className="gap-1.5 text-xs">
-            <Laptop className="size-3.5" />
-            <span>Ruang dan meja ({spaces.length})</span>
+        <TabsList aria-label="Navigasi modul co-working">
+          <TabsTrigger value="SPACES">
+            <Laptop />
+            <span>Ruang dan meja</span>
+            <Badge variant="secondary" className="ml-1 tabular-nums">
+              {spaces.length}
+            </Badge>
           </TabsTrigger>
-          <TabsTrigger value="BOOKINGS" className="gap-1.5 text-xs">
-            <Calendar className="size-3.5" />
-            <span>Booking ({bookings.length})</span>
+          <TabsTrigger value="BOOKINGS">
+            <Calendar />
+            <span>Booking</span>
+            <Badge variant="secondary" className="ml-1 tabular-nums">
+              {bookings.length}
+            </Badge>
           </TabsTrigger>
-          <TabsTrigger value="MEMBERS" className="gap-1.5 text-xs">
-            <Users className="size-3.5" />
-            <span>Member ({members.length})</span>
+          <TabsTrigger value="MEMBERS">
+            <Users />
+            <span>Member</span>
+            <Badge variant="secondary" className="ml-1 tabular-nums">
+              {members.length}
+            </Badge>
           </TabsTrigger>
-          <TabsTrigger value="LOGS" className="gap-1.5 text-xs">
-            <History className="size-3.5" />
-            <span>Log check-in ({checkLogs.length})</span>
+          <TabsTrigger value="LOGS">
+            <History />
+            <span>Log check-in</span>
+            <Badge variant="secondary" className="ml-1 tabular-nums">
+              {checkLogs.length}
+            </Badge>
           </TabsTrigger>
         </TabsList>
 
