@@ -1,86 +1,53 @@
 "use client";
 
-import React from "react";
-import { useDateFilter } from "@/contexts/DateFilterContext";
+import { EmptyState } from "@/components/app/empty-state";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { useOrders } from "@/contexts/OrderContext";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/legacy/ui/card";
 import { formatCurrencyIDR } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Clock, CheckCircle2, AlertTriangle, Calendar, Flame } from "lucide-react";
 
+function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-lg font-medium tabular-nums">{value}</span>
+      {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
+    </div>
+  );
+}
+
+/** Order processing progress for the selected period. */
 export function DailyProgressSummary() {
-  const { formattedRangeLabel, previousPeriodLabel } = useDateFilter();
   const { filteredOrders } = useOrders();
 
-  const [isMounted, setIsMounted] = React.useState(false);
-  React.useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  const totalRevenue = isMounted ? filteredOrders.reduce((sum, o) => sum + o.total, 0) : 0;
-  const totalOrdersCount = isMounted ? filteredOrders.length : 0;
-  const completedOrdersCount = isMounted ? filteredOrders.filter((o) => o.status === "COMPLETED" || o.status === "SERVED").length : 0;
-  const completionRate = totalOrdersCount > 0 ? ((completedOrdersCount / totalOrdersCount) * 100).toFixed(1) : "0";
+  const revenue = filteredOrders.reduce((sum, order) => sum + order.total, 0);
+  const total = filteredOrders.length;
+  const completed = filteredOrders.filter((order) => order.status === "COMPLETED" || order.status === "SERVED").length;
+  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
-    <Card className="shadow-sm border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-      <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-bold flex items-center space-x-2 text-slate-900 dark:text-slate-100">
-            <Calendar className="w-4 h-4 text-primary" />
-            <span>Progress Operasional & Ringkasan Harian</span>
-          </CardTitle>
-          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded">
-            Periode: {formattedRangeLabel}
-          </span>
-        </div>
-        <CardDescription className="text-xs text-slate-500 dark:text-slate-400">
-          Monitoring performa pemrosesan pesanan dan penyelesaian transaksi
-        </CardDescription>
+    <Card className="h-full">
+      <CardHeader>
+        <CardTitle className="text-sm font-medium">Progres operasional</CardTitle>
+        <CardDescription>Penyelesaian pesanan pada periode terpilih</CardDescription>
       </CardHeader>
-
-      <CardContent className="pt-4 space-y-4">
-        {/* Progress Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 rounded-xl bg-primary/5 dark:bg-primary/10 border border-primary/20 dark:border-primary/30">
-            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Omzet Periode Ini</p>
-            <p className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5">{formatCurrencyIDR(totalRevenue)}</p>
-            <span className="text-[10px] text-primary dark:text-primary-light font-medium inline-flex items-center mt-1">
-              Live Realtime
-            </span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-sky-50/50 dark:bg-sky-950/30 border border-sky-100 dark:border-sky-900/40">
-            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Tingkat Penyelesaian</p>
-            <p className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-              {completedOrdersCount} / {totalOrdersCount} <span className="text-xs font-normal">Order</span>
-            </p>
-            <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold inline-flex items-center mt-1">
-              <CheckCircle2 className="w-3 h-3 mr-0.5" /> {completionRate}% Selesai
-            </span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-100 dark:border-amber-900/40">
-            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Antrean Aktif</p>
-            <p className="text-lg font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-              {totalOrdersCount - completedOrdersCount} <span className="text-xs font-normal">Pesanan</span>
-            </p>
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium inline-flex items-center mt-1">
-              Dapur & Bar
-            </span>
-          </div>
-
-          <div className="p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40">
-            <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Status Sistem</p>
-            <p className="text-lg font-bold text-emerald-700 dark:text-emerald-400 mt-0.5">Siap Operasi</p>
-            <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold inline-flex items-center mt-1">
-              Semua Modul Aktif
-            </span>
-          </div>
-        </div>
-
-        {totalOrdersCount === 0 && (
-          <div className="p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 text-center text-xs text-slate-400 dark:text-slate-500">
-            Belum ada data transaksi pada periode ini. Sistem siap menerima pesanan baru.
+      <CardContent>
+        {total === 0 ? (
+          <EmptyState title="Belum ada pesanan" description="Pesanan di periode ini akan muncul di sini" />
+        ) : (
+          <div className="flex flex-col gap-5">
+            <div className="grid grid-cols-3 gap-4">
+              <Metric label="Omzet" value={formatCurrencyIDR(revenue)} />
+              <Metric label="Selesai" value={`${completed} dari ${total}`} />
+              <Metric label="Antrean aktif" value={`${total - completed}`} hint="Dapur dan bar" />
+            </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Tingkat penyelesaian</span>
+                <span className="tabular-nums">{completionRate}%</span>
+              </div>
+              <Progress value={completionRate} aria-label="Tingkat penyelesaian pesanan" />
+            </div>
           </div>
         )}
       </CardContent>

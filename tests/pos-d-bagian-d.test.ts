@@ -54,8 +54,10 @@ describe("POS Bagian D — Perbaikan Minor UI/UX", () => {
         "utf-8"
       );
 
+      // The greeting was replaced by a context title (docs/UNSLOP_AUDIT.md); the name must never be truncated
       expect(dashboardContent).not.toContain('{user?.name.split(" ")[0]}');
-      expect(dashboardContent).toContain('Selamat Datang, {user?.name || "Pengguna"}');
+      expect(dashboardContent).not.toMatch(/name\??\.split\(/);
+      expect(dashboardContent).toContain('title="Ringkasan"');
     });
   });
 

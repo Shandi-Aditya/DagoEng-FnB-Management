@@ -264,6 +264,14 @@ Gunakan `--dry-run` atau `--view` dulu untuk melihat dependensi yang ditambahkan
 
 ## 8. Fase 4: Dashboard (1 MR)
 
+**Status (11 November 2026): selesai di branch `feat/shadcn-foundation`, belum di-commit.**
+
+- **Logika:** perhitungan dipindah dari `page.tsx` ke `features/dashboard/dashboard-metrics.ts` (fungsi murni, 17 test di `tests/dashboard-metrics.test.ts`) dan `use-dashboard-metrics.ts` (fetch dan scoping role).
+- **UI:** `PageHeader` "Ringkasan" (tanpa salam), 4 `StatCard`, `ActionCenter`, `Alert` untuk tenant, grafik `ChartContainer` dengan `Tabs`, `UnitContributionCard` (`Progress` + `UnitDot`), dan versi baru `DailyProgressSummary`, `InventoryRiskCard`, `OutletCompareCard`, `DateRangePicker` (Popover), serta `RoleAwareStatusPill` (Badge). `KPICard` dihapus.
+- **Bug data yang diperbaiki:** bar kontribusi kini proporsional terhadap porsi (dulu selalu penuh), dan grafik 7 hari tidak lagi menghitung pesanan di luar jendela sebagai pesanan hari ini.
+- **Konten palsu dihapus:** kartu "Status sistem: siap operasi", ikon "Context sync" yang berputar, dan tanggal hardcode pada pintasan periode. HPP diberi label "estimasi 38%".
+- **Test lama disesuaikan:** D3 di `tests/pos-d-bagian-d.test.ts` kini memeriksa bahwa nama tidak dipotong dan judulnya "Ringkasan".
+
 - **Judul**: `PageHeader` dengan judul `Ringkasan`, deskripsi outlet dan periode, dan aksi `DateRangePicker` (Calendar + Popover). Tanpa salam "Selamat Datang".
 - **KPI**: 3–4 `StatCard` (`Card` dengan `CardDescription`, angka `text-3xl font-medium tabular-nums`, perubahan + "vs periode lalu"). Tanpa tile ikon berwarna.
 - **Grafik utama**: `ChartContainer` selebar ±2/3. Omzet memakai `chart-1`/`primary`, HPP abu, diskon garis putus-putus. Saat data kosong tampilkan `Empty`.
