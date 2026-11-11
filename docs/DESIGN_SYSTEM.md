@@ -63,7 +63,7 @@ Ikuti konvensi token shadcn. **Kode fitur hanya boleh memakai token**, tidak bol
 Aturan tambahan dari audit:
 
 - Satu grafik punya satu seri utama berwarna. Seri lain memakai abu (`muted-foreground`) atau garis putus-putus.
-- Tidak ada gradien, glow, blob blur, `backdrop-blur`, atau bayangan berwarna.
+- Tidak ada gradien, glow, blob blur, `backdrop-blur`, atau bayangan berwarna. Satu-satunya pengecualian adalah permukaan tombol (lihat bagian 7).
 - Kedalaman (depth) dibentuk dari `card` di atas `background` dan garis `border`. Bayangan hanya `shadow-xs`/`shadow-sm` netral.
 
 ### Kontras tema (dihitung dari nilai OKLCH shadcn)
@@ -156,7 +156,7 @@ Ukuran minimum 12px. Ukuran `text-[9px]`/`text-[10px]` tidak dipakai lagi.
 
 ## 7. Komponen
 
-Semua komponen dasar berasal dari registry shadcn (`src/components/ui/*`) dan **tidak disunting manual**. Komponen khusus aplikasi dirangkai di `src/components/app/*`:
+Semua komponen dasar berasal dari registry shadcn (`src/components/ui/*`) dan **tidak disunting manual**, kecuali `ui/button.tsx` (lihat "Tombol" di bawah). Komponen khusus aplikasi dirangkai di `src/components/app/*`:
 
 | Komponen app | Disusun dari |
 | --- | --- |
@@ -172,6 +172,19 @@ Semua komponen dasar berasal dari registry shadcn (`src/components/ui/*`) dan **
 Daftar lengkap pemetaan komponen lama ke shadcn ada di bagian Fase 2 [rencana implementasi](./SHADCN_UI_IMPLEMENTATION_PLAN.md).
 
 Komponen lama ada di `src/components/legacy/ui/` hanya selama migrasi. **Kode baru tidak boleh mengimpor dari `legacy`.**
+
+### Tombol
+
+`ui/button.tsx` sengaja dikustomisasi supaya terasa timbul, mengikuti tombol Cloudflare Kumo. Nama varian dan ukuran tetap sama dengan shadcn, jadi pemanggil tidak berubah.
+
+| Varian | Permukaan |
+| --- | --- |
+| `default` | Gradien halus dari `--button-primary-top` ke `primary`, highlight 1px di tepi atas dalam, garis tepi `--button-primary-edge`, `shadow-xs`. Hover menerangkan bagian atas. |
+| `destructive` | Sama seperti `default` dengan token `--button-destructive-*`. |
+| `outline`, `secondary` | Garis `border`, `shadow-xs`; di mode gelap ada highlight putih 6% di tepi atas. |
+| `ghost`, `link` | Datar seperti bawaan shadcn. |
+
+Token `--button-*` ada di `globals.css` dan diturunkan dari `--primary`/`--destructive` dengan `color-mix`, jadi ikut berubah saat warna tema diganti. Saat memperbarui tombol lewat `npx shadcn add button --overwrite`, terapkan ulang kelas varian ini. Tombol di `components/legacy/ui` belum memakai gaya ini; halaman lama mendapatkannya saat dimigrasi.
 
 Catatan style Mira: `Badge` bawaan memakai teks 10px. Untuk badge yang harus dibaca cepat (status pesanan, pembayaran), tambahkan `className="text-xs"` saat dipakai, jangan mengubah file `ui/badge.tsx`.
 

@@ -196,6 +196,21 @@
   --info-foreground: oklch(0.293 0.066 243.157);
 }
 
+/*
+ * Tactile button surfaces (after Cloudflare Kumo): a soft top-to-bottom gradient,
+ * a 1px inner highlight on the top edge and a slightly darker edge line.
+ * Derived from --primary / --destructive so a theme colour change carries over.
+ */
+:root,
+.dark {
+  --button-primary-top: color-mix(in oklch, var(--primary), white 15%);
+  --button-primary-highlight: color-mix(in oklch, var(--primary), white 30%);
+  --button-primary-edge: color-mix(in oklch, var(--primary), black 15%);
+  --button-destructive-top: color-mix(in oklch, var(--destructive), white 15%);
+  --button-destructive-highlight: color-mix(in oklch, var(--destructive), white 30%);
+  --button-destructive-edge: color-mix(in oklch, var(--destructive), black 15%);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -244,5 +259,13 @@
 
   ::-webkit-scrollbar-thumb:hover {
     background: var(--muted-foreground);
+  }
+}
+
+/* Horizontal scroll rows (tenant/category tabs, sidebar) without a visible scrollbar */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
   }
 }

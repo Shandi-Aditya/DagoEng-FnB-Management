@@ -8,13 +8,13 @@ import { AlertCircle, ArrowLeft, Eye, EyeOff, Search, Ticket } from "lucide-reac
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
+import { HERO } from "@/features/landing/landing-content";
 import { ModeToggle } from "@/features/layout/ModeToggle";
 
 interface PasswordInputProps {
@@ -250,53 +250,54 @@ function LoginContent() {
   };
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center bg-muted p-4 sm:p-6">
-      <div className="flex w-full max-w-sm flex-col gap-5">
-        <div className="flex items-center justify-between">
-          <Button variant="ghost" size="sm" render={<Link href={backHref} />} nativeButton={false}>
-            <ArrowLeft />
-            Kembali
-          </Button>
-          <ModeToggle />
+    <div className="grid min-h-svh lg:grid-cols-2">
+      <div className="flex flex-col gap-4 p-6 md:p-10">
+        <div className="flex items-center justify-between gap-2">
+          <Link href="/" className="flex items-center gap-2 font-medium">
+            <Image src="/logo-dago.png" alt="" width={24} height={28} priority className="object-contain" />
+            DagoEng
+          </Link>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" render={<Link href={backHref} />} nativeButton={false}>
+              <ArrowLeft />
+              Kembali
+            </Button>
+            <ModeToggle />
+          </div>
         </div>
 
-        <Link href="/" className="flex items-center gap-3 self-center">
-          <Image src="/logo-dago.png" alt="DagoEng" width={32} height={36} priority className="object-contain" />
-          <span className="flex flex-col leading-tight">
-            <span className="text-base font-semibold">DagoEng</span>
-            <span className="text-xs text-muted-foreground">F&B, co-working, event dan member</span>
-          </span>
-        </Link>
+        <div className="flex flex-1 items-center justify-center py-6">
+          <div className="flex w-full max-w-xs flex-col gap-6">
+            <div className="flex flex-col items-center gap-1 text-center">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {isRegisterMode ? "Daftar member" : "Masuk ke akun"}
+              </h1>
+              <p className="text-sm text-balance text-muted-foreground">
+                {isRegisterMode
+                  ? "Daftar gratis dan dapatkan 50 poin pertama."
+                  : "Masukkan email dan password akun DagoEng."}
+              </p>
+            </div>
 
-        {isFromEvents && (
-          <Alert>
-            <Ticket />
-            <AlertTitle>Punya tiket event?</AlertTitle>
-            <AlertDescription>
-              <p>Masuk untuk melihat tiket yang terhubung ke akun. Pesan sebagai tamu tanpa akun? Cari tiketnya lewat kode pesanan.</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" render={<Link href="/events/tickets/recovery" />} nativeButton={false}>
-                  <Search />
-                  Cari tiket tamu
-                </Button>
-                <Button size="sm" variant="ghost" render={<Link href="/events" />} nativeButton={false}>
-                  Lihat event
-                </Button>
-              </div>
-            </AlertDescription>
-          </Alert>
-        )}
+            {isFromEvents && !isRegisterMode ? (
+              <Alert>
+                <Ticket />
+                <AlertTitle>Pesan tiket sebagai tamu?</AlertTitle>
+                <AlertDescription>
+                  <p>Tiket tanpa akun bisa dicari lewat kode pesanan.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" render={<Link href="/events/tickets/recovery" />} nativeButton={false}>
+                      <Search />
+                      Cari tiket tamu
+                    </Button>
+                    <Button size="sm" variant="ghost" render={<Link href="/events" />} nativeButton={false}>
+                      Lihat event
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            ) : null}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">{isRegisterMode ? "Daftar member" : "Masuk"}</CardTitle>
-            <CardDescription>
-              {isRegisterMode
-                ? "Daftar gratis dan dapatkan 50 poin pertama."
-                : "Gunakan email dan password akun DagoEng."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
             {errorMessage ? (
               <Alert variant="destructive">
                 <AlertCircle />
@@ -330,7 +331,7 @@ function LoginContent() {
                       autoComplete="current-password"
                     />
                   </Field>
-                  <Button type="submit" disabled={isLoading} className="w-full">
+                  <Button type="submit" size="lg" disabled={isLoading} className="w-full">
                     {isLoading ? <Spinner /> : null}
                     {isLoading ? "Memproses..." : "Masuk ke Sistem"}
                   </Button>
@@ -372,23 +373,33 @@ function LoginContent() {
                       autoComplete="new-password"
                     />
                   </Field>
-                  <Button type="submit" disabled={isLoading} className="w-full">
+                  <Button type="submit" size="lg" disabled={isLoading} className="w-full">
                     {isLoading ? <Spinner /> : null}
                     {isLoading ? "Mendaftarkan..." : "Daftar dan klaim 50 poin"}
                   </Button>
                 </FieldGroup>
               </form>
             )}
-          </CardContent>
-          <CardFooter className="justify-center text-sm text-muted-foreground">
-            {isRegisterMode ? "Sudah punya akun?" : "Belum punya akun member?"}
-            <Button variant="link" size="sm" className="px-1" onClick={() => switchMode(!isRegisterMode)}>
-              {isRegisterMode ? "Masuk" : "Daftar"}
-            </Button>
-          </CardFooter>
-        </Card>
 
-        <p className="text-center text-xs text-muted-foreground">© {new Date().getFullYear()} DagoEng Creative Hub</p>
+            <p className="text-center text-sm text-muted-foreground">
+              {isRegisterMode ? "Sudah punya akun?" : "Belum punya akun member?"}
+              <Button variant="link" size="sm" className="px-1" onClick={() => switchMode(!isRegisterMode)}>
+                {isRegisterMode ? "Masuk" : "Daftar"}
+              </Button>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="relative hidden bg-muted lg:block">
+        <Image
+          src={HERO.image}
+          alt={HERO.imageAlt}
+          fill
+          priority
+          sizes="50vw"
+          className="object-cover dark:brightness-[0.35] dark:grayscale"
+        />
       </div>
     </div>
   );
@@ -398,7 +409,7 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-svh items-center justify-center gap-2 bg-muted text-sm text-muted-foreground">
+        <div className="flex min-h-svh items-center justify-center gap-2 text-sm text-muted-foreground">
           <Spinner />
           Memuat
         </div>
