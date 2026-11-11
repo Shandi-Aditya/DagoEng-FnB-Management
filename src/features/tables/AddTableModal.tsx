@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -91,11 +93,11 @@ export function AddTableModal({ isOpen, onClose, areas, onAddTable }: AddTableMo
           </div>
 
           <DialogFooter className="border-t pt-3">
-            <Button type="button" variant="outline" size="sm" onClick={onClose} className="text-xs">
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs">
-              Simpan Meja
+            <Button type="submit" size="sm">
+              Simpan meja
             </Button>
           </DialogFooter>
         </form>

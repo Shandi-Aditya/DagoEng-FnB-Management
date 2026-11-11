@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   calculateTableSummary,
+  countReservationsByStatus,
+  emptyReservationsMessage,
   filterReservations,
   formatReservationDateTime,
   reservationStatusLabel,
@@ -119,5 +121,46 @@ describe("formatReservationDateTime", () => {
 
     expect(formatReservationDateTime(today, "19:00")).toBe("Hari ini, 19:00 WITA");
     expect(formatReservationDateTime(tomorrow, "20:00")).toBe("Besok, 20:00 WITA");
+  });
+});
+
+describe("countReservationsByStatus", () => {
+  it("counts reservations by status including total ALL count", () => {
+    const reservations = [
+      makeReservation("1", { status: "CONFIRMED" }),
+      makeReservation("2", { status: "CONFIRMED" }),
+      makeReservation("3", { status: "SEATED" }),
+      makeReservation("4", { status: "CANCELLED" }),
+    ];
+
+    const counts = countReservationsByStatus(reservations);
+    expect(counts.ALL).toBe(4);
+    expect(counts.CONFIRMED).toBe(2);
+    expect(counts.SEATED).toBe(1);
+    expect(counts.CANCELLED).toBe(1);
+  });
+
+  it("returns zero counts for empty array", () => {
+    const counts = countReservationsByStatus([]);
+    expect(counts.ALL).toBe(0);
+    expect(counts.CONFIRMED).toBe(0);
+    expect(counts.SEATED).toBe(0);
+    expect(counts.CANCELLED).toBe(0);
+  });
+});
+
+describe("emptyReservationsMessage", () => {
+  it("returns search-specific copy when query is active", () => {
+    const msg = emptyReservationsMessage("CONFIRMED", true);
+    expect(msg.title).toBe("Tidak ada reservasi yang cocok");
+    expect(msg.description).toContain("Ubah kata kunci");
+  });
+
+  it("returns specific copy when a status queue is empty without search", () => {
+    const confirmedMsg = emptyReservationsMessage("CONFIRMED", false);
+    expect(confirmedMsg.title).toBe("Tidak ada reservasi menunggu");
+
+    const allMsg = emptyReservationsMessage("ALL", false);
+    expect(allMsg.title).toBe("Belum ada reservasi");
   });
 });

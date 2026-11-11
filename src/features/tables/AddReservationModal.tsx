@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -44,12 +46,12 @@ export function AddReservationModal({
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [time, setTime] = useState("19:00");
   const [pax, setPax] = useState(4);
-  const [downPayment, setDownPayment] = useState(100000);
+  const [downPayment, setDownPayment] = useState(0);
   const [notes, setNotes] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName.trim()) return;
+    if (!customerName.trim() || !phone.trim()) return;
 
     let assignedArea = areas[0]?.name || "Indoor Hall";
     for (const a of areas) {
@@ -63,7 +65,7 @@ export function AddReservationModal({
 
     onAddReservation({
       customerName: customerName.trim(),
-      phone: phone.trim() || "+62 812-xxxx-xxxx",
+      phone: phone.trim(),
       tableId,
       areaName: assignedArea,
       dateTime,
@@ -75,6 +77,7 @@ export function AddReservationModal({
     setCustomerName("");
     setPhone("");
     setNotes("");
+    setDownPayment(0);
     onClose();
   };
 
@@ -90,7 +93,7 @@ export function AddReservationModal({
         <DialogHeader>
           <DialogTitle className="text-base font-medium">Buat reservasi</DialogTitle>
           <DialogDescription className="text-xs">
-            Catat tamu yang memesan meja, jadwal datang, dan uang muka.
+            Catat tamu yang memesan meja, jadwal kedatangan, dan uang muka.
           </DialogDescription>
         </DialogHeader>
 
@@ -162,11 +165,11 @@ export function AddReservationModal({
 
           <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
             <span className="block text-xs font-medium text-foreground">
-              Jadwal Kedatangan Tamu
+              Jadwal kedatangan tamu
             </span>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[11px] text-muted-foreground">Tanggal</label>
+                <label className="text-xs text-muted-foreground">Tanggal</label>
                 <Input
                   type="date"
                   required
@@ -176,7 +179,7 @@ export function AddReservationModal({
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] text-muted-foreground">Jam (WITA)</label>
+                <label className="text-xs text-muted-foreground">Jam (WITA)</label>
                 <Input
                   type="time"
                   required
@@ -187,19 +190,19 @@ export function AddReservationModal({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground">
               <span>Cepat:</span>
               <button
                 type="button"
                 onClick={() => setShortcutDate(0)}
-                className="rounded border bg-background px-2 py-0.5 hover:bg-muted"
+                className="rounded border bg-background px-2 py-0.5 text-xs hover:bg-muted"
               >
                 Hari ini
               </button>
               <button
                 type="button"
                 onClick={() => setShortcutDate(1)}
-                className="rounded border bg-background px-2 py-0.5 hover:bg-muted"
+                className="rounded border bg-background px-2 py-0.5 text-xs hover:bg-muted"
               >
                 Besok
               </button>
@@ -209,7 +212,7 @@ export function AddReservationModal({
                   key={t}
                   type="button"
                   onClick={() => setTime(t)}
-                  className={`rounded px-1.5 py-0.5 font-mono ${
+                  className={`rounded px-1.5 py-0.5 font-mono text-xs ${
                     time === t ? "bg-primary text-primary-foreground font-medium" : "border bg-background hover:bg-muted"
                   }`}
                 >
@@ -230,10 +233,10 @@ export function AddReservationModal({
           </div>
 
           <DialogFooter className="border-t pt-3">
-            <Button type="button" variant="outline" size="sm" onClick={onClose} className="text-xs">
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs">
+            <Button type="submit" size="sm">
               Simpan reservasi
             </Button>
           </DialogFooter>

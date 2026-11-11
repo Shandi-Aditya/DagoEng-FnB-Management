@@ -146,3 +146,71 @@ export function formatReservationDateTime(dateStr: string, timeStr: string): str
 
   return `${formattedDateLabel}, ${timeStr} WITA`;
 }
+
+export type ReservationQueueId = "ALL" | "CONFIRMED" | "SEATED" | "CANCELLED";
+
+export interface ReservationQueueItem {
+  id: ReservationQueueId;
+  label: string;
+}
+
+export const RESERVATION_QUEUES: readonly ReservationQueueItem[] = [
+  { id: "ALL", label: "Semua" },
+  { id: "CONFIRMED", label: "Menunggu" },
+  { id: "SEATED", label: "Sudah duduk" },
+  { id: "CANCELLED", label: "Dibatalkan" },
+];
+
+export function countReservationsByStatus(
+  reservations: readonly ScheduledReservation[]
+): Record<ReservationQueueId, number> {
+  const counts: Record<ReservationQueueId, number> = {
+    ALL: reservations.length,
+    CONFIRMED: 0,
+    SEATED: 0,
+    CANCELLED: 0,
+  };
+
+  for (const r of reservations) {
+    if (r.status === "CONFIRMED") counts.CONFIRMED += 1;
+    else if (r.status === "SEATED") counts.SEATED += 1;
+    else if (r.status === "CANCELLED") counts.CANCELLED += 1;
+  }
+
+  return counts;
+}
+
+const EMPTY_RESERVATION_COPY: Record<ReservationQueueId, { title: string; description: string }> = {
+  ALL: {
+    title: "Belum ada reservasi",
+    description: "Reservasi tamu yang dibuat akan tercatat di sini.",
+  },
+  CONFIRMED: {
+    title: "Tidak ada reservasi menunggu",
+    description: "Semua tamu reservasi sudah duduk atau belum ada pesanan baru.",
+  },
+  SEATED: {
+    title: "Belum ada tamu reservasi yang duduk",
+    description: "Tamu yang sudah didudukkan akan tercatat di sini.",
+  },
+  CANCELLED: {
+    title: "Tidak ada reservasi batal",
+    description: "Daftar pembatalan reservasi akan tercatat di sini.",
+  },
+};
+
+export function emptyReservationsMessage(
+  statusFilter: string,
+  hasSearch: boolean
+): { title: string; description: string } {
+  if (hasSearch) {
+    return {
+      title: "Tidak ada reservasi yang cocok",
+      description: "Ubah kata kunci pencarian atau pilih filter status lain.",
+    };
+  }
+
+  const queueKey = (statusFilter in EMPTY_RESERVATION_COPY ? statusFilter : "ALL") as ReservationQueueId;
+  return EMPTY_RESERVATION_COPY[queueKey];
+}
+

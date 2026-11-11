@@ -1,7 +1,8 @@
+"use client";
+
 import { ArrowRight, Utensils } from "lucide-react";
 
 import { StatusBadge } from "@/components/app/status-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -40,7 +41,7 @@ export function TableDetailModal({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <div className="flex items-center justify-between gap-2 pr-6">
-            <DialogTitle className="text-base font-medium">
+            <DialogTitle className="font-mono text-base font-medium">
               Meja {table.number || table.id}
             </DialogTitle>
             <StatusBadge status={tableStatusTone(table.status)}>
@@ -56,15 +57,18 @@ export function TableDetailModal({
           {/* Active Occupancy Details */}
           {isOccupied ? (
             <div className="space-y-1.5 rounded-lg border bg-muted/30 p-3">
-              <span className="text-[11px] font-medium text-muted-foreground">
-                Informasi Tagihan Aktif
+              <span className="text-xs font-medium text-muted-foreground">
+                Tagihan aktif
               </span>
-              <div className="flex justify-between font-medium text-sm text-foreground">
+              <div className="flex justify-between text-sm font-medium text-foreground">
                 <span>{table.customer || "Tamu"}</span>
-                <span className="font-mono text-primary">{table.total || "-"}</span>
+                <span className="font-mono tabular-nums text-primary">
+                  {table.total || "—"}
+                </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Durasi: {table.time || "Baru saja"} • {table.itemsCount || 2} Menu
+              <p className="text-xs text-muted-foreground">
+                Durasi: {table.time || "Baru saja"}
+                {table.itemsCount ? ` · ${table.itemsCount} menu` : ""}
               </p>
             </div>
           ) : null}
@@ -78,7 +82,6 @@ export function TableDetailModal({
                 size="sm"
                 variant={table.status === "AVAILABLE" ? "default" : "outline"}
                 onClick={() => onUpdateStatus("AVAILABLE")}
-                className="text-xs"
               >
                 Tersedia
               </Button>
@@ -87,7 +90,6 @@ export function TableDetailModal({
                 size="sm"
                 variant={table.status === "OCCUPIED" ? "default" : "outline"}
                 onClick={() => onUpdateStatus("OCCUPIED")}
-                className="text-xs"
               >
                 Terisi
               </Button>
@@ -96,7 +98,6 @@ export function TableDetailModal({
                 size="sm"
                 variant={table.status === "RESERVED" ? "default" : "outline"}
                 onClick={() => onUpdateStatus("RESERVED")}
-                className="text-xs"
               >
                 Reservasi
               </Button>
@@ -105,27 +106,25 @@ export function TableDetailModal({
                 size="sm"
                 variant={table.status === "CLEANING" ? "default" : "outline"}
                 onClick={() => onUpdateStatus("CLEANING")}
-                className="text-xs"
               >
-                Pembersihan
+                Dibersihkan
               </Button>
             </div>
           </div>
         </div>
 
         <DialogFooter className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 sm:justify-between">
-          <Button type="button" variant="outline" size="sm" onClick={onClose} className="text-xs">
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
             Tutup
           </Button>
           <Button
             type="button"
             size="sm"
             onClick={onOpenPOS}
-            className="gap-1.5 text-xs"
           >
-            <Utensils className="size-3.5" />
+            <Utensils />
             <span>Buka di POS</span>
-            <ArrowRight className="size-3.5" />
+            <ArrowRight />
           </Button>
         </DialogFooter>
       </DialogContent>

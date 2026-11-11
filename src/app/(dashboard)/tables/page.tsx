@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CalendarCheck, Grid } from "lucide-react";
 
 import { notify } from "@/components/app/notify";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useOutlet } from "@/contexts/OutletContext";
 import {
@@ -21,6 +22,7 @@ import { ReservationsView } from "@/features/tables/ReservationsView";
 import { TableDetailModal } from "@/features/tables/TableDetailModal";
 import {
   calculateTableSummary,
+  countReservationsByStatus,
   filterReservations,
   tableStatusLabel,
 } from "@/features/tables/tables-domain";
@@ -59,6 +61,10 @@ export default function TablesPage() {
   const summary = useMemo(() => {
     return calculateTableSummary(filteredAreas);
   }, [filteredAreas]);
+
+  const reservationCounts = useMemo(() => {
+    return countReservationsByStatus(filteredReservations);
+  }, [filteredReservations]);
 
   const searchedReservations = useMemo(() => {
     return filterReservations(filteredReservations, resFilter, searchResQuery);
@@ -132,10 +138,6 @@ export default function TablesPage() {
     notify.info("Reservasi dibatalkan", `Meja ${tableId} kembali tersedia.`);
   };
 
-  const confirmedReservationsCount = filteredReservations.filter(
-    (r) => r.status === "CONFIRMED"
-  ).length;
-
   return (
     <div className="space-y-6">
       <TablesToolbar
@@ -144,7 +146,6 @@ export default function TablesPage() {
         availableCount={summary.availableCount}
         occupiedCount={summary.occupiedCount}
         reservedCount={summary.reservedCount}
-        activeTab={activeTab}
         onAddArea={() => setIsAddAreaModalOpen(true)}
         onAddTable={() => setIsAddTableModalOpen(true)}
         onAddReservation={() => setIsAddReservationModalOpen(true)}
@@ -154,14 +155,17 @@ export default function TablesPage() {
         value={activeTab}
         onValueChange={(val) => setActiveTab(val as "FLOOR_PLAN" | "RESERVATIONS")}
       >
-        <TabsList className="h-9">
-          <TabsTrigger value="FLOOR_PLAN" className="gap-1.5 text-xs">
-            <Grid className="size-3.5 text-muted-foreground" />
-            <span>Denah Meja</span>
+        <TabsList aria-label="Pilihan tampilan meja dan reservasi">
+          <TabsTrigger value="FLOOR_PLAN">
+            <Grid />
+            <span>Denah meja</span>
           </TabsTrigger>
-          <TabsTrigger value="RESERVATIONS" className="gap-1.5 text-xs">
-            <CalendarCheck className="size-3.5 text-muted-foreground" />
-            <span>Buku Reservasi ({confirmedReservationsCount})</span>
+          <TabsTrigger value="RESERVATIONS">
+            <CalendarCheck />
+            <span>Buku reservasi</span>
+            <Badge variant="secondary" className="ml-1 tabular-nums">
+              {reservationCounts.CONFIRMED}
+            </Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -177,6 +181,7 @@ export default function TablesPage() {
           <TabsContent value="RESERVATIONS" className="m-0 focus-visible:outline-hidden">
             <ReservationsView
               reservations={searchedReservations}
+              counts={reservationCounts}
               statusFilter={resFilter}
               searchQuery={searchResQuery}
               onFilterChange={setResFilter}
@@ -189,7 +194,7 @@ export default function TablesPage() {
         </div>
       </Tabs>
 
-      {/* Table Details & Actions Modal */}
+      {/* Table Details & Actions Sheet */}
       <TableDetailModal
         tableDetails={selectedTableDetails}
         isOpen={Boolean(selectedTableDetails)}

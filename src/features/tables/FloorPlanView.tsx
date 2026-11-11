@@ -35,7 +35,7 @@ export function FloorPlanView({ areas, outletName, onTableClick }: FloorPlanView
               <CardTitle className="flex items-center justify-between text-sm font-medium">
                 <span>{area.name}</span>
                 <span className="text-xs font-normal text-muted-foreground">
-                  {occupied} / {area.tables.length} Terisi
+                  {occupied}/{area.tables.length} terisi
                 </span>
               </CardTitle>
             </CardHeader>
@@ -66,28 +66,30 @@ export function FloorPlanView({ areas, outletName, onTableClick }: FloorPlanView
                           </StatusBadge>
                         </div>
 
-                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <Users className="size-3" />
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <Users className="size-3.5 text-muted-foreground" />
                           <span>Kapasitas {t.cap} orang</span>
                         </div>
 
                         {isOccupied ? (
-                          <div className="border-t pt-1.5 text-[11px]">
+                          <div className="border-t pt-1.5 text-xs">
                             <p className="truncate font-medium text-foreground">
                               {t.customer || "Tamu"}
                             </p>
                             <p className="font-mono text-xs tabular-nums text-primary">
-                              {t.total || "-"}
+                              {t.total || "—"}
                             </p>
                           </div>
                         ) : isReserved ? (
-                          <div className="border-t pt-1.5 text-[11px]">
-                            <p className="truncate font-medium text-foreground">{t.customer}</p>
-                            <p className="font-mono text-xs text-muted-foreground">{t.time}</p>
+                          <div className="border-t pt-1.5 text-xs">
+                            <p className="truncate font-medium text-foreground">
+                              {t.customer || "Reservasi"}
+                            </p>
+                            <p className="font-mono text-xs text-muted-foreground">{t.time || "—"}</p>
                           </div>
                         ) : (
-                          <div className="border-t pt-1 text-[11px] text-muted-foreground">
-                            Klik untuk opsi
+                          <div className="border-t pt-1 text-xs text-muted-foreground">
+                            {t.status === "AVAILABLE" ? "Siap digunakan" : "Sedang dibersihkan"}
                           </div>
                         )}
                       </button>

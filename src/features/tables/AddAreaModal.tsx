@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -54,11 +56,11 @@ export function AddAreaModal({ isOpen, onClose, outletName, onAddArea }: AddArea
           </div>
 
           <DialogFooter className="border-t pt-3">
-            <Button type="button" variant="outline" size="sm" onClick={onClose} className="text-xs">
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs">
-              Simpan Area
+            <Button type="submit" size="sm">
+              Simpan area
             </Button>
           </DialogFooter>
         </form>
