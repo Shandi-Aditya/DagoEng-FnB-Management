@@ -235,7 +235,20 @@ Gunakan `--dry-run` atau `--view` dulu untuk melihat dependensi yang ditambahkan
 
 ## 7. Fase 3: App shell dashboard (1 MR)
 
-Ganti `features/layout/Sidebar.tsx` dan `Header.tsx` dengan komponen `Sidebar` resmi:
+**Status (11 November 2026): selesai di branch `feat/shadcn-foundation`, belum di-commit.**
+
+- **Shell:** mengikuti pola blok `dashboard-01`, dengan `SidebarProvider` + `AppSidebar variant="inset" collapsible="icon"` + `SidebarInset` + `SiteHeader`. Status buka/tutup sidebar disimpan di cookie `sidebar_state` bawaan shadcn, menggantikan key `localStorage` `dago_sidebar_collapsed`. Pintasan `Ctrl/Cmd+B` aktif, dan di mobile sidebar otomatis menjadi sheet.
+- **File baru di `src/features/layout/`:** `AppSidebar.tsx`, `NavUser.tsx` (alur tutup shift kasir dipertahankan), `SiteHeader.tsx`, `NotificationMenu.tsx` (Popover), `ModeToggle.tsx`, dan `nav-groups.ts` (pengelompokan menu dan pencarian halaman aktif berbasis segmen URL). Test-nya ada di `tests/app-shell-nav.test.ts` (10 test).
+- **Unslop:** label grup memakai huruf kalimat (Ringkasan, F&B, Ruang & tenant, Event, Laporan & administrasi) dengan `UnitDot` warna logo per unit. Tag modul `FNB`/`COMMERCIAL` dan badge `PRO` dihapus, dan ikon tanpa warna per item.
+- **Dihapus:** `Sidebar.tsx` dan `Header.tsx` lama.
+- **Belum dimigrasi:** `RoleAwareStatusPill` masih bergaya lama dan baru dirapikan bersama halaman dashboard di Fase 4.
+
+**Upgrade Next 15.5 + React 19 (commit terpisah, prasyarat Fase 3).** Komponen shadcn Base UI ditulis untuk React 19, yang meneruskan `ref` sebagai prop. Di React 18, wrapper seperti `Button` dan `SidebarMenuButton` yang dipakai di `render` kehilangan ref, sehingga popover, dropdown, dan tooltip muncul di pojok kiri atas.
+
+- **Paket:** `next` 15.5.29, `react`/`react-dom` 19, `@types/react` 19, dan `lucide-react` 1.x (ikon merek dihapus, sehingga `Instagram` di landing diganti `AtSign`).
+- **Codemod `next-async-request-api`:** `await params` di 10 route handler dan `await cookies()` di `src/lib/session.ts`.
+- **Konfigurasi:** `outputFileTracingRoot` di `next.config.js`. Duplikat `src/app/favicon.ico` dihapus karena Next 15 menolak konflik dengan `public/favicon.ico`.
+- **Verifikasi:** typecheck bersih, build 38 halaman sukses, dan test 889 lulus / 4 gagal (baseline). Popover notifikasi, dropdown user, dan tooltip sidebar mode ikon dicek muncul di posisi yang benar.
 
 - `SidebarProvider`, `Sidebar collapsible="icon"`, `SidebarHeader`, `SidebarContent`, `SidebarGroup`, `SidebarGroupLabel`, `SidebarMenu`, `SidebarMenuButton isActive`, `SidebarFooter`, `SidebarInset`, `SidebarTrigger`. Ini menggantikan logika collapse dan tooltip buatan sendiri.
 - **Header**: `SidebarTrigger`, `Breadcrumb` (halaman aktif), pemilih outlet dengan `DropdownMenu`, `ThemeToggle`, dan menu user (`Avatar` + `DropdownMenu`) di `SidebarFooter`.

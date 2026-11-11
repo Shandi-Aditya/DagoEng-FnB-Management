@@ -1,46 +1,44 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
-import { useAuth } from "@/contexts/AuthContext";
-import { Sidebar } from "@/features/layout/Sidebar";
-import { Header } from "@/features/layout/Header";
-import { evaluateRouteAccess } from "@/lib/route-guard";
-import { Menu, X } from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
+import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { Spinner } from "@/components/ui/spinner";
+import { useAuth } from "@/contexts/AuthContext";
+import { AppSidebar } from "@/features/layout/AppSidebar";
+import { SiteHeader } from "@/features/layout/SiteHeader";
+import { evaluateRouteAccess } from "@/lib/route-guard";
+import { cn } from "@/lib/utils";
+
+// Operational screens that benefit from maximum horizontal space
+const FULL_WIDTH_ROUTES = new Set(["/pos", "/kitchen", "/tables"]);
+
+const SHELL_STYLE = {
+  "--sidebar-width": "calc(var(--spacing) * 64)",
+  "--header-height": "calc(var(--spacing) * 12)",
+} as CSSProperties;
+
+function StatusScreen({ message, tone = "default" }: { message: string; tone?: "default" | "destructive" }) {
+  return (
+    <div className="flex min-h-svh items-center justify-center bg-background p-4">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <Spinner className={cn("size-6", tone === "destructive" ? "text-destructive" : "text-muted-foreground")} />
+        <p className={cn("text-sm", tone === "destructive" ? "text-destructive" : "text-muted-foreground")}>
+          {message}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { user, isLoading, isLoggingOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // Restore client preference for sidebar collapse state
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("dago_sidebar_collapsed");
-      if (saved !== null) {
-        setIsSidebarCollapsed(saved === "true");
-      }
-    } catch (_) {}
-  }, []);
-
-  const handleToggleSidebar = () => {
-    setIsSidebarCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("dago_sidebar_collapsed", String(next));
-      } catch (_) {}
-      return next;
-    });
-  };
-
-  // Operational screens that benefit from maximum horizontal space
-  const isFullWidthPage = pathname === "/pos" || pathname === "/kitchen" || pathname === "/tables";
+  const isFullWidthPage = FULL_WIDTH_ROUTES.has(pathname);
 
   useEffect(() => {
     if (!isLoading && user === null) {
@@ -57,92 +55,37 @@ export default function DashboardLayout({
   }, [user, isLoading, pathname, router]);
 
   if (!user && !isLoading) {
-    if (isLoggingOut) {
-      // During active logout, let LogoutOverlay render smoothly without clashing with the fallback spinner
-      return null;
-    }
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white p-4">
-        <div className="text-center space-y-3 animate-in fade-in">
-          <div className="w-10 h-10 border-3 border-brand-orange border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-xs text-slate-400 font-medium">Sesi telah berakhir. Mengarahkan ke halaman login...</p>
-        </div>
-      </div>
-    );
+    // During active logout, let LogoutOverlay render without the fallback screen
+    if (isLoggingOut) return null;
+    return <StatusScreen message="Sesi telah berakhir. Mengarahkan ke halaman login" />;
   }
 
   if (user && !isLoading) {
     const evaluation = evaluateRouteAccess(pathname, user.role.slug);
     if (!evaluation.allowed) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white p-4">
-          <div className="text-center space-y-3 animate-in fade-in">
-            <div className="w-10 h-10 border-3 border-red-500 border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-xs text-red-400 font-medium">Akses Ditolak. Role [{user.role.name}] tidak memiliki hak akses ke halaman ini. Mengalihkan...</p>
-          </div>
-        </div>
+        <StatusScreen
+          tone="destructive"
+          message={`Role ${user.role.name} tidak punya akses ke halaman ini. Mengalihkan`}
+        />
       );
     }
   }
 
   return (
-    <div className="h-screen max-h-screen overflow-hidden flex flex-col bg-[#F8FAFC] dark:bg-[#0F172A] text-[#1E293B] dark:text-[#E2E8F0] transition-colors duration-200">
-      <div className="flex-1 flex overflow-hidden h-full">
-        {/* Desktop Sidebar (visible on large screens >= 1024px) */}
-        <aside
-          className={`hidden lg:flex shrink-0 h-full transition-all duration-300 ease-in-out ${
-            isSidebarCollapsed ? "w-20" : "w-64"
-          }`}
+    <SidebarProvider style={SHELL_STYLE}>
+      <AppSidebar variant="inset" />
+      <SidebarInset>
+        <SiteHeader />
+        <div
+          className={cn(
+            "flex w-full flex-1 flex-col",
+            isFullWidthPage ? "p-2 sm:p-4" : "mx-auto max-w-7xl p-4 lg:p-6",
+          )}
         >
-          <Sidebar
-            isCollapsed={isSidebarCollapsed}
-            onToggleCollapse={handleToggleSidebar}
-          />
-        </aside>
-
-        {/* Mobile & Tablet Slide-over Drawer (< 1024px) */}
-        {isMobileMenuOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden flex animate-in fade-in duration-150">
-            <div
-              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
-              onClick={() => setIsMobileMenuOpen(false)}
-            />
-            <div className="relative flex-1 flex flex-col max-w-xs w-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-10 shadow-2xl animate-in slide-in-from-left duration-200">
-              <div className="absolute top-3 right-3 z-20">
-                <button
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="p-2 min-h-[44px] min-w-[44px] rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 flex items-center justify-center touch-manipulation"
-                  aria-label="Tutup Menu"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-              <Sidebar
-                isCollapsed={false}
-                onNavigate={() => setIsMobileMenuOpen(false)}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto">
-          <Header
-            onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
-            isSidebarCollapsed={isSidebarCollapsed}
-            onToggleSidebar={handleToggleSidebar}
-          />
-          <main
-            className={`flex-1 w-full animate-in fade-in duration-200 ${
-              isFullWidthPage
-                ? "p-2.5 sm:p-4 lg:p-5"
-                : "p-3 sm:p-5 lg:p-6 max-w-7xl mx-auto"
-            }`}
-          >
-            {children}
-          </main>
+          {children}
         </div>
-      </div>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

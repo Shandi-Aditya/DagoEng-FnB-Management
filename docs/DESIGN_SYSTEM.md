@@ -2,7 +2,7 @@
 
 Sumber kebenaran untuk tampilan aplikasi. Dibangun di atas **shadcn/ui** dengan preset dari [shadcn/create](https://ui.shadcn.com/create), mengikuti hasil [UNSLOP_AUDIT.md](./UNSLOP_AUDIT.md) dan langkah di [SHADCN_UI_IMPLEMENTATION_PLAN.md](./SHADCN_UI_IMPLEMENTATION_PLAN.md).
 
-- Status: **Fase 2 selesai**. Preset terpasang, 38 komponen shadcn di `src/components/ui/`, dan komponen app di `src/components/app/`. Halaman dimigrasi mulai Fase 3.
+- Status: **Fase 3 selesai**. Shell dashboard memakai `Sidebar` inset resmi shadcn. Proyek berjalan di Next 15 + React 19, sesuai target komponen shadcn.
 - Diputuskan: 11 November 2026
 
 ---
