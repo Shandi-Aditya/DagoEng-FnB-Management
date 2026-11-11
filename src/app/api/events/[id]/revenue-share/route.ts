@@ -9,10 +9,8 @@ export const dynamic = "force-dynamic";
  * POST /api/events/[id]/revenue-share
  * Submit a revenue share proposal (from Organizer or Admin)
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const { id } = params;
     const body = await req.json();
@@ -98,10 +96,8 @@ export async function POST(
  * PATCH /api/events/[id]/revenue-share
  * Accept, Reject, or Counter-Offer a revenue share proposal
  */
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const { id } = params;
     const body = await req.json();

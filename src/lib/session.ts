@@ -47,7 +47,7 @@ export async function createDatabaseSession(
  * Returns the fully hydrated AuthenticatedUser or null.
  */
 export async function validateSessionFromCookie(): Promise<AuthenticatedUser | null> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (!rawToken) return null;
@@ -132,7 +132,7 @@ export async function validateSessionFromCookie(): Promise<AuthenticatedUser | n
  * Revokes session by deleting it from database.
  */
 export async function revokeCurrentSession(): Promise<void> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const rawToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
   if (rawToken) {

@@ -11,10 +11,8 @@ export const dynamic = "force-dynamic";
  * Enforces rate limiting, server-side price calculation, input sanitization,
  * manual bank transfer with destination bank snapshot, or DOKU Checkout session.
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const { id } = params;
     const body: EventBookingPayload = await req.json();

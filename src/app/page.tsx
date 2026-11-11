@@ -25,7 +25,7 @@ import {
   Menu,
   X,
   Mail,
-  Instagram,
+  AtSign,
   MessageCircle,
   Calendar,
   PlusCircle,
@@ -1120,7 +1120,7 @@ export default function PublicLandingPage() {
                   rel="noopener noreferrer"
                   className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 hover:border-brand-sageBright hover:bg-white/10 text-slate-200 transition-colors"
                 >
-                  <Instagram className="w-3.5 h-3.5 text-pink-400" />
+                  <AtSign className="w-3.5 h-3.5 text-slate-400" />
                   <span>@dagocreativehub</span>
                 </a>
                 <a

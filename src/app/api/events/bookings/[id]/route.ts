@@ -17,10 +17,8 @@ export const dynamic = "force-dynamic";
  * Endpoint to update ticket check-in status (Field Officer, Organizer, or Admin)
  * or payment status (strictly Admin).
  */
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const { id } = params;
     const existing = await getBookingById(id);

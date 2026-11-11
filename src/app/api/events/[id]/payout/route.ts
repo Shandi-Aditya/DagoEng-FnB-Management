@@ -15,10 +15,8 @@ export const dynamic = "force-dynamic";
  * Organizer requests payout of accumulated ticket revenue for an event.
  * Server guard: verifies that organizer bank account in server storage is complete & valid.
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const { id } = params;
     const body = await req.json();
@@ -115,10 +113,8 @@ export async function POST(
  * Admin verifies, processes, or rejects organizer payout request.
  * Server guard: destination bank must be complete & valid to approve.
  */
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const { id } = params;
     const auth = await assertEventAdmin(req);
