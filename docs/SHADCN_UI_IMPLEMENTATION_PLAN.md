@@ -286,7 +286,7 @@ Gunakan `--dry-run` atau `--view` dulu untuk melihat dependensi yang ditambahkan
 
 > **Status: selesai.** Catatan implementasi:
 >
-> - **Login** (`src/app/(auth)/login/page.tsx`): `Card` + `FieldGroup` + `Input`, password memakai `InputGroup` dengan tombol tampil/sembunyi, error memakai `Alert`, loading memakai `Spinner`, toggle tema memakai `ModeToggle`. Konteks event (`?from=events`) jadi `Alert` dengan dua tombol. Logika login, register, dan `sanitizeReturnTo` tidak berubah.
+> - **Login** (`src/app/(auth)/login/page.tsx`): layout dua kolom seperti blok shadcn `login-02` (form di kiri, foto di kanan, foto disembunyikan di bawah `lg`), `FieldGroup` + `Input`, password memakai `InputGroup` dengan tombol tampil/sembunyi, error memakai `Alert`, loading memakai `Spinner`, toggle tema memakai `ModeToggle`. Konteks event (`?from=events`) jadi `Alert` dengan dua tombol. Logika login, register, dan `sanitizeReturnTo` tidak berubah.
 > - **Landing** dipecah dari 1167 baris jadi `src/features/landing/` (header, hero, layanan, event, tentang, footer) dan `src/app/page.tsx` hanya merangkai section. Copy ada di `landing-content.ts`.
 > - Carousel 3 slide diganti satu hero tetap. Blob, Sparkles berputar, emoji tenant, badge di atas judul, gradien, dan `hover:scale` dihapus. Scroll-spy diganti link anchor biasa; nav mobile memakai `Sheet`, menu akun memakai `DropdownMenu`.
 > - Logika murni di `landing-logic.ts` (event mendatang, label peran, akses dashboard, label kategori event) dengan test di `tests/landing-content.test.ts`. Kategori event kini tampil sebagai label, bukan enum mentah.
@@ -303,7 +303,17 @@ Gunakan `--dry-run` atau `--view` dulu untuk melihat dependensi yang ditambahkan
 
 ## 10. Fase 6: Layar operasional (2–3 MR)
 
+> Tracker semua fase, workflow per halaman, dan aturan pengujian ada di [REDESIGN_HANDOFF.md](./REDESIGN_HANDOFF.md).
+
 Urutan dari yang paling sering dipakai staf: POS → KDS (kitchen) → pesanan → meja → inventory → menu → pelanggan → co-working → komersial → karyawan → laporan → log aktivitas → events-admin.
+
+> **Progres (dikerjakan per halaman, satu halaman diverifikasi sebelum lanjut):**
+>
+> - [x] **KDS** (`/kitchen`): logika papan di `src/features/kitchen/kitchen-board.ts` (filter FIFO, scoping tenant, stasiun, data cetak ulang) dengan test `tests/kitchen-board.test.ts`; kartu tiket di `KitchenTicketCard.tsx` dengan nomor antrean dan waktu `font-mono tabular-nums`. Filter tipe memakai `Tabs`, status memakai `StatusBadge`, semua tombol aksi memakai `Button` default. Diperbaiki: filter "Takeaway" dulu mencari `TAKE_AWAY` sehingga tidak pernah cocok; legenda SLA kini mengikuti target per pesanan (75% = mendekati, lewat target = terlambat), bukan menit tetap. Generator pesanan demo yang tidak terpakai dihapus. Modal cetak ulang (`KitchenOrderReceiptModal`) masih komponen lama dan ikut dimigrasi bersama POS.
+> - [~] **POS** (2856 → 2329 baris), dikerjakan dua tahap:
+>   - [x] **Kerangka + mode F&B**: `PosToolbar` (mode `Tabs`, status shift), `ProductCatalog` + `ProductCard` (pencarian `InputGroup`, mitra dan kategori `Tabs`, kartu produk berupa `<button>` dengan status tutup/habis/stok tipis), dan panel keranjang `CartOrderSetup` (`NativeSelect` meja dan member), `CartItemList`, `CartPromoField`, `CartSummary`. State dan handler transaksi tetap di `page.tsx`; status produk diuji di `tests/pos-catalog.test.ts`. 17 toast buatan (`setPosToast`) diganti `notify()`. Diperbaiki: nomor antrean takeaway palsu (`Antrean #A-14`) dihapus, label service charge kini dari pengaturan (dulu ditulis 5%), fallback gambar produk kini juga menangkap gambar yang gagal sebelum hydration. Utility `no-scrollbar` (dipakai sidebar shadcn) ternyata belum didefinisikan; sekarang ada di `globals.css`.
+>   - [ ] **Mode co-working** dan modal POS (`ModifierModal`, `PaymentModal`, `ReceiptModal`, `KitchenOrderReceiptModal`, `CashDrawerShiftModal`, buka shift, voucher, pratinjau foto).
+> - [ ] Pesanan, meja, inventory, pelanggan, co-working, komersial, karyawan, laporan, log aktivitas, events-admin.
 
 Untuk setiap halaman:
 
