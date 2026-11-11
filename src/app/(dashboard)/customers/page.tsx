@@ -1,26 +1,25 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useOutlet } from "@/contexts/OutletContext";
-import { useLoyalty } from "@/contexts/LoyaltyContext";
-import type { LoyaltyMember, LoyaltyTier } from "@/types/loyalty";
-import { StatCard } from "@/components/app/stat-card";
+import { useMemo, useState } from "react";
 import { notify } from "@/components/app/notify";
+import { StatCard } from "@/components/app/stat-card";
+import { useAuth } from "@/contexts/AuthContext";
+import { useLoyalty } from "@/contexts/LoyaltyContext";
+import { useOutlet } from "@/contexts/OutletContext";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
-import { Sparkles } from "lucide-react";
+import type { LoyaltyMember, LoyaltyTier } from "@/types/loyalty";
 
-import {
-  calculateCustomerKPIs,
-  filterMembers,
-  buildCustomerExportData,
-} from "@/features/customers/customers-domain";
-import { CustomersToolbar } from "@/features/customers/CustomersToolbar";
-import { CustomersTable } from "@/features/customers/CustomersTable";
 import { AddCustomerModal } from "@/features/customers/AddCustomerModal";
 import { CustomerHistoryModal } from "@/features/customers/CustomerHistoryModal";
-import { TierOverrideModal } from "@/features/customers/TierOverrideModal";
+import {
+  buildCustomerExportData,
+  calculateCustomerKPIs,
+  filterMembers,
+} from "@/features/customers/customers-domain";
 import { CustomersReportPDFModal } from "@/features/customers/CustomersReportPDFModal";
+import { CustomersTable } from "@/features/customers/CustomersTable";
+import { CustomersToolbar } from "@/features/customers/CustomersToolbar";
+import { TierOverrideModal } from "@/features/customers/TierOverrideModal";
 
 export default function CustomersPage() {
   const { user } = useAuth();
@@ -99,62 +98,27 @@ export default function CustomersPage() {
         onOpenAddModal={() => setIsAddModalOpen(true)}
       />
 
-      {/* Info Banner */}
-      <div className="p-4 rounded-xl border bg-card text-xs space-y-3">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-primary/10 text-primary flex items-center justify-center font-medium">
-            <Sparkles className="w-3.5 h-3.5" />
-          </div>
-          <span className="font-medium text-foreground text-sm">
-            Cara Kerja CRM & Akumulasi Tier Loyalty
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-muted-foreground">
-          <div className="p-3 rounded-lg border bg-muted/30 space-y-1">
-            <p className="font-medium text-foreground">1. Pendaftaran Otomatis</p>
-            <p className="text-[11px] leading-relaxed">
-              Saat pelanggan login di QR Self-Order atau kasir memasukkan No. WhatsApp di POS, akun member langsung dibuat.
-            </p>
-          </div>
-
-          <div className="p-3 rounded-lg border bg-muted/30 space-y-1">
-            <p className="font-medium text-foreground">2. Akumulasi Poin Real-Time</p>
-            <p className="text-[11px] leading-relaxed">
-              Setiap transaksi selesai menambah 1 Poin per Rp 1.000 belanja. Tier diperbarui otomatis saat mencapai threshold.
-            </p>
-          </div>
-
-          <div className="p-3 rounded-lg border bg-muted/30 space-y-1">
-            <p className="font-medium text-foreground">3. Override Manajerial</p>
-            <p className="text-[11px] leading-relaxed">
-              Manajer dan Admin dapat menyesuaikan poin dan tier secara manual dengan alasan terverifikasi ke log audit.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <StatCard
-          label="Total Pelanggan"
-          value={`${kpis.totalMembers.toLocaleString("id-ID")}`}
-          hint="Terdaftar di outlet aktif"
+          label="Total member"
+          value={kpis.totalMembers.toLocaleString("id-ID")}
+          hint={`di ${activeOutlet?.name || "outlet aktif"}`}
         />
         <StatCard
-          label="Platinum / Gold"
-          value={`${kpis.platinumGoldCount.toLocaleString("id-ID")}`}
-          hint=">= 1.500 Poin loyalty"
+          label="Platinum & Gold"
+          value={kpis.platinumGoldCount.toLocaleString("id-ID")}
+          hint="≥ 1.500 poin loyalty"
         />
         <StatCard
-          label="Silver Member"
-          value={`${kpis.silverCount.toLocaleString("id-ID")}`}
-          hint="500 - 1.499 Poin loyalty"
+          label="Silver"
+          value={kpis.silverCount.toLocaleString("id-ID")}
+          hint="500 – 1.499 poin loyalty"
         />
         <StatCard
-          label="Bronze Member"
-          value={`${kpis.bronzeCount.toLocaleString("id-ID")}`}
-          hint="0 - 499 Poin loyalty"
+          label="Bronze"
+          value={kpis.bronzeCount.toLocaleString("id-ID")}
+          hint="0 – 499 poin loyalty"
         />
       </div>
 

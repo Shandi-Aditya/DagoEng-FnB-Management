@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { UserPlus } from "lucide-react";
 import {
@@ -68,26 +70,26 @@ export function AddCustomerModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-base font-medium">
+            <UserPlus className="size-4 text-primary" />
             <span>Tambah member</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Tier member ditentukan otomatis berdasarkan saldo poin awal.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          <div className="space-y-1 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
             <p className="font-medium text-foreground">Tier dihitung dari poin</p>
             <p>
-              Tier awal dihitung otomatis dari saldo poin. 0 Poin menghasilkan Tier Bronze.
+              Tier awal dihitung otomatis dari saldo poin. 0 poin menghasilkan tier Bronze.
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="customer-name" className="text-xs">
-              Nama Lengkap <span className="text-destructive">*</span>
+            <Label htmlFor="customer-name" className="text-xs font-medium text-foreground">
+              Nama lengkap <span className="text-destructive">*</span>
             </Label>
             <Input
               id="customer-name"
@@ -100,8 +102,8 @@ export function AddCustomerModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="customer-phone" className="text-xs">
-              Nomor WhatsApp / Telepon <span className="text-destructive">*</span>
+            <Label htmlFor="customer-phone" className="text-xs font-medium text-foreground">
+              Nomor WhatsApp <span className="text-destructive">*</span>
             </Label>
             <Input
               id="customer-phone"
@@ -115,8 +117,8 @@ export function AddCustomerModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="customer-email" className="text-xs">
-                Email (Opsional)
+              <Label htmlFor="customer-email" className="text-xs font-medium text-foreground">
+                Email (opsional)
               </Label>
               <Input
                 id="customer-email"
@@ -124,12 +126,12 @@ export function AddCustomerModal({
                 placeholder="nama@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="text-xs"
+                className="text-xs font-mono"
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="customer-id" className="text-xs">
-                Nomor KTP / ID (Opsional)
+              <Label htmlFor="customer-id" className="text-xs font-medium text-foreground">
+                Nomor identitas (opsional)
               </Label>
               <Input
                 id="customer-id"
@@ -142,8 +144,8 @@ export function AddCustomerModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="customer-points" className="text-xs">
-              Poin Awal Pendaftaran
+            <Label htmlFor="customer-points" className="text-xs font-medium text-foreground">
+              Poin awal
             </Label>
             <Input
               id="customer-points"
@@ -154,23 +156,22 @@ export function AddCustomerModal({
               onChange={(e) => setInitialPoints(Number(e.target.value))}
               className="text-xs font-mono font-medium"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {getTierHint(initialPoints)}
             </p>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+          <DialogFooter className="gap-2 border-t pt-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={handleClose}
-              className="text-xs"
             >
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs font-medium">
-              Simpan & Daftarkan
+            <Button type="submit" size="sm">
+              Simpan member
             </Button>
           </DialogFooter>
         </form>

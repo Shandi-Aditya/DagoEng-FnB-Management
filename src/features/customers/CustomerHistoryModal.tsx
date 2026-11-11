@@ -1,4 +1,6 @@
-import { History, Crown, Star } from "lucide-react";
+"use client";
+
+import { Crown, History, Star } from "lucide-react";
 import type { LoyaltyMember } from "@/types/loyalty";
 import {
   Dialog,
@@ -25,33 +27,33 @@ export function CustomerHistoryModal({
 
   return (
     <Dialog open={Boolean(member)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col overflow-hidden">
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-lg">
         <DialogHeader className="shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <History className="w-5 h-5 text-primary" />
-            <span>Riwayat Poin & Tier — {member.name}</span>
+          <DialogTitle className="flex items-center gap-2 text-base font-medium">
+            <History className="size-4 text-primary" />
+            <span>Riwayat poin dan tier — {member.name}</span>
           </DialogTitle>
-          <DialogDescription className="flex items-center gap-2 pt-1">
-            <span>Tier sekarang</span>
-            <StatusBadge status={getTierTone(member.tier)} className="text-xs">
+          <DialogDescription className="flex items-center gap-2 pt-1 text-xs">
+            <span>Tier sekarang:</span>
+            <StatusBadge status={getTierTone(member.tier)}>
               {member.tier}
             </StatusBadge>
-            <span className="font-mono tabular-nums font-medium text-foreground">
-              ({member.points.toLocaleString("id-ID")} Poin)
+            <span className="font-mono font-medium tabular-nums text-foreground">
+              ({member.points.toLocaleString("id-ID")} poin)
             </span>
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-5 pr-1 py-1">
+        <div className="flex-1 space-y-5 overflow-y-auto py-1 pr-1 text-xs">
           {/* Tier History Section */}
           <div className="space-y-2.5">
             <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-              <Crown className="w-4 h-4 text-primary" />
+              <Crown className="size-3.5 text-primary" />
               <span>Riwayat tier</span>
             </div>
 
             {member.tierHistory.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic rounded-lg border bg-muted/30 p-3">
+              <p className="rounded-lg border bg-muted/30 p-3 text-xs italic text-muted-foreground">
                 Belum ada perubahan tier. Member masih berada pada tier awal.
               </p>
             ) : (
@@ -59,19 +61,19 @@ export function CustomerHistoryModal({
                 {member.tierHistory.map((th) => (
                   <div
                     key={th.id}
-                    className="p-3 rounded-lg border bg-card text-xs space-y-1"
+                    className="space-y-1 rounded-lg border bg-card p-3 text-xs"
                   >
                     <div className="flex items-center justify-between">
                       <p className="font-medium text-foreground">
                         {th.previousTier} →{" "}
-                        <span className="text-primary font-semibold">{th.newTier}</span>
+                        <span className="font-semibold text-primary">{th.newTier}</span>
                       </p>
-                      <span className="font-mono text-[11px] text-muted-foreground">
+                      <span className="font-mono text-xs text-muted-foreground">
                         {th.timestamp.slice(0, 10)}
                       </span>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">{th.reason}</p>
-                    <p className="text-[10px] text-muted-foreground">Oleh: {th.actorName}</p>
+                    <p className="text-xs text-muted-foreground">{th.reason}</p>
+                    <p className="text-xs text-muted-foreground">Oleh: {th.actorName}</p>
                   </div>
                 ))}
               </div>
@@ -81,12 +83,12 @@ export function CustomerHistoryModal({
           {/* Point Ledger Section */}
           <div className="space-y-2.5">
             <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-              <Star className="w-4 h-4 text-primary" />
+              <Star className="size-3.5 text-primary" />
               <span>Riwayat poin</span>
             </div>
 
             {member.pointHistory.length === 0 ? (
-              <p className="text-xs text-muted-foreground italic rounded-lg border bg-muted/30 p-3">
+              <p className="rounded-lg border bg-muted/30 p-3 text-xs italic text-muted-foreground">
                 Belum ada riwayat transaksi poin.
               </p>
             ) : (
@@ -94,24 +96,24 @@ export function CustomerHistoryModal({
                 {member.pointHistory.map((ptx) => (
                   <div
                     key={ptx.id}
-                    className="p-3 flex items-center justify-between gap-3"
+                    className="flex items-center justify-between gap-3 p-3"
                   >
-                    <div className="space-y-0.5 min-w-0">
-                      <p className="font-medium text-foreground truncate">{ptx.reason}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {ptx.actorName} • {ptx.timestamp.slice(0, 10)}
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="truncate font-medium text-foreground">{ptx.reason}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {ptx.actorName} · {ptx.timestamp.slice(0, 10)}
                       </p>
                     </div>
 
-                    <div className="text-right shrink-0">
+                    <div className="shrink-0 text-right">
                       <p
                         className={`font-mono font-medium tabular-nums ${
-                          ptx.points >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
+                          ptx.points >= 0 ? "text-success" : "text-destructive"
                         }`}
                       >
                         {ptx.points >= 0 ? `+${ptx.points}` : ptx.points} Pts
                       </p>
-                      <p className="text-[10px] text-muted-foreground font-mono">
+                      <p className="font-mono text-xs text-muted-foreground">
                         Saldo: {ptx.balanceAfter}
                       </p>
                     </div>
@@ -122,13 +124,12 @@ export function CustomerHistoryModal({
           </div>
         </div>
 
-        <DialogFooter className="shrink-0 pt-3 border-t">
+        <DialogFooter className="shrink-0 border-t pt-3">
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={onClose}
-            className="text-xs"
           >
             Tutup
           </Button>

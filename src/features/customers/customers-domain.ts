@@ -117,3 +117,28 @@ export function buildCustomerExportData(members: LoyaltyMember[]) {
 
   return { headers, rows };
 }
+
+export const TIER_OPTIONS: readonly { id: string; label: string }[] = [
+  { id: "ALL", label: "Semua tier" },
+  { id: "Platinum", label: "Platinum" },
+  { id: "Gold", label: "Gold" },
+  { id: "Silver", label: "Silver" },
+  { id: "Bronze", label: "Bronze" },
+];
+
+export function emptyCustomerMessage(
+  hasFilter: boolean
+): { title: string; description: string } {
+  if (hasFilter) {
+    return {
+      title: "Tidak ada member yang cocok",
+      description: "Ubah kata kunci pencarian atau pilih filter tier lain.",
+    };
+  }
+
+  return {
+    title: "Belum ada member",
+    description: "Pelanggan yang terdaftar dari POS atau self-order akan tercatat di sini.",
+  };
+}
+

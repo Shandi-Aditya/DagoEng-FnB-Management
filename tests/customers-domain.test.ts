@@ -6,6 +6,7 @@ import {
   getTierHint,
   getTierTone,
   buildCustomerExportData,
+  emptyCustomerMessage,
 } from "@/features/customers/customers-domain";
 import type { LoyaltyMember } from "@/types/loyalty";
 
@@ -140,4 +141,14 @@ describe("customers-domain", () => {
     expect(exportData.rows[0][1]).toBe("Gusti Bagus");
     expect(exportData.rows[0][5]).toBe("Platinum");
   });
+
+  it("provides distinct empty-state copy for filtered vs empty customer database", () => {
+    const emptyDb = emptyCustomerMessage(false);
+    expect(emptyDb.title).toBe("Belum ada member");
+
+    const filtered = emptyCustomerMessage(true);
+    expect(filtered.title).toBe("Tidak ada member yang cocok");
+    expect(filtered.description).toContain("Ubah kata kunci");
+  });
 });
+

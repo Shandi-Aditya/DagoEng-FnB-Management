@@ -1,6 +1,15 @@
-import { FileSpreadsheet, Download, FileText, Plus } from "lucide-react";
+"use client";
+
+import { ChevronDown, Download, FileSpreadsheet, FileText, Plus } from "lucide-react";
+
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export interface CustomersToolbarProps {
   outletName: string;
@@ -22,46 +31,33 @@ export function CustomersToolbar({
   return (
     <PageHeader
       title="Pelanggan"
-      description={`${totalMembers} member, poin, dan tier loyalty`}
+      description={`${totalMembers} member terdaftar di ${outletName}.`}
       actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onExportExcel}
-            className="gap-1.5 text-xs"
-          >
-            <FileSpreadsheet className="size-3.5 text-success" />
-            <span>Ekspor Excel</span>
-          </Button>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" />}>
+              Ekspor
+              <ChevronDown className="text-muted-foreground" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onExportExcel}>
+                <FileSpreadsheet />
+                Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onExportCSV}>
+                <Download />
+                CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenPDF}>
+                <FileText />
+                Laporan PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onExportCSV}
-            className="gap-1.5 text-xs"
-          >
-            <Download className="size-3.5 text-muted-foreground" />
-            <span>Ekspor CSV</span>
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onOpenPDF}
-            className="gap-1.5 text-xs"
-          >
-            <FileText className="size-3.5 text-muted-foreground" />
-            <span>Cetak PDF</span>
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={onOpenAddModal}
-            className="gap-1.5 text-xs font-medium"
-          >
-            <Plus className="size-3.5" />
-            <span>Tambah member</span>
+          <Button onClick={onOpenAddModal}>
+            <Plus />
+            Tambah member
           </Button>
         </div>
       }

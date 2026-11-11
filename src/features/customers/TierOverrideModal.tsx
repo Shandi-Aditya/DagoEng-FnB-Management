@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+"use client";
+
+import { useEffect, useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import type { LoyaltyMember, LoyaltyTier } from "@/types/loyalty";
 import {
@@ -49,36 +51,36 @@ export function TierOverrideModal({
     <Dialog open={Boolean(member)} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-base font-medium">
+            <ShieldAlert className="size-4 text-primary" />
             <span>Ubah tier manual</span>
           </DialogTitle>
-          <DialogDescription>
-            Tier biasanya dihitung dari poin. Pakai ini hanya untuk pengecualian.
+          <DialogDescription className="text-xs">
+            Tier biasanya dihitung dari poin. Gunakan menu ini hanya untuk pengecualian khusus.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+          <div className="space-y-1 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
             <p className="font-medium text-foreground">Tercatat di log aktivitas</p>
             <p>
-              Nama akun Anda dan alasannya ikut tercatat.
+              Nama akun Anda dan alasan pengubahan tier akan tercatat di log audit.
             </p>
           </div>
 
-          <div className="text-xs space-y-1">
+          <div className="space-y-1 text-xs">
             <p className="text-muted-foreground">Member</p>
             <p className="text-sm font-medium text-foreground">
               {member.name}{" "}
               <span className="text-xs font-normal text-muted-foreground">
-                (Tier saat ini: {member.tier}, {member.points.toLocaleString("id-ID")} Pts)
+                (Tier saat ini: {member.tier}, {member.points.toLocaleString("id-ID")} poin)
               </span>
             </p>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="override-tier" className="text-xs">
-              Pilih Tier Baru
+            <Label htmlFor="override-tier" className="text-xs font-medium text-foreground">
+              Pilih tier baru
             </Label>
             <NativeSelect
               id="override-tier"
@@ -94,8 +96,8 @@ export function TierOverrideModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="override-reason" className="text-xs">
-              Alasan Manual Override <span className="text-destructive">*</span>
+            <Label htmlFor="override-reason" className="text-xs font-medium text-foreground">
+              Alasan pengubahan <span className="text-destructive">*</span>
             </Label>
             <Textarea
               id="override-reason"
@@ -108,18 +110,17 @@ export function TierOverrideModal({
             />
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+          <DialogFooter className="gap-2 border-t pt-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={onClose}
-              className="text-xs"
             >
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs font-medium">
-              Simpan & Catat Audit
+            <Button type="submit" size="sm">
+              Simpan perubahan
             </Button>
           </DialogFooter>
         </form>
