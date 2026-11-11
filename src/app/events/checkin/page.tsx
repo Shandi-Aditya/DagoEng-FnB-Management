@@ -35,7 +35,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { CommunityEvent, EventTicketOrder, AttendeeCheckInStatus } from "@/types/event";
 import { EventSearchInput } from "@/components/events/EventSearchInput";
-import { formatCurrencyIDR } from "@/lib/utils";
+import { formatCurrencyIDR, normalizeIndonesianPhone } from "@/lib/utils";
 import { canAccessEventCheckIn, getRoleSlug } from "@/lib/rbac";
 import { EventCheckInQRScannerModal } from "./EventCheckInQRScannerModal";
 import { QRCodeSVG } from "qrcode.react";
@@ -218,11 +218,14 @@ export default function EventCheckInDashboardPage() {
     const q = ticketSearch.trim().toLowerCase();
     if (!q) return list;
 
+    const normQ = normalizeIndonesianPhone(q);
     return list.filter((b) => {
       const matchCode = (b.ticketCode || "").toLowerCase().includes(q);
       const matchName = (b.guestName || "").toLowerCase().includes(q);
       const matchEmail = (b.guestEmail || "").toLowerCase().includes(q);
-      const matchPhone = (b.guestPhone || "").toLowerCase().includes(q);
+      const matchPhone =
+        (b.guestPhone || "").toLowerCase().includes(q) ||
+        (normQ.length >= 4 && normalizeIndonesianPhone(b.guestPhone || "").includes(normQ));
       const matchInst = (b.institution || "").toLowerCase().includes(q);
       return matchCode || matchName || matchEmail || matchPhone || matchInst;
     });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEventBookings, checkRateLimit } from "@/lib/events";
 import { getRequestAuthUser } from "@/lib/server-auth";
+import { normalizeIndonesianPhone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -136,13 +137,7 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      const normalizePhone = (p: string) => {
-        const digits = p.replace(/\D/g, "");
-        if (digits.startsWith("62")) return "0" + digits.slice(2);
-        return digits;
-      };
-
-      const normalizedQueryPhone = normalizePhone(queryPhone);
+      const normalizedQueryPhone = normalizeIndonesianPhone(queryPhone);
       if (normalizedQueryPhone.length < 8) {
         return NextResponse.json(
           {
@@ -156,7 +151,7 @@ export async function GET(req: NextRequest) {
       const matchingBookings = allBookings.filter(
         (b) =>
           b.guestEmail.toLowerCase().trim() === queryEmail &&
-          normalizePhone(b.guestPhone || "") === normalizedQueryPhone
+          normalizeIndonesianPhone(b.guestPhone || "") === normalizedQueryPhone
       );
 
       const safeMatches = matchingBookings.map((match) => ({

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEventBookings, getEventOperationalStats } from "@/lib/events";
 import { assertEventAdmin, assertCheckInAuth, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
+import { normalizeIndonesianPhone } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +45,30 @@ export async function GET(req: NextRequest) {
 
     const rawBookings = await getEventBookings(eventId);
 
-    const safeBookings = rawBookings.map((b) => {
+    const phoneQuery = searchParams.get("phone")?.trim();
+    const searchQuery = (searchParams.get("search") || searchParams.get("q"))?.trim().toLowerCase();
+
+    let filteredBookings = rawBookings;
+    if (phoneQuery) {
+      const normPhone = normalizeIndonesianPhone(phoneQuery);
+      filteredBookings = filteredBookings.filter((b) =>
+        normalizeIndonesianPhone(b.guestPhone || "").includes(normPhone)
+      );
+    }
+    if (searchQuery) {
+      const normPhone = normalizeIndonesianPhone(searchQuery);
+      filteredBookings = filteredBookings.filter((b) => {
+        const matchCode = (b.ticketCode || "").toLowerCase().includes(searchQuery);
+        const matchName = (b.guestName || "").toLowerCase().includes(searchQuery);
+        const matchEmail = (b.guestEmail || "").toLowerCase().includes(searchQuery);
+        const matchPhone =
+          (b.guestPhone || "").toLowerCase().includes(searchQuery) ||
+          (normPhone.length >= 4 && normalizeIndonesianPhone(b.guestPhone || "").includes(normPhone));
+        return matchCode || matchName || matchEmail || matchPhone;
+      });
+    }
+
+    const safeBookings = filteredBookings.map((b) => {
       const { guestToken: _token, ...rest } = b;
       if (canViewUnmasked) return rest;
       return {

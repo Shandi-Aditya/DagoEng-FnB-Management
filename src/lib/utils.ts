@@ -25,3 +25,18 @@ export function formatCurrencyIDR(amount: number): string {
 export function formatPercentage(val: number): string {
   return `${(val * 100).toFixed(1)}%`;
 }
+
+/**
+ * Normalizes Indonesian phone numbers into canonical format: "08xxxxxxxxxx".
+ * Handles: "+62 812-3456-7890", "628123456789", "08123456789", "8123456789".
+ */
+export function normalizeIndonesianPhone(phone: string): string {
+  if (!phone) return "";
+  let digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("62")) {
+    digits = "0" + digits.slice(2);
+  } else if (digits.startsWith("8")) {
+    digits = "0" + digits;
+  }
+  return digits;
+}
