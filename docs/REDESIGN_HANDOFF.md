@@ -11,11 +11,12 @@ Terakhir diperbarui: 11 November 2026, branch `feat/shadcn-foundation`.
 | [UNSLOP_AUDIT.md](./UNSLOP_AUDIT.md) | Temuan audit UI lama dan alasannya | Sekali, untuk konteks |
 | [SHADCN_UI_IMPLEMENTATION_PLAN.md](./SHADCN_UI_IMPLEMENTATION_PLAN.md) | Rencana fase 0–8, pemetaan komponen lama ke shadcn (bagian 6), checklist per halaman (bagian 13) | Sebelum mulai fase atau halaman baru |
 | [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) | Preset, token warna, tipografi, komponen app, pengecualian tombol | Setiap kali ragu soal warna, ukuran, atau komponen |
+| [REDESIGN_REVIEW_GEMINI.md](./REDESIGN_REVIEW_GEMINI.md) | Review pekerjaan Gemini dan rencana perbaikan P0–P4 | Sebelum menyentuh halaman Fase 6 yang sudah dipecah |
 | Dokumen ini | Tracker, workflow, jebakan | Setiap mulai sesi |
 
 ## 2. Tracker fase
 
-Status: `selesai` (sudah di-commit), `selesai, belum commit`, `berjalan`, `belum`.
+Status: `selesai` (sudah di-commit), `selesai, belum commit`, `struktur selesai` (sudah dipecah ke `features/`, tampilan dan copy belum di-redesign), `berjalan`, `belum`.
 
 | Fase | Cakupan | Status | Commit |
 | --- | --- | --- | --- |
@@ -39,26 +40,26 @@ Urutan mengikuti seberapa sering staf memakai halaman. Kerjakan satu halaman sam
 | --- | --- | --- | --- |
 | `/kitchen` (KDS) | 572 | selesai (`5f98197`) | `src/features/kitchen/*`, test `kitchen-board.test.ts` |
 | `/pos` mode F&B + kerangka | 2856 → 2329 | selesai (`5f98197`) | `src/features/pos/{PosToolbar,ProductCatalog,ProductCard,Cart*}.tsx`, `pos-catalog.ts` |
-| `/pos` mode co-working | (bagian dari 2329) | belum | Baris 1209–1953 di `pos/page.tsx` (blok `2. CO-WORKING TRANSACTION MODE` sampai `MODALS`) |
-| Modal POS | 2765 total | belum | `ModifierModal`, `PaymentModal` (901), `ReceiptModal`, `KitchenOrderReceiptModal`, `CashDrawerShiftModal`, `DailyClosingPDFModal`, plus modal inline buka shift, voucher, foto ruang, closing |
-| `/orders` | 896 | belum | |
-| `/tables` | 910 | belum | |
-| `/inventory` | 2038 | belum | Pecah dulu |
-| `/menu` | 21 | belum | Hanya pembungkus |
-| `/customers` | 727 | belum | |
-| `/coworking` | 1579 | belum | |
-| `/commercial` | 903 | belum | |
-| `/employees` | 1697 | belum | |
-| `/reports` | 575 | belum | Pakai `DateRangePicker` yang sudah baru |
-| `/activity-log` | 1189 | belum | |
-| `/ai-insight` | 358 | belum | |
+| `/pos` mode co-working | 2329 → 1493 | struktur selesai, redesign belum | `src/features/pos/{CoworkingToolbar,CoworkingRoomCard,CoworkingPhotoModal,CoworkingBookingPanel}.tsx`, `pos-coworking.ts`, test `pos-coworking.test.ts` |
+| Modal POS | 2765 total | berjalan | Import sudah ke shadcn, tapi isinya masih gaya lama (mis. `PaymentModal` 278 kelas lama, `DailyClosingPDFModal` 170). `PosVoucherModal` dan `PosOpenShiftModal` baru dipisah dari `pos/page.tsx`. Lihat review P4. |
+| `/orders` | 896 → 325 | struktur selesai, redesign belum | `src/features/orders/{OrdersToolbar,OrdersTable,OrderDetailModal,OrdersReportPDFModal}.tsx`, `orders-domain.ts`, test `orders-domain.test.ts` |
+| `/tables` | 910 → 225 | struktur selesai, redesign belum | `src/features/tables/{TablesToolbar,FloorPlanView,ReservationsView,TableDetailModal,AddTableModal,AddAreaModal,AddReservationModal}.tsx`, `tables-domain.ts`, test `tables-domain.test.ts` |
+| `/inventory` | 2038 → 466 | struktur selesai, redesign belum | `src/features/inventory/{InventoryToolbar,InventoryStockTab,InventoryRecipesTab,InventoryPurchaseOrdersTab,InventoryOpnameTab,RestockAlertModal,StockAdjustmentModal,BOMSimulatorModal,CreatePOModal,PODetailModal,StockOpnameModal}.tsx`, `inventory-domain.ts`, test `inventory-domain.test.ts` |
+| `/menu` | 21 | struktur selesai, redesign belum | Hanya pembungkus redirect ke `/settings`, token dibersihkan |
+| `/customers` | 727 → 197 | struktur selesai, redesign belum | `src/features/customers/{CustomersToolbar,CustomersTable,AddCustomerModal,CustomerHistoryModal,TierOverrideModal,CustomersReportPDFModal}.tsx`, `customers-domain.ts`, test `customers-domain.test.ts` |
+| `/coworking` | 1579 → 404 | struktur selesai, redesign belum | `src/features/coworking/{CoworkingToolbar,CoworkingSpacesTab,CoworkingBookingsTab,CoworkingMembersTab,CoworkingLogsTab,NewBookingModal,NewMemberModal}.tsx`, `coworking-domain.ts`, test `coworking-domain.test.ts` |
+| `/commercial` | 903 → 267 | struktur selesai, redesign belum | `src/features/commercial/{CommercialToolbar,CommercialTable,CommercialDetailModal,CreateLeaseModal,RecordPaymentModal,ChangeLeaseStatusModal,CommercialReportPDFModal}.tsx`, `commercial-domain.ts`, test `commercial-domain.test.ts` |
+| `/employees` | 1697 → 373 | struktur selesai, redesign belum | `src/features/employees/{EmployeesToolbar,EmployeesShiftsTab,EmployeesDirectoryTab,AddEmployeeModal,EditEmployeeModal,EmployeeDetailModal,OpenShiftModal,CloseShiftModal,DeleteEmployeeDialog,EmployeesReportPDFModal}.tsx`, `employees-domain.ts`, test `employees-domain.test.ts` |
+| `/reports` | 575 → 155 | struktur selesai, redesign belum | `src/features/reports/{ReportsToolbar,ReportsCategorySelector,ReportsPreviewTable,StructuredReportPDFModal}.tsx`, `reports-domain.ts`, test `reports-domain.test.ts` |
+| `/activity-log` | 1189 → 217 | struktur selesai, redesign belum | `src/features/activity-log/{ActivityLogToolbar,ActivityLogStatsCards,ActivityLogFilterBar,ActivityLogTableView,ActivityLogTimelineView,ActivityLogDetailModal,ActivityLogRestrictedGuard,ActivityLogPDFModal}.tsx`, `activity-log-domain.ts`, test `activity-log-domain.test.ts` |
+| `/ai-insight` | 358 → 133 | struktur selesai, redesign belum | `src/features/ai-insight/{AIInsightHeader,AIInsightQuickPrompts,AIInsightChatContainer}.tsx`, `ai-insight-domain.ts`, test `ai-insight-domain.test.ts` |
 | `/events-admin` | 4700 | belum | Pecah dulu |
 
-Masih ada 50 file yang meng-import `components/legacy`. Cek dengan `grep -rl "components/legacy" src | wc -l`.
+Masih ada 20 file yang meng-import `components/legacy`. Cek dengan `grep -rl "components/legacy" src | wc -l`.
 
 ## 3. Kondisi working tree saat handoff
 
-Semua pekerjaan redesign sudah di-commit. Yang tersisa di working tree bukan bagian redesign dan **tidak boleh ikut di-commit**: `data/*`, `.audit/`, `Laporan_Settlement_Mingguan_Dago_Mitra.xlsx`, `docs/KLARIFIKASI_SETTLEMENT_MITRA.md`, `panduan.md`. Stage file satu per satu, jangan `git add -A`.
+Pemecahan struktural halaman Fase 6 oleh Gemini (`src/features/*`, `*-domain.ts`, test domain, modal POS) masih belum di-commit; lihat `REDESIGN_REVIEW_GEMINI.md` P0. Swap import setengah jadi di halaman Fase 7 sudah dikembalikan. Yang tersisa di working tree bukan bagian redesign dan **tidak boleh ikut di-commit**: `data/*`, `.audit/`, `Laporan_Settlement_Mingguan_Dago_Mitra.xlsx`, `docs/KLARIFIKASI_SETTLEMENT_MITRA.md`, `panduan.md`. Stage file satu per satu, jangan `git add -A`.
 
 ## 4. Aturan yang sudah disepakati
 
