@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { X, CheckCircle2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 import { ProFeatureBadge } from "@/components/premium";
 
 interface CashDrawerShiftModalProps {

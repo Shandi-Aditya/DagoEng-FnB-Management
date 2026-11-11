@@ -4,7 +4,7 @@ import React from "react";
 import Image from "next/image";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { X, Printer, CheckCircle2, Laptop } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 
 export interface CoworkingReceiptData {
   bookingCode: string;

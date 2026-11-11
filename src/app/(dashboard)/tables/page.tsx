@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useTables, TableItem, AreaItem, ScheduledReservation } from "@/contexts/TableContext";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/legacy/ui/card";
 import {
   Grid,
   Plus,
@@ -19,7 +19,7 @@ import {
   Search,
   RotateCcw,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 import { formatCurrencyIDR } from "@/lib/utils";
 
 export default function TablesPage() {

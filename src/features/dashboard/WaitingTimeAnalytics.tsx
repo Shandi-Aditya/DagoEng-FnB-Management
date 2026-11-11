@@ -3,7 +3,7 @@
 import React from "react";
 import { useOrders } from "@/contexts/OrderContext";
 import { analyzeOperationalBottlenecks, formatMinutesToHuman } from "@/lib/order-analytics";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/legacy/ui/card";
 import { Timer, AlertTriangle, CheckCircle2, Clock, Activity, Zap } from "lucide-react";
 
 export function WaitingTimeAnalytics() {

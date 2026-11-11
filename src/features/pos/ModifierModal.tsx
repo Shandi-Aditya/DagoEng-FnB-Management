@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { POSProductItem, POSVariantOption, POSModifierOption, POSCartItem } from "./types";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { X, Plus, Minus, Check, Coffee } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 
 interface ModifierModalProps {
   product: POSProductItem | null;

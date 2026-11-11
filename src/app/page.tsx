@@ -32,9 +32,9 @@ import {
   ShieldCheck,
   Flame,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/legacy/ui/button";
+import { Badge } from "@/components/legacy/ui/badge";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
 import { PublicCommunityEvent } from "@/types/event";
 
 // Hero Slides Data

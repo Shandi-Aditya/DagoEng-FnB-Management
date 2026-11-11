@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/legacy/ui/card";
 import { useOrders } from "@/contexts/OrderContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -226,7 +226,7 @@ export function RevenueChartPreview() {
                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: axisColor }} axisLine={{ stroke: isDark ? "#334155" : "#e2e8f0" }} />
                 <YAxis tick={{ fontSize: 11, fill: axisColor }} tickFormatter={formatYAxisValue} axisLine={false} />
                 <Tooltip
-                  formatter={(value: any, name: string) => {
+                  formatter={(value, name) => {
                     const num = Number(value) || 0;
                     return [formatCurrencyIDR(num), name];
                   }}
@@ -253,7 +253,7 @@ export function RevenueChartPreview() {
                 <XAxis dataKey="hour" tick={{ fontSize: 11, fill: axisColor }} axisLine={{ stroke: isDark ? "#334155" : "#e2e8f0" }} />
                 <YAxis tick={{ fontSize: 11, fill: axisColor }} tickFormatter={formatYAxisValue} axisLine={false} />
                 <Tooltip
-                  formatter={(value: any, name: string) => {
+                  formatter={(value, name) => {
                     const num = Number(value) || 0;
                     if (name === "Omzet per Jam") return [formatCurrencyIDR(num), name];
                     return [value, name];
@@ -273,7 +273,7 @@ export function RevenueChartPreview() {
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: axisColor }} axisLine={{ stroke: isDark ? "#334155" : "#e2e8f0" }} />
                 <YAxis tick={{ fontSize: 11, fill: axisColor }} tickFormatter={formatYAxisValue} axisLine={false} />
                 <Tooltip
-                  formatter={(value: any, name: string) => [formatCurrencyIDR(Number(value) || 0), name]}
+                  formatter={(value, name) => [formatCurrencyIDR(Number(value) || 0), name]}
                   contentStyle={{ backgroundColor: tooltipBg, borderRadius: "10px", border: `1px solid ${tooltipBorder}`, color: isDark ? "#f8fafc" : "#0f172a", fontSize: "12px" }}
                 />
                 <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "8px" }} />

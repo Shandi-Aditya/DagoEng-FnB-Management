@@ -11,7 +11,7 @@ import { useSettings } from "@/contexts/SettingsContext";
 import { OrderRecord } from "@/types/order";
 import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import { calculateOrderMetrics, formatMinutesToHuman } from "@/lib/order-analytics";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/legacy/ui/card";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
   ClipboardList,
@@ -31,8 +31,8 @@ import {
   FileSpreadsheet,
   Printer,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pagination";
+import { Button } from "@/components/legacy/ui/button";
+import { TablePagination, TablePageSizeSelector } from "@/components/legacy/ui/table-pagination";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { PaymentModal } from "@/features/pos/PaymentModal";
 import { POSCartItem, POSPaymentMethod, POSReceiptData, SplitGuestBill } from "@/features/pos/types";

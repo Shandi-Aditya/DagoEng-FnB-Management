@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useInventory } from "@/contexts/InventoryContext";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/legacy/ui/card";
 import {
   Package,
   AlertTriangle,
@@ -28,8 +28,8 @@ import {
   Scale,
   History,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pagination";
+import { Button } from "@/components/legacy/ui/button";
+import { TablePagination, TablePageSizeSelector } from "@/components/legacy/ui/table-pagination";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { IngredientItem, PurchaseOrder, StockAdjustmentLog, RecipeBOM, StockOpnameRecord, StockOpnameReason } from "@/types/inventory";

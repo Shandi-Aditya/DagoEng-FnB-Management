@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useDateFilter, DateShortcut } from "@/contexts/DateFilterContext";
 import { Calendar, ChevronDown, Check, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 
 const SHORTCUTS: { key: DateShortcut; label: string }[] = [
   { key: "TODAY", label: "Hari Ini (14 Sep)" },

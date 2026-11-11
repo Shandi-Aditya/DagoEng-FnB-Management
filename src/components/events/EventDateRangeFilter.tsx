@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Calendar, AlertCircle, RotateCcw, Check, Clock, ChevronDown, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 
 export interface DateRange {
   startDate: string; // YYYY-MM-DD

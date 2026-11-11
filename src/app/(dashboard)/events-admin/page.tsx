@@ -46,10 +46,10 @@ import {
   TrendingUp,
   ChevronUp,
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pagination";
+import { Card } from "@/components/legacy/ui/card";
+import { Button } from "@/components/legacy/ui/button";
+import { Badge } from "@/components/legacy/ui/badge";
+import { TablePagination, TablePageSizeSelector } from "@/components/legacy/ui/table-pagination";
 import { CommunityEvent, EventCategory, EventStatus, EventTicketOrder, EventOperationalStats, PayoutRecord } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV } from "@/lib/export-utils";

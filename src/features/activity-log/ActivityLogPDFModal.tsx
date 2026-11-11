@@ -14,7 +14,7 @@ import {
   AlertTriangle,
   Lock,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 import { ActivityLogEntry } from "@/types/audit";
 
 interface ActivityLogPDFModalProps {

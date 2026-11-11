@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/legacy/ui/card";
 import { useOrders } from "@/contexts/OrderContext";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { Store } from "lucide-react";

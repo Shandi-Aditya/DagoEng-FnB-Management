@@ -22,8 +22,8 @@ import {
   Zap,
   Laptop,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/legacy/ui/button";
+import { Badge } from "@/components/legacy/ui/badge";
 
 export interface UnifiedPaymentItem {
   id: string;

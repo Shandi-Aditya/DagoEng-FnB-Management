@@ -13,9 +13,9 @@ import {
   Phone,
   MessageCircle,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/legacy/ui/button";
+import { Card } from "@/components/legacy/ui/card";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
 
 interface RecoveredBooking {
   id: string;

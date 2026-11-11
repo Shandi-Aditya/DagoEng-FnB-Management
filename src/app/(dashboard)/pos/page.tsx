@@ -75,7 +75,7 @@ import {
   Building,
   Eye,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 
 const COWORKING_TIME_SLOTS = [
   "09:00",

@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
 import { LoyaltyMember, LoyaltyTier } from "@/types/loyalty";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/legacy/ui/card";
 import {
   Users,
   Award,
@@ -25,8 +25,8 @@ import {
   FileText,
   Sparkles,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pagination";
+import { Button } from "@/components/legacy/ui/button";
+import { TablePagination, TablePageSizeSelector } from "@/components/legacy/ui/table-pagination";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { CustomersReportPDFModal } from "@/features/customers/CustomersReportPDFModal";

@@ -174,6 +174,17 @@ Catatan yang ditemukan saat pengerjaan:
 
 Pasang komponen resmi, lalu buat lapisan kompatibilitas supaya import lama tetap jalan.
 
+**Status (11 November 2026): selesai di branch `feat/shadcn-foundation`.**
+
+- **Lapisan kompatibilitas:** alih-alih mapping variant di `index.ts`, komponen lama (11 file) dipindah utuh ke `src/components/legacy/ui/`, dan import di 61 file diarahkan ke sana. Tampilan halaman lama tidak berubah. `src/components/ui/` sekarang murni berisi registry shadcn.
+- **Komponen shadcn (38):** alert, alert-dialog, avatar, badge, breadcrumb, button, calendar, card, chart, checkbox, combobox, dialog, drawer, dropdown-menu, empty, field, input, input-group, kbd, label, native-select, pagination, popover, progress, radio-group, scroll-area, select, separator, sheet, sidebar, skeleton, spinner, switch, table, tabs, textarea, toast, dan tooltip.
+- **Dependensi baru:** `react-day-picker` 10. Recharts naik dari 2 ke 3 (dibutuhkan `chart`). `RevenueChartPreview.tsx` disesuaikan tipe `formatter`-nya.
+- **`src/components/app/`:** `PageHeader`, `SectionHeader`, `StatCard`, `formatChange`, `UnitDot`, `StatusBadge`, `EmptyState`, `ConfirmDialog`, dan `notify()`. Ada 21 test di `tests/app-components.test.ts` yang merender HTML statis di lingkungan node. `vitest.config.ts` memakai `jsx: "automatic"`.
+- **Provider:** `TooltipProvider` dan `Toaster` dipasang di `AppProviders`.
+- **Verifikasi:** typecheck bersih, `next build` sukses (38 halaman), test 879 lulus / 4 gagal (baseline yang sama), dan dashboard dicek tanpa error konsol.
+
+Aturan migrasi per halaman (Fase 3–7): ganti import `@/components/legacy/ui/*` dengan `@/components/ui/*` atau `@/components/app`. Folder `legacy/ui` dihapus di Fase 8 setelah tidak ada lagi yang mengimpornya.
+
 ```bash
 npx shadcn@latest add button badge card input textarea label field select native-select checkbox radio-group switch tabs table skeleton pagination dialog alert-dialog sheet drawer dropdown-menu popover tooltip calendar separator scroll-area avatar breadcrumb progress empty spinner kbd sidebar chart toast
 ```

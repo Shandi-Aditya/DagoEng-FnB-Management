@@ -21,7 +21,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 import {
   QRISVerificationDetail,
 } from "@/lib/qris-verification";

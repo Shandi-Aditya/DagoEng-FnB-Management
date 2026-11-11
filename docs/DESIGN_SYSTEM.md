@@ -2,7 +2,7 @@
 
 Sumber kebenaran untuk tampilan aplikasi. Dibangun di atas **shadcn/ui** dengan preset dari [shadcn/create](https://ui.shadcn.com/create), mengikuti hasil [UNSLOP_AUDIT.md](./UNSLOP_AUDIT.md) dan langkah di [SHADCN_UI_IMPLEMENTATION_PLAN.md](./SHADCN_UI_IMPLEMENTATION_PLAN.md).
 
-- Status: **Fase 1 selesai**. Preset terpasang (`components.json`, token di `src/app/globals.css`). Komponen shadcn dipasang mulai Fase 2.
+- Status: **Fase 2 selesai**. Preset terpasang, 38 komponen shadcn di `src/components/ui/`, dan komponen app di `src/components/app/`. Halaman dimigrasi mulai Fase 3.
 - Diputuskan: 11 November 2026
 
 ---
@@ -170,6 +170,10 @@ Semua komponen dasar berasal dari registry shadcn (`src/components/ui/*`) dan **
 | `notify()` | `toast` (Base UI) |
 
 Daftar lengkap pemetaan komponen lama ke shadcn ada di bagian Fase 2 [rencana implementasi](./SHADCN_UI_IMPLEMENTATION_PLAN.md).
+
+Komponen lama ada di `src/components/legacy/ui/` hanya selama migrasi. **Kode baru tidak boleh mengimpor dari `legacy`.**
+
+Catatan style Mira: `Badge` bawaan memakai teks 10px. Untuk badge yang harus dibaca cepat (status pesanan, pembayaran), tambahkan `className="text-xs"` saat dipakai, jangan mengubah file `ui/badge.tsx`.
 
 ---
 

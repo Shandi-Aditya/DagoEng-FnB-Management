@@ -28,10 +28,10 @@ import {
   Filter,
   ScanLine,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/legacy/ui/button";
+import { Card } from "@/components/legacy/ui/card";
+import { Badge } from "@/components/legacy/ui/badge";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { CommunityEvent, EventTicketOrder, AttendeeCheckInStatus } from "@/types/event";
 import { EventSearchInput } from "@/components/events/EventSearchInput";

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/legacy/ui/card";
 import { useInventory } from "@/contexts/InventoryContext";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 

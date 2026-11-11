@@ -5,7 +5,7 @@ import Image from "next/image";
 import { POSReceiptData } from "./types";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { X, Printer, Share2, CheckCircle2, RotateCcw, Store, MessageSquare, UtensilsCrossed } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 import { DEFAULT_FNB_TENANTS, getAllStoredTenantSettings, getTenantName } from "@/lib/tenant";
 import { MASTER_HQ_OUTLET } from "@/lib/receipt-publisher";
 import { getOrCreateSimulatedWifiVoucher, getSimulatedWifiCalcBasis } from "@/lib/wifi";

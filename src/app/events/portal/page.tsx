@@ -63,11 +63,11 @@ import {
   Landmark,
 } from "lucide-react";
 import { formatCurrencyIDR } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pagination";
+import { Card } from "@/components/legacy/ui/card";
+import { Badge } from "@/components/legacy/ui/badge";
+import { Button } from "@/components/legacy/ui/button";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
+import { TablePagination, TablePageSizeSelector } from "@/components/legacy/ui/table-pagination";
 import { CommunityEvent, EventTicketOrder, OrganizerPortalData, AttendeeCheckInStatus, PayoutRecord, EventCategory } from "@/types/event";
 import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { useAuth } from "@/contexts/AuthContext";

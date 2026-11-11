@@ -14,7 +14,7 @@ import { OutletCompareCard } from "@/features/dashboard/OutletCompareCard";
 import { InventoryRiskCard } from "@/features/dashboard/InventoryRiskCard";
 import { DateRangePicker } from "@/features/dashboard/DateRangePicker";
 import { DailyProgressSummary } from "@/features/dashboard/DailyProgressSummary";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/legacy/ui/card";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
   DollarSign,

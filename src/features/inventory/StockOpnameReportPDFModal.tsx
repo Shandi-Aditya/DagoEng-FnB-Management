@@ -13,7 +13,7 @@ import {
   TrendingDown,
   CheckCircle2,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 
 interface StockOpnameReportPDFModalProps {
   isOpen: boolean;

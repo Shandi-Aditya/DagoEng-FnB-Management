@@ -22,7 +22,7 @@ import {
   ExternalLink,
   Menu,
 } from "lucide-react";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
 
 export function Header({
   onOpenMobileMenu,

@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/legacy/ui/card";
 import {
   Laptop,
   Users,
@@ -34,7 +34,7 @@ import {
   Settings,
 } from "lucide-react";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { SpaceType, CoworkingSpaceItem } from "@/types/coworking";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";

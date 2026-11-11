@@ -6,7 +6,7 @@ import { useOrders } from "@/contexts/OrderContext";
 import { OrderRecord, OrderStatus } from "@/types/order";
 import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import { calculateOrderMetrics, formatMinutesToHuman } from "@/lib/order-analytics";
-import { Card } from "@/components/ui/card";
+import { Card } from "@/components/legacy/ui/card";
 import {
   UtensilsCrossed,
   Clock,
@@ -23,7 +23,7 @@ import {
   Sparkles,
   Printer,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 import { soundChime } from "@/lib/audio-chime";
 import { ProFeatureBadge } from "@/components/premium";
 import { isAddonActive } from "@/lib/subscription";

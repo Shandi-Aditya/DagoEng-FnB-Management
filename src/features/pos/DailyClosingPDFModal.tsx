@@ -14,7 +14,7 @@ import {
   Send,
   FileText,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 
 export interface ClosingReportData {
   reportNumber: string;

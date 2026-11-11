@@ -16,8 +16,8 @@ import {
   User,
   Users,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/legacy/ui/button";
+import { Badge } from "@/components/legacy/ui/badge";
 import { CommunityEvent, EventTicketOrder } from "@/types/event";
 import { Html5Qrcode } from "html5-qrcode";
 

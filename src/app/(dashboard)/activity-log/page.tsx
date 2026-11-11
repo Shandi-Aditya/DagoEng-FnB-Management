@@ -5,8 +5,8 @@ import { useOutlet } from "@/contexts/OutletContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { ActivityLogEntry, ActivityModule, AuditStatus, ActivitySeverity } from "@/types/audit";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/legacy/ui/card";
+import { Button } from "@/components/legacy/ui/button";
 import {
   ShieldCheck,
   Search,

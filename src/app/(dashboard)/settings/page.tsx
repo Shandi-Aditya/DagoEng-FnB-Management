@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useOutlet } from "@/contexts/OutletContext";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/legacy/ui/card";
 import { PromoConfig, PromoType, PromoScope, TargetType, getPromoComputedStatus, sortPromosByPriority } from "@/lib/promo";
 import { useProducts } from "@/contexts/ProductContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
@@ -83,7 +83,7 @@ import {
   TenantOperationConfig,
 } from "@/lib/operating-hours";
 import { CategoryTaxType } from "@/types/settings";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 import {
   getTenantStatus,
   setTenantStatus,

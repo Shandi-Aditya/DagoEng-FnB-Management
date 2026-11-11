@@ -3,7 +3,7 @@
 import React from "react";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useOrders } from "@/contexts/OrderContext";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/legacy/ui/card";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { TrendingUp, TrendingDown, Clock, CheckCircle2, AlertTriangle, Calendar, Flame } from "lucide-react";
 

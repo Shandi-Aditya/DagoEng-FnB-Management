@@ -2,7 +2,7 @@
 
 import React from "react";
 import { CheckCircle2, ChevronRight, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 import { ProFeatureBadge, ProBadgeVariant } from "./ProFeatureBadge";
 
 export interface PremiumFeatureCardProps {

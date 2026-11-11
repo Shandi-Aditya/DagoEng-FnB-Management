@@ -9,8 +9,8 @@ import {
   aggregateShiftOrdersTaxAndRevenue,
   computeClosingVerificationHash,
 } from "@/lib/tax-breakdown";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/legacy/ui/card";
+import { Button } from "@/components/legacy/ui/button";
 import {
   UserCheck,
   Plus,

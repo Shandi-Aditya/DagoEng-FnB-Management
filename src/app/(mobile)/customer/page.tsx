@@ -30,7 +30,7 @@ import { OrderRecord } from "@/types/order";
 import { LoyaltyTier } from "@/types/loyalty";
 import { CoworkingSpaceItem, CoworkingMembershipPlan } from "@/types/coworking";
 import { PublicCommunityEvent, EventTicketOrder } from "@/types/event";
-import { AnimatedCounter } from "@/components/ui/animated-counter";
+import { AnimatedCounter } from "@/components/legacy/ui/animated-counter";
 import { QRCodeSVG } from "qrcode.react";
 import { downloadTicketAsImage } from "@/lib/ticket-download";
 import { isTenantActive, getTenantStatus, getAllFnbTenants, getTenantName } from "@/lib/tenant";
@@ -80,11 +80,11 @@ import {
   CreditCard,
   Upload,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/legacy/ui/button";
+import { Input } from "@/components/legacy/ui/input";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/legacy/ui/card";
+import { Badge } from "@/components/legacy/ui/badge";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import { POSReceiptData } from "@/features/pos/types";
 import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
