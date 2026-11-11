@@ -65,9 +65,9 @@ export function PaymentModal({
   const { logActivity } = useActivityLog();
   const [activeTab, setActiveTab] = useState<POSPaymentMethod>("QRIS");
 
-  // Cash Tab States
-  const [cashGiven, setCashGiven] = useState<number>(grandTotal);
-  const [cashInputRaw, setCashInputRaw] = useState<string>(grandTotal.toString());
+  // Cash Tab States (POS-29: initialized empty to prevent auto-fill)
+  const [cashGiven, setCashGiven] = useState<number>(0);
+  const [cashInputRaw, setCashInputRaw] = useState<string>("");
 
   // QRIS Tab States
   const [qrisSecondsLeft, setQrisSecondsLeft] = useState<number>(120);

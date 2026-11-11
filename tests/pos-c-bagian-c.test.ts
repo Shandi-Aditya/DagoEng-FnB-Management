@@ -163,6 +163,8 @@ describe("POS Bagian C — Perbaikan Menengah", () => {
       expect(ordersPageContent).toContain('const isKitchenStaff = roleSlug === "KITCHEN_STAFF"');
       expect(ordersPageContent).toContain("canExportNominalReports");
       expect(ordersPageContent).toContain("canViewNominals");
+      expect(ordersPageContent).toContain('{canViewNominals ? formatCurrencyIDR(selectedOrder.total) : "—"}');
+      expect(ordersPageContent).toContain('canViewNominals && (() => {');
     });
   });
 });

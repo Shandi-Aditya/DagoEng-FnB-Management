@@ -626,7 +626,7 @@ export default function OrdersPage() {
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Meja {selectedOrder.tableNumber} • {selectedOrder.customerName} • Total:{" "}
-                  <strong className="text-slate-900 dark:text-slate-100">{formatCurrencyIDR(selectedOrder.total)}</strong>
+                  <strong className="text-slate-900 dark:text-slate-100">{canViewNominals ? formatCurrencyIDR(selectedOrder.total) : "—"}</strong>
                 </p>
               </div>
               <button
@@ -682,7 +682,7 @@ export default function OrdersPage() {
                         )}
                       </div>
                       <span className="font-medium text-slate-900 dark:text-slate-100">
-                        {formatCurrencyIDR(item.unitPrice * item.quantity)}
+                        {canViewNominals ? formatCurrencyIDR(item.unitPrice * item.quantity) : "—"}
                       </span>
                     </div>
                   ))}
@@ -690,7 +690,7 @@ export default function OrdersPage() {
               </div>
 
               {/* Financial Calculation (Subtotal, Promo, Discount, PB1, Service Charge, Total) */}
-              {(() => {
+              {canViewNominals && (() => {
                 const promoName = settings.promos.find((p) => p.id === selectedOrder.promoId)?.name || selectedOrder.promoId;
                 const breakdown = getOrderTaxBreakdown(selectedOrder);
                 const discountAmount = breakdown.discount;
