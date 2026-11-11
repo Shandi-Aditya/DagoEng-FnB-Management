@@ -42,7 +42,7 @@ Urutan mengikuti seberapa sering staf memakai halaman. Kerjakan satu halaman sam
 | `/pos` mode F&B + kerangka | 2856 → 2329 | selesai (`5f98197`) | `src/features/pos/{PosToolbar,ProductCatalog,ProductCard,Cart*}.tsx`, `pos-catalog.ts` |
 | `/pos` mode co-working | 2329 → 1493 | struktur selesai, redesign belum | `src/features/pos/{CoworkingToolbar,CoworkingRoomCard,CoworkingPhotoModal,CoworkingBookingPanel}.tsx`, `pos-coworking.ts`, test `pos-coworking.test.ts` |
 | Modal POS | 2765 total | berjalan | Import sudah ke shadcn, tapi isinya masih gaya lama (mis. `PaymentModal` 278 kelas lama, `DailyClosingPDFModal` 170). `PosVoucherModal` dan `PosOpenShiftModal` baru dipisah dari `pos/page.tsx`. Lihat review P4. |
-| `/orders` | 896 → 325 | struktur selesai, redesign belum | `src/features/orders/{OrdersToolbar,OrdersTable,OrderDetailModal,OrdersReportPDFModal}.tsx`, `orders-domain.ts`, test `orders-domain.test.ts` |
+| `/orders` | 896 → 325 | selesai, belum commit (P3) | **Tugas:** menemukan pesanan yang perlu ditindak, lalu bayar atau cetak. **Keputusan:** antrean `Tabs` (Perlu dibayar, Diproses, Selesai, Dibatalkan, Semua) dengan jumlah, default "Perlu dibayar" untuk peran kasir; antrean tunggu diurutkan dari yang terlama, riwayat dari yang terbaru; pencarian nomor/meja/nama; tabel 9 → 6 kolom (target waktu jadi titik di kolom waktu, metode bayar di bawah status bayar, waktu disembunyikan untuk pesanan yang sudah ditutup); detail di `Sheet` samping (`OrderDetailSheet`) supaya daftar tetap terlihat; ekspor dalam satu `DropdownMenu`; `DataPagination`; di mobile hanya pesanan, status, total, dan Bayar. Logika di `orders-queue.ts` + test. `lint:ui` 0 di file yang disentuh (sisa di `OrdersReportPDFModal`, menunggu `ReportPreviewDialog`). |
 | `/tables` | 910 → 225 | struktur selesai, redesign belum | `src/features/tables/{TablesToolbar,FloorPlanView,ReservationsView,TableDetailModal,AddTableModal,AddAreaModal,AddReservationModal}.tsx`, `tables-domain.ts`, test `tables-domain.test.ts` |
 | `/inventory` | 2038 → 466 | struktur selesai, redesign belum | `src/features/inventory/{InventoryToolbar,InventoryStockTab,InventoryRecipesTab,InventoryPurchaseOrdersTab,InventoryOpnameTab,RestockAlertModal,StockAdjustmentModal,BOMSimulatorModal,CreatePOModal,PODetailModal,StockOpnameModal}.tsx`, `inventory-domain.ts`, test `inventory-domain.test.ts` |
 | `/menu` | 21 | struktur selesai, redesign belum | Hanya pembungkus redirect ke `/settings`, token dibersihkan |
@@ -124,9 +124,40 @@ Ini cara kerja yang dipakai untuk KDS dan POS. Ikuti urutannya.
    ```bash
    pkill -f "next dev"; npx vitest run; npm run build
    ```
-   Baseline: **4 test gagal sejak sebelum redesign** dan tidak terkait UI (`etl-data-validation`, `final-demo-readiness`, `organizer-activation-hardening`, `storage-sync-safety`). Selain 4 itu harus lulus semua. Terakhir: 926 lulus dari 930. Setelah selesai, jalankan lagi dev server (`npm run dev` di background).
-9. **Catat progres** di tabel bagian 2 dokumen ini dan di blok progres Fase 6 pada rencana. Tulis apa yang dipindah ke mana, bug yang ikut diperbaiki, dan apa yang belum.
-10. **Tutup sesi:** ringkas ke user, jangan commit sebelum diminta.
+   Baseline: **4 test gagal sejak sebelum redesign** dan tidak terkait UI (`etl-data-validation`, `final-demo-readiness`, `organizer-activation-hardening`, `storage-sync-safety`). Selain 4 itu harus lulus semua. Terakhir: 1010 lulus dari 1014 (test `unified-account` sesekali timeout saat suite penuh; jalankan ulang sendiri sebelum dianggap gagal). Setelah selesai, jalankan lagi dev server (`npm run dev` di background).
+9. **Cek Definition of Done** (bagian 5a). Status `selesai` hanya boleh dipakai kalau semua butirnya terpenuhi.
+10. **Catat progres** di tabel bagian 2 dokumen ini dan di blok progres Fase 6 pada rencana. Tulis apa yang dipindah ke mana, bug yang ikut diperbaiki, dan apa yang belum.
+11. **Tutup sesi:** ringkas ke user, jangan commit sebelum diminta.
+
+## 5a. Definition of Done per halaman
+
+Memecah file dan mengganti tag ke shadcn **belum** redesign. Sebuah halaman baru boleh ditandai `selesai` kalau:
+
+1. **Tugas utama layar ditulis** dalam satu kalimat di catatan tracker, dan tata letak disusun dari situ: apa yang dilihat pertama, satu aksi primary, dan apa yang dipindah ke menu atau panel samping. Sebutkan minimal satu keputusan desain yang berbeda dari layout lama, beserta alasannya.
+2. `npm run lint:ui -- <file atau folder yang disentuh>` menghasilkan **0 temuan**. Pengecualian yang disengaja harus diberi komentar `lint-ui-ignore: <alasan>`.
+3. Copy lolos glosarium dan aturan pesan di `DESIGN_SYSTEM.md` bagian 8: sentence case, satu bahasa, judul pendek, tanpa enum mentah, tanpa `Mohon/Silakan/Berhasil!`.
+4. Komponen bersama dipakai, bukan disalin: `PageHeader`, `StatusBadge`, `EmptyState`, `DataPagination`, `notify()`. Pola yang muncul di dua halaman atau lebih dijadikan komponen di `src/components/app`.
+5. Keadaan kosong, loading (`Skeleton`), dan error ditangani jujur, tanpa data palsu.
+6. Dicek di browser dalam mode terang, gelap, dan mobile 375px, tanpa menekan aksi yang menulis ke server (lihat bagian 6). Overlay dicek lewat DOM.
+7. `tsc`, `vitest` (hanya baseline yang gagal), dan `npm run build` hijau.
+
+Baseline `lint:ui` saat Definition of Done ini dibuat (11 November 2026), sebagai target yang harus turun ke 0 per halaman:
+
+| Area | Temuan |
+| --- | --- |
+| `features/pos` (termasuk modal) | 713 |
+| `features/activity-log` | 239 |
+| `features/inventory` | 219 |
+| `features/coworking` | 208 |
+| `features/customers` | 184 |
+| `features/commercial` | 161 |
+| `features/employees` | 154 |
+| `features/reports` | 124 |
+| `features/orders` | 33 |
+| `features/tables` | 24 |
+| `features/ai-insight` | 13 |
+| `features/kitchen` | 0 |
+| Seluruh `src/app`, `src/features`, `src/components` | 16528 |
 
 ## 6. Keamanan data saat menguji (penting)
 
@@ -149,6 +180,9 @@ Ini cara kerja yang dipakai untuk KDS dan POS. Ikuti urutannya.
 
 ## 8. Langkah berikutnya
 
-1. POS tahap 2: mode co-working (`CoworkingBookingPanel`, grid ruang, pemilih durasi dan jam memakai `Tabs`/`NativeSelect`), lalu modal-modal POS memakai `Dialog`/`AlertDialog`. Test yang mengunci teks modal: D1 (`ModifierModal`, semantik radio untuk grup sekali pilih), C3 (`PaymentModal`, nominal tunai tidak terisi otomatis), C4 (`ReceiptModal`, tanpa password Wi-Fi statis).
-2. Lanjutkan Fase 6 sesuai tabel. Halaman di atas 1500 baris dipecah dulu tanpa mengubah tampilan.
-3. Fase 7, lalu Fase 8 (hapus legacy, `lint:ui`).
+Ikuti rencana di [REDESIGN_REVIEW_GEMINI.md](./REDESIGN_REVIEW_GEMINI.md) bagian 4. P0 (pulihkan branch) dan P1 (`lint:ui`, glosarium, Definition of Done) sudah selesai.
+
+1. **P2 — pass copy** di semua `src/features/*` Fase 6 sesuai glosarium.
+2. **P3 — redesign per halaman** mulai dari `/orders`, `/inventory`, `/tables`, `/coworking`, dengan Definition of Done di bagian 5a.
+3. **P4 — modal POS** sebagai `Dialog`/`AlertDialog` sungguhan. Test yang mengunci teks modal: D1 (`ModifierModal`, semantik radio untuk grup sekali pilih), C3 (`PaymentModal`, nominal tunai tidak terisi otomatis), C4 (`ReceiptModal`, tanpa password Wi-Fi statis). Lalu Fase 7 dengan pola pecah dulu, baru migrasi.
+4. Fase 8: hapus legacy, lalu jalankan `npm run lint:ui -- --strict` di CI.

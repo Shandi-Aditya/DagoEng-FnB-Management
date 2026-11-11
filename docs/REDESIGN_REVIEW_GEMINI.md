@@ -70,6 +70,16 @@ Tidak ada bukti bahwa halaman-halaman ini sudah dicek di terang, gelap, dan mobi
 
 ## 4. Rencana perbaikan
 
+> Status: **P0 selesai** (`64964f4`, `799780c`), **P1 selesai** (`npm run lint:ui`, glosarium di `DESIGN_SYSTEM.md` bagian 8, Definition of Done di `REDESIGN_HANDOFF.md` bagian 5a). **P2 selesai** (belum di-commit): copy di semua fitur Fase 6 disunting sesuai glosarium. P3 berjalan: `/orders` selesai (lihat tracker di handoff). Berikutnya `/inventory`.
+
+> Catatan P2:
+> - Label domain baru: `slaStatusLabel`, `paymentMethodLabel` (orders), `getEmployeeStatusLabel`, `OPNAME_REASONS` sebagai satu sumber daftar alasan opname.
+> - Bug yang ikut diperbaiki: status pesanan `READY` dan status meja `BILLING` tampil sebagai enum mentah; `SERVED` dilabeli "Siap disajikan"; `slaStatusTone` mengecek `ON_TRACK` sehingga pesanan tepat waktu berwarna netral; laporan penjualan mengisi metode bayar kosong dengan "QRIS"; ejaan "Kadaluwarsa".
+> - Klaim tanpa dasar data dihapus: "Status audit: Terverifikasi sistem", "Keamanan log: Immutable", "Gateway: Sistem terintegrasi", badge "Data tersinkronisasi", dan kalimat analisis AI insight yang tidak dihitung (misalnya "margin pada kisaran optimal", "retensi stabil"). AI insight kini hanya menyebut angka yang dihitung.
+> - Teks pilihan metode bayar sewa dan co-working diganti (mis. "QRIS DagoPay" → "QRIS"); `value` tetap, kecuali modal pembayaran sewa yang kini menyimpan string baru (`Transfer BCA`, `QRIS`, `Tunai`). Tidak ada kode yang membandingkan string itu; data lama tetap tampil apa adanya.
+> - Di luar cakupan P2: `*ReportPDFModal` (akan dilebur di P3), `BOMRecipeModal` (P4). Temuan untuk diputuskan user: tombol "AI Generate" di `BOMRecipeModal` bukan AI, melainkan template kata kunci yang mengisi resep dengan ID bahan palsu (`ing-1`…`ing-8`) dan harga karangan, sehingga resep tersimpan bisa menunjuk bahan yang tidak ada di inventori.
+> - `lint:ui` hampir tidak berubah (mis. orders 33 → 32) karena P2 hanya menyentuh copy; penurunan angka itu target P3.
+
 Urutannya disusun supaya branch cepat hijau lagi, lalu kualitas dinaikkan halaman demi halaman.
 
 ### P0 — Pulihkan branch (blocker, ±setengah hari)

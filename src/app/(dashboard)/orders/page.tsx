@@ -22,12 +22,14 @@ import { formatCurrencyIDR } from "@/lib/utils";
 import type { OrderRecord } from "@/types/order";
 import type { KitchenTicketData, PrintPurpose } from "@/types/printer";
 
-import { OrderDetailModal } from "@/features/orders/OrderDetailModal";
+import { OrderDetailSheet } from "@/features/orders/OrderDetailSheet";
+import { countByQueue, emptyQueueMessage, ordersInQueue, searchOrders, type OrderQueueId } from "@/features/orders/orders-queue";
 import {
   buildOrderExportData,
   buildOrderReceiptData,
   buildReprintKitchenTicket,
   filterOrdersByTenant,
+  paymentMethodLabel,
 } from "@/features/orders/orders-domain";
 import { OrdersReportPDFModal } from "@/features/orders/OrdersReportPDFModal";
 import { OrdersTable } from "@/features/orders/OrdersTable";
@@ -66,18 +68,35 @@ export default function OrdersPage() {
     return filterOrdersByTenant(filteredOrders, userTenantId, isTenantOwner);
   }, [filteredOrders, userTenantId, isTenantOwner]);
 
-  // Pagination states
+  // Cashiers land on what needs action; everyone else on the full list
+  const [orderQueue, setOrderQueue] = useState<OrderQueueId>("ALL");
+  const [hasChosenQueue, setHasChosenQueue] = useState(false);
+  // The signed-in role loads after the first render; pick the default queue once it is known
+  useEffect(() => {
+    if (!hasChosenQueue && canProcessPayment) setOrderQueue("UNPAID");
+  }, [canProcessPayment, hasChosenQueue]);
+  const handleQueueChange = (next: OrderQueueId) => {
+    setHasChosenQueue(true);
+    setOrderQueue(next);
+  };
+  const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
+  const queueCounts = useMemo(() => countByQueue(displayedOrders), [displayedOrders]);
+  const visibleOrders = useMemo(
+    () => searchOrders(ordersInQueue(displayedOrders, orderQueue), searchQuery),
+    [displayedOrders, orderQueue, searchQuery],
+  );
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [displayedOrders.length]);
+  }, [orderQueue, searchQuery, displayedOrders.length]);
 
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
-    return displayedOrders.slice(start, start + pageSize);
-  }, [displayedOrders, currentPage, pageSize]);
+    return visibleOrders.slice(start, start + pageSize);
+  }, [visibleOrders, currentPage, pageSize]);
 
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
   const [paymentOrder, setPaymentOrder] = useState<OrderRecord | null>(null);
@@ -102,11 +121,11 @@ export default function OrdersPage() {
 
   const handleOpenPayment = (order: OrderRecord) => {
     if (order.paymentStatus === "PAID") {
-      notify.warning("Pesanan sudah lunas", "Pembayaran kedua tidak dapat diproses.");
+      notify.warning("Pesanan sudah lunas");
       return;
     }
     if (!canProcessPayment) {
-      notify.error("Akses ditolak", "Peran Anda tidak memiliki izin untuk memproses pembayaran.");
+      notify.error("Tidak bisa memproses pembayaran", "Peran Anda tidak punya akses kasir.");
       return;
     }
     setPaymentOrder(order);
@@ -194,10 +213,10 @@ export default function OrdersPage() {
     });
 
     // 6. UI Toast Feedback
-    const memberMsg = matchingMember ? ` +${pointsAdded} Poin Loyalty (${matchingMember.name})` : "";
+    const memberMsg = matchingMember ? ` · ${matchingMember.name} +${pointsAdded} poin` : "";
     notify.success(
-      "Pembayaran berhasil",
-      `Pesanan ${paymentOrder.orderNumber} lunas via ${paymentData.method}. Stok BOM dipotong.${memberMsg}`
+      `Pesanan ${paymentOrder.orderNumber} dibayar`,
+      `${paymentMethodLabel(paymentData.method as OrderRecord["paymentMethod"])}${memberMsg}`
     );
     setIsPaymentModalOpen(false);
 
@@ -240,14 +259,14 @@ export default function OrdersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       <OrdersToolbar
-        pageSize={pageSize}
-        onPageSizeChange={(sz) => {
-          setPageSize(sz);
-          setCurrentPage(1);
-        }}
-        canExportNominalReports={canExportNominalReports}
+        queue={orderQueue}
+        onQueueChange={handleQueueChange}
+        counts={queueCounts}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        canExport={canExportNominalReports}
         onExportExcel={handleExportOrdersExcel}
         onExportCSV={handleExportOrdersCSV}
         onOpenPDF={() => setIsPDFModalOpen(true)}
@@ -255,20 +274,20 @@ export default function OrdersPage() {
 
       <OrdersTable
         orders={paginatedOrders}
-        totalOrders={displayedOrders.length}
+        totalOrders={visibleOrders.length}
         currentPage={currentPage}
         pageSize={pageSize}
         onPageChange={setCurrentPage}
+        onPageSizeChange={setPageSize}
+        emptyMessage={emptyQueueMessage(orderQueue, searchQuery.trim() !== "")}
         canViewNominals={canViewNominals}
         canProcessPayment={canProcessPayment}
         onOpenPayment={handleOpenPayment}
         onSelectOrder={setSelectedOrder}
       />
 
-      {/* Order Detail & Lifecycle History Modal */}
-      <OrderDetailModal
+      <OrderDetailSheet
         order={selectedOrder}
-        isOpen={Boolean(selectedOrder)}
         onClose={() => setSelectedOrder(null)}
         canViewNominals={canViewNominals}
         canProcessPayment={canProcessPayment}

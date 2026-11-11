@@ -1,28 +1,30 @@
-import { ChevronLeft, ChevronRight, ClipboardList, CreditCard, History } from "lucide-react";
+"use client";
 
+import { ClipboardList, CreditCard } from "lucide-react";
+
+import { DataPagination } from "@/components/app/data-pagination";
 import { EmptyState } from "@/components/app/empty-state";
 import { StatusBadge } from "@/components/app/status-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { calculateOrderMetrics, formatMinutesToHuman } from "@/lib/order-analytics";
-import { formatCurrencyIDR } from "@/lib/utils";
-import type { OrderRecord } from "@/types/order";
+import { cn, formatCurrencyIDR } from "@/lib/utils";
+import type { OrderRecord, SLAStatus } from "@/types/order";
 
 import {
   orderStatusLabel,
   orderStatusTone,
+  paymentMethodLabel,
   paymentStatusLabel,
   paymentStatusTone,
-  slaStatusTone,
+  slaStatusLabel,
 } from "./orders-domain";
+
+const SLA_DOT: Record<SLAStatus, string> = {
+  ON_TIME: "bg-success",
+  AT_RISK: "bg-warning",
+  DELAYED: "bg-destructive",
+};
 
 interface OrdersTableProps {
   orders: OrderRecord[];
@@ -30,10 +32,21 @@ interface OrdersTableProps {
   currentPage: number;
   pageSize: number;
   onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
   canViewNominals: boolean;
   canProcessPayment: boolean;
+  emptyMessage: { title: string; description: string };
   onOpenPayment: (order: OrderRecord) => void;
   onSelectOrder: (order: OrderRecord) => void;
+}
+
+/** Finished or cancelled orders no longer have a waiting time worth tracking. */
+function isClosed(order: OrderRecord): boolean {
+  return order.status === "COMPLETED" || order.status === "CANCELLED" || order.status === "SERVED";
+}
+
+function isPayable(order: OrderRecord, canProcessPayment: boolean): boolean {
+  return canProcessPayment && order.paymentStatus !== "PAID" && order.status !== "CANCELLED" && order.status !== "COMPLETED";
 }
 
 export function OrdersTable({
@@ -42,157 +55,122 @@ export function OrdersTable({
   currentPage,
   pageSize,
   onPageChange,
+  onPageSizeChange,
   canViewNominals,
   canProcessPayment,
+  emptyMessage,
   onOpenPayment,
   onSelectOrder,
 }: OrdersTableProps) {
-  const totalPages = Math.max(1, Math.ceil(totalOrders / pageSize));
-  const hasOrders = orders.length > 0;
+  if (orders.length === 0) {
+    return (
+      <EmptyState
+        className="border"
+        icon={<ClipboardList />}
+        title={emptyMessage.title}
+        description={emptyMessage.description}
+      />
+    );
+  }
 
   return (
-    <div className="space-y-3">
+    <div className="flex flex-col gap-3">
       <div className="rounded-lg border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[120px]">No. Pesanan</TableHead>
-              <TableHead>Meja / Pelanggan</TableHead>
-              <TableHead>Status Operasional</TableHead>
-              <TableHead>Status Pembayaran</TableHead>
-              <TableHead>Waktu Tunggu</TableHead>
-              <TableHead>SLA Status</TableHead>
-              <TableHead>Total Tagihan</TableHead>
-              <TableHead>Metode Bayar</TableHead>
-              <TableHead className="text-right">Aksi</TableHead>
+              <TableHead>Pesanan</TableHead>
+              <TableHead className="hidden sm:table-cell">Meja</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="hidden md:table-cell">Pembayaran</TableHead>
+              <TableHead className="hidden md:table-cell">Waktu tunggu</TableHead>
+              <TableHead className="text-right">Total</TableHead>
+              <TableHead className="w-0">
+                <span className="sr-only">Aksi</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {!hasOrders ? (
-              <TableRow>
-                <TableCell colSpan={9} className="py-12">
-                  <EmptyState
-                    icon={<ClipboardList className="size-6 text-muted-foreground" />}
-                    title="Belum ada riwayat pesanan"
-                    description="Pesanan baru dari POS atau portal pelanggan akan muncul di sini."
-                  />
-                </TableCell>
-              </TableRow>
-            ) : (
-              orders.map((o) => {
-                const metrics = calculateOrderMetrics(o);
-                const isCompleted = o.status === "COMPLETED";
-                const isCancelled = o.status === "CANCELLED";
-                const isPaid = o.paymentStatus === "PAID";
-                const canPayThis = !isCompleted && !isCancelled && !isPaid && canProcessPayment;
-
-                return (
-                  <TableRow key={o.id}>
-                    <TableCell className="font-mono text-xs font-medium tabular-nums">
-                      {o.orderNumber}
-                    </TableCell>
-                    <TableCell>
-                      <div className="font-medium text-foreground">{o.tableNumber}</div>
-                      <div className="text-xs text-muted-foreground">{o.customerName}</div>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={orderStatusTone(o.status)}>
-                        {orderStatusLabel(o.status)}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={paymentStatusTone(o.paymentStatus)}>
-                        {paymentStatusLabel(o.paymentStatus)}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs tabular-nums text-muted-foreground">
-                      {formatMinutesToHuman(metrics.totalCustomerWaitingMinutes)}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={slaStatusTone(metrics.slaStatus)}>
-                        {metrics.slaStatus.replace("_", " ")}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs tabular-nums font-medium">
-                      {canViewNominals ? formatCurrencyIDR(o.total) : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="font-mono text-[11px]">
-                        {o.paymentMethod || "-"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {canPayThis ? (
-                          <Button
-                            size="sm"
-                            onClick={() => onOpenPayment(o)}
-                            className="h-8 gap-1 text-xs"
-                          >
-                            <CreditCard className="size-3.5" />
-                            <span>Bayar</span>
-                          </Button>
-                        ) : null}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onSelectOrder(o)}
-                          className="h-8 gap-1 text-xs"
-                        >
-                          <History className="size-3.5 text-muted-foreground" />
-                          <span>Timeline</span>
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
+            {orders.map((o) => {
+              const metrics = calculateOrderMetrics(o);
+              return (
+                <TableRow key={o.id} className="cursor-pointer" onClick={() => onSelectOrder(o)}>
+                  <TableCell>
+                    <button
+                      type="button"
+                      className="flex flex-col text-left outline-none focus-visible:underline"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelectOrder(o);
+                      }}
+                    >
+                      <span className="font-mono font-medium tabular-nums">{o.orderNumber}</span>
+                      <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                        {new Date(o.createdAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                        <span className="sm:hidden"> · {o.tableNumber}</span>
+                      </span>
+                    </button>
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    <div className="flex flex-col">
+                      <span>{o.tableNumber}</span>
+                      <span className="text-xs text-muted-foreground">{o.customerName}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={orderStatusTone(o.status)}>{orderStatusLabel(o.status)}</StatusBadge>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    <div className="flex flex-col items-start gap-0.5">
+                      <StatusBadge status={paymentStatusTone(o.paymentStatus)}>{paymentStatusLabel(o.paymentStatus)}</StatusBadge>
+                      {o.paymentStatus === "PAID" ? (
+                        <span className="text-xs text-muted-foreground">{paymentMethodLabel(o.paymentMethod)}</span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell">
+                    {isClosed(o) ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <span className="flex items-center gap-1.5" title={slaStatusLabel(metrics.slaStatus)}>
+                        <span className={cn("size-1.5 rounded-full", SLA_DOT[metrics.slaStatus])} aria-hidden />
+                        <span className="font-mono tabular-nums">{formatMinutesToHuman(metrics.totalCustomerWaitingMinutes)}</span>
+                        <span className="sr-only">{slaStatusLabel(metrics.slaStatus)}</span>
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {canViewNominals ? formatCurrencyIDR(o.total) : "—"}
+                  </TableCell>
+                  <TableCell>
+                    {isPayable(o, canProcessPayment) ? (
+                      <Button
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onOpenPayment(o);
+                        }}
+                      >
+                        <CreditCard />
+                        Bayar
+                      </Button>
+                    ) : null}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
 
-      {hasOrders ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
-          <div>
-            Menampilkan{" "}
-            <span className="font-mono font-medium text-foreground">
-              {(currentPage - 1) * pageSize + 1}
-            </span>
-            –
-            <span className="font-mono font-medium text-foreground">
-              {Math.min(currentPage * pageSize, totalOrders)}
-            </span>{" "}
-            dari <span className="font-mono font-medium text-foreground">{totalOrders}</span> pesanan
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage <= 1}
-              onClick={() => onPageChange(currentPage - 1)}
-              className="h-8 gap-1 px-2 text-xs"
-            >
-              <ChevronLeft className="size-3.5" />
-              <span>Sebelumnya</span>
-            </Button>
-            <span className="px-2 font-mono tabular-nums">
-              {currentPage} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage >= totalPages}
-              onClick={() => onPageChange(currentPage + 1)}
-              className="h-8 gap-1 px-2 text-xs"
-            >
-              <span>Berikutnya</span>
-              <ChevronRight className="size-3.5" />
-            </Button>
-          </div>
-        </div>
-      ) : null}
+      <DataPagination
+        currentPage={currentPage}
+        totalItems={totalOrders}
+        pageSize={pageSize}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        itemLabel="pesanan"
+      />
     </div>
   );
 }

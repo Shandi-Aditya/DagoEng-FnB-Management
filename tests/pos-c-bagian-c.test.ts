@@ -164,9 +164,9 @@ describe("POS Bagian C — Perbaikan Menengah", () => {
         path.resolve(process.cwd(), "src/app/(dashboard)/orders/page.tsx"),
         "utf-8"
       );
-      // The timeline lifecycle modal moved from orders/page.tsx to features/orders/OrderDetailModal.tsx
+      // Order detail moved from orders/page.tsx to a side panel in features/orders/OrderDetailSheet.tsx
       const orderDetailContent = fs.readFileSync(
-        path.resolve(process.cwd(), "src/features/orders/OrderDetailModal.tsx"),
+        path.resolve(process.cwd(), "src/features/orders/OrderDetailSheet.tsx"),
         "utf-8"
       );
 
