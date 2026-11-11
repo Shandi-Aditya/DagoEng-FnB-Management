@@ -349,7 +349,7 @@ export function PaymentModal({
   ].filter((v, i, a) => a.indexOf(v) === i && v >= grandTotal);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-900 text-white">
@@ -468,7 +468,7 @@ export function PaymentModal({
               {!isQrisVerified ? (
                 <div className="w-full max-w-md p-3.5 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800/60 text-left space-y-2">
                   <div className="flex items-start space-x-2">
-                    <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5 animate-pulse" />
+                    <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5 animate-pulse" />
                     <div>
                       <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200">
                         Menunggu Notifikasi Gateway QRIS
@@ -503,7 +503,7 @@ export function PaymentModal({
                 </div>
               ) : isGatewayVerified ? (
                 <div className="w-full max-w-md p-3.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-xl border border-emerald-300 dark:border-emerald-800 text-left flex items-start space-x-2.5">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
                   <div className="flex-1 text-xs">
                     <span className="font-bold text-emerald-900 dark:text-emerald-200 block">
                       Pembayaran QRIS Terverifikasi Gateway!
@@ -515,7 +515,7 @@ export function PaymentModal({
                 </div>
               ) : (
                 <div className="w-full max-w-md p-3.5 bg-blue-50 dark:bg-blue-950/40 rounded-xl border border-blue-300 dark:border-blue-800 text-left flex items-start space-x-2.5">
-                  <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                  <ShieldCheck className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
                   <div className="flex-1 text-xs">
                     <span className="font-bold text-blue-900 dark:text-blue-200 block">
                       Otorisasi QRIS Statis Disetujui (PIN Supervisor OK)
@@ -558,7 +558,7 @@ export function PaymentModal({
                         value={supervisorPin}
                         onChange={(e) => setSupervisorPin(e.target.value)}
                         placeholder="Masukkan PIN Supervisor Resmi"
-                        className="w-full px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-full px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-primary"
                       />
                     </div>
 
@@ -571,7 +571,7 @@ export function PaymentModal({
                         value={referenceNumber}
                         onChange={(e) => setReferenceNumber(e.target.value)}
                         placeholder="Contoh: RRN-20261109-001 (Lihat struk m-banking)"
-                        className="w-full px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-full px-3 py-1.5 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-primary"
                       />
                     </div>
 
@@ -584,7 +584,7 @@ export function PaymentModal({
                         value={supervisorNote}
                         onChange={(e) => setSupervisorNote(e.target.value)}
                         placeholder="Contoh: QRIS Statis Meja 4 / Mandiri Livin"
-                        className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary"
+                        className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-primary"
                       />
                     </div>
                   </div>
@@ -628,7 +628,7 @@ export function PaymentModal({
                       type="text"
                       value={cashInputRaw}
                       onChange={(e) => handleCustomCashInput(e.target.value)}
-                      className="w-full pl-9 pr-3 py-2.5 text-base font-bold font-mono border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full pl-9 pr-3 py-2.5 text-base font-bold font-mono border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-primary"
                       placeholder="0"
                     />
                   </div>
@@ -713,7 +713,7 @@ export function PaymentModal({
                   value={approvalCode}
                   onChange={(e) => setApprovalCode(e.target.value)}
                   placeholder="Contoh: APP-782910"
-                  className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-primary"
                 />
                 <p className="text-[11px] text-slate-400">
                   Gesek kartu pelanggan di mesin EDC {selectedBank}, lalu masukkan 6 digit kode otorisasi transaksi.
@@ -806,7 +806,7 @@ export function PaymentModal({
                               : "border-slate-300 dark:border-slate-600 hover:border-slate-400 bg-white dark:bg-slate-700"
                           }`}
                         >
-                          {guest.isPaid && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          {guest.isPaid && <Check className="w-3.5 h-3.5 stroke-3" />}
                         </button>
                         <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{guest.guestLabel}</span>
                       </div>
@@ -839,7 +839,7 @@ export function PaymentModal({
                           type="number"
                           value={guest.assignedAmount}
                           onChange={(e) => handleGuestAmountChange(guest.id, Number(e.target.value))}
-                          className="w-full pl-8 pr-2 py-1 text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-right focus:outline-none focus:ring-1 focus:ring-primary"
+                          className="w-full pl-8 pr-2 py-1 text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg text-right focus:outline-hidden focus:ring-1 focus:ring-primary"
                         />
                       </div>
                     </div>

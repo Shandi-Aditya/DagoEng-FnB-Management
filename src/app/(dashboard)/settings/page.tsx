@@ -1550,7 +1550,7 @@ export default function SettingsPage() {
       )}
       {tenantSavedSuccess && (
         <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-900 font-bold flex items-center space-x-2 animate-in fade-in shadow-xs">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>Pengaturan profil mitra dan konfigurasi operasional {tenantBrandName} berhasil disimpan!</span>
         </div>
       )}
@@ -2001,7 +2001,7 @@ export default function SettingsPage() {
                 <CardContent className="p-4 space-y-4">
                   {bankFormError && (
                     <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-red-700 text-xs font-medium flex items-center space-x-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                       <span>{bankFormError}</span>
                     </div>
                   )}
@@ -2471,7 +2471,7 @@ export default function SettingsPage() {
           {tenantActiveTab === "ADDONS" && (
             <div className="space-y-4">
               {/* Header Info Banner */}
-              <div className="p-4 bg-gradient-to-r from-purple-50/80 to-indigo-50/50 border border-purple-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="p-4 bg-linear-to-r from-purple-50/80 to-indigo-50/50 border border-purple-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
                 <div className="flex items-start space-x-3.5">
                   <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 border border-purple-200 mt-0.5">
                     <Sparkles className="w-5 h-5" />
@@ -2780,7 +2780,7 @@ export default function SettingsPage() {
                   key={tab}
                   type="button"
                   onClick={() => setSelectedMasterTab(tab)}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex-shrink-0 flex items-center space-x-1.5 ${
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all shrink-0 flex items-center space-x-1.5 ${
                     selectedMasterTab === tab
                       ? "bg-primary text-white shadow-xs"
                       : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 hover:text-slate-900 dark:hover:text-white"
@@ -2806,7 +2806,7 @@ export default function SettingsPage() {
                         value={masterSearch}
                         onChange={(e) => setMasterSearch(e.target.value)}
                         placeholder="Cari nama produk, kategori, mitra..."
-                        className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                        className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-brand-orange/20"
                       />
                     </div>
 
@@ -2816,7 +2816,7 @@ export default function SettingsPage() {
                       <select
                         value={masterTenantFilter}
                         onChange={(e) => setMasterTenantFilter(e.target.value)}
-                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-brand-orange/20"
                       >
                         <option value="ALL">Semua Mitra F&B</option>
                         {localTenants.map((t) => (
@@ -2831,7 +2831,7 @@ export default function SettingsPage() {
                     <select
                       value={masterCategoryFilter}
                       onChange={(e) => setMasterCategoryFilter(e.target.value)}
-                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                      className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-brand-orange/20"
                     >
                       <option value="ALL">Semua Kategori</option>
                       {categories.map((c) => (
@@ -2847,7 +2847,7 @@ export default function SettingsPage() {
                       <select
                         value={masterStatusFilter}
                         onChange={(e) => setMasterStatusFilter(e.target.value as any)}
-                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-brand-orange/20"
                       >
                         <option value="ALL">Semua Status</option>
                         <option value="ACTIVE">Aktif Saja</option>
@@ -2861,7 +2861,7 @@ export default function SettingsPage() {
                       <select
                         value={masterSortOrder}
                         onChange={(e) => setMasterSortOrder(e.target.value as any)}
-                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-orange/20"
+                        className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-brand-orange/20"
                       >
                         <option value="UPDATED_DESC">Terakhir Diubah/Diaktifkan</option>
                         <option value="UPDATED_ASC">Terlama Diubah</option>
@@ -3026,7 +3026,7 @@ export default function SettingsPage() {
                     onClick={() => setPartnerSubTab("MANAJEMEN_MITRA")}
                     className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
                       partnerSubTab === "MANAJEMEN_MITRA"
-                        ? "bg-white dark:bg-slate-700 text-[#3B7A57] dark:text-[#52B788] shadow-xs"
+                        ? "bg-white dark:bg-slate-700 text-brand-sage dark:text-brand-sageBright shadow-xs"
                         : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                     }`}
                   >
@@ -3066,7 +3066,7 @@ export default function SettingsPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
                         <h4 className="font-bold text-xs text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center space-x-2">
-                          <Users className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                          <Users className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                           <span>Direktori Mitra & Hak Akses Akun Platform</span>
                         </h4>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
@@ -3078,7 +3078,7 @@ export default function SettingsPage() {
                         size="sm"
                         type="button"
                         onClick={() => setIsAddOrganizerModalOpen(true)}
-                        className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl h-8 px-3.5 space-x-1.5 shadow-xs shrink-0"
+                        className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl h-8 px-3.5 space-x-1.5 shadow-xs shrink-0"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Tambah Penyelenggara Event</span>
@@ -3094,7 +3094,7 @@ export default function SettingsPage() {
                           value={partnerSearchQuery}
                           onChange={(e) => setPartnerSearchQuery(e.target.value)}
                           placeholder="Cari nama mitra, PIC, email, atau modul..."
-                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
                         />
                       </div>
 
@@ -3247,7 +3247,7 @@ export default function SettingsPage() {
                                             className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
                                               p.type === "FNB"
                                                 ? "bg-amber-100 dark:bg-amber-950/60 text-brand-orange"
-                                                : "bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788]"
+                                                : "bg-emerald-100 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright"
                                             }`}
                                           >
                                             {p.type === "FNB" ? (
@@ -3350,7 +3350,7 @@ export default function SettingsPage() {
                                               className="h-7 text-[11px] font-bold px-2.5 rounded-lg border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100 dark:border-emerald-700 dark:text-emerald-300 dark:bg-emerald-950/40 disabled:opacity-40"
                                               title="Terbitkan tautan aktivasi mandiri berdurasi 48 jam"
                                             >
-                                              <Key className="w-3 h-3 mr-1 text-[#3B7A57]" />
+                                              <Key className="w-3 h-3 mr-1 text-brand-sage" />
                                               <span>Tautan Aktivasi</span>
                                             </Button>
                                           )}
@@ -3747,7 +3747,7 @@ export default function SettingsPage() {
                           onClick={handleSaveEventRevenuePolicy}
                           disabled={isSavingEventPolicy}
                           size="sm"
-                          className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold px-4 text-xs rounded-xl shadow-xs"
+                          className="bg-brand-sage hover:bg-[#2E6044] text-white font-bold px-4 text-xs rounded-xl shadow-xs"
                         >
                           <Save className="w-3.5 h-3.5 mr-1.5" />
                           <span>{isSavingEventPolicy ? "Menyimpan..." : "Simpan Kebijakan Komisi Platform"}</span>
@@ -3759,7 +3759,7 @@ export default function SettingsPage() {
                     <div className="p-4 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
                       <div className="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-700">
                         <span className="font-bold text-xs text-slate-900 dark:text-slate-100 flex items-center space-x-2">
-                          <Calculator className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                          <Calculator className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                           <span>2. Simulasi Interaktif Pembagian Pendapatan Tiket</span>
                         </span>
                         <span className="text-[10px] text-slate-400">Model Komisi: {eventPlatformFee}% DAGO / {100 - eventPlatformFee}% Komunitas</span>
@@ -3812,7 +3812,7 @@ export default function SettingsPage() {
                               <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 block">
                                 Hak Penyelenggara ({100 - eventPlatformFee}%)
                               </span>
-                              <span className="text-sm font-extrabold text-[#3B7A57] dark:text-[#52B788] font-mono">
+                              <span className="text-sm font-extrabold text-brand-sage dark:text-brand-sageBright font-mono">
                                 Rp {organizerAmount.toLocaleString("id-ID")}
                               </span>
                             </div>
@@ -3940,7 +3940,7 @@ export default function SettingsPage() {
                     {/* Section 4: Immutability & Business Rules Note */}
                     <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl text-[11px] text-emerald-950 dark:text-emerald-200 space-y-1.5">
                       <p className="font-bold flex items-center space-x-1.5">
-                        <ShieldCheck className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                        <ShieldCheck className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                         <span>Prinsip Keamanan Finansial & Snapshot Immutability:</span>
                       </p>
                       <ul className="list-disc list-inside space-y-0.5 text-[10px] text-emerald-900 dark:text-emerald-300 pl-1">
@@ -3994,7 +3994,7 @@ export default function SettingsPage() {
                                   </td>
                                   <td className="p-2.5 font-mono font-bold">
                                     <span className="text-slate-400 line-through mr-1">{item.previousPlatformFeePercent}%</span>
-                                    <span className="text-[#3B7A57] dark:text-[#52B788]">➔ {item.newPlatformFeePercent}% DAGO</span>
+                                    <span className="text-brand-sage dark:text-brand-sageBright">➔ {item.newPlatformFeePercent}% DAGO</span>
                                   </td>
                                   <td className="p-2.5 text-slate-600 dark:text-slate-400">
                                     {item.reason}
@@ -4015,7 +4015,7 @@ export default function SettingsPage() {
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
                         <div className="flex items-center space-x-2">
-                          <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright flex items-center justify-center">
                             <Plus className="w-4 h-4" />
                           </div>
                           <div>
@@ -4053,7 +4053,7 @@ export default function SettingsPage() {
                             value={newOrgName}
                             onChange={(e) => setNewOrgName(e.target.value)}
                             placeholder="Contoh: Bandung Indie Filmmakers Guild"
-                            className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                            className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
                           />
                         </div>
 
@@ -4067,7 +4067,7 @@ export default function SettingsPage() {
                               value={newOrgCategory}
                               onChange={(e) => setNewOrgCategory(e.target.value)}
                               placeholder="Kolektif Seni / Teknologi / Kopi"
-                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
                             />
                           </div>
 
@@ -4081,7 +4081,7 @@ export default function SettingsPage() {
                               value={newOrgPIC}
                               onChange={(e) => setNewOrgPIC(e.target.value)}
                               placeholder="Nama koordinator komunitas"
-                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
                             />
                           </div>
                         </div>
@@ -4097,7 +4097,7 @@ export default function SettingsPage() {
                               value={newOrgPhone}
                               onChange={(e) => setNewOrgPhone(e.target.value)}
                               placeholder="+62 812-xxxx-xxxx"
-                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
                             />
                           </div>
 
@@ -4111,7 +4111,7 @@ export default function SettingsPage() {
                               value={newOrgEmail}
                               onChange={(e) => setNewOrgEmail(e.target.value)}
                               placeholder="kontak@komunitas.id"
-                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                              className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
                             />
                           </div>
                         </div>
@@ -4153,7 +4153,7 @@ export default function SettingsPage() {
                             value={newOrgNotes}
                             onChange={(e) => setNewOrgNotes(e.target.value)}
                             placeholder="Informasi tambahan mengenai MOU atau jadwal kegiatan komunitas..."
-                            className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                            className="w-full px-3 py-2 text-xs border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
                           />
                         </div>
 
@@ -4169,7 +4169,7 @@ export default function SettingsPage() {
                           <Button
                             type="submit"
                             disabled={isSubmittingOrg}
-                            className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-9 px-4 rounded-xl shadow-xs"
+                            className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold h-9 px-4 rounded-xl shadow-xs"
                           >
                             {isSubmittingOrg ? "Menyimpan..." : "Simpan Penyelenggara"}
                           </Button>
@@ -4185,7 +4185,7 @@ export default function SettingsPage() {
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
                       <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
                         <div className="flex items-center space-x-2">
-                          <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright flex items-center justify-center">
                             <Key className="w-4 h-4" />
                           </div>
                           <div>
@@ -4249,7 +4249,7 @@ export default function SettingsPage() {
                             className={`h-9 px-3 shrink-0 rounded-xl text-xs font-bold transition-all ${
                               copiedLink
                                 ? "bg-emerald-600 text-white"
-                                : "bg-[#3B7A57] hover:bg-[#2D5F43] text-white"
+                                : "bg-brand-sage hover:bg-[#2D5F43] text-white"
                             }`}
                           >
                             {copiedLink ? (
@@ -4298,7 +4298,7 @@ export default function SettingsPage() {
                             className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                               selectedPartnerDetail.type === "FNB"
                                 ? "bg-amber-100 dark:bg-amber-950/60 text-brand-orange"
-                                : "bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788]"
+                                : "bg-emerald-100 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright"
                             }`}
                           >
                             {selectedPartnerDetail.type === "FNB" ? (
@@ -5680,7 +5680,7 @@ export default function SettingsPage() {
             {selectedMasterTab === "Paket Langganan & Add-on" && (
               <div className="p-4 sm:p-6 space-y-6">
                 {/* Header Info Banner with Quick Tier Switcher */}
-                <div className="p-4 bg-gradient-to-r from-purple-50/80 to-indigo-50/50 dark:from-slate-850 dark:to-slate-800 border border-purple-200/80 dark:border-slate-700 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
+                <div className="p-4 bg-linear-to-r from-purple-50/80 to-indigo-50/50 dark:from-slate-850 dark:to-slate-800 border border-purple-200/80 dark:border-slate-700 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
                   <div className="flex items-start space-x-3.5">
                     <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0 border border-purple-200 dark:border-purple-800/60 mt-0.5">
                       <Sparkles className="w-5 h-5" />
@@ -5728,7 +5728,7 @@ export default function SettingsPage() {
                 </div>
 
                 {/* HERO CARD: PAKET ANDA SAAT INI */}
-                <Card className="border-2 border-purple-300/80 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs bg-gradient-to-b from-white to-purple-50/20 dark:from-slate-900 dark:to-slate-900">
+                <Card className="border-2 border-purple-300/80 dark:border-slate-700 rounded-2xl overflow-hidden shadow-xs bg-linear-to-b from-white to-purple-50/20 dark:from-slate-900 dark:to-slate-900">
                   <CardHeader className="p-4 sm:p-5 bg-purple-50/50 dark:bg-slate-800/60 border-b border-purple-100 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex items-center space-x-2 flex-wrap gap-y-1">
@@ -6215,7 +6215,7 @@ export default function SettingsPage() {
               <div className="p-4 sm:p-6 space-y-8">
                 {/* 1. RINGKASAN & STATUS INTEGRASI */}
                 <div className="space-y-4">
-                  <div className="p-4 sm:p-5 bg-gradient-to-r from-blue-50/80 via-indigo-50/40 to-slate-50 dark:from-slate-850 dark:via-slate-800 dark:to-slate-850 border border-blue-200/80 dark:border-slate-700 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
+                  <div className="p-4 sm:p-5 bg-linear-to-r from-blue-50/80 via-indigo-50/40 to-slate-50 dark:from-slate-850 dark:via-slate-800 dark:to-slate-850 border border-blue-200/80 dark:border-slate-700 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
                     <div className="flex items-start space-x-3.5">
                       <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0 border border-blue-200 dark:border-blue-800/60 mt-0.5">
                         <Wifi className="w-5 h-5" />
@@ -6579,14 +6579,14 @@ export default function SettingsPage() {
                           value={wifiSearchQuery}
                           onChange={(e) => setWifiSearchQuery(e.target.value)}
                           placeholder="Cari kode voucher, no struk, booking ID, atau nama..."
-                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          className="w-full pl-9 pr-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                         />
                       </div>
 
                       <select
                         value={wifiServiceFilter}
                         onChange={(e) => setWifiServiceFilter(e.target.value as any)}
-                        className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                       >
                         <option value="ALL">Semua Layanan (F&B & CW)</option>
                         <option value="FNB">Hanya F&B Kasir</option>
@@ -6596,7 +6596,7 @@ export default function SettingsPage() {
                       <select
                         value={wifiStatusFilter}
                         onChange={(e) => setWifiStatusFilter(e.target.value as any)}
-                        className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        className="px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-primary/20"
                       >
                         <option value="ALL">Semua Status</option>
                         <option value="ACTIVE">Aktif</option>

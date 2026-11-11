@@ -619,7 +619,7 @@ export function EventCheckInQRScannerModal({
         {/* Header Bar */}
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-900/80">
           <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center font-bold">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-brand-sage dark:text-brand-sageBright flex items-center justify-center font-bold">
               <QrCode className="w-5 h-5" />
             </div>
             <div>
@@ -639,7 +639,7 @@ export function EventCheckInQRScannerModal({
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               title={soundEnabled ? "Audio Beep Aktif" : "Audio Beep Senyap"}
             >
-              {soundEnabled ? <Volume2 className="w-4 h-4 text-[#3B7A57]" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
+              {soundEnabled ? <Volume2 className="w-4 h-4 text-brand-sage" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
             </button>
             <button
               type="button"
@@ -675,7 +675,7 @@ export function EventCheckInQRScannerModal({
             {/* Loading / Error States */}
             {isInitializing && (
               <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center text-white space-y-2 z-10">
-                <RefreshCw className="w-7 h-7 text-[#52B788] animate-spin" />
+                <RefreshCw className="w-7 h-7 text-brand-sageBright animate-spin" />
                 <p className="text-xs text-slate-300 font-medium">Menghubungkan ke kamera...</p>
               </div>
             )}
@@ -687,7 +687,7 @@ export function EventCheckInQRScannerModal({
                 <Button
                   size="sm"
                   onClick={startCamera}
-                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-xs font-bold rounded-xl"
+                  className="bg-brand-sage hover:bg-[#2E6044] text-xs font-bold rounded-xl"
                 >
                   <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
                   Coba Akses Kamera Lagi
@@ -721,7 +721,7 @@ export function EventCheckInQRScannerModal({
                 <button
                   type="button"
                   onClick={toggleCameraDirection}
-                  className="font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline ml-2"
+                  className="font-bold text-brand-sage dark:text-brand-sageBright hover:underline ml-2"
                 >
                   Ganti ({facingMode === "environment" ? "Belakang" : "Depan"})
                 </button>
@@ -731,7 +731,7 @@ export function EventCheckInQRScannerModal({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center space-x-1 text-slate-600 dark:text-slate-300 hover:text-[#3B7A57] dark:hover:text-[#52B788] font-bold py-1 px-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-colors"
+              className="flex items-center space-x-1 text-slate-600 dark:text-slate-300 hover:text-brand-sage dark:hover:text-brand-sageBright font-bold py-1 px-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-colors"
               title="Unggah foto atau tangkapan layar e-tiket QR"
             >
               <Upload className="w-3.5 h-3.5 mr-1" />
@@ -809,12 +809,12 @@ export function EventCheckInQRScannerModal({
                 }}
                 placeholder="Contoh: DAGO-EVT-72676"
                 disabled={isProcessing}
-                className="flex-1 px-3 py-2 text-xs font-mono rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white"
+                className="flex-1 px-3 py-2 text-xs font-mono rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-white"
               />
               <Button
                 type="submit"
                 disabled={!manualCode.trim() || isProcessing}
-                className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl px-4"
+                className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl px-4"
               >
                 {isProcessing ? "Memproses..." : "Check-in"}
               </Button>

@@ -72,7 +72,7 @@ export function TablePagination({
                 onPageSizeChange(Number(e.target.value));
                 onPageChange(1);
               }}
-              className="py-1 px-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold focus:outline-none"
+              className="py-1 px-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold focus:outline-hidden"
             >
               {pageSizeOptions.map((opt) => (
                 <option key={opt} value={opt}>
@@ -131,7 +131,7 @@ export function TablePagination({
                 onClick={() => onPageChange(pageNum)}
                 className={`min-w-[32px] h-8 px-2 rounded-lg text-xs font-bold transition-all ${
                   isCurrent
-                    ? "bg-[#3B7A57] text-white shadow-xs"
+                    ? "bg-brand-sage text-white shadow-xs"
                     : "border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
                 }`}
               >
@@ -191,7 +191,7 @@ export function TablePageSizeSelector({
       <select
         value={pageSize}
         onChange={(e) => onPageSizeChange(Number(e.target.value))}
-        className="py-1.5 px-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-semibold focus:outline-none focus:ring-1 focus:ring-[#3B7A57] cursor-pointer"
+        className="py-1.5 px-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 font-semibold focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57] cursor-pointer"
         aria-label="Jumlah baris per halaman"
       >
         {pageSizeOptions.map((opt) => (

@@ -152,7 +152,7 @@ export function Sidebar({
     <div
       className={`${
         isCollapsed ? "w-20" : "w-64"
-      } flex-shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between h-full select-none transition-all duration-300 ease-in-out`}
+      } shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between h-full select-none transition-all duration-300 ease-in-out`}
     >
       {/* Brand Header & Scrollable Nav */}
       <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
@@ -164,7 +164,7 @@ export function Sidebar({
           {!isCollapsed ? (
             <>
               <div className="flex items-center space-x-3 overflow-hidden min-w-0">
-                <div className="w-8 h-10 relative flex-shrink-0">
+                <div className="w-8 h-10 relative shrink-0">
                   <Image
                     src="/logo-dago.png"
                     alt="Dago Creative Hub"
@@ -303,7 +303,7 @@ export function Sidebar({
                   <span className={isActive ? "text-slate-900 dark:text-slate-100" : ""}>{item.name}</span>
                 </div>
                 {item.module !== "CORE" && (
-                  <div className="flex items-center space-x-1.5 flex-shrink-0 ml-1.5">
+                  <div className="flex items-center space-x-1.5 shrink-0 ml-1.5">
                     {item.module === "CO_WORKING" ? (
                       <ProFeatureBadge label="PRO" variant="pro" size="xs" />
                     ) : (
@@ -327,7 +327,7 @@ export function Sidebar({
           <>
             <div className="p-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between mb-2">
               <div className="flex items-center space-x-2 overflow-hidden">
-                <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center font-bold text-xs text-slate-700 dark:text-slate-200 flex-shrink-0">
+                <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center font-bold text-xs text-slate-700 dark:text-slate-200 shrink-0">
                   {user?.name.charAt(0) || "U"}
                 </div>
                 <div className="truncate">

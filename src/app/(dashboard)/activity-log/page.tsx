@@ -499,7 +499,7 @@ export default function ActivityLogPage() {
               placeholder="Cari aksi, aktor, record ID, alasan, nilai..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 font-medium"
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-purple-500 font-medium"
             />
           </div>
 
@@ -555,7 +555,7 @@ export default function ActivityLogPage() {
             <select
               value={selectedActor}
               onChange={(e) => setSelectedActor(e.target.value)}
-              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-purple-500"
+              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-1 focus:ring-purple-500"
             >
               <option value="ALL">Semua User</option>
               {uniqueActors.map((actor) => (
@@ -573,7 +573,7 @@ export default function ActivityLogPage() {
             <select
               value={selectedRole}
               onChange={(e) => setSelectedRole(e.target.value)}
-              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-purple-500"
+              className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-1 focus:ring-purple-500"
             >
               <option value="ALL">Semua Role</option>
               {uniqueRoles.map((role) => (
@@ -749,7 +749,7 @@ export default function ActivityLogPage() {
                     setPageSize(Number(e.target.value));
                     setCurrentPage(1);
                   }}
-                  className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-1 focus:ring-purple-500"
                 >
                   <option value={10}>10 per halaman</option>
                   <option value={15}>15 per halaman</option>
@@ -948,7 +948,7 @@ export default function ActivityLogPage() {
                     setPageSize(Number(e.target.value));
                     setCurrentPage(1);
                   }}
-                  className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-purple-500"
+                  className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold focus:outline-hidden focus:ring-1 focus:ring-purple-500"
                 >
                   <option value={10}>10 per halaman</option>
                   <option value={15}>15 per halaman</option>

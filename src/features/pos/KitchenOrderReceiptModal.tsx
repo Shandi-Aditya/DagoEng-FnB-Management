@@ -270,7 +270,7 @@ export function KitchenOrderReceiptModal({
                 type="button"
                 disabled={isPrinting}
                 onClick={() => handlePrint(false)}
-                className="flex-1 sm:flex-none text-xs font-bold space-x-1.5 bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs"
+                className="flex-1 sm:flex-none text-xs font-bold space-x-1.5 bg-brand-sage hover:bg-[#2E6044] text-white shadow-xs"
               >
                 <Printer className="w-3.5 h-3.5 mr-1" />
                 <span>{isPrinting ? "Mengirim..." : "Cetak Tiket Dapur"}</span>

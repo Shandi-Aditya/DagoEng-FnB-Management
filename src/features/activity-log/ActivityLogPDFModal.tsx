@@ -101,7 +101,7 @@ export default function ActivityLogPDFModal({
           {/* Non-Printable Action Bar */}
           <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/80 print:hidden shrink-0">
             <div className="flex items-center space-x-2">
-              <ShieldCheck className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788]" />
+              <ShieldCheck className="w-5 h-5 text-brand-sage dark:text-brand-sageBright" />
               <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">Pratinjau PDF Audit Trail & Activity Log</h3>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary dark:text-primary-light">
                 {logs.length} Entri Tercatat
@@ -111,7 +111,7 @@ export default function ActivityLogPDFModal({
               <Button
                 size="sm"
                 onClick={handlePrint}
-                className="text-xs bg-[#3B7A57] hover:bg-[#2e6245] text-white space-x-1.5 shadow-xs font-semibold"
+                className="text-xs bg-brand-sage hover:bg-[#2e6245] text-white space-x-1.5 shadow-xs font-semibold"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>Cetak / Simpan PDF</span>
@@ -135,7 +135,7 @@ export default function ActivityLogPDFModal({
               <div className="flex items-start justify-between border-b-2 border-slate-900 dark:border-slate-700 pb-5">
                 <div>
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-12 relative flex-shrink-0">
+                    <div className="w-10 h-12 relative shrink-0">
                       <Image
                         src="/logo-dago.png"
                         alt="Dago Creative Hub Logo"
@@ -146,7 +146,7 @@ export default function ActivityLogPDFModal({
                     </div>
                     <div>
                       <h1 className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
-                        DAGO <span className="text-[#3B7A57] dark:text-[#52B788]">CREATIVE HUB</span>
+                        DAGO <span className="text-brand-sage dark:text-brand-sageBright">CREATIVE HUB</span>
                       </h1>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold">
                         Integrated F&B, Co-working & Commercial Management System

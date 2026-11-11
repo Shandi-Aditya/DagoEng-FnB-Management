@@ -95,7 +95,7 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-850">
@@ -219,7 +219,7 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
                             group.maxSelect === 1 ? (
                               <div className="w-1.5 h-1.5 rounded-full bg-white" />
                             ) : (
-                              <Check className="w-3 h-3 stroke-[3]" />
+                              <Check className="w-3 h-3 stroke-3" />
                             )
                           )}
                         </div>
@@ -247,7 +247,7 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Contoh: Pisahkan es batu, sambal dipisah..."
-              className="w-full text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              className="w-full text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
         </div>

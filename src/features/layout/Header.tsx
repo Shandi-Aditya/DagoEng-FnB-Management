@@ -75,7 +75,7 @@ export function Header({
 
         {/* Active Operational Outlet Badge (Singaraja) */}
         <div className="flex items-center space-x-1.5 sm:space-x-2 px-2.5 sm:px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-2xs">
-          <Store className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+          <Store className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
           <span className="truncate max-w-[130px] sm:max-w-none">
             <span className="hidden sm:inline">Outlet </span>Singaraja (Pusat)
           </span>

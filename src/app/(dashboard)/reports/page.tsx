@@ -435,14 +435,14 @@ export default function ReportsPage() {
             >
               <div className="flex items-center justify-between gap-1">
                 <div
-                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center transition-colors flex-shrink-0 ${
+                  className={`w-7 h-7 sm:w-8 sm:h-8 rounded-xl flex items-center justify-center transition-colors shrink-0 ${
                     isSelected ? "bg-primary/20 text-primary dark:text-primary-light" : "bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400"
                   }`}
                 >
                   <Icon className="w-4 h-4" />
                 </div>
                 <span
-                  className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${
+                  className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md shrink-0 ${
                     isSelected ? "bg-primary/20 text-primary dark:text-primary-light" : "bg-slate-100 dark:bg-slate-700/60 text-slate-500 dark:text-slate-400"
                   }`}
                 >
@@ -475,7 +475,7 @@ export default function ReportsPage() {
             </CardTitle>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{currentReportData.subtitle}</p>
           </div>
-          <span className="text-xs font-bold px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full border border-slate-200/80 dark:border-slate-700 self-start sm:self-center flex-shrink-0">
+          <span className="text-xs font-bold px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full border border-slate-200/80 dark:border-slate-700 self-start sm:self-center shrink-0">
             {currentReportData.tableRows.length} Baris Data
           </span>
         </CardHeader>
@@ -540,7 +540,7 @@ export default function ReportsPage() {
           {currentReportData.reconciliationInfo && currentReportData.reconciliationInfo.length > 0 && (
             <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 space-y-3">
               <div className="flex items-center space-x-2 pb-2 border-b border-slate-200/80 dark:border-slate-700/80">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
                   Ringkasan Rekonsiliasi & Audit Terkait
                 </h4>
@@ -549,7 +549,7 @@ export default function ReportsPage() {
                 {currentReportData.reconciliationInfo.map((rec: any, rIdx: number) => (
                   <div key={rIdx} className="p-3 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs flex items-center justify-between gap-2 text-xs">
                     <span className="text-slate-600 dark:text-slate-400 font-medium text-[11px] truncate">{rec.label}</span>
-                    <span className="font-bold font-mono text-slate-900 dark:text-slate-100 flex-shrink-0 ml-2">{rec.value}</span>
+                    <span className="font-bold font-mono text-slate-900 dark:text-slate-100 shrink-0 ml-2">{rec.value}</span>
                   </div>
                 ))}
               </div>

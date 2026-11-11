@@ -339,7 +339,7 @@ export default function AIInsightPage() {
               placeholder={`Tanyakan performa bisnis, stok kritis, atau omset di outlet ${activeOutlet?.name}...`}
               value={inputQuery}
               onChange={(e) => setInputQuery(e.target.value)}
-              className="flex-1 px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-purple-500"
+              className="flex-1 px-4 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-purple-500"
             />
             <Button
               type="submit"

@@ -72,7 +72,7 @@ export function WaitingTimeAnalytics() {
           <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px] font-semibold">
               <span>Avg Cooking Time</span>
-              <Activity className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+              <Activity className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
             </div>
             <p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1" suppressHydrationWarning>
               {formatMinutesToHuman(analysis.avgCookingMinutes)}
@@ -156,7 +156,7 @@ export function WaitingTimeAnalytics() {
 
         {/* Bottleneck Diagnosis Statement */}
         <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl flex items-start space-x-2 text-xs">
-          <Zap className="w-4 h-4 text-brand-yellow flex-shrink-0 mt-0.5" />
+          <Zap className="w-4 h-4 text-brand-yellow shrink-0 mt-0.5" />
           <div>
             <span className="font-bold text-amber-900 uppercase text-[10px] tracking-wide">
               Operational Bottleneck Diagnosis:

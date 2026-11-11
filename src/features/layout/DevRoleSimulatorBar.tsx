@@ -90,7 +90,7 @@ const PERSONAS_LIST: PersonaOption[] = [
 ];
 
 const QUICK_PERSONAS: { key: PersonaKey; label: string; icon: React.ReactNode }[] = [
-  { key: "DAGO_OWNER", label: "Dago Hub Owner", icon: <Building className="w-3 h-3 text-[#52B788]" /> },
+  { key: "DAGO_OWNER", label: "Dago Hub Owner", icon: <Building className="w-3 h-3 text-brand-sageBright" /> },
   { key: "TENANT_OWNER_KS", label: "Kopi Senja (Tenant)", icon: <Coffee className="w-3 h-3 text-amber-400" /> },
   { key: "CASHIER_SGR", label: "POS Kasir", icon: <Calculator className="w-3 h-3 text-emerald-400" /> },
   { key: "KITCHEN_SGR", label: "Dapur KDS", icon: <ChefHat className="w-3 h-3 text-rose-400" /> },
@@ -193,7 +193,7 @@ export function DevRoleSimulatorBar() {
               <div className="absolute right-0 mt-1.5 w-96 bg-white dark:bg-[#1E293B] rounded-xl shadow-dropdown border border-slate-200 dark:border-slate-800 py-1.5 z-50 text-slate-900 dark:text-slate-100 animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-3 py-1.5 border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider flex items-center justify-between">
                   <span>Panel Otorisasi Multi-Tenant RBAC</span>
-                  <span className="text-[10px] text-[#3B7A57] dark:text-[#52B788] font-bold">Multi-Tenant RBAC</span>
+                  <span className="text-[10px] text-brand-sage dark:text-brand-sageBright font-bold">Multi-Tenant RBAC</span>
                 </div>
                 <div className="max-h-96 overflow-y-auto divide-y divide-slate-50 dark:divide-slate-800">
                   {PERSONAS_LIST.map((item) => {
@@ -203,7 +203,7 @@ export function DevRoleSimulatorBar() {
                         key={item.key}
                         onClick={() => handleSelectPersona(item.key)}
                         className={`w-full text-left px-3 py-2 flex items-start justify-between hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors ${
-                          isSelected ? "bg-emerald-50/70 dark:bg-emerald-950/40 border-l-2 border-[#3B7A57] dark:border-[#52B788]" : ""
+                          isSelected ? "bg-emerald-50/70 dark:bg-emerald-950/40 border-l-2 border-brand-sage dark:border-brand-sageBright" : ""
                         }`}
                       >
                         <div className="space-y-0.5">
@@ -215,7 +215,7 @@ export function DevRoleSimulatorBar() {
                           </div>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400">{item.scopeDesc}</p>
                         </div>
-                        {isSelected && <Check className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-1" />}
+                        {isSelected && <Check className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0 mt-1" />}
                       </button>
                     );
                   })}

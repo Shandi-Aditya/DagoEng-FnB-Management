@@ -266,9 +266,9 @@ export default function DashboardPage() {
       share: eventShare,
       tenants: `${eventStats.paidBookingsCount} Tiket Terjual (Platform Fee 20%)`,
       status: "AKTIF",
-      icon: <Calendar className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />,
-      color: "border-[#3B7A57]",
-      progressColor: "bg-[#3B7A57]",
+      icon: <Calendar className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />,
+      color: "border-brand-sage",
+      progressColor: "bg-brand-sage",
       progressWidth: eventRevenue > 0 ? "w-full" : "w-0",
     },
   ];

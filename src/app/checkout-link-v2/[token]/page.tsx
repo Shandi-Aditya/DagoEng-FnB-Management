@@ -139,7 +139,7 @@ export default function DokuCheckoutSimulatorPage() {
             <p className="text-xs text-slate-400 mt-1">{error || "Token atau invoice pembayaran tidak valid."}</p>
           </div>
           <Link href="/customer?tab=profile">
-            <Button className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer">
+            <Button className="w-full bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer">
               Kembali ke E-Tiket Saya
             </Button>
           </Link>
@@ -153,7 +153,7 @@ export default function DokuCheckoutSimulatorPage() {
       {/* Top Header */}
       <div className="max-w-xl w-full mx-auto flex items-center justify-between pb-6 border-b border-slate-800">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rose-600 to-red-500 text-white font-black text-xl flex items-center justify-center shadow-lg shadow-rose-900/30">
+          <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-rose-600 to-red-500 text-white font-black text-xl flex items-center justify-center shadow-lg shadow-rose-900/30">
             D
           </div>
           <div>
@@ -212,7 +212,7 @@ export default function DokuCheckoutSimulatorPage() {
 
             <div className="pt-2 flex flex-col sm:flex-row gap-3">
               <Link href={`/events/${transaction.eventId}`} className="flex-1">
-                <Button className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold py-3 rounded-xl cursor-pointer shadow-md">
+                <Button className="w-full bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold py-3 rounded-xl cursor-pointer shadow-md">
                   <span>Lihat E-Tiket Resmi (QR Aktif)</span>
                 </Button>
               </Link>
@@ -239,7 +239,7 @@ export default function DokuCheckoutSimulatorPage() {
               </p>
             </div>
             <Link href={`/events/${transaction.eventId}`}>
-              <Button className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-6 py-2.5 rounded-xl cursor-pointer">
+              <Button className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold px-6 py-2.5 rounded-xl cursor-pointer">
                 Pesan Ulang Tiket
               </Button>
             </Link>
@@ -354,7 +354,7 @@ export default function DokuCheckoutSimulatorPage() {
                 <Button
                   disabled={isProcessing}
                   onClick={() => handleSimulatePayment("SUCCESS")}
-                  className="w-full bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-sm py-3.5 rounded-2xl shadow-xl shadow-rose-950/50 cursor-pointer flex items-center justify-center space-x-2 transition-all hover:scale-[1.01]"
+                  className="w-full bg-linear-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-black text-sm py-3.5 rounded-2xl shadow-xl shadow-rose-950/50 cursor-pointer flex items-center justify-center space-x-2 transition-all hover:scale-[1.01]"
                 >
                   {isProcessing ? (
                     <RefreshCw className="w-4 h-4 animate-spin" />

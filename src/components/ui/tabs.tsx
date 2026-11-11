@@ -64,7 +64,7 @@ export function TabsTrigger({
       type="button"
       onClick={() => context.onValueChange(value)}
       className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold ring-offset-white dark:ring-offset-slate-900 transition-all focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold ring-offset-white dark:ring-offset-slate-900 transition-all focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50",
         isSelected
           ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm"
           : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100",
@@ -93,7 +93,7 @@ export function TabsContent({
   return (
     <div
       className={cn(
-        "ring-offset-white dark:ring-offset-slate-900 focus-visible:outline-none animate-in fade-in duration-200",
+        "ring-offset-white dark:ring-offset-slate-900 focus-visible:outline-hidden animate-in fade-in duration-200",
         className
       )}
     >

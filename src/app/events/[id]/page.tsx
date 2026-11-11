@@ -363,7 +363,7 @@ export default function EventDetailPage() {
 
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8 animate-pulse">
           {/* Poster Skeleton */}
-          <div className="rounded-3xl bg-slate-200/80 dark:bg-slate-800/80 aspect-[16/9] sm:aspect-[21/9] w-full" />
+          <div className="rounded-3xl bg-slate-200/80 dark:bg-slate-800/80 aspect-video sm:aspect-21/9 w-full" />
 
           {/* 2-Column Skeleton Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -407,7 +407,7 @@ export default function EventDetailPage() {
           {error || "Acara ini mungkin belum disetujui kurator atau telah dihapus."}
         </p>
         <Link href="/events">
-          <Button className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl">
+          <Button className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl">
             <ArrowLeft className="w-4 h-4 mr-1.5" />
             Kembali ke Daftar Event
           </Button>
@@ -426,9 +426,9 @@ export default function EventDetailPage() {
           {/* Modernized Pill Back Button */}
           <Link
             href="/events"
-            className="inline-flex items-center space-x-2 text-xs font-bold py-1.5 px-3.5 rounded-full bg-slate-100/80 dark:bg-slate-800/80 hover:bg-[#3B7A57]/10 dark:hover:bg-[#3B7A57]/20 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 hover:text-[#3B7A57] dark:hover:text-[#52B788] hover:border-[#3B7A57]/40 shadow-xs hover:shadow-sm transition-all duration-200 group cursor-pointer"
+            className="inline-flex items-center space-x-2 text-xs font-bold py-1.5 px-3.5 rounded-full bg-slate-100/80 dark:bg-slate-800/80 hover:bg-brand-sage/10 dark:hover:bg-brand-sage/20 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 hover:text-brand-sage dark:hover:text-brand-sageBright hover:border-brand-sage/40 shadow-xs hover:shadow-sm transition-all duration-200 group cursor-pointer"
           >
-            <ArrowLeft className="w-3.5 h-3.5 transition-transform duration-200 group-hover:-translate-x-1 text-[#3B7A57] dark:text-[#52B788]" />
+            <ArrowLeft className="w-3.5 h-3.5 transition-transform duration-200 group-hover:-translate-x-1 text-brand-sage dark:text-brand-sageBright" />
             <span>Kembali ke Daftar Event</span>
           </Link>
 
@@ -437,9 +437,9 @@ export default function EventDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs h-8 px-2.5 sm:px-3 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57] hover:text-[#3B7A57] rounded-xl transition-all cursor-pointer"
+                className="text-xs h-8 px-2.5 sm:px-3 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-sage hover:text-brand-sage rounded-xl transition-all cursor-pointer"
               >
-                <Ticket className="w-3.5 h-3.5 mr-1 text-[#3B7A57] dark:text-[#52B788]" />
+                <Ticket className="w-3.5 h-3.5 mr-1 text-brand-sage dark:text-brand-sageBright" />
                 <span className="hidden sm:inline">Tiket Saya</span>
                 <span className="sm:hidden">Tiket</span>
               </Button>
@@ -450,9 +450,9 @@ export default function EventDetailPage() {
               variant="outline"
               size="sm"
               onClick={() => setIsShareModalOpen(true)}
-              className="text-xs font-semibold h-8 px-3 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57] hover:text-[#3B7A57] rounded-xl transition-all cursor-pointer"
+              className="text-xs font-semibold h-8 px-3 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-sage hover:text-brand-sage rounded-xl transition-all cursor-pointer"
             >
-              <Share2 className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788]" />
+              <Share2 className="w-3.5 h-3.5 mr-1.5 text-brand-sage dark:text-brand-sageBright" />
               <span>Bagikan</span>
             </Button>
 
@@ -464,7 +464,7 @@ export default function EventDetailPage() {
       {/* Main Container */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-24 lg:pb-12">
         {/* Poster Showcase Container with Cinematic Blur Backdrop */}
-        <div className="relative rounded-3xl overflow-hidden bg-slate-900 border border-slate-200/80 dark:border-slate-800 aspect-[16/9] sm:aspect-[21/9] mb-8 shadow-lg group">
+        <div className="relative rounded-3xl overflow-hidden bg-slate-900 border border-slate-200/80 dark:border-slate-800 aspect-video sm:aspect-21/9 mb-8 shadow-lg group">
           {/* Blurred Background Glow */}
           <div
             className="absolute inset-0 bg-cover bg-center filter blur-2xl opacity-40 scale-110"
@@ -478,7 +478,7 @@ export default function EventDetailPage() {
             alt={event.title}
             className="relative z-10 w-full h-full object-cover sm:object-contain object-center"
           />
-          <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+          <div className="absolute inset-0 z-20 bg-linear-to-t from-black/80 via-black/20 to-transparent" />
 
           {/* Badges Floating over poster */}
           <div className="absolute top-4 left-4 z-30 flex items-center space-x-2">
@@ -490,7 +490,7 @@ export default function EventDetailPage() {
                 Event Telah Berlalu
               </Badge>
             ) : (
-              <Badge variant="outline" className="bg-[#3B7A57]/90 text-white border-emerald-600 text-xs px-2.5 py-1">
+              <Badge variant="outline" className="bg-brand-sage/90 text-white border-emerald-600 text-xs px-2.5 py-1">
                 Event Mendatang
               </Badge>
             )}
@@ -525,7 +525,7 @@ export default function EventDetailPage() {
               <div className="space-y-1">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Waktu Acara</span>
                 <div className="flex items-center space-x-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
-                  <Clock className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                  <Clock className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
                   <span className="truncate">
                     {new Date(event.startDate).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} - {new Date(event.endDate).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WITA
                   </span>
@@ -561,7 +561,7 @@ export default function EventDetailPage() {
 
               <div className="space-y-1">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Tiket Masuk</span>
-                <div className="flex items-center space-x-1.5 text-xs font-black text-[#3B7A57] dark:text-[#52B788]">
+                <div className="flex items-center space-x-1.5 text-xs font-black text-brand-sage dark:text-brand-sageBright">
                   <Ticket className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">{event.isPaid ? formatCurrencyIDR(event.price) : "GRATIS"}</span>
                 </div>
@@ -574,7 +574,7 @@ export default function EventDetailPage() {
             {/* About Event Card */}
             <Card className="p-6 sm:p-7 bg-white dark:bg-[#1E293B] border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs">
               <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-4 pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center space-x-2">
-                <Sparkles className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                <Sparkles className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                 <span>Tentang Acara Ini</span>
               </h2>
               <div className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line space-y-4">
@@ -586,13 +586,13 @@ export default function EventDetailPage() {
             {event.guidelines && event.guidelines.length > 0 && (
               <Card className="p-6 sm:p-7 bg-white dark:bg-[#1E293B] border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs">
                 <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white mb-4 pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center space-x-2">
-                  <ShieldCheck className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                  <ShieldCheck className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                   <span>Panduan & Fasilitas Acara</span>
                 </h2>
                 <ul className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 space-y-3">
                   {event.guidelines.map((guide, idx) => (
                     <li key={idx} className="flex items-start space-x-2.5">
-                      <CheckCircle2 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0 mt-0.5" />
+                      <CheckCircle2 className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0 mt-0.5" />
                       <span>{guide}</span>
                     </li>
                   ))}
@@ -603,7 +603,7 @@ export default function EventDetailPage() {
             {/* Organizer Profile Card */}
             <Card className="p-6 bg-white dark:bg-[#1E293B] border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center space-x-3.5">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center font-black text-lg border border-emerald-200 dark:border-emerald-800">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright flex items-center justify-center font-black text-lg border border-emerald-200 dark:border-emerald-800">
                   {event.organizerName.charAt(0)}
                 </div>
                 <div>
@@ -629,7 +629,7 @@ export default function EventDetailPage() {
                   Tiket Masuk
                 </span>
                 <div className="flex items-baseline space-x-2">
-                  <span className="text-2xl sm:text-3xl font-black text-[#3B7A57] dark:text-[#52B788]">
+                  <span className="text-2xl sm:text-3xl font-black text-brand-sage dark:text-brand-sageBright">
                     {event.isPaid ? formatCurrencyIDR(event.price) : "GRATIS"}
                   </span>
                   {event.isPaid && <span className="text-xs text-slate-400 font-medium">/ orang</span>}
@@ -641,7 +641,7 @@ export default function EventDetailPage() {
                 <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-1.5">
-                      <Ticket className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                      <Ticket className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
                         Ketersediaan Kuota
                       </span>
@@ -666,7 +666,7 @@ export default function EventDetailPage() {
                       <strong className="text-slate-900 dark:text-slate-100 font-bold">{event.availability.ticketsReserved}</strong> dari{" "}
                       <strong className="text-slate-900 dark:text-slate-100 font-bold">{event.availability.totalCapacity}</strong> tiket terisi
                     </span>
-                    <span className="font-bold text-[#3B7A57] dark:text-[#52B788]">
+                    <span className="font-bold text-brand-sage dark:text-brand-sageBright">
                       {event.availability.occupancyRate}%
                     </span>
                   </div>
@@ -685,7 +685,7 @@ export default function EventDetailPage() {
                           ? "bg-rose-500"
                           : event.availability.occupancyRate >= 80
                           ? "bg-amber-500"
-                          : "bg-[#3B7A57] dark:bg-[#52B788]"
+                          : "bg-brand-sage dark:bg-brand-sageBright"
                       }`}
                       style={{ width: `${Math.min(100, Math.max(0, event.availability.occupancyRate))}%` }}
                     />
@@ -711,7 +711,7 @@ export default function EventDetailPage() {
               {/* Schedule Info */}
               <div className="space-y-2.5 text-xs pt-0.5">
                 <div className="flex items-start space-x-3">
-                  <Calendar className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] shrink-0 mt-0.5" />
+                  <Calendar className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold text-slate-800 dark:text-slate-200 block">Jadwal Acara</span>
                     <span className="text-slate-500 dark:text-slate-400 text-[11px] leading-snug">
@@ -731,7 +731,7 @@ export default function EventDetailPage() {
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center space-x-1 text-[11px] text-[#3B7A57] dark:text-[#52B788] hover:underline font-bold mt-1"
+                      className="inline-flex items-center space-x-1 text-[11px] text-brand-sage dark:text-brand-sageBright hover:underline font-bold mt-1"
                     >
                       <span>Buka di Google Maps</span>
                       <ExternalLink className="w-3 h-3" />
@@ -761,7 +761,7 @@ export default function EventDetailPage() {
                         setBookingError(null);
                         setIsBookingModalOpen(true);
                       }}
-                      className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-sm py-3.5 rounded-2xl shadow-lg shadow-[#3B7A57]/25 flex items-center justify-center space-x-2 transition-all hover:scale-[1.01] active:scale-[0.98] cursor-pointer touch-manipulation"
+                      className="w-full bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-sm py-3.5 rounded-2xl shadow-lg shadow-[#3B7A57]/25 flex items-center justify-center space-x-2 transition-all hover:scale-[1.01] active:scale-[0.98] cursor-pointer touch-manipulation"
                     >
                       <Ticket className="w-4 h-4" />
                       <span>{event.isPaid ? "Pesan Tiket Sekarang" : "Daftar Tiket Gratis (RSVP)"}</span>
@@ -773,7 +773,7 @@ export default function EventDetailPage() {
               {/* Trust Signals */}
               <div className="pt-2 text-[10.5px] text-slate-500 dark:text-slate-400 space-y-1.5 border-t border-slate-100 dark:border-slate-800/60">
                 <div className="flex items-center space-x-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
                   <span>
                     {event.isPaid
                       ? "Verifikasi pembayaran manual oleh tim Dago Creative Hub sebelum QR check-in aktif"
@@ -781,13 +781,13 @@ export default function EventDetailPage() {
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                  <CheckCircle2 className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
                   <span>QR Code check-in resmi Dago Creative Hub</span>
                 </div>
                 <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60 text-center">
                   <Link
                     href="/events/tickets/recovery"
-                    className="text-[11px] font-semibold text-[#3B7A57] dark:text-[#52B788] hover:underline inline-flex items-center space-x-1"
+                    className="text-[11px] font-semibold text-brand-sage dark:text-brand-sageBright hover:underline inline-flex items-center space-x-1"
                   >
                     <Search className="w-3 h-3" />
                     <span>Sudah pesan tiket? Lupa kode booking? Cek di sini &rarr;</span>
@@ -797,7 +797,7 @@ export default function EventDetailPage() {
             </Card>
 
             {/* Host an Event Card */}
-            <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-slate-100 dark:from-[#1E293B] dark:to-[#161F31] border border-slate-200 dark:border-slate-800 text-center space-y-2">
+            <div className="p-4 rounded-2xl bg-linear-to-br from-emerald-50 to-slate-100 dark:from-[#1E293B] dark:to-[#161F31] border border-slate-200 dark:border-slate-800 text-center space-y-2">
               <span className="text-xs font-bold text-slate-900 dark:text-white block">
                 Ingin Mengadakan Event Komunitas?
               </span>
@@ -808,7 +808,7 @@ export default function EventDetailPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="w-full text-xs font-bold text-[#3B7A57] dark:text-[#52B788] border-emerald-300 dark:border-emerald-700/60 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl"
+                  className="w-full text-xs font-bold text-brand-sage dark:text-brand-sageBright border-emerald-300 dark:border-emerald-700/60 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl"
                 >
                   Ajukan Event Komunitas
                 </Button>
@@ -823,7 +823,7 @@ export default function EventDetailPage() {
         <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-[#0B1120]/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 p-3.5 px-4 flex items-center justify-between shadow-xl">
           <div>
             <span className="text-[10px] text-slate-400 font-bold uppercase block leading-none">Harga</span>
-            <span className="text-base font-black text-[#3B7A57] dark:text-[#52B788]">
+            <span className="text-base font-black text-brand-sage dark:text-brand-sageBright">
               {event.isPaid ? formatCurrencyIDR(event.price) : "GRATIS"}
             </span>
           </div>
@@ -833,7 +833,7 @@ export default function EventDetailPage() {
               setBookingError(null);
               setIsBookingModalOpen(true);
             }}
-            className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md cursor-pointer"
+            className="bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md cursor-pointer"
           >
             <Ticket className="w-3.5 h-3.5 mr-1.5" />
             <span>{event.isPaid ? "Pesan Tiket" : "Daftar RSVP"}</span>
@@ -854,7 +854,7 @@ export default function EventDetailPage() {
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-150">
             <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-xl bg-[#3B7A57]/15 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-brand-sage/15 text-brand-sage dark:text-brand-sageBright flex items-center justify-center">
                   <Ticket className="w-4 h-4" />
                 </div>
                 <div>
@@ -982,7 +982,7 @@ export default function EventDetailPage() {
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <div>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400 block">Total Biaya Tiket:</span>
-                  <span className="text-lg font-black text-[#3B7A57] dark:text-[#52B788]">
+                  <span className="text-lg font-black text-brand-sage dark:text-brand-sageBright">
                     {event.isPaid
                       ? formatCurrencyIDR(event.price * bookingForm.ticketCount)
                       : "GRATIS"}
@@ -991,7 +991,7 @@ export default function EventDetailPage() {
                 <Button
                   type="submit"
                   disabled={isSubmittingBooking}
-                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md cursor-pointer"
+                  className="bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md cursor-pointer"
                 >
                   {isSubmittingBooking ? "Memproses..." : event.isPaid ? "Lanjut ke Pembayaran" : "Dapatkan Tiket"}
                 </Button>
@@ -1026,7 +1026,7 @@ export default function EventDetailPage() {
 
             <div className="space-y-1">
               <span className="text-[11px] text-slate-400">Total Nominal Pembayaran:</span>
-              <h2 className="text-2xl font-black text-[#3B7A57] dark:text-[#52B788]">
+              <h2 className="text-2xl font-black text-brand-sage dark:text-brand-sageBright">
                 {formatCurrencyIDR(pendingTicket.totalPrice)}
               </h2>
               <p className="text-[11px] text-slate-500 font-medium">
@@ -1088,7 +1088,7 @@ export default function EventDetailPage() {
                             alert(`Nomor rekening ${bank.bankName} (${bank.accountNumber}) berhasil disalin!`);
                           }
                         }}
-                        className="h-7 px-2.5 text-[10.5px] font-bold text-[#3B7A57] border-[#3B7A57]/30 hover:bg-[#3B7A57]/10 cursor-pointer"
+                        className="h-7 px-2.5 text-[10.5px] font-bold text-brand-sage border-brand-sage/30 hover:bg-brand-sage/10 cursor-pointer"
                       >
                         Salin Rekening
                       </Button>
@@ -1117,7 +1117,7 @@ export default function EventDetailPage() {
               {pendingTicket.guestToken && (
                 <Link
                   href={`/events/tickets/${pendingTicket.guestToken}`}
-                  className="w-full inline-flex items-center justify-center space-x-2 py-3 px-3 rounded-xl bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold transition-all shadow-md hover:scale-[1.01]"
+                  className="w-full inline-flex items-center justify-center space-x-2 py-3 px-3 rounded-xl bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold transition-all shadow-md hover:scale-[1.01]"
                 >
                   <ExternalLink className="w-4 h-4" />
                   <span>Buka E-Tiket & Unggah Bukti Transfer &rarr;</span>
@@ -1128,7 +1128,7 @@ export default function EventDetailPage() {
                 onClick={handleProceedToTicketView}
                 className="w-full border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs py-2.5 rounded-xl cursor-pointer flex items-center justify-center space-x-1.5"
               >
-                <Ticket className="w-3.5 h-3.5 text-[#3B7A57]" />
+                <Ticket className="w-3.5 h-3.5 text-brand-sage" />
                 <span>Lihat Tiket Pesanan</span>
               </Button>
               <button
@@ -1156,7 +1156,7 @@ export default function EventDetailPage() {
         >
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-150">
             {/* Header Voucher */}
-            <div className="bg-gradient-to-r from-[#3B7A57] to-[#2E6044] p-5 text-white flex items-center justify-between shrink-0">
+            <div className="bg-linear-to-r from-[#3B7A57] to-[#2E6044] p-5 text-white flex items-center justify-between shrink-0">
               <div>
                 <span className="text-[10px] uppercase font-black tracking-widest text-emerald-200 block">
                   E-Tiket Komunitas Resmi
@@ -1208,7 +1208,7 @@ export default function EventDetailPage() {
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 font-semibold uppercase">Jumlah & Biaya:</span>
-                    <p className="font-bold text-[#3B7A57] dark:text-[#52B788]">
+                    <p className="font-bold text-brand-sage dark:text-brand-sageBright">
                       {issuedTicket.ticketCount} Tiket • {issuedTicket.totalPrice > 0 ? formatCurrencyIDR(issuedTicket.totalPrice) : "GRATIS"}
                     </p>
                     <p className="text-[10px] text-slate-400">{issuedTicket.paymentMethod}</p>
@@ -1279,7 +1279,7 @@ export default function EventDetailPage() {
                 <Button
                   type="button"
                   onClick={() => setIsTicketModalOpen(false)}
-                  className="flex-1 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
+                  className="flex-1 bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-md cursor-pointer"
                 >
                   Selesai
                 </Button>
@@ -1289,7 +1289,7 @@ export default function EventDetailPage() {
                 <div className="pt-1">
                   <Link
                     href={`/events/tickets/${issuedTicket.guestToken}`}
-                    className="w-full inline-flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 text-[#3B7A57] dark:text-[#52B788] text-xs font-bold transition-colors"
+                    className="w-full inline-flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/50 dark:hover:bg-emerald-900/50 text-brand-sage dark:text-brand-sageBright text-xs font-bold transition-colors"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                     <span>
@@ -1304,7 +1304,7 @@ export default function EventDetailPage() {
               <div className="flex items-center justify-between text-[11px] pt-2 border-t border-slate-100 dark:border-slate-800">
                 <Link
                   href={user ? "/customer?tab=PROFILE" : `/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&from=events&mode=customer`}
-                  className="inline-flex items-center space-x-1 font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline"
+                  className="inline-flex items-center space-x-1 font-bold text-brand-sage dark:text-brand-sageBright hover:underline"
                 >
                   <Ticket className="w-3.5 h-3.5 mr-1" />
                   <span>{user ? "Tiket Saya" : "Masuk ke Akun DagoEng"}</span>
@@ -1334,7 +1334,7 @@ export default function EventDetailPage() {
             <div className="p-5 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto flex-1">
               <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
-                <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788] uppercase tracking-wider block">
+                <span className="text-[10px] font-bold text-brand-sage dark:text-brand-sageBright uppercase tracking-wider block">
                   Bagikan ke Teman & Komunitas
                 </span>
                 <h3 className="text-base font-bold text-slate-900 dark:text-white line-clamp-1 mt-0.5">
@@ -1396,7 +1396,7 @@ export default function EventDetailPage() {
                 onClick={handleNativeShare}
                 className="w-full text-xs font-bold h-9 rounded-xl border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-center space-x-1.5"
               >
-                <Share2 className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                <Share2 className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
                 <span>Bagikan via Aplikasi Lain</span>
               </Button>
             )}
@@ -1411,7 +1411,7 @@ export default function EventDetailPage() {
                   type="text"
                   readOnly
                   value={getShareUrl()}
-                  className="flex-1 text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 focus:outline-none select-all"
+                  className="flex-1 text-xs px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 focus:outline-hidden select-all"
                 />
                 <Button
                   type="button"
@@ -1420,7 +1420,7 @@ export default function EventDetailPage() {
                   className={`h-9 px-3.5 text-xs font-bold rounded-xl transition-all cursor-pointer shrink-0 ${
                     isCopied
                       ? "bg-emerald-600 text-white"
-                      : "bg-[#3B7A57] hover:bg-[#2E6044] text-white"
+                      : "bg-brand-sage hover:bg-[#2E6044] text-white"
                   }`}
                 >
                   {isCopied ? (

@@ -94,7 +94,7 @@ export function StockOpnameReportPDFModal({
         }
       `}</style>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in">
         <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden">
           {/* Header Action Bar */}
           <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -138,7 +138,7 @@ export function StockOpnameReportPDFModal({
               {/* Official Letterhead */}
               <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
                 <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 relative flex-shrink-0">
+                  <div className="w-12 h-12 relative shrink-0">
                     <Image
                       src="/logo-dago.png"
                       alt="Dago Creative Hub"

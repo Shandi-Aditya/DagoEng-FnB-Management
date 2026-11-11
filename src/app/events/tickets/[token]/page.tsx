@@ -383,7 +383,7 @@ export default function PrivateTicketViewPage() {
     return (
       <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B1120] flex items-center justify-center p-4">
         <div className="flex flex-col items-center space-y-3">
-          <RefreshCw className="w-8 h-8 text-[#3B7A57] animate-spin" />
+          <RefreshCw className="w-8 h-8 text-brand-sage animate-spin" />
           <span className="text-xs text-slate-500 font-semibold tracking-wide">
             Mengambil E-Tiket Resmi...
           </span>
@@ -417,7 +417,7 @@ export default function PrivateTicketViewPage() {
               </Button>
             </Link>
             <Link href="/events">
-              <Button className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl shadow-xs">
+              <Button className="w-full bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl shadow-xs">
                 Kembali ke Daftar Event
               </Button>
             </Link>
@@ -455,7 +455,7 @@ export default function PrivateTicketViewPage() {
       <div className="max-w-xl w-full mx-auto flex items-center justify-between pb-5 border-b border-slate-200/80 dark:border-slate-800/80">
         <Link
           href={`/events/${ticket.eventId}`}
-          className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors"
+          className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Kembali ke Detail Event</span>
@@ -514,7 +514,7 @@ export default function PrivateTicketViewPage() {
         {/* Ticket Header Voucher Card */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-xl overflow-hidden">
           {/* Top Banner Ribbon */}
-          <div className="bg-gradient-to-r from-[#3B7A57] to-[#2E6044] p-5 sm:p-6 text-white flex items-center justify-between">
+          <div className="bg-linear-to-r from-[#3B7A57] to-[#2E6044] p-5 sm:p-6 text-white flex items-center justify-between">
             <div className="space-y-0.5">
               <span className="text-[10px] uppercase font-black tracking-widest text-emerald-200 block">
                 E-Tiket Komunitas Resmi
@@ -545,7 +545,7 @@ export default function PrivateTicketViewPage() {
             {/* Event Overview */}
             <div className="space-y-1">
               {ticket.eventDetails?.category && (
-                <span className="text-[10px] font-black uppercase text-[#3B7A57] dark:text-[#52B788] tracking-wider block">
+                <span className="text-[10px] font-black uppercase text-brand-sage dark:text-brand-sageBright tracking-wider block">
                   {ticket.eventDetails.category}
                 </span>
               )}
@@ -565,7 +565,7 @@ export default function PrivateTicketViewPage() {
             {/* Key Event Metadata */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs">
               <div className="flex items-start space-x-2.5">
-                <Calendar className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] shrink-0 mt-0.5" />
+                <Calendar className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0 mt-0.5" />
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">Waktu Acara</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-200 leading-snug block">
@@ -575,7 +575,7 @@ export default function PrivateTicketViewPage() {
               </div>
 
               <div className="flex items-start space-x-2.5">
-                <MapPin className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] shrink-0 mt-0.5" />
+                <MapPin className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0 mt-0.5" />
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase block">Lokasi Venue</span>
                   <span className="font-semibold text-slate-800 dark:text-slate-200 leading-snug block">
@@ -585,7 +585,7 @@ export default function PrivateTicketViewPage() {
                     href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ticket.eventLocation)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center space-x-1 text-[11px] text-[#3B7A57] dark:text-[#52B788] hover:underline font-bold mt-1"
+                    className="inline-flex items-center space-x-1 text-[11px] text-brand-sage dark:text-brand-sageBright hover:underline font-bold mt-1"
                   >
                     <span>Buka Rute Google Maps</span>
                     <ExternalLink className="w-3 h-3" />
@@ -599,7 +599,7 @@ export default function PrivateTicketViewPage() {
               <div className="p-3 bg-slate-50 dark:bg-slate-800/80 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
-                    <Ticket className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                    <Ticket className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
                     <span>Pilih QR Tiket ({activeSubIndex} dari {ticket.ticketCount}):</span>
                   </span>
                   <span className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">
@@ -619,8 +619,8 @@ export default function PrivateTicketViewPage() {
                         onClick={() => setSelectedTicketIndex(seatNum)}
                         className={`flex-1 min-w-[95px] py-2 px-2.5 rounded-xl text-xs font-bold transition-all text-center border cursor-pointer ${
                           isSelected
-                            ? "bg-[#3B7A57] text-white border-[#3B7A57] shadow-sm scale-[1.02]"
-                            : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#3B7A57]/50"
+                            ? "bg-brand-sage text-white border-brand-sage shadow-sm scale-[1.02]"
+                            : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-sage/50"
                         }`}
                       >
                         <div className="flex items-center justify-center space-x-1">
@@ -643,7 +643,7 @@ export default function PrivateTicketViewPage() {
                 isCurrentSubDone ? (
                   <div className="p-6 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center text-center space-y-2.5">
                     <div className="w-14 h-14 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-md">
-                      <Check className="w-8 h-8 stroke-[3]" />
+                      <Check className="w-8 h-8 stroke-3" />
                     </div>
                     <Badge className="bg-slate-800 text-white dark:bg-slate-700 text-xs font-bold">
                       {isMultiTicket ? `TIKET #${activeSubIndex} SELESAI CHECK-IN` : "SELESAI CHECK-IN (SUDAH DIGUNAKAN)"}
@@ -720,7 +720,7 @@ export default function PrivateTicketViewPage() {
                       <div className="flex items-center space-x-2.5">
                         <Clock
                           className={`w-5 h-5 shrink-0 ${
-                            timeLeft.isExpired ? "text-rose-500" : "text-[#3B7A57] dark:text-[#52B788] animate-pulse"
+                            timeLeft.isExpired ? "text-rose-500" : "text-brand-sage dark:text-brand-sageBright animate-pulse"
                           }`}
                         />
                         <div className="space-y-0.5">
@@ -739,7 +739,7 @@ export default function PrivateTicketViewPage() {
                         </div>
                       </div>
                       {!timeLeft.isExpired && (
-                        <div className="font-mono font-black text-base sm:text-lg text-[#3B7A57] dark:text-[#52B788] bg-white dark:bg-slate-900 px-3 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800/80 shadow-2xs shrink-0">
+                        <div className="font-mono font-black text-base sm:text-lg text-brand-sage dark:text-brand-sageBright bg-white dark:bg-slate-900 px-3 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800/80 shadow-2xs shrink-0">
                           {String(timeLeft.minutes).padStart(2, "0")}:{String(timeLeft.seconds).padStart(2, "0")}
                         </div>
                       )}
@@ -806,7 +806,7 @@ export default function PrivateTicketViewPage() {
               </div>
               <div className="flex justify-between pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
                 <span className="font-bold text-slate-700 dark:text-slate-300">Total Nominal:</span>
-                <span className="font-black text-[#3B7A57] dark:text-[#52B788] text-sm">
+                <span className="font-black text-brand-sage dark:text-brand-sageBright text-sm">
                   {ticket.totalPrice > 0 ? formatCurrencyIDR(ticket.totalPrice) : "Gratis (RSVP)"}
                 </span>
               </div>
@@ -821,7 +821,7 @@ export default function PrivateTicketViewPage() {
                   className="w-full flex items-center justify-between font-bold text-slate-900 dark:text-white cursor-pointer"
                 >
                   <span className="flex items-center space-x-1.5">
-                    <Ticket className="w-4 h-4 text-[#3B7A57]" />
+                    <Ticket className="w-4 h-4 text-brand-sage" />
                     <span>
                       Daftar {ticket.ticketCount} Tiket Anda ({ticket.checkedInQty || (isCheckedIn ? ticket.ticketCount : 0)}/{ticket.ticketCount} Hadir)
                     </span>
@@ -847,7 +847,7 @@ export default function PrivateTicketViewPage() {
                           key={subTicketCode}
                           className={`p-3.5 rounded-2xl border transition-all ${
                             isCurrentlySelected
-                              ? "bg-emerald-50/70 dark:bg-emerald-950/40 border-[#3B7A57] ring-1 ring-[#3B7A57]"
+                              ? "bg-emerald-50/70 dark:bg-emerald-950/40 border-brand-sage ring-1 ring-[#3B7A57]"
                               : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                           }`}
                         >
@@ -901,7 +901,7 @@ export default function PrivateTicketViewPage() {
                               }}
                               className={`flex-1 py-1 px-2 rounded-lg text-[10.5px] font-bold transition-colors cursor-pointer text-center ${
                                 isCurrentlySelected
-                                  ? "bg-[#3B7A57] text-white"
+                                  ? "bg-brand-sage text-white"
                                   : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200"
                               }`}
                             >
@@ -911,7 +911,7 @@ export default function PrivateTicketViewPage() {
                               type="button"
                               onClick={() => handleDownloadSubTicket(ticketIndex)}
                               disabled={isDownloadingTicket}
-                              className="py-1 px-2 rounded-lg text-[10.5px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 cursor-pointer flex items-center space-x-1"
+                              className="py-1 px-2 rounded-lg text-[10.5px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright hover:bg-emerald-100 border border-emerald-200 dark:border-emerald-800 cursor-pointer flex items-center space-x-1"
                               title="Download e-tiket PNG untuk tiket ini"
                             >
                               <Download className="w-3 h-3" />
@@ -931,12 +931,12 @@ export default function PrivateTicketViewPage() {
               <div className="space-y-4 pt-1">
 
                   {/* Transfer Amount Card */}
-                  <div className="p-4 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-slate-50 dark:to-slate-800/40 rounded-2xl border border-emerald-500/20 text-left space-y-2">
+                  <div className="p-4 bg-linear-to-br from-emerald-500/10 via-emerald-500/5 to-slate-50 dark:to-slate-800/40 rounded-2xl border border-emerald-500/20 text-left space-y-2">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
                       Total Nominal Transfer Pas
                     </span>
                     <div className="flex items-center justify-between">
-                      <span className="text-2xl font-black text-[#3B7A57] dark:text-[#52B788]">
+                      <span className="text-2xl font-black text-brand-sage dark:text-brand-sageBright">
                         {formatCurrencyIDR(ticket.totalPrice)}
                       </span>
                       <Button
@@ -966,7 +966,7 @@ export default function PrivateTicketViewPage() {
                   {/* Destination Bank Accounts */}
                   <div className="space-y-2 text-left">
                     <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5">
-                      <Building2 className="w-3.5 h-3.5 text-[#3B7A57]" />
+                      <Building2 className="w-3.5 h-3.5 text-brand-sage" />
                       <span>{isPaid ? "Rekening Tujuan Pembayaran Tiket Ini:" : "Rekening Resmi Tujuan Transfer Aktif:"}</span>
                     </span>
 
@@ -1019,7 +1019,7 @@ export default function PrivateTicketViewPage() {
                             {displayBanks.map((bank) => (
                               <div
                                 key={bank.accountNumber}
-                                className="p-3.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/90 dark:border-slate-700 flex items-center justify-between shadow-2xs hover:border-[#3B7A57] transition-colors"
+                                className="p-3.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/90 dark:border-slate-700 flex items-center justify-between shadow-2xs hover:border-brand-sage transition-colors"
                               >
                                 <div className="space-y-0.5">
                                   <div className="flex items-center space-x-2">
@@ -1031,7 +1031,7 @@ export default function PrivateTicketViewPage() {
                                     </span>
                                   </div>
                                   <div className="flex items-center space-x-2">
-                                    <span className="font-mono font-bold text-sm text-[#3B7A57] dark:text-[#52B788]">
+                                    <span className="font-mono font-bold text-sm text-brand-sage dark:text-brand-sageBright">
                                       {bank.accountNumber}
                                     </span>
                                     <span className="text-[10px] text-slate-400">
@@ -1049,7 +1049,7 @@ export default function PrivateTicketViewPage() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => handleCopyAccount(bank.accountNumber)}
-                                  className="h-7 px-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-[#3B7A57] hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg cursor-pointer"
+                                  className="h-7 px-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-brand-sage hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-lg cursor-pointer"
                                 >
                                   {copiedAccount === bank.accountNumber ? (
                                     <>
@@ -1092,7 +1092,7 @@ export default function PrivateTicketViewPage() {
                     {uploadSuccessMessage && (
                       <div className="mb-3 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs flex items-center justify-between animate-in fade-in">
                         <div className="flex items-center space-x-2">
-                          <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                          <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
                           <span>{uploadSuccessMessage}</span>
                         </div>
                         <button
@@ -1107,7 +1107,7 @@ export default function PrivateTicketViewPage() {
                     {uploadErrorMessage && (
                       <div className="mb-3 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs flex items-center justify-between animate-in fade-in">
                         <div className="flex items-center space-x-2">
-                          <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                           <span>{uploadErrorMessage}</span>
                         </div>
                         <button
@@ -1125,7 +1125,7 @@ export default function PrivateTicketViewPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-2">
                             <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center">
-                              <Check className="w-3.5 h-3.5 stroke-[3]" />
+                              <Check className="w-3.5 h-3.5 stroke-3" />
                             </div>
                             <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
                               Bukti Transfer Berhasil Diunggah
@@ -1188,7 +1188,7 @@ export default function PrivateTicketViewPage() {
                           <button
                             type="button"
                             onClick={() => setIsReuploading(true)}
-                            className="text-[11px] font-bold text-[#3B7A57] hover:underline cursor-pointer"
+                            className="text-[11px] font-bold text-brand-sage hover:underline cursor-pointer"
                           >
                             Unggah Ulang Bukti Lain &rarr;
                           </button>
@@ -1199,7 +1199,7 @@ export default function PrivateTicketViewPage() {
                       <form onSubmit={handleUploadProof} className="space-y-3">
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
-                            <Upload className="w-3.5 h-3.5 text-[#3B7A57]" />
+                            <Upload className="w-3.5 h-3.5 text-brand-sage" />
                             <span>Unggah Bukti Transfer Pembayaran:</span>
                           </span>
                           {isReuploading && (
@@ -1218,7 +1218,7 @@ export default function PrivateTicketViewPage() {
                         </div>
 
                         {/* File Dropzone */}
-                        <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-[#3B7A57] dark:hover:border-[#52B788] rounded-2xl bg-slate-50/60 dark:bg-slate-800/40 cursor-pointer transition-colors group">
+                        <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-brand-sage dark:hover:border-brand-sageBright rounded-2xl bg-slate-50/60 dark:bg-slate-800/40 cursor-pointer transition-colors group">
                           {proofPreview ? (
                             <div className="space-y-2 text-center">
                               <img
@@ -1226,13 +1226,13 @@ export default function PrivateTicketViewPage() {
                                 alt="Preview Bukti"
                                 className="max-h-36 mx-auto rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 object-contain"
                               />
-                              <span className="text-[11px] font-semibold text-[#3B7A57] block">
+                              <span className="text-[11px] font-semibold text-brand-sage block">
                                 Ganti Foto / File Bukti
                               </span>
                             </div>
                           ) : (
                             <div className="space-y-1 text-center py-2">
-                              <div className="w-9 h-9 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center mx-auto">
+                              <div className="w-9 h-9 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright flex items-center justify-center mx-auto">
                                 <ImageIcon className="w-4 h-4" />
                               </div>
                               <span className="text-xs font-bold text-slate-700 dark:text-slate-200 block">
@@ -1269,7 +1269,7 @@ export default function PrivateTicketViewPage() {
                         <Button
                           type="submit"
                           disabled={!proofFile || isUploadingProof}
-                          className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md cursor-pointer flex items-center justify-center space-x-2"
+                          className="w-full bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md cursor-pointer flex items-center justify-center space-x-2"
                         >
                           {isUploadingProof ? (
                             <>
@@ -1323,7 +1323,7 @@ export default function PrivateTicketViewPage() {
                       type="button"
                       onClick={handleDownloadAllTickets}
                       disabled={isDownloadingTicket}
-                      className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl h-10 py-2.5 cursor-pointer shadow-xs"
+                      className="w-full bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl h-10 py-2.5 cursor-pointer shadow-xs"
                     >
                       <Download className="w-3.5 h-3.5 mr-1.5" />
                       <span>Download Semua ({ticket.ticketCount} Tiket)</span>

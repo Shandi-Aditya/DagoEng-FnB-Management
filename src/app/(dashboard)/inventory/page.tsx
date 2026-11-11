@@ -362,7 +362,7 @@ export default function InventoryPage() {
       {/* Toast Notification */}
       {successToast && (
         <div className="p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-900 font-bold flex items-center space-x-2 animate-in fade-in shadow-xs">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
           <span>{successToast}</span>
         </div>
       )}

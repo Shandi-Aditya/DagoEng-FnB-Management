@@ -253,7 +253,7 @@ export function PrinterSettingsTab() {
               type="button"
               size="sm"
               onClick={openAddModal}
-              className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl space-x-1.5 cursor-pointer shadow-xs"
+              className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl space-x-1.5 cursor-pointer shadow-xs"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Tambah Perangkat Printer</span>
@@ -470,7 +470,7 @@ export function PrinterSettingsTab() {
               <Button
                 type="submit"
                 size="sm"
-                className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl space-x-1 cursor-pointer"
+                className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl space-x-1 cursor-pointer"
               >
                 <Check className="w-3.5 h-3.5" />
                 <span>Simpan Aturan</span>
@@ -1000,7 +1000,7 @@ export function PrinterSettingsTab() {
                 </Button>
                 <Button
                   type="submit"
-                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-9 px-4 rounded-xl"
+                  className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold h-9 px-4 rounded-xl"
                 >
                   {editingDeviceId ? "Simpan Perubahan" : "Tambahkan Printer"}
                 </Button>

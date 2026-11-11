@@ -225,7 +225,7 @@ _Sent via POS DagoEng Platform_`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
       <div className="bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col animate-in zoom-in-95 duration-150 text-slate-900 dark:text-slate-100">
         {/* Header */}
         <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
@@ -256,7 +256,7 @@ _Sent via POS DagoEng Platform_`;
             {/* Cashier Name Confirmation */}
             <div className="space-y-1.5">
               <label className="text-[11px] text-slate-600 dark:text-slate-400 font-medium block">
-                Tolong masukkan nama Anda (<span className="text-[#3B7A57] dark:text-[#52B788] font-bold">kasir</span>) sebagai konfirmasi
+                Tolong masukkan nama Anda (<span className="text-brand-sage dark:text-brand-sageBright font-bold">kasir</span>) sebagai konfirmasi
               </label>
               <input
                 type="text"
@@ -264,7 +264,7 @@ _Sent via POS DagoEng Platform_`;
                 onChange={(e) => setConfirmCashierName(e.target.value)}
                 placeholder="Konfirmasi nama kasir yang menutup sesi"
                 disabled={isClosing}
-                className="w-full px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#3B7A57] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
+                className="w-full px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
               />
             </div>
 
@@ -281,7 +281,7 @@ _Sent via POS DagoEng Platform_`;
                   onChange={handleCashInputChange}
                   placeholder="0"
                   disabled={isClosing}
-                  className="w-full pl-10 pr-3.5 py-2 text-xs font-mono border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#3B7A57] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
+                  className="w-full pl-10 pr-3.5 py-2 text-xs font-mono border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
                 />
               </div>
             </div>
@@ -302,7 +302,7 @@ _Sent via POS DagoEng Platform_`;
               type="button"
               disabled={isClosing || !confirmCashierName.trim()}
               onClick={handleConfirmCloseSession}
-              className="w-full py-2.5 text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-sm transition-all active:scale-98 flex items-center justify-center space-x-2"
+              className="w-full py-2.5 text-xs font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-xl shadow-sm transition-all active:scale-98 flex items-center justify-center space-x-2"
             >
               {isClosing ? (
                 <>

@@ -172,7 +172,7 @@ export default function CustomersPage() {
       {/* Toast Alert */}
       {toastMessage && (
         <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-900 font-bold flex items-center space-x-2 animate-in fade-in shadow-xs">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -305,7 +305,7 @@ export default function CustomersPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Cari pelanggan berdasarkan nama, nomor telepon, email, atau tier..."
-            className="w-full text-xs bg-transparent border-none focus:outline-none placeholder:text-slate-400"
+            className="w-full text-xs bg-transparent border-none focus:outline-hidden placeholder:text-slate-400"
           />
         </div>
         <TablePageSizeSelector
@@ -433,7 +433,7 @@ export default function CustomersPage() {
 
       {/* MODAL 1: TAMBAH MEMBER (IDENTITAS SAJA, TIER OTOMATIS) */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 dark:border-slate-700 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
               <div className="flex items-center space-x-2">
@@ -464,7 +464,7 @@ export default function CustomersPage() {
                   placeholder="Contoh: Gusti Ngurah Bagus"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-primary"
                 />
               </div>
 
@@ -476,7 +476,7 @@ export default function CustomersPage() {
                   placeholder="Contoh: +62 812-3456-7890"
                   value={newPhone}
                   onChange={(e) => setNewPhone(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl font-mono focus:outline-hidden focus:ring-1 focus:ring-primary"
                 />
               </div>
 
@@ -488,7 +488,7 @@ export default function CustomersPage() {
                     placeholder="nama@email.com"
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-primary"
                   />
                 </div>
                 <div className="space-y-1">
@@ -498,7 +498,7 @@ export default function CustomersPage() {
                     placeholder="510801xxxxxx"
                     value={newIdentity}
                     onChange={(e) => setNewIdentity(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl font-mono focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 rounded-xl font-mono focus:outline-hidden focus:ring-1 focus:ring-primary"
                   />
                 </div>
               </div>
@@ -511,7 +511,7 @@ export default function CustomersPage() {
                   step={50}
                   value={initialPoints}
                   onChange={(e) => setInitialPoints(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-xl font-mono font-bold text-primary dark:text-primary-light focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-xl font-mono font-bold text-primary dark:text-primary-light focus:outline-hidden focus:ring-1 focus:ring-primary"
                 />
                 <span className="text-[10px] text-slate-400 dark:text-slate-400">
                   {initialPoints >= 3000
@@ -545,7 +545,7 @@ export default function CustomersPage() {
 
       {/* MODAL 2: RIWAYAT POIN & TIER */}
       {selectedMemberForHistory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg p-5 border border-slate-200 dark:border-slate-700 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
               <div>
@@ -641,7 +641,7 @@ export default function CustomersPage() {
 
       {/* MODAL 3: MANUAL TIER OVERRIDE (OWNER / ADMIN) */}
       {selectedMemberForOverride && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 dark:border-slate-700 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-3">
               <div className="flex items-center space-x-2 text-primary">
@@ -675,7 +675,7 @@ export default function CustomersPage() {
                 <select
                   value={overrideTier}
                   onChange={(e) => setOverrideTier(e.target.value as LoyaltyTier)}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-bold focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-bold focus:outline-hidden focus:ring-1 focus:ring-primary"
                 >
                   <option value="Bronze">Bronze (0 - 499 Pts)</option>
                   <option value="Silver">Silver (500 - 1.499 Pts)</option>
@@ -692,7 +692,7 @@ export default function CustomersPage() {
                   placeholder="Contoh: Promosi VIP Dago Hub / Penyesuaian keanggotaan investor..."
                   value={overrideReason}
                   onChange={(e) => setOverrideReason(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-primary"
                 />
               </div>
 

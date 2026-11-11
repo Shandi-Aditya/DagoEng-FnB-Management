@@ -176,7 +176,7 @@ export default function TicketRecoveryPage() {
         <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
           <Link
             href="/events"
-            className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788]"
+            className="inline-flex items-center space-x-1.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-brand-sage dark:hover:text-brand-sageBright"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Kembali ke Daftar Event</span>
@@ -186,7 +186,7 @@ export default function TicketRecoveryPage() {
 
         {/* Page Title Card */}
         <div className="text-center space-y-1.5">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center mx-auto mb-2">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright flex items-center justify-center mx-auto mb-2">
             <Ticket className="w-6 h-6" />
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
@@ -204,7 +204,7 @@ export default function TicketRecoveryPage() {
             <div className="space-y-4 animate-in fade-in duration-150">
               <div className="space-y-1">
                 <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-                  <Search className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                  <Search className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                   <span>Akses Cepat: Kode Booking & Email</span>
                 </h2>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -225,7 +225,7 @@ export default function TicketRecoveryPage() {
                         setCodeSearchError(null);
                         setPhoneSearchError(null);
                       }}
-                      className="text-[11px] font-semibold text-[#3B7A57] dark:text-[#52B788] hover:underline cursor-pointer"
+                      className="text-[11px] font-semibold text-brand-sage dark:text-brand-sageBright hover:underline cursor-pointer"
                     >
                       Lupa kode booking? Klik di sini
                     </button>
@@ -235,7 +235,7 @@ export default function TicketRecoveryPage() {
                     value={ticketCode}
                     onChange={(e) => setTicketCode(e.target.value)}
                     placeholder="Contoh: DAGO-EVT-48246"
-                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono uppercase focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono uppercase focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
 
@@ -249,7 +249,7 @@ export default function TicketRecoveryPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="email.pemesan@example.com"
-                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
 
@@ -263,7 +263,7 @@ export default function TicketRecoveryPage() {
                 <Button
                   type="submit"
                   disabled={isSearchingCode}
-                  className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
+                  className="w-full bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
                 >
                   {isSearchingCode ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -289,7 +289,7 @@ export default function TicketRecoveryPage() {
                       </p>
                     </div>
                     <Link href={`/events/tickets/${codeRecoveredToken}`}>
-                      <Button className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold py-2 rounded-xl mt-1 cursor-pointer">
+                      <Button className="w-full bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold py-2 rounded-xl mt-1 cursor-pointer">
                         <span>Buka Tautan E-Tiket Privat Sekarang</span>
                         <ExternalLink className="w-3 h-3 ml-1.5" />
                       </Button>
@@ -303,7 +303,7 @@ export default function TicketRecoveryPage() {
             <div className="space-y-4 animate-in fade-in duration-150">
               <div className="space-y-1">
                 <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-                  <Phone className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                  <Phone className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                   <span>Pemulihan Mandiri: Email & No. WhatsApp</span>
                 </h2>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400">
@@ -322,7 +322,7 @@ export default function TicketRecoveryPage() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="email.pemesan@example.com"
-                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
 
@@ -336,7 +336,7 @@ export default function TicketRecoveryPage() {
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
                     placeholder="Contoh: 08123456789 atau 628123456789"
-                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
 
@@ -366,7 +366,7 @@ export default function TicketRecoveryPage() {
                 <Button
                   type="submit"
                   disabled={isSearchingPhone}
-                  className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
+                  className="w-full bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
                 >
                   {isSearchingPhone ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -385,7 +385,7 @@ export default function TicketRecoveryPage() {
                       setCodeSearchError(null);
                       setPhoneSearchError(null);
                     }}
-                    className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-[#3B7A57] dark:hover:text-[#52B788] hover:underline cursor-pointer"
+                    className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-brand-sage dark:hover:text-brand-sageBright hover:underline cursor-pointer"
                   >
                     ← Ingat Kode Booking? Masukkan kode booking di sini
                   </button>
@@ -417,7 +417,7 @@ export default function TicketRecoveryPage() {
                               {bk.eventTitle}
                             </p>
                             <div className="flex items-center space-x-3 text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
-                              <span className="font-mono font-semibold text-[#3B7A57] dark:text-[#52B788]">
+                              <span className="font-mono font-semibold text-brand-sage dark:text-brand-sageBright">
                                 {bk.ticketCode}
                               </span>
                               <span>•</span>
@@ -439,7 +439,7 @@ export default function TicketRecoveryPage() {
 
                         {bk.guestToken ? (
                           <Link href={`/events/tickets/${bk.guestToken}`} className="block">
-                            <Button className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold py-2 rounded-xl cursor-pointer flex items-center justify-center space-x-1">
+                            <Button className="w-full bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold py-2 rounded-xl cursor-pointer flex items-center justify-center space-x-1">
                               <span>Buka E-Tiket Saya</span>
                               <ExternalLink className="w-3.5 h-3.5 ml-1" />
                             </Button>
@@ -494,7 +494,7 @@ export default function TicketRecoveryPage() {
           <p>Sudah memiliki akun DagoEng?</p>
           <Link
             href={`/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&from=events&mode=customer`}
-            className="font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline inline-flex items-center"
+            className="font-bold text-brand-sage dark:text-brand-sageBright hover:underline inline-flex items-center"
           >
             <span>Masuk ke Akun DagoEng (Tiket Otomatis Muncul di Tiket Saya)</span>
             <ExternalLink className="w-3 h-3 ml-1" />

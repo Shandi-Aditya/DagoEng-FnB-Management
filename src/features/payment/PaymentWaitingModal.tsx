@@ -193,7 +193,7 @@ export function PaymentWaitingModal({
       <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl border border-slate-200/90 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[94vh]">
         
         {/* Modal Top Header */}
-        <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white flex items-center justify-between border-b border-slate-700/80">
+        <div className="p-4 sm:p-5 bg-linear-to-r from-slate-900 via-slate-850 to-slate-900 text-white flex items-center justify-between border-b border-slate-700/80">
           <div className="flex items-center space-x-2.5">
             <div className="w-8 h-8 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-bold border border-primary/30">
               {isPaidSuccess ? (
@@ -475,7 +475,7 @@ export function PaymentWaitingModal({
                 <Button
                   onClick={handleSimulateWebhookSuccess}
                   disabled={isVerifying}
-                  className="w-full h-12 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 transition-all hover:scale-[1.01] active:scale-98 border border-emerald-400/40"
+                  className="w-full h-12 bg-linear-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 transition-all hover:scale-[1.01] active:scale-98 border border-emerald-400/40"
                 >
                   {isVerifying ? (
                     <>

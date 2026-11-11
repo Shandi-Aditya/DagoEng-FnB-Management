@@ -90,7 +90,7 @@ export default function DashboardLayout({
       <div className="flex-1 flex overflow-hidden h-full">
         {/* Desktop Sidebar (visible on large screens >= 1024px) */}
         <aside
-          className={`hidden lg:flex flex-shrink-0 h-full transition-all duration-300 ease-in-out ${
+          className={`hidden lg:flex shrink-0 h-full transition-all duration-300 ease-in-out ${
             isSidebarCollapsed ? "w-20" : "w-64"
           }`}
         >

@@ -408,7 +408,7 @@ export default function CoworkingPage() {
       {/* Toast Alert */}
       {toastMessage && (
         <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-900 font-bold flex items-center space-x-2 animate-in fade-in shadow-xs">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       )}
@@ -564,7 +564,7 @@ export default function CoworkingPage() {
                         />
                       </div>
                     ) : (
-                      <div className="relative w-full h-24 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 border border-slate-200 flex items-center justify-center text-slate-400">
+                      <div className="relative w-full h-24 rounded-xl bg-linear-to-br from-slate-100 to-slate-200 border border-slate-200 flex items-center justify-center text-slate-400">
                         <Laptop className="w-8 h-8 opacity-30" />
                       </div>
                     )}
@@ -580,7 +580,7 @@ export default function CoworkingPage() {
                         </p>
                       </div>
                       <span
-                        className={`text-[10px] font-extrabold px-2 py-0.5 rounded flex-shrink-0 ${isOccupied ? "bg-blue-600 text-white" : "bg-emerald-100 text-emerald-800"
+                        className={`text-[10px] font-extrabold px-2 py-0.5 rounded shrink-0 ${isOccupied ? "bg-blue-600 text-white" : "bg-emerald-100 text-emerald-800"
                           }`}
                       >
                         {sp.status}
@@ -802,7 +802,7 @@ export default function CoworkingPage() {
                 value={searchMemberQuery}
                 onChange={(e) => setSearchMemberQuery(e.target.value)}
                 placeholder="Cari member berdasarkan ID, nama, kontak, atau paket..."
-                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none"
+                className="w-full pl-9 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-hidden"
               />
             </div>
 
@@ -938,7 +938,7 @@ export default function CoworkingPage() {
 
       {/* MODAL 1: BUAT BOOKING & CHECK-IN (HARMONIZED & CONSISTENT WITH PACKAGES & DATE RANGE) */}
       {isNewBookingModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-6 border border-slate-200 space-y-4 max-h-[92vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -996,7 +996,7 @@ export default function CoworkingPage() {
                 <select
                   value={bookSpaceId}
                   onChange={(e) => setBookSpaceId(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-bold text-xs outline-hidden focus:ring-2 focus:ring-blue-500/20"
                 >
                   {spaces.map((s) => (
                     <option key={s.id} value={s.id}>
@@ -1065,7 +1065,7 @@ export default function CoworkingPage() {
                           setBookStartDate(e.target.value);
                           setBookEndDate(e.target.value);
                         }}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-hidden focus:ring-2 focus:ring-blue-500/20"
                         required
                       />
                       {(() => {
@@ -1101,7 +1101,7 @@ export default function CoworkingPage() {
                         max={12}
                         value={bookDurationHours}
                         onChange={(e) => setBookDurationHours(Math.max(2, Number(e.target.value)))}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-hidden focus:ring-2 focus:ring-blue-500/20"
                         required
                       />
                     </div>
@@ -1205,7 +1205,7 @@ export default function CoworkingPage() {
                         type="date"
                         value={bookStartDate}
                         onChange={(e) => setBookStartDate(e.target.value)}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-amber-500/20"
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-bold text-xs outline-hidden focus:ring-2 focus:ring-amber-500/20"
                         required
                       />
                       {(() => {
@@ -1263,7 +1263,7 @@ export default function CoworkingPage() {
                                   : bookEndDate
                         }
                         onChange={(e) => setBookEndDate(e.target.value)}
-                        className={`w-full p-2 border rounded-xl font-bold text-xs outline-none ${bookDailyPreset === "CUSTOM_RANGE"
+                        className={`w-full p-2 border rounded-xl font-bold text-xs outline-hidden ${bookDailyPreset === "CUSTOM_RANGE"
                             ? "bg-white dark:bg-slate-800 border-primary focus:ring-2 focus:ring-primary/20 text-slate-900 dark:text-slate-100"
                             : "bg-slate-100 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
                           }`}
@@ -1301,7 +1301,7 @@ export default function CoworkingPage() {
                     type="date"
                     value={bookStartDate}
                     onChange={(e) => setBookStartDate(e.target.value)}
-                    className="w-full p-2 bg-white border border-purple-200 rounded-xl font-bold text-xs outline-none focus:ring-2 focus:ring-purple-500/20"
+                    className="w-full p-2 bg-white border border-purple-200 rounded-xl font-bold text-xs outline-hidden focus:ring-2 focus:ring-purple-500/20"
                     required
                   />
                   <p className="text-[11px] text-purple-800">
@@ -1320,7 +1320,7 @@ export default function CoworkingPage() {
                     placeholder="Contoh: Sarah Jenkins / PT Nomad Tech"
                     value={bookGuestName}
                     onChange={(e) => setBookGuestName(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold outline-hidden focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>
 
@@ -1333,7 +1333,7 @@ export default function CoworkingPage() {
                       placeholder="+62 812-xxxx-xxxx"
                       value={bookPhone}
                       onChange={(e) => setBookPhone(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono text-xs outline-hidden focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1343,7 +1343,7 @@ export default function CoworkingPage() {
                       placeholder="nomad@example.com"
                       value={bookEmail}
                       onChange={(e) => setBookEmail(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-hidden focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
                 </div>
@@ -1355,7 +1355,7 @@ export default function CoworkingPage() {
                     placeholder="Contoh: Tim IT Remote, butuh stopkontak tambahan"
                     value={bookCompany}
                     onChange={(e) => setBookCompany(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs outline-hidden focus:ring-2 focus:ring-blue-500/20"
                   />
                 </div>
               </div>
@@ -1368,7 +1368,7 @@ export default function CoworkingPage() {
                     <select
                       value={bookPaymentMethod}
                       onChange={(e) => setBookPaymentMethod(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-medium text-xs outline-none"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white font-medium text-xs outline-hidden"
                     >
                       <option value="QRIS DagoPay">QRIS DagoPay (Instant)</option>
                       <option value="CASH">Tunai (Cash Meja Kasir)</option>
@@ -1459,7 +1459,7 @@ export default function CoworkingPage() {
 
       {/* MODAL 2: DAFTAR MEMBER BARU */}
       {isNewMemberModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h3 className="font-bold text-sm text-slate-900">Registrasi Member Co-working Baru</h3>
