@@ -1,572 +1,179 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useOutlet } from "@/contexts/OutletContext";
-import { useOrders } from "@/contexts/OrderContext";
-import { OrderRecord, OrderStatus } from "@/types/order";
-import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
-import { calculateOrderMetrics, formatMinutesToHuman } from "@/lib/order-analytics";
-import { Card } from "@/components/legacy/ui/card";
-import {
-  UtensilsCrossed,
-  Clock,
-  CheckCircle2,
-  Flame,
-  AlertTriangle,
-  Play,
-  Check,
-  Volume2,
-  VolumeX,
-  Bell,
-  PlusCircle,
-  Filter,
-  Sparkles,
-  Printer,
-} from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
-import { soundChime } from "@/lib/audio-chime";
-import { ProFeatureBadge } from "@/components/premium";
-import { isAddonActive } from "@/lib/subscription";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Bell, Volume2, VolumeX } from "lucide-react";
+
+import { PageHeader } from "@/components/app/page-header";
+import { StatusBadge } from "@/components/app/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
-import { usePrinter } from "@/contexts/PrinterContext";
+import { useOrders } from "@/contexts/OrderContext";
+import { useOutlet } from "@/contexts/OutletContext";
+import { KitchenTicketCard } from "@/features/kitchen/KitchenTicketCard";
+import {
+  KDS_COLUMNS,
+  type KitchenStation,
+  type KitchenTypeFilter,
+  STATION_FILTERS,
+  TYPE_FILTERS,
+  buildReprintTicket,
+  filterKitchenOrders,
+  ticketItems,
+} from "@/features/kitchen/kitchen-board";
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
-import { KitchenTicketData } from "@/types/printer";
+import { soundChime } from "@/lib/audio-chime";
+import { isAddonActive } from "@/lib/subscription";
+import type { OrderStatus } from "@/types/order";
+import type { KitchenTicketData } from "@/types/printer";
+
+const CLOCK_TICK_MS = 1000;
+
+// Mirrors calculateOrderMetrics: at risk from 75% of the order's target, delayed past it
+const SLA_LEGEND = [
+  { tone: "bg-success", label: "Tepat waktu" },
+  { tone: "bg-warning", label: "Mendekati target" },
+  { tone: "bg-destructive", label: "Lewat target" },
+] as const;
 
 export default function KitchenKDSPage() {
   const { user } = useAuth();
-  const { activeOutlet, activeOutletId } = useOutlet();
-  const { filteredOrders, advanceOrderStatus, createOrder } = useOrders();
-  const [selectedTicketForPrint, setSelectedTicketForPrint] = useState<KitchenTicketData | null>(null);
-  const [isKitchenReceiptModalOpen, setIsKitchenReceiptModalOpen] = useState(false);
-  const [currentTime, setCurrentTime] = useState<number>(Date.now());
-  const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(true);
-  const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>("ALL");
-  const [selectedStationFilter, setSelectedStationFilter] = useState<"ALL" | "BARISTA" | "KITCHEN" | "PASTRY">("ALL");
-  const isMultiStationActive = isAddonActive("KDS_MULTI_STATION");
-  const prevOrderCountRef = useRef<number>(filteredOrders.length);
+  const { activeOutlet } = useOutlet();
+  const { filteredOrders, advanceOrderStatus } = useOrders();
+  const [ticketToPrint, setTicketToPrint] = useState<KitchenTicketData | null>(null);
+  const [now, setNow] = useState<number>(Date.now());
+  const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+  const [typeFilter, setTypeFilter] = useState<KitchenTypeFilter>("ALL");
+  const [station, setStation] = useState<KitchenStation>("ALL");
+  const isMultiStation = isAddonActive("KDS_MULTI_STATION");
 
-  // Real-time second tick for active SLA timers
+  // Live clock for the SLA timers
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
     return () => clearInterval(timer);
   }, []);
 
-  const userTenantId = user?.scopeLevel === "TENANT" ? user?.tenant?.id : undefined;
+  // POS-38 / TC-K09: a tenant kitchen only sees tickets with its own items
+  const tenantId = user?.scopeLevel === "TENANT" ? user?.tenant?.id : undefined;
 
-  // Filter kitchen active orders (POS-38 / TC-K09: Scoped to logged in tenant)
-  const activeOrders = useMemo(() => {
-    return filteredOrders
-      .filter(
-        (o) =>
-          o.status === "NEW" ||
-          o.status === "CONFIRMED" ||
-          o.status === "KITCHEN_RECEIVED" ||
-          o.status === "COOKING" ||
-          o.status === "READY"
-      )
-      .filter((o) => {
-        // POS-38 / TC-K09: If logged in as a specific tenant kitchen, only show tickets containing that tenant's items
-        if (userTenantId && !o.items.some((it) => it.tenantId === userTenantId)) {
-          return false;
-        }
+  const activeOrders = useMemo(
+    () => filterKitchenOrders(filteredOrders, { tenantId, type: typeFilter, station, multiStation: isMultiStation }),
+    [filteredOrders, tenantId, typeFilter, station, isMultiStation],
+  );
 
-        if (selectedTypeFilter !== "ALL" && o.orderType !== selectedTypeFilter) return false;
-
-        if (isMultiStationActive && selectedStationFilter !== "ALL") {
-          const stationItems = userTenantId
-            ? o.items.filter((it) => it.tenantId === userTenantId)
-            : o.items;
-
-          const hasStationItem = stationItems.some((it) => {
-            const name = it.productName.toLowerCase();
-            if (selectedStationFilter === "BARISTA") {
-              return name.includes("kopi") || name.includes("tea") || name.includes("latte") || name.includes("espresso") || name.includes("ice") || name.includes("matcha");
-            }
-            if (selectedStationFilter === "PASTRY") {
-              return name.includes("croissant") || name.includes("pastry") || name.includes("cake") || name.includes("toast");
-            }
-            if (selectedStationFilter === "KITCHEN") {
-              return !name.includes("kopi") && !name.includes("tea") && !name.includes("latte") && !name.includes("espresso") && !name.includes("croissant") && !name.includes("pastry");
-            }
-            return true;
-          });
-          if (!hasStationItem) return false;
-        }
-        return true;
-      })
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }, [filteredOrders, userTenantId, selectedTypeFilter, isMultiStationActive, selectedStationFilter]);
-
-  // Ring bell when new ticket arrives
+  // Ring the bell when a new ticket arrives
+  const previousCountRef = useRef(activeOrders.length);
   useEffect(() => {
-    if (activeOrders.length > prevOrderCountRef.current) {
-      if (isSoundEnabled) {
-        soundChime.playKitchenBell();
-      }
+    if (activeOrders.length > previousCountRef.current && isSoundEnabled) {
+      soundChime.playKitchenBell();
     }
-    prevOrderCountRef.current = activeOrders.length;
+    previousCountRef.current = activeOrders.length;
   }, [activeOrders.length, isSoundEnabled]);
 
   const handleAdvance = (orderId: string, nextStatus: OrderStatus) => {
-    if (isSoundEnabled) {
-      soundChime.playKitchenBell();
-    }
+    if (isSoundEnabled) soundChime.playKitchenBell();
     advanceOrderStatus(orderId, nextStatus);
   };
 
-  const handleTestChime = () => {
-    soundChime.playKitchenBell();
-  };
-
-  // Quick Demo Order Generator for presentation
-  const handleQuickDemoOrder = () => {
-    const randomTables = ["T-05", "T-08", "VIP-01", "OUT-04", "BAR-02"];
-    const randomNames = ["Dimas Pratama", "Sarah Anjani", "Kevin Wijaya", "Lina Marlina", "Rizky Fauzi"];
-    const sampleItems = [
-      [
-        { id: `it-${Date.now()}-1`, productName: "Signature Wagyu Beef Bowl", quantity: 1, unitPrice: 65000, modifiers: ["Onsen Egg", "Pedas Lv.2"] },
-        { id: `it-${Date.now()}-2`, productName: "Kopi Senja Aren (Regular)", quantity: 1, unitPrice: 24000, modifiers: ["Less Ice", "Oat Milk"] },
-      ],
-      [
-        { id: `it-${Date.now()}-3`, productName: "Artisan Peach White Tea", quantity: 2, unitPrice: 28000, modifiers: ["Less Sugar (50%)"] },
-        { id: `it-${Date.now()}-4`, productName: "Flaky French Butter Croissant", quantity: 2, unitPrice: 20000, modifiers: ["Warm Heat"] },
-      ],
-      [
-        { id: `it-${Date.now()}-5`, productName: "Espresso Double Shot", quantity: 1, unitPrice: 22000 },
-        { id: `it-${Date.now()}-6`, productName: "Signature Wagyu Beef Bowl", quantity: 2, unitPrice: 65000, modifiers: ["Extra Sambal Matah"] },
-      ],
-    ];
-
-    const pickIdx = Math.floor(Math.random() * sampleItems.length);
-    const chosenItems = sampleItems[pickIdx];
-    const subtotal = chosenItems.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0);
-    const orderType = Math.random() > 0.3 ? "DINE_IN" : "TAKEAWAY";
-    const breakdown = getOrderTaxBreakdown({
-      subtotal,
-      tax: Math.round(subtotal * 0.1),
-      serviceCharge: 0,
-      taxRatePercent: 10,
-      serviceChargePercent: 0,
-      orderType,
-    });
-
-    const newOrder = createOrder({
-      outletId: activeOutletId || "outlet-sgr",
-      outletName: activeOutlet?.name || "Singaraja",
-      tableNumber: randomTables[Math.floor(Math.random() * randomTables.length)],
-      customerName: randomNames[Math.floor(Math.random() * randomNames.length)],
-      orderType,
-      status: "CONFIRMED",
-      targetServiceMinutes: 10,
-      items: chosenItems,
-      subtotal: breakdown.subtotal,
-      tax: breakdown.pb1,
-      serviceCharge: breakdown.serviceCharge,
-      total: breakdown.total,
-      paymentStatus: "PAID",
-      paymentMethod: "CASH",
-    });
-
-    if (isSoundEnabled) {
-      soundChime.playKitchenBell();
-    }
-  };
-
-  const columnConfig: {
-    statusGroup: OrderStatus[];
-    title: string;
-    color: string;
-    headerBg: string;
-    nextStatus?: OrderStatus;
-    nextLabel?: string;
-    nextIcon?: React.ReactNode;
-  }[] = [
-    {
-      statusGroup: ["NEW", "CONFIRMED"],
-      title: "1. Antrean Baru (NEW)",
-      color: "border-blue-200 bg-blue-50/20",
-      headerBg: "bg-blue-600 text-white",
-      nextStatus: "KITCHEN_RECEIVED",
-      nextLabel: "Terima Tiket",
-      nextIcon: <Play className="w-3 h-3 mr-1" />,
-    },
-    {
-      statusGroup: ["KITCHEN_RECEIVED"],
-      title: "2. Siap Dimasak (QUEUE)",
-      color: "border-amber-200 bg-amber-50/20",
-      headerBg: "bg-amber-500 text-white",
-      nextStatus: "COOKING",
-      nextLabel: "Mulai Masak",
-      nextIcon: <Flame className="w-3 h-3 mr-1" />,
-    },
-    {
-      statusGroup: ["COOKING"],
-      title: "3. Sedang Dimasak (COOKING)",
-      color: "border-orange-200 bg-orange-50/20",
-      headerBg: "bg-brand-orange text-white",
-      nextStatus: "READY",
-      nextLabel: "Selesai (Ready)",
-      nextIcon: <Check className="w-3 h-3 mr-1" />,
-    },
-    {
-      statusGroup: ["READY"],
-      title: "4. Siap Saji (READY)",
-      color: "border-emerald-200 bg-emerald-50/20",
-      headerBg: "bg-emerald-600 text-white",
-      nextStatus: "SERVED",
-      nextLabel: "Sajikan ke Meja",
-      nextIcon: <CheckCircle2 className="w-3 h-3 mr-1" />,
-    },
-  ];
-
   return (
-    <div className="space-y-4">
-      {/* Banner Mode Operasional Nota Dapur */}
-      <div className="p-3.5 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-2xs">
-        <div className="flex items-center space-x-2.5 text-emerald-950 dark:text-emerald-200">
-          <Printer className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <span className="leading-snug">
-            <strong>Operasional Berbasis Nota Dapur Aktif</strong> — Setiap pesanan masuk otomatis dialirkan ke printer thermal dapur. Staf dapur tidak diwajibkan menggunakan tablet/layar sentuh. Layar KDS ini berfungsi sebagai visual backup pipeline.
-          </span>
-        </div>
-        <span className="text-[10px] bg-emerald-200/60 dark:bg-emerald-900 text-emerald-800 dark:text-emerald-200 px-2.5 py-1 rounded-lg font-bold uppercase shrink-0">
-          Tablet Opsional
-        </span>
-      </div>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title="Dapur"
+        description={`${activeOutlet?.name ?? "Singaraja"} · Pesanan juga dicetak ke printer dapur, layar ini cadangan visualnya.`}
+        actions={
+          <>
+            <Badge variant="secondary" className="tabular-nums">
+              {activeOrders.length} tiket aktif
+            </Badge>
+            <Button variant="ghost" size="sm" onClick={() => soundChime.playKitchenBell()}>
+              <Bell />
+              Tes bel
+            </Button>
+            <Button variant="outline" size="sm" aria-pressed={isSoundEnabled} onClick={() => setIsSoundEnabled((on) => !on)}>
+              {isSoundEnabled ? <Volume2 /> : <VolumeX />}
+              {isSoundEnabled ? "Suara aktif" : "Suara mati"}
+            </Button>
+          </>
+        }
+      />
 
-      {/* KDS Header with Live Controls & SLA Metrics */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-200 dark:border-slate-800 gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
-            <UtensilsCrossed className="w-5 h-5 text-primary dark:text-emerald-400" />
-            <span>Kitchen Display System (KDS Live)</span>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-              Outlet: {activeOutlet?.name || "Singaraja"}
-            </span>
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Real-time visual order pipeline, SLA timer per tiket, dan stasiun persiapan dapur
-          </p>
-        </div>
-
-        {/* Action Toolbar */}
-        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
-          {/* Sound Toggle */}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsSoundEnabled(!isSoundEnabled)}
-            className={`h-8 px-2.5 text-xs font-bold space-x-1 border rounded-xl ${
-              isSoundEnabled
-                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800"
-                : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700"
-            }`}
-          >
-            {isSoundEnabled ? <Volume2 className="w-3.5 h-3.5 text-primary dark:text-emerald-400" /> : <VolumeX className="w-3.5 h-3.5" />}
-            <span>{isSoundEnabled ? "Audio On" : "Mute"}</span>
-          </Button>
-
-          {/* Test Chime */}
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleTestChime}
-            className="h-8 px-2.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 rounded-xl"
-            title="Tes bunyi bel pesanan dapur"
-          >
-            <Bell className="w-3.5 h-3.5 mr-1 text-slate-500 dark:text-slate-400" />
-            <span>Tes Bell</span>
-          </Button>
-
-          <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-300 rounded-xl font-bold">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-            <span>{activeOrders.length} Tiket Aktif</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Filter Tabs & Target SLA Indicator */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white dark:bg-slate-800/90 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
-        <div className="flex items-center space-x-1 text-xs">
-          <span className="text-slate-400 dark:text-slate-500 font-semibold px-2 flex items-center space-x-1">
-            <Filter className="w-3 h-3" />
-            <span>Tipe:</span>
-          </span>
-          {["ALL", "DINE_IN", "TAKE_AWAY"].map((type) => (
-            <button
-              key={type}
-              onClick={() => setSelectedTypeFilter(type)}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-colors ${
-                selectedTypeFilter === type
-                  ? "bg-primary text-white shadow-xs font-bold"
-                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-750 dark:hover:bg-slate-700"
-              }`}
-            >
-              {type === "ALL" && "Semua Pesanan"}
-              {type === "DINE_IN" && "Dine In"}
-              {type === "TAKE_AWAY" && "Takeaway / Delivery"}
-            </button>
-          ))}
-          {isMultiStationActive ? (
-            <div className="hidden lg:flex items-center space-x-1 pl-2.5 ml-1 border-l border-slate-200">
-              <span className="text-[11px] text-purple-700 font-bold mr-1">Stasiun:</span>
-              {(
-                [
-                  { id: "ALL", label: "Semua" },
-                  { id: "BARISTA", label: "Barista" },
-                  { id: "KITCHEN", label: "Kitchen Panas" },
-                  { id: "PASTRY", label: "Pastry" },
-                ] as const
-              ).map((st) => (
-                <button
-                  key={st.id}
-                  onClick={() => setSelectedStationFilter(st.id)}
-                  className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
-                    selectedStationFilter === st.id
-                      ? "bg-purple-700 text-white shadow-2xs"
-                      : "bg-purple-50 text-purple-800 hover:bg-purple-100"
-                  }`}
-                >
-                  {st.label}
-                </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Tabs value={typeFilter} onValueChange={(value) => setTypeFilter(value as KitchenTypeFilter)}>
+            <TabsList>
+              {TYPE_FILTERS.map((filter) => (
+                <TabsTrigger key={filter.value} value={filter.value}>
+                  {filter.label}
+                </TabsTrigger>
               ))}
-              <ProFeatureBadge label="ROUTING AKTIF" variant="addon" size="xs" />
-            </div>
+            </TabsList>
+          </Tabs>
+          {isMultiStation ? (
+            <Tabs value={station} onValueChange={(value) => setStation(value as KitchenStation)}>
+              <TabsList>
+                {STATION_FILTERS.map((filter) => (
+                  <TabsTrigger key={filter.value} value={filter.value}>
+                    {filter.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
           ) : (
-            <div className="hidden lg:flex items-center space-x-1.5 pl-2.5 ml-1 border-l border-slate-200">
-              <span className="text-[11px] text-slate-500 font-medium">Stasiun: Central Kitchen (Single Line)</span>
-            </div>
+            <span className="text-xs text-muted-foreground">Satu jalur dapur</span>
           )}
         </div>
-
-        <div className="flex items-center space-x-3 text-xs text-slate-600 pr-2">
-          <div className="flex items-center space-x-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span className="text-[11px]">&lt;5 mnt (Normal)</span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-            <span className="text-[11px]">5-10 mnt (At Risk)</span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-            <span className="text-[11px]">&gt;10 mnt (Delayed)</span>
-          </div>
-        </div>
+        <ul className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground" aria-label="Status waktu tunggu terhadap target pesanan">
+          {SLA_LEGEND.map((item) => (
+            <li key={item.label} className="flex items-center gap-1.5">
+              <span className={`size-2 rounded-full ${item.tone}`} aria-hidden />
+              {item.label}
+            </li>
+          ))}
+        </ul>
       </div>
 
-      {/* 4-Column KDS Live Board */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {columnConfig.map((col, idx) => {
-          const ticketsInCol = activeOrders.filter((o) => col.statusGroup.includes(o.status));
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {KDS_COLUMNS.map((column) => {
+          const tickets = activeOrders.filter((order) => column.statuses.includes(order.status));
           return (
-            <div
-              key={idx}
-              className={`p-3 rounded-xl border ${col.color} space-y-3 min-h-[520px] flex flex-col justify-between`}
-            >
-              <div className="space-y-3">
-                {/* Column Header */}
-                <div className="flex items-center justify-between font-bold text-xs pb-2 border-b border-slate-200">
-                  <span className="text-slate-800">{col.title}</span>
-                  <span className={`px-2 py-0.5 rounded-full font-mono text-[11px] ${col.headerBg}`}>
-                    {ticketsInCol.length}
-                  </span>
-                </div>
-
-                {/* Ticket Cards */}
-                <div className="space-y-3">
-                  {ticketsInCol.length === 0 ? (
-                    <div className="text-center py-12 text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg bg-white/50">
-                      Tidak ada tiket antrean
-                    </div>
-                  ) : (
-                    ticketsInCol.map((order, ticketIdx) => {
-                      // POS-38 / TC-K09: Filter items on ticket strictly to logged in tenant
-                      const displayItems = userTenantId
-                        ? order.items.filter((it) => it.tenantId === userTenantId)
-                        : order.items;
-
-                      if (displayItems.length === 0) return null;
-
-                      const metrics = calculateOrderMetrics(order, currentTime);
-                      const isDelayed = metrics.slaStatus === "DELAYED";
-                      const isAtRisk = metrics.slaStatus === "AT_RISK";
-
-                      return (
-                        <Card
-                          key={order.id}
-                          className={`p-3.5 shadow-sm bg-white border transition-all ${
-                            isDelayed
-                              ? "border-red-400 bg-red-50/30 shadow-red-100"
-                              : isAtRisk
-                              ? "border-amber-400 bg-amber-50/30"
-                              : "border-slate-200 hover:border-slate-300"
-                          }`}
-                        >
-                          {/* Card Header: Queue Number + Table + Live Timer */}
-                          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                            <div className="min-w-0 pr-2">
-                              <div className="flex items-center space-x-1.5">
-                                <span className="font-extrabold text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-white shrink-0">
-                                  #{ticketIdx + 1}
-                                </span>
-                                <span className="font-bold text-xs text-slate-900 dark:text-slate-100 block truncate">
-                                  {order.orderNumber}
-                                </span>
-                              </div>
-                              <span className="text-[10px] text-slate-500 dark:text-slate-300 font-medium block truncate">
-                                {order.customerName || "Customer"}
-                              </span>
-                            </div>
-                            <span className="font-bold text-xs px-2.5 py-0.5 rounded-md bg-primary text-white shadow-xs whitespace-nowrap shrink-0">
-                              Meja {order.tableNumber}
-                            </span>
-                          </div>
-
-                          {/* SLA Timer Badge */}
-                          <div className="py-2 flex items-center justify-between gap-1 overflow-hidden">
-                            <span
-                              suppressHydrationWarning
-                              className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold whitespace-nowrap shrink-0 ${
-                                isDelayed
-                                  ? "bg-rose-50 text-rose-700 animate-pulse border border-rose-300"
-                                  : isAtRisk
-                                  ? "bg-amber-50 text-amber-800 border border-amber-300"
-                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              }`}
-                            >
-                              <Clock className="w-3 h-3 mr-1 shrink-0" />
-                              {formatMinutesToHuman(metrics.totalCustomerWaitingMinutes)}
-                              <span className="ml-1 text-[9px] uppercase">
-                                ({metrics.slaStatus.replace("_", " ")})
-                              </span>
-                            </span>
-
-                            <div className="flex items-center space-x-1 whitespace-nowrap shrink-0">
-                              <span
-                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border whitespace-nowrap ${
-                                  order.paymentStatus === "PAID"
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                    : "bg-amber-50 text-amber-700 border-amber-200"
-                                }`}
-                              >
-                                {order.paymentStatus === "PAID" ? "LUNAS" : "BELUM LUNAS"}
-                              </span>
-                              <span className="text-[10px] text-slate-600 dark:text-slate-200 font-semibold uppercase px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded whitespace-nowrap">
-                                {order.orderType === "DINE_IN" ? "Dine In" : "Takeaway"}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Order-level special notes (POS-39 / TC-K10) */}
-                          {order.notes && order.notes.trim() && (
-                            <div className="mb-2 p-1.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-900 font-semibold flex items-start space-x-1">
-                              <span className="shrink-0">📌</span>
-                              <span><strong>Catatan:</strong> {order.notes.trim()}</span>
-                            </div>
-                          )}
-
-                          {/* Items List with Modifiers & Item-level Notes */}
-                          <div className="py-2 space-y-1.5 text-xs border-y border-slate-100 max-h-44 overflow-y-auto">
-                            {displayItems.map((it, itIdx) => (
-                              <div key={itIdx} className="flex flex-col bg-slate-50/60 p-1.5 rounded">
-                                <div className="flex justify-between font-bold text-slate-800">
-                                  <span>{it.quantity}x {it.productName}</span>
-                                </div>
-                                {it.modifiers && it.modifiers.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-0.5">
-                                    {it.modifiers.map((mod, mIdx) => (
-                                      <span
-                                        key={mIdx}
-                                        className="text-[10px] bg-orange-50 text-brand-orange border border-orange-200/60 font-semibold px-1.5 py-0.5 rounded"
-                                      >
-                                        ↳ {mod}
-                                      </span>
-                                    ))}
-                                  </div>
-                                )}
-                                {it.notes && it.notes.trim() && (
-                                  <div className="mt-1 text-[11px] font-semibold text-amber-900 bg-amber-50 border border-amber-200/60 px-1.5 py-0.5 rounded">
-                                    📝 <strong>Catatan:</strong> {it.notes.trim()}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Action Button & Print Trigger */}
-                          <div className="pt-2.5 flex items-center space-x-1.5">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedTicketForPrint({
-                                  orderId: order.id,
-                                  orderNumber: order.orderNumber,
-                                  outletId: order.outletId,
-                                  outletName: order.outletName || "Singaraja",
-                                  tableNumber: order.tableNumber,
-                                  customerName: order.customerName,
-                                  orderType: order.orderType,
-                                  purpose: "REPRINT",
-                                  sequenceNumber: ticketIdx + 1,
-                                  items: displayItems.map((it) => ({
-                                    id: it.id,
-                                    productName: it.productName,
-                                    quantity: it.quantity,
-                                    modifiers: it.modifiers,
-                                    notes: it.notes,
-                                  })),
-                                  cashierName: "Dapur KDS",
-                                  timestamp: new Date().toLocaleTimeString("id-ID") + " WITA",
-                                  reprintedBy: "Kitchen Staff",
-                                  kitchenNotes: order.notes,
-                                });
-                                setIsKitchenReceiptModalOpen(true);
-                              }}
-                              className="h-8 px-2 text-[10px] font-bold text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800"
-                              title="Cetak ulang tiket fisik dapur"
-                            >
-                              <Printer className="w-3.5 h-3.5" />
-                            </Button>
-
-                            {col.nextStatus && (
-                              <Button
-                                size="sm"
-                                onClick={() => handleAdvance(order.id, col.nextStatus!)}
-                                className={`flex-1 h-8 text-xs font-bold justify-center shadow-xs ${
-                                  col.nextStatus === "COOKING"
-                                    ? "bg-amber-500 hover:bg-amber-600 text-white"
-                                    : col.nextStatus === "READY"
-                                    ? "bg-brand-orange hover:bg-orange-600 text-white"
-                                    : col.nextStatus === "SERVED"
-                                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                    : "bg-slate-900 hover:bg-slate-800 text-white"
-                                }`}
-                              >
-                                {col.nextIcon}
-                                <span>{col.nextLabel}</span>
-                              </Button>
-                            )}
-                          </div>
-                        </Card>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-            </div>
+            <section key={column.title} className="flex min-h-[480px] flex-col gap-3 rounded-xl bg-muted/50 p-3" aria-label={column.title}>
+              <header className="flex items-center justify-between">
+                <h2 className="text-sm font-medium">{column.title}</h2>
+                <StatusBadge status={column.tone} className="tabular-nums">
+                  {tickets.length}
+                </StatusBadge>
+              </header>
+              {tickets.length === 0 ? (
+                <p className="rounded-lg border border-dashed py-10 text-center text-xs text-muted-foreground">Tidak ada tiket</p>
+              ) : (
+                tickets.map((order, ticketIdx) => {
+                  const items = ticketItems(order, tenantId);
+                  const queueNumber = ticketIdx + 1;
+                  return (
+                    <KitchenTicketCard
+                      key={order.id}
+                      order={order}
+                      items={items}
+                      queueNumber={queueNumber}
+                      now={now}
+                      column={column}
+                      onAdvance={() => handleAdvance(order.id, column.nextStatus)}
+                      onReprint={() =>
+                        setTicketToPrint(
+                          buildReprintTicket(order, items, queueNumber, `${new Date().toLocaleTimeString("id-ID")} WITA`),
+                        )
+                      }
+                    />
+                  );
+                })
+              )}
+            </section>
           );
         })}
       </div>
 
-      {/* Kitchen Ticket Reprint Modal */}
-      <KitchenOrderReceiptModal
-        isOpen={isKitchenReceiptModalOpen}
-        ticketData={selectedTicketForPrint}
-        onClose={() => setIsKitchenReceiptModalOpen(false)}
-      />
+      <KitchenOrderReceiptModal isOpen={ticketToPrint !== null} ticketData={ticketToPrint} onClose={() => setTicketToPrint(null)} />
     </div>
   );
 }

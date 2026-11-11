@@ -76,6 +76,16 @@ import {
   Eye,
 } from "lucide-react";
 import { Button } from "@/components/legacy/ui/button";
+import { notify } from "@/components/app/notify";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { CartItemList } from "@/features/pos/CartItemList";
+import { CartOrderSetup } from "@/features/pos/CartOrderSetup";
+import { CartPromoField } from "@/features/pos/CartPromoField";
+import { CartSummary } from "@/features/pos/CartSummary";
+import { ProductCatalog } from "@/features/pos/ProductCatalog";
+import { PosToolbar } from "@/features/pos/PosToolbar";
+import { cartItemCount, tenantClosedMessage } from "@/features/pos/pos-catalog";
 
 const COWORKING_TIME_SLOTS = [
   "09:00",
@@ -267,7 +277,6 @@ export default function POSPage() {
   } = usePrinter();
   const [isClosingShiftModalOpen, setIsClosingShiftModalOpen] = useState<boolean>(false);
   const [lastReceiptData, setLastReceiptData] = useState<POSReceiptData | null>(null);
-  const [posToast, setPosToast] = useState<string>("");
 
   // Live Shift Metrics for Instant Closing
   const livePaidOrders = useMemo(() => {
@@ -433,8 +442,7 @@ export default function POSPage() {
     const tId = product.tenantId || "tenant-ks";
     const tenantOp = isTenantAcceptingOrders(tId, settings?.tenantOperations);
     if (!tenantOp.isOpen) {
-      const reopenMsg = tenantOp.estimatedReopenTime ? ` (${tenantOp.estimatedReopenTime})` : "";
-      setPosToast(`Mitra [${getTenantName(tId) || "F&B"}] Tutup Sementara: ${tenantOp.reason}.${reopenMsg}`);
+      notify.warning(`${getTenantName(tId) || "Mitra F&B"} tutup sementara`, tenantClosedMessage(tenantOp));
       return;
     }
 
@@ -450,8 +458,7 @@ export default function POSPage() {
     const tId = item.tenantId || "tenant-ks";
     const tenantOp = isTenantAcceptingOrders(tId, settings?.tenantOperations);
     if (!tenantOp.isOpen) {
-      const reopenMsg = tenantOp.estimatedReopenTime ? ` (${tenantOp.estimatedReopenTime})` : "";
-      setPosToast(`Mitra [${getTenantName(tId) || "F&B"}] Tutup Sementara: ${tenantOp.reason}.${reopenMsg}`);
+      notify.warning(`${getTenantName(tId) || "Mitra F&B"} tutup sementara`, tenantClosedMessage(tenantOp));
       return;
     }
     setCartItems((prev) => {
@@ -793,8 +800,7 @@ export default function POSPage() {
     setSelectedCategory("Semua Menu");
     setSelectedTable("");
     setOrderType("DINE_IN");
-    setPosToast("Sesi transaksi baru aktif! Keranjang belanja dan formulir kasir telah di-reset bersih.");
-    setTimeout(() => setPosToast(""), 3500);
+    notify.success("Transaksi baru siap", "Keranjang dan formulir kasir sudah dikosongkan.");
   };
 
   // ==========================================
@@ -902,7 +908,7 @@ export default function POSPage() {
         type: "SUCCESS",
         text: `Voucher "${res.promo.code || res.promo.name}" aktif! Hemat ${formatCurrencyIDR(res.discountAmount)}`,
       });
-      setPosToast(`Voucher ${res.promo.code || res.promo.name} berhasil diterapkan!`);
+      notify.success(`Voucher ${res.promo.code || res.promo.name} diterapkan`);
     } else {
       setCwAppliedPromo(null);
       setCwVoucherValidationMsg({
@@ -914,7 +920,7 @@ export default function POSPage() {
 
   const handleCompleteCoworkingPayment = () => {
     if (!selectedSpace) {
-      setPosToast("Silakan pilih workspace terlebih dahulu.");
+      notify.warning("Pilih ruang kerja dulu");
       return;
     }
 
@@ -924,7 +930,7 @@ export default function POSPage() {
 
     if (cwCustomerType === "MEMBER") {
       if (!cwSelectedMember) {
-        setPosToast("Silakan pilih member terdaftar dari daftar.");
+        notify.warning("Pilih member dari daftar");
         return;
       }
       effectiveGuestName = cwSelectedMember.name;
@@ -932,7 +938,7 @@ export default function POSPage() {
       effectiveGuestEmail = cwSelectedMember.email || "";
     } else {
       if (!cwGuestName.trim()) {
-        setPosToast("Silakan isi nama tamu walk-in.");
+        notify.warning("Isi nama tamu walk-in");
         return;
       }
       effectiveGuestName = cwGuestName.trim();
@@ -943,14 +949,14 @@ export default function POSPage() {
     const startH = parseHour(cwStartTime);
     const avail = checkSlotAvailability(selectedSpace.id, cwDate, startH, cwDuration);
     if (!avail.isAvailable) {
-      setPosToast(`Slot waktu ${cwStartTime} (${cwDuration} Jam) pada tanggal ${cwDate} sudah tidak tersedia/penuh.`);
+      notify.warning("Slot sudah terisi", `${cwStartTime}, ${cwDuration} jam pada ${cwDate} tidak tersedia.`);
       return;
     }
 
     // Holiday & Closed Date Check (Revisi 1)
     const holidayCheck = isCoworkingDateOpen(cwDate, settings?.coworkingHolidays);
     if (!holidayCheck.isOpen) {
-      setPosToast(`Booking Ditolak: ${holidayCheck.reason}. Co-working tutup pada ${cwDate}.`);
+      notify.warning("Co-working tutup", `${holidayCheck.reason} (${cwDate}).`);
       return;
     }
 
@@ -964,13 +970,13 @@ export default function POSPage() {
       endTime: `${startH + cwDuration}:00 WITA`,
     });
     if (!activeShift) {
-      setPosToast("Harap buka shift kasir dengan modal awal sebelum memproses pembayaran.");
+      notify.warning("Shift kasir belum dibuka", "Buka shift dengan modal awal sebelum menerima pembayaran.");
       setIsPosOpenShiftModalOpen(true);
       return;
     }
 
     if (conflict.hasConflict) {
-      setPosToast(`Booking Bentrok: ${conflict.message}`);
+      notify.warning("Jadwal bentrok", conflict.message);
       return;
     }
 
@@ -1001,7 +1007,7 @@ export default function POSPage() {
         notes: cwNotes || undefined,
       });
     } catch (err: any) {
-      setPosToast(`Gagal: ${err.message}`);
+      notify.error("Booking gagal", err.message);
       return;
     }
 
@@ -1076,657 +1082,126 @@ export default function POSPage() {
     setIsCoworkReceiptModalOpen(true);
     setCwSelectedSpaceId("");
     setIsManualTimeSet(false);
-    setPosToast(`Booking ${createdBooking.bookingCode} berhasil diproses!`);
+    notify.success(`Booking ${createdBooking.bookingCode} tersimpan`);
+  };
+
+  const fnbPromos = (settings.promos ?? []).filter(
+    (promo: PromoConfig) => promo.isActive && (!promo.scope || promo.scope === "ALL" || promo.scope === "FNB"),
+  );
+  const promoMinimumNotice =
+    activePromo?.minimumAmount && subtotal < activePromo.minimumAmount
+      ? `Belum mencapai minimum belanja Rp ${activePromo.minimumAmount.toLocaleString("id-ID")}.`
+      : null;
+  const cartCount = cartItemCount(cartItems);
+  const canPay = cartItems.length > 0 && !(orderType === "DINE_IN" && (!selectedTable || availableTables.length === 0));
+
+  const handlePromoChange = (promoId: string) => {
+    setSelectedPromoId(promoId);
+    setFnbVoucherValidationMsg(null);
+    const promo = settings.promos?.find((item) => item.id === promoId);
+    setFnbVoucherCode(promo ? promo.code || promo.name : "");
+  };
+
+  const handleClearPromo = () => {
+    setSelectedPromoId("");
+    setFnbVoucherCode("");
+    setFnbVoucherValidationMsg(null);
+  };
+
+  const handleRequestPayment = () => {
+    if (orderType === "DINE_IN" && !selectedTable) {
+      notify.warning("Pilih meja dulu", "Pesanan dine in perlu nomor meja sebelum dibayar.");
+      return;
+    }
+    if (!activeShift) {
+      notify.warning("Shift kasir belum dibuka", "Buka shift dengan modal awal sebelum menerima pembayaran.");
+      setIsPosOpenShiftModalOpen(true);
+      return;
+    }
+    setIsPaymentModalOpen(true);
   };
 
   return (
-    <div className="space-y-4">
-      {/* POS Toast Notification */}
-      {posToast && (
-        <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-bold text-emerald-900 flex items-center space-x-2 animate-in fade-in shadow-xs">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>{posToast}</span>
-        </div>
-      )}
+    <div className="flex flex-col gap-4">
+      <PosToolbar
+        mode={posMode}
+        onModeChange={setPosMode}
+        cartCount={cartCount}
+        activeShift={activeShift}
+        onOpenShift={() => setIsPosOpenShiftModalOpen(true)}
+        onCloseShift={() => setIsClosingShiftModalOpen(true)}
+      />
 
-      {/* Sleek Minimalist POS Mode Switcher (Ultra-focused, zero header clutter) */}
-      <div className="flex items-center justify-between gap-3 pb-1">
-        <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800/90 p-1 rounded-2xl border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
-          <button
-            type="button"
-            onClick={() => setPosMode("FNB")}
-            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 touch-manipulation ${
-              posMode === "FNB"
-                ? "bg-brand-sage text-white shadow-xs"
-                : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-            }`}
-          >
-            <Utensils className="w-3.5 h-3.5" />
-            <span>Kuliner F&B</span>
-            {cartItems.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 bg-white text-brand-sage rounded-full text-[10px] font-black">
-                {cartItems.reduce((s, i) => s + i.quantity, 0)}
-              </span>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setPosMode("COWORKING")}
-            className={`px-4 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 touch-manipulation ${
-              posMode === "COWORKING"
-                ? "bg-brand-sage text-white shadow-xs"
-                : "text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
-            }`}
-          >
-            <Laptop className="w-3.5 h-3.5" />
-            <span>Co-Working & Ruang Kerja</span>
-          </button>
-        </div>
-
-        {/* Status Shift Kasir */}
-        {activeShift ? (
-          <div className="flex items-center gap-2">
-            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/70 px-2.5 py-1 rounded-xl">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Shift Aktif: <strong className="text-slate-700 dark:text-slate-200">{activeShift.shiftName}</strong> ({activeShift.assignedCashierName})</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsClosingShiftModalOpen(true)}
-              className="text-[11px] font-bold text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 px-2.5 py-1 rounded-lg transition-all"
-              title="Tutup Shift & Rekonsiliasi Kasir"
-            >
-              Tutup Shift
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsPosOpenShiftModalOpen(true)}
-              className="inline-flex items-center gap-1.5 text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1 rounded-lg shadow-xs"
-              title="Buka Shift Kasir Baru"
-            >
-              <Clock className="w-3.5 h-3.5" />
-              <span>Buka Shift Kasir</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* ==================================================== */}
-      {/* 1. F&B TRANSACTION MODE */}
-      {/* ==================================================== */}
       {posMode === "FNB" && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 animate-in fade-in duration-200">
-          {/* Left Catalog (Col 7 / 12) */}
-          <div className="lg:col-span-7 xl:col-span-8 space-y-4">
-            {/* Search, Primary Mitra Filter, & Secondary Category Tabs */}
-            <div className="space-y-3.5 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari menu, SKU, atau kategori..."
-                  className="w-full pl-10 pr-3 py-2 text-xs border border-slate-200 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange shadow-2xs"
-                />
-              </div>
-
-              {/* 1. Primary Filter: Mitra F&B Navigation Buttons */}
-              <div className="space-y-1.5 pt-1">
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-                  <span className="flex items-center space-x-1">
-                    <Store className="w-3.5 h-3.5 text-brand-orange" />
-                    <span>Pilih Mitra F&B:</span>
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-normal">
-                    {activeTenants.length} Mitra Aktif
-                  </span>
-                </div>
-
-                <div className="flex items-center space-x-2 overflow-x-auto pb-1 text-xs no-scrollbar">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedTenantId("ALL")}
-                    className={`px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all duration-200 flex items-center space-x-1.5 ${selectedTenantId === "ALL"
-                      ? "bg-slate-900 text-white shadow-sm"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900"
-                      }`}
-                  >
-                    <Building className="w-3.5 h-3.5" />
-                    <span>Semua Mitra</span>
-                  </button>
-
-                  {activeTenants.map((tenant) => {
-                    const isSelected = selectedTenantId === tenant.id;
-                    return (
-                      <button
-                        key={tenant.id}
-                        type="button"
-                        onClick={() => setSelectedTenantId(tenant.id)}
-                        className={`px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all duration-200 flex items-center space-x-1.5 ${isSelected
-                          ? "bg-slate-900 text-white shadow-sm"
-                          : "bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900"
-                          }`}
-                      >
-                        <span className="text-sm">{tenant.icon}</span>
-                        <span>{tenant.name}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 2. Secondary Filter: Category Sub-Pills */}
-              {categoryTabs.length > 1 && (
-                <div className="pt-2 border-t border-slate-100 flex items-center space-x-1.5 overflow-x-auto pb-0.5 text-xs no-scrollbar">
-                  <span className="text-[10px] font-semibold text-slate-400 mr-1 shrink-0">Kategori:</span>
-                  {categoryTabs.map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all ${selectedCategory === cat
-                        ? "bg-brand-orange text-white shadow-2xs"
-                        : "bg-slate-50 border border-slate-200/80 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                        }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Product Cards Grid with Live Stock Status & Disabled Out of Stock */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-              {filteredProducts.map((product) => {
-                const tenantOp = isTenantAcceptingOrders(product.tenantId || "tenant-ks", settings?.tenantOperations);
-                const isTenantClosed = !tenantOp.isOpen;
-                const isOutOfStock = product.stockStatus === "OUT_OF_STOCK" || !product.isAvailable;
-                const isCriticalStock = product.stockStatus === "CRITICAL";
-
-                return (
-                  <div
-                    key={product.id}
-                    onClick={() => handleSelectProduct(product)}
-                    className={`p-3 rounded-xl border transition-all flex flex-col justify-between relative overflow-hidden ${isTenantClosed
-                      ? "bg-slate-100/90 border-amber-300/80 opacity-70 cursor-not-allowed select-none"
-                      : isOutOfStock
-                        ? "bg-slate-100/80 border-slate-300 opacity-60 cursor-not-allowed select-none"
-                        : "bg-white border-slate-200 hover:border-brand-orange hover:shadow-md cursor-pointer group"
-                      }`}
-                  >
-                    {/* Stock or Tenant Closed Status Badge */}
-                    {isTenantClosed ? (
-                      <div
-                        className="absolute top-2 right-2 z-10 bg-amber-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded shadow-sm flex items-center space-x-1"
-                        title={`${tenantOp.reason}${tenantOp.estimatedReopenTime ? ` • ${tenantOp.estimatedReopenTime}` : ""}`}
-                      >
-                        <Clock className="w-2.5 h-2.5" />
-                        <span>Tutup Sementara</span>
-                      </div>
-                    ) : isOutOfStock ? (
-                      <div className="absolute top-2 right-2 z-10 bg-rose-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded shadow-sm flex items-center space-x-1">
-                        <Ban className="w-2.5 h-2.5" />
-                        <span>Habis</span>
-                      </div>
-                    ) : isCriticalStock ? (
-                      <div className="absolute top-2 right-2 z-10 bg-amber-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-sm flex items-center space-x-1">
-                        <AlertTriangle className="w-2.5 h-2.5" />
-                        <span>Stok Menipis</span>
-                      </div>
-                    ) : null}
-
-                    <div className="space-y-2">
-                      {product.imageUrl ? (
-                        <div className="relative w-full h-24 rounded-lg overflow-hidden bg-slate-100 border border-slate-100 flex items-center justify-center">
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
-                              const fallback = e.currentTarget.parentElement?.querySelector(".product-fallback-placeholder") as HTMLElement;
-                              if (fallback) fallback.classList.remove("hidden");
-                            }}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                          />
-                          <div className="product-fallback-placeholder hidden flex w-full h-full items-center justify-center text-slate-400">
-                            <Utensils className="w-6 h-6 opacity-30" />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="w-full h-16 rounded-lg bg-slate-100 border border-slate-100 flex items-center justify-center text-slate-400">
-                          <Utensils className="w-6 h-6 opacity-30" />
-                        </div>
-                      )}
-
-                      <div className="space-y-0.5">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-                          {product.category}
-                        </span>
-                        <h4 className={`font-bold text-xs line-clamp-2 transition-colors ${isOutOfStock ? "text-slate-500" : isTenantClosed ? "text-amber-900" : "text-slate-900 group-hover:text-brand-orange"
-                          }`}>
-                          {product.name}
-                        </h4>
-                        {isTenantClosed && (
-                          <p className="text-[9px] text-amber-700 font-semibold line-clamp-1 mt-0.5" title={tenantOp.reason}>
-                            {tenantOp.reason}
-                            {tenantOp.estimatedReopenTime ? ` • ${tenantOp.estimatedReopenTime}` : ""}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
-                      <span className="font-extrabold text-xs text-slate-900 font-mono">
-                        {formatCurrencyIDR(product.basePrice)}
-                      </span>
-                      <div className={`w-6 h-6 rounded-md flex items-center justify-center transition-colors ${isOutOfStock
-                        ? "bg-slate-200 text-slate-400"
-                        : "bg-slate-100 group-hover:bg-brand-orange group-hover:text-white text-slate-600"
-                        }`}>
-                        <Plus className="w-3.5 h-3.5" />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+          <div className="lg:col-span-7 xl:col-span-8">
+            <ProductCatalog
+              products={filteredProducts}
+              tenants={activeTenants}
+              selectedTenantId={selectedTenantId}
+              onTenantChange={setSelectedTenantId}
+              categories={categoryTabs}
+              selectedCategory={selectedCategory}
+              onCategoryChange={setSelectedCategory}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              tenantState={(tenantId) => isTenantAcceptingOrders(tenantId, settings?.tenantOperations)}
+              onSelectProduct={handleSelectProduct}
+            />
           </div>
 
-          {/* Right Cart & Checkout Panel (Col 5 / 12) */}
-          <div className="lg:col-span-5 xl:col-span-4 flex flex-col space-y-3">
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col flex-1 overflow-hidden">
-              {/* Cart Header & Dine-In / Takeaway Toggle */}
-              <div className="p-4 border-b border-slate-100 space-y-3 bg-slate-50/70">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <ShoppingCart className="w-4 h-4 text-brand-orange" />
-                    <span className="font-bold text-xs text-slate-900">
-                      Keranjang Pesanan ({cartItems.reduce((s, i) => s + i.quantity, 0)} item)
-                    </span>
-                  </div>
-
-                  {/* Dine-In vs Takeaway */}
-                  <div className="flex items-center bg-slate-200 p-0.5 rounded-lg text-xs font-bold">
-                    <button
-                      type="button"
-                      onClick={() => setOrderType("DINE_IN")}
-                      className={`px-2 py-0.5 rounded-md transition-all ${orderType === "DINE_IN"
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-600"
-                        }`}
-                    >
-                      Dine In
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOrderType("TAKEAWAY")}
-                      className={`px-2 py-0.5 rounded-md transition-all ${orderType === "TAKEAWAY"
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-600"
-                        }`}
-                    >
-                      Takeaway
-                    </button>
-                  </div>
-                </div>
-
-                {/* Table Selector (Strictly AVAILABLE tables only) */}
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {orderType === "DINE_IN" ? (
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-slate-600 flex items-center justify-between">
-                        <span>Pilih Meja Tersedia:</span>
-                        <span className="text-[9px] text-emerald-600 font-bold font-mono">
-                          {availableTables.length} Siap
-                        </span>
-                      </label>
-                      {availableTables.length === 0 ? (
-                        <div className="p-2 bg-rose-50 border border-rose-200 rounded-lg text-[10px] text-rose-700 font-bold">
-                          Semua meja terisi/reservasi!
-                        </div>
-                      ) : (
-                        <select
-                          value={selectedTable}
-                          onChange={(e) => setSelectedTable(e.target.value)}
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-white focus:outline-hidden focus:ring-1 focus:ring-brand-orange"
-                        >
-                          <option value="">-- Pilih Meja --</option>
-                          {filteredAreas.map((area) => {
-                            const areaAvailableTables = area.tables.filter((t) => t.status === "AVAILABLE");
-                            if (areaAvailableTables.length === 0) return null;
-                            return (
-                              <optgroup key={area.id} label={`${area.name} (${area.outletName})`}>
-                                {areaAvailableTables.map((t) => (
-                                  <option key={t.id} value={t.number || t.id}>
-                                    Meja {t.number || t.id} (Kapasitas {t.cap} Org)
-                                  </option>
-                                ))}
-                              </optgroup>
-                            );
-                          })}
-                        </select>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-semibold text-slate-600">Nomor Antrean:</label>
-                      <input
-                        type="text"
-                        disabled
-                        value="Antrean #A-14"
-                        className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-slate-100 text-slate-700"
-                      />
-                    </div>
-                  )}
-
-                  {/* Loyalty Member Selector */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 flex items-center justify-between">
-                      <span>Member Loyalty:</span>
-                      <Crown className="w-3 h-3 text-primary" />
-                    </label>
-                    <select
-                      value={selectedMemberId}
-                      onChange={(e) => handleSelectMember(e.target.value)}
-                      className="w-full px-2 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-medium focus:outline-hidden focus:ring-1 focus:ring-primary"
-                    >
-                      <option value="">Guest (Non-Member)</option>
-                      {membersList.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} ({m.tier} - {m.points} Pts)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Member Points Card & Voucher Trigger */}
-                {selectedMember && (
-                  <div className="p-2.5 bg-primary/10 dark:bg-primary/15 rounded-xl border border-primary/20 dark:border-primary/30 text-xs flex items-center justify-between shadow-xs">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center space-x-1.5 font-bold text-slate-900 dark:text-slate-100">
-                        <Crown className="w-3.5 h-3.5 text-primary" />
-                        <span className="text-slate-900 dark:text-slate-100">{selectedMember.name}</span>
-                        <span className="text-[9px] bg-primary/20 text-primary dark:bg-primary/30 px-1.5 py-0.2 rounded font-mono font-bold">
-                          {selectedMember.tier}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
-                        Saldo Poin: <strong className="font-mono text-primary font-bold">{selectedMember.points} Pts</strong>
-                      </p>
-                    </div>
-
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setIsVoucherModalOpen(true)}
-                      className="text-[10px] h-7 px-2.5 font-bold space-x-1 bg-white border-amber-300 text-amber-900 hover:bg-amber-100"
-                    >
-                      <Ticket className="w-3 h-3 text-brand-orange" />
-                      <span>{appliedVoucher ? "Ubah Voucher" : "Klaim Voucher"}</span>
-                    </Button>
-                  </div>
-                )}
-
-                {/* Active Voucher Tag */}
-                {appliedVoucher && (
-                  <div className="flex items-center justify-between p-2 bg-emerald-50 rounded-lg border border-emerald-200 text-xs">
-                    <div className="flex items-center space-x-1.5 text-emerald-900 font-bold">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{appliedVoucher.title}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setAppliedVoucher(null)}
-                      className="p-1 text-slate-400 hover:text-rose-600"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+          <Card className="self-start lg:sticky lg:top-[calc(var(--header-height)+1rem)] lg:col-span-5 xl:col-span-4">
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">Pesanan</CardTitle>
+              <CardDescription className="tabular-nums">{cartCount} item</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <CartOrderSetup
+                orderType={orderType}
+                onOrderTypeChange={setOrderType}
+                areas={filteredAreas}
+                availableTableCount={availableTables.length}
+                selectedTable={selectedTable}
+                onTableChange={setSelectedTable}
+                members={membersList}
+                selectedMember={selectedMember}
+                onMemberChange={handleSelectMember}
+                appliedVoucherTitle={appliedVoucher?.title ?? null}
+                onOpenVouchers={() => setIsVoucherModalOpen(true)}
+                onRemoveVoucher={() => setAppliedVoucher(null)}
+              />
+              <Separator />
+              <div className="max-h-80 overflow-y-auto">
+                <CartItemList items={cartItems} onUpdateQuantity={handleUpdateQuantity} onRemove={handleRemoveItem} />
               </div>
-
-              {/* Cart Items List */}
-              <div className="p-4 overflow-y-auto max-h-[280px] space-y-3 flex-1 divide-y divide-slate-100">
-                {cartItems.length === 0 ? (
-                  <div className="py-12 text-center text-slate-400 space-y-2">
-                    <ShoppingCart className="w-8 h-8 mx-auto stroke-[1.5] text-slate-300" />
-                    <p className="text-xs font-medium">Keranjang masih kosong.</p>
-                    <p className="text-[11px] text-slate-400">
-                      Pilih menu di samping untuk menambahkan pesanan.
-                    </p>
-                  </div>
-                ) : (
-                  cartItems.map((item) => (
-                    <div key={item.cartItemId} className="pt-3 first:pt-0 space-y-1 text-xs">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h5 className="font-bold text-slate-900">{item.productName}</h5>
-                          {item.selectedVariant && (
-                            <span className="text-[10px] text-brand-orange font-semibold block">
-                              • {item.selectedVariant.name}
-                            </span>
-                          )}
-                          {item.selectedModifiers.length > 0 && (
-                            <span className="text-[10px] text-slate-500 block">
-                              • {item.selectedModifiers.map((m) => m.name).join(", ")}
-                            </span>
-                          )}
-                          {item.notes && (
-                            <span className="text-[10px] italic text-slate-400 block">
-                              *{item.notes}
-                            </span>
-                          )}
-                        </div>
-
-                        <span className="font-bold font-mono text-slate-900">
-                          {formatCurrencyIDR(item.itemTotal)}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-1">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(item.cartItemId)}
-                          className="text-slate-400 hover:text-rose-600 transition-colors p-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-
-                        <div className="flex items-center space-x-1.5 bg-slate-100 rounded-lg p-0.5">
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQuantity(item.cartItemId, -1)}
-                            className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:bg-white active:scale-95"
-                          >
-                            <Minus className="w-3 h-3" />
-                          </button>
-                          <span className="w-5 text-center text-xs font-bold font-mono">
-                            {item.quantity}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleUpdateQuantity(item.cartItemId, 1)}
-                            className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:bg-white active:scale-95"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              {/* Calculations & Checkout Trigger */}
-              <div className="p-4 border-t border-slate-200 bg-slate-50 space-y-3">
-                {/* Promo & Voucher Code Selector */}
-                <div className="space-y-2 p-2.5 bg-white rounded-xl border border-slate-200">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="font-bold text-slate-700 flex items-center gap-1">
-                      <Tag className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Promo / Voucher Diskon</span>
-                    </span>
-                    {(selectedPromoId || fnbVoucherCode) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedPromoId("");
-                          setFnbVoucherCode("");
-                          setFnbVoucherValidationMsg(null);
-                        }}
-                        className="text-[10px] text-rose-600 hover:underline font-bold"
-                      >
-                        Hapus Promo
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Manual Voucher Code Input */}
-                  <div className="flex space-x-1.5">
-                    <input
-                      type="text"
-                      placeholder="Input Kode: DAGO20 / KOPI10"
-                      value={fnbVoucherCode}
-                      onChange={(e) => setFnbVoucherCode(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleApplyFnbVoucher();
-                        }
-                      }}
-                      className="flex-1 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono font-bold uppercase text-slate-900 outline-hidden focus:ring-1 focus:ring-brand-orange"
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => handleApplyFnbVoucher()}
-                      className="h-8 px-3 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-2xs"
-                    >
-                      Terapkan
-                    </Button>
-                  </div>
-
-                  {/* Validation Feedback Message */}
-                  {fnbVoucherValidationMsg && (
-                    <div
-                      className={`p-2 rounded-lg text-[11px] font-medium flex items-center space-x-1.5 ${fnbVoucherValidationMsg.type === "SUCCESS"
-                        ? "bg-emerald-50 border border-emerald-200 text-emerald-800"
-                        : "bg-rose-50 border border-rose-200 text-rose-800"
-                        }`}
-                    >
-                      {fnbVoucherValidationMsg.type === "SUCCESS" ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      ) : (
-                        <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                      )}
-                      <span>{fnbVoucherValidationMsg.text}</span>
-                    </div>
-                  )}
-
-                  {/* Active Promos Dropdown Selector */}
-                  <select
-                    value={selectedPromoId}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setSelectedPromoId(val);
-                      if (!val) {
-                        setFnbVoucherCode("");
-                        setFnbVoucherValidationMsg(null);
-                      } else {
-                        const p = settings.promos?.find((promo) => promo.id === val);
-                        if (p) {
-                          setFnbVoucherCode(p.code || p.name);
-                          setFnbVoucherValidationMsg(null);
-                        }
-                      }
-                    }}
-                    className="w-full px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 font-medium text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-brand-orange"
-                  >
-                    <option value="">-- Atau Pilih Promo Aktif ({settings.promos?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "FNB")).length || 0}) --</option>
-                    {settings.promos?.filter((p: PromoConfig) => p.isActive && (!p.scope || p.scope === "ALL" || p.scope === "FNB")).map((promo: PromoConfig) => (
-                      <option key={promo.id} value={promo.id}>
-                        {promo.code ? `[${promo.code}] ` : ""}{promo.name} &bull; {promo.discountType === "PERCENTAGE" ? `${promo.discountValue}% (Maks Rp${(promo.maxDiscount || 0).toLocaleString()})` : `Potongan Rp${promo.discountValue.toLocaleString()}`}
-                      </option>
-                    ))}
-                  </select>
-
-                  {activePromo && activePromo.minimumAmount && subtotal < activePromo.minimumAmount && (
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                      * Belum mencapai min. belanja Rp {activePromo.minimumAmount.toLocaleString("id-ID")}.
-                    </p>
-                  )}
-                </div>
-
-                {/* Price Breakdown */}
-                <div className="space-y-1 text-xs text-slate-600">
-                  <div className="flex justify-between">
-                    <span>Subtotal:</span>
-                    <span className="font-mono font-semibold">{formatCurrencyIDR(subtotal)}</span>
-                  </div>
-                  {voucherDiscountAmount > 0 && (
-                    <div className="flex justify-between text-emerald-600 font-semibold">
-                      <span>Voucher Loyalty Poin:</span>
-                      <span className="font-mono">-{formatCurrencyIDR(voucherDiscountAmount)}</span>
-                    </div>
-                  )}
-                  {promoDiscountAmount > 0 && (
-                    <div className="flex justify-between text-emerald-600 font-semibold">
-                      <span>Diskon Promo {activePromo ? `(${activePromo.name})` : ""}:</span>
-                      <span className="font-mono">-{formatCurrencyIDR(promoDiscountAmount)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span>Pajak {isTaxEnabled ? `PB1 (${taxRatePercent}%)` : "(Non-Aktif)"}:</span>
-                    <span className="font-mono font-semibold">
-                      {isTaxEnabled ? formatCurrencyIDR(taxPB1) : "Rp 0"}
-                    </span>
-                  </div>
-                  {serviceCharge > 0 && (
-                    <div className="flex justify-between">
-                      <span>Service Charge (5%):</span>
-                      <span className="font-mono font-semibold">{formatCurrencyIDR(serviceCharge)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-sm font-extrabold text-slate-900 pt-1.5 border-t border-slate-200">
-                    <span>Total Tagihan:</span>
-                    <span className="font-mono text-brand-orange text-base">
-                      {formatCurrencyIDR(grandTotal)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Pay Button */}
-                <Button
-                  type="button"
-                  disabled={cartItems.length === 0 || (orderType === "DINE_IN" && (!selectedTable || availableTables.length === 0))}
-                  onClick={() => {
-                    if (orderType === "DINE_IN" && !selectedTable) {
-                      setPosToast("Harap pilih meja sebelum memproses pembayaran Dine In.");
-                      return;
-                    }
-                    if (!activeShift) {
-                      setPosToast("Harap buka shift kasir dengan modal awal sebelum memproses pembayaran.");
-                      setIsPosOpenShiftModalOpen(true);
-                      return;
-                    }
-                    setIsPaymentModalOpen(true);
-                  }}
-                  className="w-full text-xs font-bold h-11 space-x-2 bg-brand-orange hover:bg-orange-600 text-white shadow-md"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>Proses Pembayaran ({formatCurrencyIDR(grandTotal)})</span>
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
+              <Separator />
+              <CartPromoField
+                code={fnbVoucherCode}
+                onCodeChange={setFnbVoucherCode}
+                onApplyCode={() => handleApplyFnbVoucher()}
+                message={fnbVoucherValidationMsg}
+                promos={fnbPromos}
+                selectedPromoId={selectedPromoId}
+                onPromoChange={handlePromoChange}
+                onClear={handleClearPromo}
+                minimumNotice={promoMinimumNotice}
+              />
+              <CartSummary
+                subtotal={subtotal}
+                voucherDiscount={voucherDiscountAmount}
+                promoDiscount={promoDiscountAmount}
+                promoName={activePromo?.name}
+                isTaxEnabled={isTaxEnabled}
+                taxRatePercent={taxRatePercent}
+                tax={taxPB1}
+                serviceCharge={serviceCharge}
+                serviceChargePercent={Number(settings.serviceChargePercent) || 0}
+                grandTotal={grandTotal}
+                canPay={canPay}
+                onPay={handleRequestPayment}
+              />
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -2740,8 +2215,7 @@ export default function POSPage() {
                   });
                   const data = await res.json().catch(() => null);
                   if (res.status === 409) {
-                    setPosToast(data?.error || "Sesi kasir aktif sudah berjalan.");
-                    setTimeout(() => setPosToast(""), 4000);
+                    notify.warning(data?.error || "Shift kasir sudah berjalan");
                   }
                 } catch (err) {
                   console.warn("[Shift Open Sync Warn]:", err);
@@ -2750,8 +2224,7 @@ export default function POSPage() {
                 openShift(posOpenShiftName, Number(posOpeningCashInput) || 0, targetCashier);
                 setIsSubmittingShift(false);
                 setIsPosOpenShiftModalOpen(false);
-                setPosToast(`Shift "${posOpenShiftName}" berhasil dibuka dengan Modal Kas ${formatCurrencyIDR(Number(posOpeningCashInput) || 0)}. Selamat bertugas!`);
-                setTimeout(() => setPosToast(""), 4000);
+                notify.success(`${posOpenShiftName} dibuka`, `Modal kas ${formatCurrencyIDR(Number(posOpeningCashInput) || 0)}.`);
               }}
               className="space-y-4 text-xs"
             >

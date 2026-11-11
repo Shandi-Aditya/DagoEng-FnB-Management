@@ -20,16 +20,19 @@ describe("POS Bagian D — Perbaikan Minor UI/UX", () => {
   });
 
   describe("D2: Fallback image untuk gambar produk yang rusak (POS-18 / TC-J02)", () => {
-    it("memastikan pos/page.tsx memiliki onError fallback placeholder pada kartu produk", () => {
-      const posPageContent = fs.readFileSync(
-        path.resolve(process.cwd(), "src/app/(dashboard)/pos/page.tsx"),
+    it("memastikan kartu produk POS memiliki onError fallback placeholder", () => {
+      // The product tile moved from pos/page.tsx to features/pos/ProductCard.tsx
+      const productCardContent = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/pos/ProductCard.tsx"),
         "utf-8"
       );
 
-      expect(posPageContent).toContain("onError={(e) => {");
-      expect(posPageContent).toContain("product-fallback-placeholder");
-      expect(posPageContent).toContain(
-        'className="product-fallback-placeholder hidden flex w-full h-full items-center justify-center text-slate-400"'
+      expect(productCardContent).toContain("onError={(e) => {");
+      expect(productCardContent).toContain("setImageFailed(true)");
+      // Images that failed before hydration are caught on mount as well
+      expect(productCardContent).toContain("node.naturalWidth === 0");
+      expect(productCardContent).toContain(
+        'className="product-fallback-placeholder flex size-full items-center justify-center text-muted-foreground"'
       );
     });
 
@@ -132,14 +135,20 @@ describe("POS Bagian D — Perbaikan Minor UI/UX", () => {
       expect(status.estimatedReopenTime).toContain("pk 08:00 WITA");
     });
 
-    it("memastikan pos/page.tsx menyertakan alasan dan estimasi buka pada badge Tutup Sementara", () => {
-      const posPageContent = fs.readFileSync(
-        path.resolve(process.cwd(), "src/app/(dashboard)/pos/page.tsx"),
+    it("memastikan kartu produk POS menyertakan alasan dan estimasi buka saat Tutup Sementara", () => {
+      // Message formatting is covered behaviourally in tests/pos-catalog.test.ts
+      const productCardContent = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/pos/ProductCard.tsx"),
+        "utf-8"
+      );
+      const catalogContent = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/pos/pos-catalog.ts"),
         "utf-8"
       );
 
-      expect(posPageContent).toContain("tenantOp.estimatedReopenTime");
-      expect(posPageContent).toContain("tenantOp.reason");
+      expect(productCardContent).toContain("tenantClosedMessage(tenant)");
+      expect(catalogContent).toContain("tenant.reason");
+      expect(catalogContent).toContain("tenant.estimatedReopenTime");
     });
   });
 
@@ -150,14 +159,25 @@ describe("POS Bagian D — Perbaikan Minor UI/UX", () => {
         "utf-8"
       );
 
-      // Verify FIFO sort by createdAt
-      expect(kitchenPageContent).toMatch(
+      // The board logic moved to features/kitchen (FIFO order is covered in tests/kitchen-board.test.ts);
+      // the page must still feed it and number tickets per column from 1.
+      expect(kitchenPageContent).toContain("filterKitchenOrders(");
+      expect(kitchenPageContent).toContain("const queueNumber = ticketIdx + 1;");
+
+      const boardContent = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/kitchen/kitchen-board.ts"),
+        "utf-8"
+      );
+      expect(boardContent).toMatch(
         /\.sort\s*\(\s*\(a,\s*b\)\s*=>\s*new Date\(a\.createdAt\)\.getTime\(\)\s*-\s*new Date\(b\.createdAt\)\.getTime\(\)\s*\)/
       );
+      expect(boardContent).toContain("sequenceNumber: queueNumber");
 
-      // Verify explicit queue ticket numbering badge (#1, #2, ...)
-      expect(kitchenPageContent).toContain("#{ticketIdx + 1}");
-      expect(kitchenPageContent).toContain("sequenceNumber: ticketIdx + 1");
+      const cardContent = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/kitchen/KitchenTicketCard.tsx"),
+        "utf-8"
+      );
+      expect(cardContent).toContain("#{queueNumber}");
     });
   });
 });
