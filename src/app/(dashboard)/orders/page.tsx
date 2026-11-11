@@ -59,6 +59,13 @@ export default function OrdersPage() {
   const userTenantId = user?.tenant?.id;
 
   const roleSlug = user?.role?.slug || (typeof user?.role === "string" ? user.role : "");
+  const isKitchenStaff = roleSlug === "KITCHEN_STAFF";
+  const canExportNominalReports =
+    roleSlug === "SUPER_ADMIN" ||
+    roleSlug === "OWNER" ||
+    roleSlug === "MANAGER" ||
+    (user?.scopeLevel === "TENANT" && !!user?.tenant?.id);
+  const canViewNominals = !isKitchenStaff;
   const canProcessPayment =
     roleSlug === "CASHIER" ||
     roleSlug === "SUPER_ADMIN" ||
@@ -237,11 +244,13 @@ export default function OrdersPage() {
   };
 
   const handleExportOrdersCSV = () => {
+    if (!canExportNominalReports) return;
     const { headers, rows } = getOrderExportData();
     downloadCSV(`Daftar_Pesanan_Transaksi_${Date.now()}`, headers, rows);
   };
 
   const handleExportOrdersExcel = () => {
+    if (!canExportNominalReports) return;
     const { headers, rows } = getOrderExportData();
     downloadExcel(`Daftar_Pesanan_Transaksi_${Date.now()}`, "Riwayat Pesanan", headers, rows);
   };
@@ -424,34 +433,38 @@ export default function OrdersPage() {
             label="records"
           />
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleExportOrdersExcel}
-            className="text-xs space-x-1.5 border-emerald-300 text-emerald-750 font-bold hover:bg-emerald-50 shadow-2xs text-emerald-800"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Export Excel</span>
-          </Button>
+          {canExportNominalReports && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExportOrdersExcel}
+                className="text-xs space-x-1.5 border-emerald-300 text-emerald-750 font-bold hover:bg-emerald-50 shadow-2xs text-emerald-800"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Export Excel</span>
+              </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleExportOrdersCSV}
-            className="text-xs space-x-1.5 border-slate-300 text-slate-700 font-bold hover:bg-slate-50 shadow-2xs"
-          >
-            <Download className="w-3.5 h-3.5 text-slate-600" />
-            <span>Export CSV</span>
-          </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExportOrdersCSV}
+                className="text-xs space-x-1.5 border-slate-300 text-slate-700 font-bold hover:bg-slate-50 shadow-2xs"
+              >
+                <Download className="w-3.5 h-3.5 text-slate-600" />
+                <span>Export CSV</span>
+              </Button>
 
-          <Button
-            size="sm"
-            onClick={() => setIsPDFModalOpen(true)}
-            className="text-xs space-x-1.5 bg-brand-orange hover:bg-orange-600 text-white font-bold shadow-sm"
-          >
-            <FileText className="w-3.5 h-3.5 text-white" />
-            <span>Cetak PDF Resmi</span>
-          </Button>
+              <Button
+                size="sm"
+                onClick={() => setIsPDFModalOpen(true)}
+                className="text-xs space-x-1.5 bg-brand-orange hover:bg-orange-600 text-white font-bold shadow-sm"
+              >
+                <FileText className="w-3.5 h-3.5 text-white" />
+                <span>Cetak PDF Resmi</span>
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -534,7 +547,9 @@ export default function OrdersPage() {
                             {metrics.slaStatus.replace("_", " ")}
                           </span>
                         </td>
-                        <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{formatCurrencyIDR(o.total)}</td>
+                        <td className="p-3 font-bold text-slate-900 whitespace-nowrap">
+                          {canViewNominals ? formatCurrencyIDR(o.total) : "—"}
+                        </td>
                         <td className="p-3 whitespace-nowrap">
                           <span
                             className="text-[10px] font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 whitespace-nowrap"

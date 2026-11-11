@@ -220,14 +220,22 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
 
     syncOrderToServer(updated);
 
+    const isRefund = nextStatus === "CANCELLED" && (target.paymentStatus === "PAID" || updated.paymentStatus === "REFUNDED");
+    const isVoid = nextStatus === "CANCELLED" && !isRefund;
+    const auditAction = isRefund ? "REFUND_ORDER" : isVoid ? "VOID_ORDER" : "ADVANCE_ORDER_STATUS";
+
     logActivity({
       module: "POS",
-      action: "ADVANCE_ORDER_STATUS",
+      action: auditAction,
       recordId: target.orderNumber,
-      previousValue: `Status: ${target.status}`,
-      newValue: `Status: ${nextStatus}`,
-      description: `Perubahan status pesanan ${target.orderNumber} (Meja ${target.tableNumber}) ➔ ${nextStatus}`,
-      reason: note || "Update status progres dapur/waiter",
+      previousValue: `Status: ${target.status}, Payment: ${target.paymentStatus}`,
+      newValue: `Status: ${nextStatus}, Payment: ${updated.paymentStatus}`,
+      description: isRefund
+        ? `Refund transaksi ${target.orderNumber} (Meja ${target.tableNumber}) sebesar Rp ${target.total.toLocaleString("id-ID")}`
+        : isVoid
+        ? `Pembatalan (Void) pesanan ${target.orderNumber} (Meja ${target.tableNumber})`
+        : `Perubahan status pesanan ${target.orderNumber} (Meja ${target.tableNumber}) ➔ ${nextStatus}`,
+      reason: note || (isRefund ? "Refund transaksi pelanggan" : isVoid ? "Void pesanan kasir" : "Update status progres dapur/waiter"),
       status: "SUCCESS",
       outletId: target.outletId,
       outletName: target.outletName,
@@ -247,7 +255,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       organizationId: user?.organization?.id || "org-dago-hub",
       outletId: targetOutletId,
       outletName: targetOutletName,
-      tableNumber: newOrderData.tableNumber || "T-01",
+      tableNumber: newOrderData.tableNumber || (newOrderData.orderType === "TAKEAWAY" ? "TAKEAWAY" : "-"),
       customerName: newOrderData.customerName || "Pelanggan Meja",
       orderType: newOrderData.orderType || "DINE_IN",
       status: "NEW",
@@ -306,7 +314,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       organizationId: user?.organization?.id || "org-dago-hub",
       outletId: targetOutletId,
       outletName: targetOutletName,
-      tableNumber: newOrderData.tableNumber || "T-01",
+      tableNumber: newOrderData.tableNumber || (newOrderData.orderType === "TAKEAWAY" ? "TAKEAWAY" : "-"),
       customerName: newOrderData.customerName || "Pelanggan Kasir",
       orderType: newOrderData.orderType || "DINE_IN",
       status: "CONFIRMED",

@@ -95,8 +95,9 @@ export function PaymentModal({
   useEffect(() => {
     if (isOpen) {
       const newTxId = `GW-DAGO-${Date.now().toString().slice(-6)}`;
-      setCashGiven(grandTotal);
-      setCashInputRaw(grandTotal.toString());
+      // POS-29: Leave cash input empty to prevent accidental auto-fill of exact change
+      setCashGiven(0);
+      setCashInputRaw("");
       setQrisSecondsLeft(120);
       setIsGatewayVerified(false);
       setGatewayTxId(newTxId);
