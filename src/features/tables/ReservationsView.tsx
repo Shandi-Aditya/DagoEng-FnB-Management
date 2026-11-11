@@ -51,7 +51,7 @@ export function ReservationsView({
           <Input
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Cari nama tamu, nomor WhatsApp, atau meja..."
+            placeholder="Cari nama, WhatsApp, atau meja"
             className="pl-9 text-xs"
           />
         </div>
@@ -79,11 +79,11 @@ export function ReservationsView({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Tamu & Kontak</TableHead>
-              <TableHead>Meja & Area</TableHead>
-              <TableHead>Jadwal Kedatangan</TableHead>
-              <TableHead>Pax & DP Masuk</TableHead>
-              <TableHead>Catatan Khusus</TableHead>
+              <TableHead>Tamu</TableHead>
+              <TableHead>Meja</TableHead>
+              <TableHead>Jadwal</TableHead>
+              <TableHead>Tamu dan DP</TableHead>
+              <TableHead>Catatan</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Aksi</TableHead>
             </TableRow>
@@ -94,8 +94,8 @@ export function ReservationsView({
                 <TableCell colSpan={7} className="py-12">
                   <EmptyState
                     icon={<CalendarCheck className="size-6 text-muted-foreground" />}
-                    title="Tidak ada data reservasi"
-                    description="Reservasi meja yang dibuat akan muncul di sini."
+                    title="Belum ada reservasi"
+                    description="Reservasi yang dibuat akan muncul di sini."
                   />
                 </TableCell>
               </TableRow>
@@ -165,7 +165,7 @@ export function ReservationsView({
                           className="h-8 gap-1 text-xs"
                         >
                           <Utensils className="size-3.5 text-muted-foreground" />
-                          <span>Buka POS</span>
+                          <span>Buka di POS</span>
                         </Button>
                       ) : null}
                     </div>

@@ -36,8 +36,8 @@ export function InventoryToolbar({
   return (
     <div className="space-y-4">
       <PageHeader
-        title={`Inventori & Bahan Baku · ${outletName}`}
-        description="Pelacakan stok bahan baku, resep BOM, purchase order, dan audit fisik opname."
+        title="Inventori"
+        description="Stok bahan, resep, pesanan pembelian, dan opname."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -47,7 +47,7 @@ export function InventoryToolbar({
               className="gap-1.5 text-xs"
             >
               <FileText className="size-3.5 text-muted-foreground" />
-              <span>Laporan Valuasi</span>
+              <span>Laporan nilai stok</span>
             </Button>
 
             <Button
@@ -56,8 +56,8 @@ export function InventoryToolbar({
               onClick={onOpenRestockAlert}
               className="gap-1.5 text-xs"
             >
-              <BellRing className="size-3.5 text-warning" />
-              <span>Peringatan Restock</span>
+              <BellRing className="size-3.5 text-muted-foreground" />
+              <span>Perlu dibeli</span>
               {needsAttention ? (
                 <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
                   {criticalCount + outOfStockCount}
@@ -72,12 +72,12 @@ export function InventoryToolbar({
               className="gap-1.5 text-xs"
             >
               <RefreshCw className="size-3.5 text-muted-foreground" />
-              <span>Simulasi Resep</span>
+              <span>Simulasi resep</span>
             </Button>
 
             <Button size="sm" onClick={onOpenCreatePO} className="gap-1.5 text-xs">
               <Plus className="size-3.5" />
-              <span>Buat PO Baru</span>
+              <span>Buat PO</span>
             </Button>
           </div>
         }
@@ -86,27 +86,27 @@ export function InventoryToolbar({
       {/* KPI Stat Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard
-          label="Total Nilai Aset Stok"
+          label="Nilai stok"
           value={formatCurrencyIDR(totalStockValue)}
-          hint="Berdasarkan harga pokok per unit"
+          hint="Dihitung dari HPP per satuan"
         />
         <StatCard
-          label="Bahan Stok Aman"
-          value={`${safeCount} Bahan`}
-          hint="Stok di atas batas minimum"
+          label="Aman"
+          value={String(safeCount)}
+          hint="bahan di atas batas minimum"
         />
         <StatCard
-          label="Stok Menipis"
-          value={`${lowCount} Bahan`}
-          hint="Mendekati batas minimum operasional"
+          label="Menipis"
+          value={String(lowCount)}
+          hint="bahan mendekati batas minimum"
         />
         <StatCard
-          label="Stok Habis / Kritis"
-          value={`${criticalCount + outOfStockCount} Bahan`}
+          label="Kritis atau habis"
+          value={String(criticalCount + outOfStockCount)}
           hint={
             outOfStockCount > 0
               ? `${outOfStockCount} habis, ${criticalCount} kritis`
-              : "Perlu re-order segera"
+              : "bahan perlu dibeli"
           }
         />
       </div>

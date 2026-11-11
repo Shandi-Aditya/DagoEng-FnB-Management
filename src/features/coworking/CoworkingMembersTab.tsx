@@ -58,7 +58,7 @@ export function CoworkingMembersTab({
                 onSearchChange(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Cari member, kontak, atau paket..."
+              placeholder="Cari member, kontak, atau paket"
               className="h-8 pl-8 text-xs"
             />
           </div>
@@ -117,11 +117,11 @@ export function CoworkingMembersTab({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[200px]">ID & Nama Member</TableHead>
-                <TableHead>Kontak & Email</TableHead>
-                <TableHead>Paket Membership</TableHead>
-                <TableHead>Periode Aktif</TableHead>
-                <TableHead>Total Transaksi</TableHead>
+                <TableHead className="w-[200px]">Member</TableHead>
+                <TableHead>Kontak</TableHead>
+                <TableHead>Paket</TableHead>
+                <TableHead>Periode aktif</TableHead>
+                <TableHead>Transaksi</TableHead>
                 <TableHead className="text-right">Status</TableHead>
               </TableRow>
             </TableHeader>

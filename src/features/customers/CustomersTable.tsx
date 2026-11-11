@@ -83,7 +83,7 @@ export function CustomersTable({
             <Input
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Cari nama, telepon, email, atau tier..."
+              placeholder="Cari nama, telepon, email, atau tier"
               className="h-8 pl-8 text-xs"
             />
           </div>
@@ -94,7 +94,7 @@ export function CustomersTable({
               onChange={(e) => onTierFilterChange(e.target.value)}
               className="h-8 text-xs font-medium"
             >
-              <option value="ALL">Semua Tier</option>
+              <option value="ALL">Semua tier</option>
               <option value="Platinum">Platinum</option>
               <option value="Gold">Gold</option>
               <option value="Silver">Silver</option>
@@ -116,7 +116,7 @@ export function CustomersTable({
 
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>Baris</span>
+            <span>baris</span>
             <NativeSelect
               value={String(pageSize)}
               onChange={(e) => {
@@ -140,13 +140,13 @@ export function CustomersTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[260px]">Nama Pelanggan & Kontak</TableHead>
-                <TableHead>Loyalty Tier</TableHead>
-                <TableHead className="text-right">Saldo Poin</TableHead>
-                <TableHead>Total Belanja & Kunjungan</TableHead>
-                <TableHead>Tgl Bergabung</TableHead>
-                <TableHead className="text-center">Riwayat & Log</TableHead>
-                <TableHead className="text-right">Aksi Khusus</TableHead>
+                <TableHead className="w-[260px]">Member</TableHead>
+                <TableHead>Tier</TableHead>
+                <TableHead className="text-right">Poin</TableHead>
+                <TableHead>Belanja dan kunjungan</TableHead>
+                <TableHead>Bergabung</TableHead>
+                <TableHead className="text-center">Riwayat</TableHead>
+                <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -155,11 +155,11 @@ export function CustomersTable({
                   <TableCell colSpan={7} className="h-48 text-center">
                     <EmptyState
                       icon={<UserCheck className="w-8 h-8 text-muted-foreground" />}
-                      title="Tidak ada data pelanggan"
+                      title="Member tidak ditemukan"
                       description={
                         searchQuery
-                          ? `Tidak ditemukan pelanggan yang cocok dengan kata kunci "${searchQuery}".`
-                          : "Belum ada pelanggan terdaftar di outlet ini."
+                          ? `Tidak ada member yang cocok dengan "${searchQuery}".`
+                          : "Belum ada member di outlet ini."
                       }
                     />
                   </TableCell>

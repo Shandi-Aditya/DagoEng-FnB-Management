@@ -151,7 +151,7 @@ export function EditEmployeeModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-emp-role" className="text-xs">Jabatan / Role</Label>
+              <Label htmlFor="edit-emp-role" className="text-xs">Jabatan</Label>
               <NativeSelect
                 id="edit-emp-role"
                 value={role}
@@ -185,7 +185,7 @@ export function EditEmployeeModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-emp-contact" className="text-xs">Kontak WhatsApp</Label>
+              <Label htmlFor="edit-emp-contact" className="text-xs">WhatsApp</Label>
               <Input
                 id="edit-emp-contact"
                 value={contact}
@@ -207,7 +207,7 @@ export function EditEmployeeModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-emp-shift" className="text-xs">Shift Penugasan</Label>
+              <Label htmlFor="edit-emp-shift" className="text-xs">Shift</Label>
               <NativeSelect
                 id="edit-emp-shift"
                 value={assignedShift}
@@ -223,16 +223,16 @@ export function EditEmployeeModal({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="edit-emp-status" className="text-xs">Status Kepegawaian</Label>
+              <Label htmlFor="edit-emp-status" className="text-xs">Status</Label>
               <NativeSelect
                 id="edit-emp-status"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as "AKTIF" | "CUTI" | "NON-AKTIF")}
                 className="w-full text-xs font-medium"
               >
-                <option value="AKTIF">AKTIF</option>
-                <option value="CUTI">CUTI</option>
-                <option value="NON-AKTIF">NON-AKTIF</option>
+                <option value="AKTIF">Aktif</option>
+                <option value="CUTI">Cuti</option>
+                <option value="NON-AKTIF">Nonaktif</option>
               </NativeSelect>
             </div>
           </div>
@@ -240,7 +240,7 @@ export function EditEmployeeModal({
           {/* Permissions Matrix */}
           <div className="space-y-2 pt-2 border-t">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium">Hak Izin Akses Sistem</Label>
+              <Label className="text-xs font-medium">Hak akses</Label>
               <span className="text-[11px] text-muted-foreground font-mono">
                 {permissions.length} izin dipilih
               </span>

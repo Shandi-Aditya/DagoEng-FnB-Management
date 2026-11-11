@@ -62,7 +62,7 @@ export function ChangeLeaseStatusModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertCircle className="w-5 h-5 text-amber-600" />
-            <span>Ubah Status Kontrak</span>
+            <span>Ubah status kontrak</span>
           </DialogTitle>
           <DialogDescription>
             Memperbarui status sewa tenant {lease.tenantName} ({lease.unitCode}).
@@ -80,10 +80,10 @@ export function ChangeLeaseStatusModal({
               onChange={(e) => setStatus(e.target.value as LeaseStatus)}
               className="w-full text-xs font-medium"
             >
-              <option value="ACTIVE">ACTIVE (Aktif)</option>
-              <option value="EXPIRING_SOON">EXPIRING_SOON (Segera Berakhir)</option>
-              <option value="EXPIRED">EXPIRED (Telah Berakhir)</option>
-              <option value="TERMINATED">TERMINATED (Dibatalkan)</option>
+              <option value="ACTIVE">Aktif</option>
+              <option value="EXPIRING_SOON">Segera berakhir</option>
+              <option value="EXPIRED">Berakhir</option>
+              <option value="TERMINATED">Diakhiri</option>
             </NativeSelect>
           </div>
 
@@ -97,7 +97,7 @@ export function ChangeLeaseStatusModal({
               rows={3}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Contoh: Masa sewa 1 tahun berakhir per tanggal..."
+              placeholder="Misalnya masa sewa berakhir dan tidak diperpanjang"
               className="text-xs"
             />
           </div>

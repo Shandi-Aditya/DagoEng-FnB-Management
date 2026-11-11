@@ -41,7 +41,7 @@ export function PosVoucherModal({
           <div className="flex items-center gap-2">
             <Ticket className="size-4 text-primary" />
             <DialogTitle className="text-sm font-medium text-foreground">
-              Klaim voucher poin loyalty
+              Tukar poin dengan voucher
             </DialogTitle>
           </div>
           <DialogDescription className="text-xs text-muted-foreground">

@@ -65,13 +65,13 @@ export function getLeaseStatusLabel(status: LeaseStatus): string {
     case "ACTIVE":
       return "Aktif";
     case "EXPIRING_SOON":
-      return "Segera Berakhir";
+      return "Segera berakhir";
     case "EXPIRED":
       return "Berakhir";
     case "TERMINATED":
-      return "Dibatalkan";
+      return "Diakhiri";
     case "DRAFT":
-      return "Draft";
+      return "Draf";
     default:
       return status;
   }

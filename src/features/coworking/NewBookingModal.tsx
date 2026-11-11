@@ -222,7 +222,7 @@ export function NewBookingModal({
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Laptop className="w-5 h-5 text-primary" />
-            <span>Buat Booking & Check-In Co-working</span>
+            <span>Buat booking</span>
           </DialogTitle>
           <DialogDescription>
             Pilih paket durasi, slot jam operasional, atau rentang tanggal sewa.
@@ -287,7 +287,7 @@ export function NewBookingModal({
 
           {/* Booking Type Switcher */}
           <div className="space-y-1.5">
-            <Label className="text-xs">Tipe Sewa & Paket</Label>
+            <Label className="text-xs">Paket</Label>
             <div className="grid grid-cols-3 gap-1.5 p-1 rounded-lg border bg-muted/40">
               <Button
                 type="button"
@@ -349,8 +349,8 @@ export function NewBookingModal({
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="hourly-dur" className="text-xs">Durasi Jam</Label>
-                    <span className="text-[10px] text-muted-foreground">Min. 2 Jam</span>
+                    <Label htmlFor="hourly-dur" className="text-xs">Durasi (jam)</Label>
+                    <span className="text-[10px] text-muted-foreground">Minimal 2 jam</span>
                   </div>
                   <Input
                     id="hourly-dur"
@@ -370,7 +370,7 @@ export function NewBookingModal({
                 <div className="flex items-center justify-between">
                   <Label className="text-xs flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-primary" />
-                    <span>Jam Mulai (09:00 - 18:00)</span>
+                    <span>Jam mulai (09:00–18:00)</span>
                   </Label>
                   <span className="text-[11px] font-mono text-muted-foreground">
                     Selesai: {calculateHourlyEndTime(bookStartTime, bookDurationHours)} WITA
@@ -398,7 +398,7 @@ export function NewBookingModal({
           {bookType === "DAILY" && (
             <div className="p-3 rounded-lg border bg-muted/20 space-y-3 text-xs">
               <div className="space-y-1.5">
-                <Label className="text-xs">Pilihan Durasi Harian</Label>
+                <Label className="text-xs">Durasi harian</Label>
                 <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                   {[
                     { key: "1_DAY", label: "1 Hari" },
@@ -423,7 +423,7 @@ export function NewBookingModal({
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="daily-start" className="text-xs">Tanggal Mulai</Label>
+                  <Label htmlFor="daily-start" className="text-xs">Mulai</Label>
                   <Input
                     id="daily-start"
                     type="date"
@@ -434,7 +434,7 @@ export function NewBookingModal({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="daily-end" className="text-xs">Tanggal Selesai</Label>
+                  <Label htmlFor="daily-end" className="text-xs">Selesai</Label>
                   <Input
                     id="daily-end"
                     type="date"
@@ -453,7 +453,7 @@ export function NewBookingModal({
           {/* Monthly Mode Details */}
           {bookType === "MONTHLY" && (
             <div className="p-3 rounded-lg border bg-muted/20 space-y-2 text-xs">
-              <Label htmlFor="monthly-start" className="text-xs">Tanggal Mulai (30 Hari Akses)</Label>
+              <Label htmlFor="monthly-start" className="text-xs">Mulai (akses 30 hari)</Label>
               <Input
                 id="monthly-start"
                 type="date"
@@ -477,7 +477,7 @@ export function NewBookingModal({
               <Input
                 id="guest-name"
                 required
-                placeholder="Contoh: Sarah Jenkins / PT Nomad Tech"
+                placeholder="Misalnya Sarah Jenkins"
                 value={bookGuestName}
                 onChange={(e) => setBookGuestName(e.target.value)}
                 className="text-xs"
@@ -520,7 +520,7 @@ export function NewBookingModal({
               </Label>
               <Input
                 id="guest-company"
-                placeholder="Contoh: Tim IT Remote, butuh stopkontak tambahan"
+                placeholder="Misalnya butuh stopkontak tambahan"
                 value={bookCompany}
                 onChange={(e) => setBookCompany(e.target.value)}
                 className="text-xs"
@@ -532,17 +532,17 @@ export function NewBookingModal({
           <div className="space-y-3 pt-2 border-t">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label htmlFor="booking-payment" className="text-xs">Metode Pembayaran</Label>
+                <Label htmlFor="booking-payment" className="text-xs">Metode bayar</Label>
                 <NativeSelect
                   id="booking-payment"
                   value={bookPaymentMethod}
                   onChange={(e) => setBookPaymentMethod(e.target.value)}
                   className="w-full text-xs"
                 >
-                  <option value="QRIS DagoPay">QRIS DagoPay (Instant)</option>
-                  <option value="CASH">Tunai (Kasir)</option>
-                  <option value="EDC / Debit Card">EDC / Kartu Debit</option>
-                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="QRIS DagoPay">QRIS</option>
+                  <option value="CASH">Tunai</option>
+                  <option value="EDC / Debit Card">Kartu (EDC)</option>
+                  <option value="Bank Transfer">Transfer bank</option>
                 </NativeSelect>
               </div>
 
@@ -554,7 +554,7 @@ export function NewBookingModal({
                     onChange={(e) => setBookIsImmediateCheckIn(e.target.checked)}
                     className="w-4 h-4 rounded text-primary"
                   />
-                  <span>Langsung Check-In (Walk-In)</span>
+                  <span>Langsung check-in</span>
                 </label>
               </div>
             </div>
@@ -590,7 +590,7 @@ export function NewBookingModal({
               Batal
             </Button>
             <Button type="submit" size="sm" className="text-xs font-medium">
-              {bookIsImmediateCheckIn ? "Simpan & Check-In" : "Simpan Reservasi"}
+              {bookIsImmediateCheckIn ? "Simpan dan check-in" : "Simpan booking"}
             </Button>
           </DialogFooter>
         </form>

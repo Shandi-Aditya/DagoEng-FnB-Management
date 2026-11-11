@@ -85,7 +85,7 @@ export function NewMemberModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-primary" />
-            <span>Registrasi Member Co-working Baru</span>
+            <span>Tambah member co-working</span>
           </DialogTitle>
           <DialogDescription>
             Pilih paket membership dan metode pembayaran untuk pendaftaran member.
@@ -100,7 +100,7 @@ export function NewMemberModal({
             <Input
               id="member-name"
               required
-              placeholder="Contoh: Made Bagus"
+              placeholder="Misalnya Made Bagus"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="text-xs"
@@ -169,9 +169,9 @@ export function NewMemberModal({
               onChange={(e) => setPaymentMethod(e.target.value)}
               className="w-full text-xs"
             >
-              <option value="QRIS DagoPay">QRIS DagoPay</option>
-              <option value="Bank Transfer">Bank Transfer BCA/Mandiri</option>
-              <option value="Credit Card">Credit Card</option>
+              <option value="QRIS DagoPay">QRIS</option>
+              <option value="Bank Transfer">Transfer bank</option>
+              <option value="Credit Card">Kartu kredit</option>
               <option value="CASH">Tunai</option>
             </NativeSelect>
           </div>

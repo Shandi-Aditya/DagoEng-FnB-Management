@@ -57,7 +57,7 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
           {/* Core Metadata Grid */}
           <div className="space-y-2 text-xs bg-muted/40 p-3.5 rounded-xl border border-border">
             <div className="flex justify-between items-center">
-              <span className="text-muted-foreground font-medium">Waktu Tercatat:</span>
+              <span className="text-muted-foreground font-medium">Waktu</span>
               <span className="font-mono font-bold text-foreground tabular-nums">
                 {new Date(log.timestamp).toLocaleString("id-ID", {
                   dateStyle: "full",
@@ -68,7 +68,7 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
             </div>
 
             <div className="flex justify-between items-center">
-              <span className="text-muted-foreground font-medium">Aktor & Role:</span>
+              <span className="text-muted-foreground font-medium">Pelaku</span>
               <span className="font-semibold text-foreground">
                 {log.actorName}{" "}
                 <span className="text-primary">({log.actorRole})</span>
@@ -76,14 +76,14 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
             </div>
 
             <div className="flex justify-between items-center">
-              <span className="text-muted-foreground font-medium">Scope Bisnis / Gerai:</span>
+              <span className="text-muted-foreground font-medium">Outlet</span>
               <span className="font-medium text-foreground">
                 {log.organizationName || "Dago Creative Hub"} • {log.outletName || "Semua"}
               </span>
             </div>
 
             <div className="flex justify-between items-center">
-              <span className="text-muted-foreground font-medium">Modul & Kode Aksi:</span>
+              <span className="text-muted-foreground font-medium">Modul dan aksi</span>
               <span className="font-mono font-bold text-primary">
                 [{log.module}] {log.action}
               </span>
@@ -91,7 +91,7 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
 
             {log.recordId && (
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground font-medium">Target Record ID:</span>
+                <span className="text-muted-foreground font-medium">ID data</span>
                 <span className="font-mono font-bold text-foreground bg-muted px-2 py-0.5 rounded">
                   {log.recordId}
                 </span>
@@ -99,7 +99,7 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
             )}
 
             <div className="flex justify-between items-center">
-              <span className="text-muted-foreground font-medium">Status & Severity:</span>
+              <span className="text-muted-foreground font-medium">Status</span>
               <div className="flex items-center gap-1.5">
                 <StatusBadge status={getStatusTone(log.status)}>
                   {log.status || "SUCCESS"}
@@ -148,7 +148,7 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
             </p>
             {log.reason && (
               <div className="p-2.5 bg-amber-500/10 rounded-lg border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
-                <span className="font-semibold">Alasan Bisnis:</span> {log.reason}
+                <span className="font-semibold">Alasan</span> {log.reason}
               </div>
             )}
           </div>
@@ -179,7 +179,7 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
         <DialogFooter className="flex flex-row items-center justify-between border-t border-border pt-3">
           <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <Lock className="h-3.5 w-3.5" />
-            <span>Kekal & Terenkripsi</span>
+            <span>Tidak bisa diubah</span>
           </div>
           <Button size="sm" onClick={onClose} variant="outline">
             Tutup

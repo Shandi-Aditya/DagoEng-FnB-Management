@@ -81,8 +81,8 @@ export function ReportsPreviewTable({
                     <TableCell colSpan={report.tableHeaders.length} className="p-8">
                       <EmptyState
                         icon={<FileText />}
-                        title="Belum ada baris data untuk modul laporan ini"
-                        description={`Tidak ada transaksi atau entri tercatat untuk ${scopeName} pada rentang ${periodLabel}.`}
+                        title="Tidak ada data pada periode ini"
+                        description={`Belum ada catatan untuk ${scopeName} pada ${periodLabel}. Coba ubah periode.`}
                       />
                     </TableCell>
                   </TableRow>

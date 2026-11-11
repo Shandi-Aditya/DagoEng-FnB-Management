@@ -22,7 +22,7 @@ export function ActivityLogStatsCards({ stats }: ActivityLogStatsCardsProps) {
         <p className="text-2xl font-bold font-mono tabular-nums tracking-tight">
           {stats.totalCount} Entri
         </p>
-        <p className="text-[11px] text-muted-foreground">Tercatat terstruktur & kekal</p>
+        <p className="text-[11px] text-muted-foreground">Tidak bisa diubah setelah tercatat</p>
       </Card>
 
       <Card className="p-4 space-y-1">

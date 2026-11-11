@@ -4,6 +4,7 @@ import {
   filterEmployees,
   filterShifts,
   getDepartmentBadgeTone,
+  getEmployeeStatusLabel,
   getEmployeeStatusTone,
   getShiftStatusTone,
   buildEmployeeExportData,
@@ -130,5 +131,13 @@ describe("employees-domain", () => {
     const empExport = buildEmployeeExportData("EMPLOYEES", [], mockEmployees, "Singaraja");
     expect(empExport.headers).toHaveLength(10);
     expect(empExport.rows).toHaveLength(2);
+  });
+});
+
+describe("getEmployeeStatusLabel", () => {
+  it("shows employment status in sentence case instead of the stored enum", () => {
+    expect(getEmployeeStatusLabel("AKTIF")).toBe("Aktif");
+    expect(getEmployeeStatusLabel("CUTI")).toBe("Cuti");
+    expect(getEmployeeStatusLabel("NON-AKTIF")).toBe("Nonaktif");
   });
 });

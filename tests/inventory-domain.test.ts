@@ -154,9 +154,9 @@ describe("status tones and human labels", () => {
   });
 
   it("maps opname reasons to human Indonesian labels", () => {
-    expect(opnameReasonLabel("WASTE")).toBe("Waste Operasional");
-    expect(opnameReasonLabel("EXPIRATION")).toBe("Kadaluwarsa");
-    expect(opnameReasonLabel("RECORDING_ERROR")).toBe("Kesalahan Catat");
+    expect(opnameReasonLabel("WASTE")).toBe("Limbah");
+    expect(opnameReasonLabel("EXPIRATION")).toBe("Kedaluwarsa");
+    expect(opnameReasonLabel("RECORDING_ERROR")).toBe("Salah catat");
   });
 });
 

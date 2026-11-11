@@ -17,8 +17,8 @@ export function InventoryRecipesTab({ recipes, onOpenRecipeModal }: InventoryRec
     return (
       <EmptyState
         icon={<Utensils className="size-6 text-muted-foreground" />}
-        title="Belum ada formula resep BOM"
-        description="Buat formula resep bahan baku untuk menghitung HPP otomatis saat transaksi kasir."
+        title="Belum ada resep"
+        description="Resep menghubungkan menu dengan bahan, jadi HPP dan stok terhitung otomatis setiap ada penjualan."
       />
     );
   }
@@ -59,13 +59,13 @@ export function InventoryRecipesTab({ recipes, onOpenRecipeModal }: InventoryRec
                   {/* Financial Metrics */}
                   <div className="grid grid-cols-2 gap-2 rounded-lg border bg-muted/30 p-2.5">
                     <div>
-                      <span className="text-[10px] text-muted-foreground">Harga Pokok (HPP)</span>
+                      <span className="text-[10px] text-muted-foreground">HPP</span>
                       <p className="font-mono text-xs font-medium tabular-nums text-foreground">
                         {formatCurrencyIDR(r.totalCOGS)}
                       </p>
                     </div>
                     <div>
-                      <span className="text-[10px] text-muted-foreground">Harga Jual Menu</span>
+                      <span className="text-[10px] text-muted-foreground">Harga jual</span>
                       <p className="font-mono text-xs font-medium tabular-nums text-foreground">
                         {formatCurrencyIDR(r.sellingPrice)}
                       </p>
@@ -104,7 +104,7 @@ export function InventoryRecipesTab({ recipes, onOpenRecipeModal }: InventoryRec
                   className="w-full gap-1.5 text-xs"
                 >
                   <Calculator className="size-3.5 text-muted-foreground" />
-                  <span>Formula & AI Kalkulator</span>
+                  <span>Atur resep</span>
                 </Button>
               </div>
             </Card>

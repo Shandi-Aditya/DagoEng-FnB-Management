@@ -36,7 +36,7 @@ export function RecordPaymentModal({
 }: RecordPaymentModalProps) {
   const [period, setPeriod] = useState("Oktober 2026");
   const [amount, setAmount] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState("Bank Transfer BCA");
+  const [paymentMethod, setPaymentMethod] = useState("Transfer BCA");
   const [referenceNo, setReferenceNo] = useState("");
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export function RecordPaymentModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CreditCard className="w-5 h-5 text-primary" />
-            <span>Catat Penerimaan Sewa</span>
+            <span>Catat pembayaran sewa</span>
           </DialogTitle>
           <DialogDescription>
             Mencatat pembayaran untuk tenant{" "}
@@ -110,22 +110,22 @@ export function RecordPaymentModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="pay-method" className="text-xs">Metode Pembayaran</Label>
+            <Label htmlFor="pay-method" className="text-xs">Metode bayar</Label>
             <NativeSelect
               id="pay-method"
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
               className="w-full text-xs font-medium"
             >
-              <option value="Bank Transfer BCA">Bank Transfer BCA</option>
-              <option value="Bank Transfer Mandiri">Bank Transfer Mandiri</option>
-              <option value="QRIS DagoPay">QRIS DagoPay</option>
-              <option value="Tunai / Cash">Tunai / Cash</option>
+              <option value="Transfer BCA">Transfer BCA</option>
+              <option value="Transfer Mandiri">Transfer Mandiri</option>
+              <option value="QRIS">QRIS</option>
+              <option value="Tunai">Tunai</option>
             </NativeSelect>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="pay-ref" className="text-xs">No. Referensi / Bukti Transfer</Label>
+            <Label htmlFor="pay-ref" className="text-xs">Nomor referensi</Label>
             <Input
               id="pay-ref"
               value={referenceNo}

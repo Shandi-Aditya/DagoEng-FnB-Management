@@ -195,11 +195,11 @@ describe("reports-domain", () => {
       logs: mockLogs,
     });
 
-    expect(report.title).toBe("Laporan Penjualan & Revenue POS");
+    expect(report.title).toBe("Laporan penjualan POS");
     expect(report.tableRows).toHaveLength(2);
-    expect(report.summaryCards[0].label).toBe("Total Omset (Revenue)");
-    expect(report.summaryCards[1].value).toBe("2 Order");
-    expect(report.summaryCards[3].value).toBe("3 Pcs");
+    expect(report.summaryCards[0].label).toBe("Omzet");
+    expect(report.summaryCards[1].value).toBe("2 pesanan");
+    expect(report.summaryCards[3].value).toBe("3 item");
     expect(report.reconciliationInfo).toBeDefined();
     expect(report.reconciliationInfo?.length).toBeGreaterThan(0);
   });
@@ -216,11 +216,12 @@ describe("reports-domain", () => {
       operatorName: "Putu Arya",
     });
 
-    expect(report.title).toBe("Laporan Rekonsiliasi Kasir & Shift Closing");
-    expect(report.summaryCards[0].value).toBe("1 Shift");
+    expect(report.title).toBe("Laporan closing kasir");
+    expect(report.summaryCards[0].value).toBe("1 shift");
     expect(report.summaryCards[1].value).toBe("Rp 128.000");
     expect(report.summaryCards[2].value).toBe("Rp 0");
     expect(report.tableRows).toHaveLength(1);
+    expect(report.reconciliationInfo?.[0]).toEqual({ label: "Status kas", value: "Seimbang" });
     expect(report.reconciliationInfo?.[1].value).toBe("Putu Arya");
   });
 
@@ -235,7 +236,7 @@ describe("reports-domain", () => {
       logs: mockLogs,
     });
 
-    expect(report.title).toBe("Laporan Penjualan Produk & COGS / Gross Margin");
+    expect(report.title).toBe("Laporan produk dan margin");
     expect(report.tableRows).toHaveLength(2);
     expect(report.summaryCards[2].value).toContain("Espresso (2 pcs)");
     expect(report.summaryCards[2].value).not.toBe("Kopi Senja Signature");
@@ -252,9 +253,9 @@ describe("reports-domain", () => {
       logs: mockLogs,
     });
 
-    expect(report.title).toBe("Laporan Mutasi Inventory & Stok Bahan Baku");
-    expect(report.summaryCards[0].value).toBe("1 Item");
-    expect(report.summaryCards[1].value).toBe("0 Item");
+    expect(report.title).toBe("Laporan stok bahan");
+    expect(report.summaryCards[0].value).toBe("1 bahan");
+    expect(report.summaryCards[1].value).toBe("0 bahan");
     expect(report.summaryCards[2].value).toBe("Rp 1.800.000");
     expect(report.tableRows).toHaveLength(1);
   });
@@ -269,8 +270,8 @@ describe("reports-domain", () => {
       ingredients: mockIngredients,
       logs: mockLogs,
     });
-    expect(settlementReport.title).toBe("Laporan Settlement & Bagi Hasil Mitra");
-    expect(settlementReport.tableHeaders).toContain("Rekening Pencairan");
+    expect(settlementReport.title).toBe("Laporan settlement mitra");
+    expect(settlementReport.tableHeaders).toContain("Rekening pencairan");
 
     const eventsReport = buildReportData({
       type: "EVENTS",
@@ -282,10 +283,12 @@ describe("reports-domain", () => {
       logs: mockLogs,
       eventBookings: mockEvents,
     });
-    expect(eventsReport.title).toBe("Laporan Pendapatan & Tiket Event Komunitas");
+    expect(eventsReport.title).toBe("Laporan tiket event");
     expect(eventsReport.summaryCards[0].value).toBe("Rp 200.000");
     expect(eventsReport.summaryCards[2].value).toBe("Rp 40.000");
     expect(eventsReport.summaryCards[3].value).toBe("Rp 160.000");
+    // No marketing claim about the payment gateway
+    expect(JSON.stringify(eventsReport.reconciliationInfo)).not.toContain("Terintegrasi");
   });
 
   it("generates report categories with permission awareness", () => {

@@ -32,7 +32,7 @@ export function CustomerHistoryModal({
             <span>Riwayat Poin & Tier — {member.name}</span>
           </DialogTitle>
           <DialogDescription className="flex items-center gap-2 pt-1">
-            <span>Tier saat ini:</span>
+            <span>Tier sekarang</span>
             <StatusBadge status={getTierTone(member.tier)} className="text-xs">
               {member.tier}
             </StatusBadge>
@@ -47,7 +47,7 @@ export function CustomerHistoryModal({
           <div className="space-y-2.5">
             <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
               <Crown className="w-4 h-4 text-primary" />
-              <span>Riwayat Perubahan Tier</span>
+              <span>Riwayat tier</span>
             </div>
 
             {member.tierHistory.length === 0 ? (
@@ -82,7 +82,7 @@ export function CustomerHistoryModal({
           <div className="space-y-2.5">
             <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
               <Star className="w-4 h-4 text-primary" />
-              <span>Riwayat Transaksi Poin</span>
+              <span>Riwayat poin</span>
             </div>
 
             {member.pointHistory.length === 0 ? (

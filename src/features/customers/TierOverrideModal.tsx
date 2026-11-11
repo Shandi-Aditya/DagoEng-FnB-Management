@@ -51,23 +51,23 @@ export function TierOverrideModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-primary" />
-            <span>Manual Override Tier</span>
+            <span>Ubah tier manual</span>
           </DialogTitle>
           <DialogDescription>
-            Penyesuaian tier loyalty secara manual untuk member terpilih.
+            Tier biasanya dihitung dari poin. Pakai ini hanya untuk pengecualian.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground">Audit Trail Permanen</p>
+            <p className="font-medium text-foreground">Tercatat di log aktivitas</p>
             <p>
-              Perubahan tier manual akan dicatat di Log Aktivitas beserta nama akun Anda dan alasan perubahan.
+              Nama akun Anda dan alasannya ikut tercatat.
             </p>
           </div>
 
           <div className="text-xs space-y-1">
-            <p className="text-muted-foreground">Target Member:</p>
+            <p className="text-muted-foreground">Member</p>
             <p className="text-sm font-medium text-foreground">
               {member.name}{" "}
               <span className="text-xs font-normal text-muted-foreground">
@@ -86,10 +86,10 @@ export function TierOverrideModal({
               onChange={(e) => setTier(e.target.value as LoyaltyTier)}
               className="w-full text-xs"
             >
-              <option value="Bronze">Bronze (0 - 499 Pts)</option>
-              <option value="Silver">Silver (500 - 1.499 Pts)</option>
-              <option value="Gold">Gold (1.500 - 2.999 Pts)</option>
-              <option value="Platinum">Platinum (3.000+ Pts)</option>
+              <option value="Bronze">Bronze (0–499 poin)</option>
+              <option value="Silver">Silver (500–1.499 poin)</option>
+              <option value="Gold">Gold (1.500–2.999 poin)</option>
+              <option value="Platinum">Platinum (3.000+ poin)</option>
             </NativeSelect>
           </div>
 
@@ -101,7 +101,7 @@ export function TierOverrideModal({
               id="override-reason"
               required
               rows={3}
-              placeholder="Contoh: Promosi VIP Dago Hub / Penyesuaian keanggotaan investor..."
+              placeholder="Misalnya tamu VIP acara peluncuran"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               className="text-xs"

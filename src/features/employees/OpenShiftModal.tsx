@@ -53,7 +53,7 @@ export function OpenShiftModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-primary" />
-            <span>Buka Shift Kasir Baru</span>
+            <span>Buka shift kasir</span>
           </DialogTitle>
           <DialogDescription>
             Masukkan saldo awal uang tunai di laci kas (cash drawer) untuk memulai shift operasional.

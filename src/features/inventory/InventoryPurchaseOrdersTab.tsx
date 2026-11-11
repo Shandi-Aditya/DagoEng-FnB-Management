@@ -35,12 +35,12 @@ export function InventoryPurchaseOrdersTab({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[120px]">No. PO</TableHead>
-              <TableHead>Supplier Utama</TableHead>
-              <TableHead>Tanggal Pesan</TableHead>
-              <TableHead>Estimasi Tiba</TableHead>
-              <TableHead>Rincian Item</TableHead>
-              <TableHead>Total Tagihan</TableHead>
+              <TableHead className="w-[120px]">Nomor PO</TableHead>
+              <TableHead>Pemasok</TableHead>
+              <TableHead>Dipesan</TableHead>
+              <TableHead>Perkiraan tiba</TableHead>
+              <TableHead>Item</TableHead>
+              <TableHead>Total</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Aksi</TableHead>
             </TableRow>
@@ -51,8 +51,8 @@ export function InventoryPurchaseOrdersTab({
                 <TableCell colSpan={8} className="py-12">
                   <EmptyState
                     icon={<Truck className="size-6 text-muted-foreground" />}
-                    title="Belum ada riwayat Purchase Order"
-                    description="Buat PO baru untuk mencatat pengadaan bahan baku ke supplier resmi."
+                    title="Belum ada pesanan pembelian"
+                    description="Buat PO untuk mencatat pembelian bahan dari pemasok."
                   />
                 </TableCell>
               </TableRow>

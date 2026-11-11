@@ -88,7 +88,7 @@ export function CreateLeaseModal({
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <FilePlus className="w-5 h-5 text-primary" />
-            <span>Pendaftaran Kontrak Tenant Baru</span>
+            <span>Tambah kontrak</span>
           </DialogTitle>
           <DialogDescription>
             Masukkan data tenant, unit komersial, dan rincian nilai sewa kontrak.
@@ -103,7 +103,7 @@ export function CreateLeaseModal({
             <Input
               id="tenant-name"
               required
-              placeholder="Contoh: Kopi Kenangan / Artisan Bakery"
+              placeholder="Misalnya Artisan Bakery"
               value={tenantName}
               onChange={(e) => setTenantName(e.target.value)}
               className="text-xs"
@@ -199,7 +199,7 @@ export function CreateLeaseModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="lease-start" className="text-xs">Tanggal Mulai</Label>
+              <Label htmlFor="lease-start" className="text-xs">Mulai</Label>
               <Input
                 id="lease-start"
                 value={startDate}
@@ -208,7 +208,7 @@ export function CreateLeaseModal({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="lease-end" className="text-xs">Tanggal Selesai</Label>
+              <Label htmlFor="lease-end" className="text-xs">Selesai</Label>
               <Input
                 id="lease-end"
                 value={endDate}
@@ -219,27 +219,27 @@ export function CreateLeaseModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="lease-sched" className="text-xs">Jadwal Pembayaran</Label>
+            <Label htmlFor="lease-sched" className="text-xs">Jadwal tagihan</Label>
             <NativeSelect
               id="lease-sched"
               value={schedule}
               onChange={(e) => setSchedule(e.target.value as "MONTHLY" | "QUARTERLY" | "ANNUALLY")}
               className="w-full text-xs font-medium"
             >
-              <option value="MONTHLY">Bulanan (Monthly)</option>
-              <option value="QUARTERLY">Per 3 Bulan (Quarterly)</option>
-              <option value="ANNUALLY">Tahunan (Annually)</option>
+              <option value="MONTHLY">Bulanan</option>
+              <option value="QUARTERLY">Per 3 bulan</option>
+              <option value="ANNUALLY">Tahunan</option>
             </NativeSelect>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="lease-notes" className="text-xs">Catatan Tambahan</Label>
+            <Label htmlFor="lease-notes" className="text-xs">Catatan</Label>
             <Textarea
               id="lease-notes"
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ketentuan khusus tenant..."
+              placeholder="Ketentuan khusus, kalau ada"
               className="text-xs"
             />
           </div>

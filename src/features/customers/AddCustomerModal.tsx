@@ -70,7 +70,7 @@ export function AddCustomerModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-primary" />
-            <span>Registrasi Member Baru</span>
+            <span>Tambah member</span>
           </DialogTitle>
           <DialogDescription>
             Tier member ditentukan otomatis berdasarkan saldo poin awal.
@@ -79,7 +79,7 @@ export function AddCustomerModal({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
-            <p className="font-medium text-foreground">Perhitungan Tier Otomatis</p>
+            <p className="font-medium text-foreground">Tier dihitung dari poin</p>
             <p>
               Tier awal dihitung otomatis dari saldo poin. 0 Poin menghasilkan Tier Bronze.
             </p>
@@ -92,7 +92,7 @@ export function AddCustomerModal({
             <Input
               id="customer-name"
               required
-              placeholder="Contoh: Gusti Ngurah Bagus"
+              placeholder="Misalnya Gusti Ngurah Bagus"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="text-xs"

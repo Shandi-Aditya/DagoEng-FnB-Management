@@ -28,7 +28,7 @@ export function TablesToolbar({
 }: TablesToolbarProps) {
   return (
     <PageHeader
-      title={`Manajemen Meja & Area · ${outletName}`}
+      title="Meja"
       description={`${totalTables} meja · ${availableCount} tersedia · ${occupiedCount} terisi · ${reservedCount} reservasi`}
       actions={
         <div className="flex items-center gap-2">
@@ -48,7 +48,7 @@ export function TablesToolbar({
                 className="gap-1.5 text-xs"
               >
                 <Plus className="size-3.5" />
-                <span>Tambah Meja</span>
+                <span>Tambah meja</span>
               </Button>
             </>
           ) : (
@@ -58,7 +58,7 @@ export function TablesToolbar({
               className="gap-1.5 text-xs"
             >
               <CalendarCheck className="size-3.5" />
-              <span>Buat Reservasi</span>
+              <span>Buat reservasi</span>
             </Button>
           )}
         </div>

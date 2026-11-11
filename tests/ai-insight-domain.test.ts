@@ -59,9 +59,9 @@ describe("ai-insight-domain", () => {
     });
 
     expect(res.sender).toBe("AI");
-    expect(res.systemData?.[1]).toContain("1 SKU");
+    expect(res.systemData?.[1]).toContain("1 bahan");
     expect(res.actionUrl).toBe("/inventory");
-    expect(res.actionLabel).toBe("Kelola Stok Gudang");
+    expect(res.actionLabel).toBe("Buka inventori");
   });
 
   it("generates sales response for revenue queries", () => {
@@ -83,7 +83,7 @@ describe("ai-insight-domain", () => {
     });
 
     expect(res.sender).toBe("AI");
-    expect(res.systemData?.[0]).toContain("3 Zona Meja");
+    expect(res.systemData?.[0]).toContain("Area meja: 3");
     expect(res.actionUrl).toBe("/coworking");
   });
 
@@ -94,7 +94,7 @@ describe("ai-insight-domain", () => {
     });
 
     expect(res.sender).toBe("AI");
-    expect(res.systemData?.[1]).toContain("45 Anggota");
+    expect(res.systemData?.[1]).toContain("Member terdaftar: 45");
     expect(res.actionUrl).toBe("/customers");
   });
 

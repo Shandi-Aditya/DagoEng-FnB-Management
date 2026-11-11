@@ -24,7 +24,7 @@ import {
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { StockOpnameRecord } from "@/types/inventory";
 
-import { opnameReasonLabel } from "./inventory-domain";
+import { OPNAME_REASONS, opnameReasonLabel } from "./inventory-domain";
 
 interface InventoryOpnameTabProps {
   opnames: StockOpnameRecord[];
@@ -62,26 +62,26 @@ export function InventoryOpnameTab({
       {/* Opname Metric Stats */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <StatCard
-          label="Total Sesi Audit Opname"
-          value={`${totalSessions} Kali`}
-          hint="Riwayat audit fisik gudang tercatat"
+          label="Opname"
+          value={String(totalSessions)}
+          hint="kali dicatat"
         />
         <StatCard
-          label="Total Selisih Fisik"
-          value={`${totalVarianceUnits > 0 ? `+${totalVarianceUnits}` : totalVarianceUnits} Satuan`}
+          label="Selisih fisik"
+          value={totalVarianceUnits > 0 ? `+${totalVarianceUnits}` : String(totalVarianceUnits)}
           hint={
             totalVarianceUnits < 0
-              ? "Akumulasi defisit stok barang"
+              ? "satuan, fisik lebih sedikit"
               : totalVarianceUnits > 0
-                ? "Akumulasi surplus barang"
-                : "Stok fisik cocok dengan sistem"
+                ? "satuan, fisik lebih banyak"
+                : "fisik cocok dengan sistem"
           }
         />
         <StatCard
-          label="Nilai Variansi / Kerugian"
+          label="Nilai selisih"
           value={formatCurrencyIDR(Math.abs(totalVarianceValue))}
           hint={
-            totalVarianceValue < 0 ? "Estimasi nilai kerugian bahan" : "Estimasi nilai selisih stok"
+            totalVarianceValue < 0 ? "Estimasi kerugian" : "Estimasi nilai selisih"
           }
         />
       </div>
@@ -94,7 +94,7 @@ export function InventoryOpnameTab({
             <Input
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Cari no. opname, bahan, atau auditor..."
+              placeholder="Cari nomor opname, bahan, atau petugas"
               className="h-8 pl-8 text-xs"
             />
           </div>
@@ -104,14 +104,12 @@ export function InventoryOpnameTab({
             onChange={(e) => onReasonFilterChange(e.target.value)}
             className="h-8 text-xs"
           >
-            <option value="ALL">Semua Alasan Selisih</option>
-            <option value="RECORDING_ERROR">Kesalahan Catat</option>
-            <option value="WASTE">Waste Operasional</option>
-            <option value="LOSS">Kehilangan / Hilang</option>
-            <option value="DAMAGED">Kerusakan Fisik</option>
-            <option value="EXPIRATION">Kadaluwarsa</option>
-            <option value="SAMPLE_PROMO">Sample Promo</option>
-            <option value="OTHER">Lainnya</option>
+            <option value="ALL">Semua alasan</option>
+            {OPNAME_REASONS.map((reason) => (
+              <option key={reason} value={reason}>
+                {opnameReasonLabel(reason)}
+              </option>
+            ))}
           </NativeSelect>
         </div>
 
@@ -138,12 +136,12 @@ export function InventoryOpnameTab({
             className="h-8 gap-1.5 text-xs"
           >
             <FileText className="size-3.5 text-muted-foreground" />
-            <span>Berita Acara PDF</span>
+            <span>Berita acara PDF</span>
           </Button>
 
           <Button size="sm" onClick={onOpenOpnameModal} className="h-8 gap-1.5 text-xs">
             <Scale className="size-3.5" />
-            <span>Audit Opname Baru</span>
+            <span>Catat opname</span>
           </Button>
         </div>
       </div>
@@ -153,15 +151,15 @@ export function InventoryOpnameTab({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[120px]">No. Opname</TableHead>
-              <TableHead>Tanggal Audit</TableHead>
-              <TableHead>Bahan Baku</TableHead>
-              <TableHead className="text-right">Stok Sistem</TableHead>
-              <TableHead className="text-right">Stok Fisik</TableHead>
+              <TableHead className="w-[120px]">Nomor</TableHead>
+              <TableHead>Tanggal</TableHead>
+              <TableHead>Bahan</TableHead>
+              <TableHead className="text-right">Stok sistem</TableHead>
+              <TableHead className="text-right">Stok fisik</TableHead>
               <TableHead className="text-center">Selisih</TableHead>
-              <TableHead>Alasan Selisih</TableHead>
+              <TableHead>Alasan</TableHead>
               <TableHead>Catatan</TableHead>
-              <TableHead>Auditor</TableHead>
+              <TableHead>Petugas</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -170,8 +168,8 @@ export function InventoryOpnameTab({
                 <TableCell colSpan={9} className="py-12">
                   <EmptyState
                     icon={<ClipboardCheck className="size-6 text-muted-foreground" />}
-                    title="Belum ada riwayat Stock Opname"
-                    description="Lakukan audit fisik barang untuk menyelaraskan stok sistem dengan hitungan riil di gudang."
+                    title="Belum ada opname"
+                    description="Hitung stok fisik untuk mencocokkan angka di sistem dengan isi gudang."
                   />
                 </TableCell>
               </TableRow>

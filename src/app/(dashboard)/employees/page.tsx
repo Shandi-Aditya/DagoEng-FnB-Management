@@ -91,9 +91,7 @@ export default function EmployeesPage() {
       activeOutlet?.name || "Singaraja"
     );
     downloadCSV(`${filename}_${Date.now()}`, headers, rows);
-    notify.success(
-      `Data ${activeTab === "SHIFTS" ? "Shift Kasir" : "Karyawan"} berhasil diekspor ke CSV.`
-    );
+    notify.success(`Data ${activeTab === "SHIFTS" ? "shift" : "karyawan"} diekspor ke CSV`);
   };
 
   const handleExportExcel = () => {
@@ -104,9 +102,7 @@ export default function EmployeesPage() {
       activeOutlet?.name || "Singaraja"
     );
     downloadExcel(`${filename}_${Date.now()}`, sheet, headers, rows);
-    notify.success(
-      `Data ${activeTab === "SHIFTS" ? "Shift Kasir" : "Karyawan"} berhasil diekspor ke Excel (.xls).`
-    );
+    notify.success(`Data ${activeTab === "SHIFTS" ? "shift" : "karyawan"} diekspor ke Excel`);
   };
 
   const handleCreateEmployeeSubmit = (params: {
@@ -135,7 +131,7 @@ export default function EmployeesPage() {
       }),
       permissions: params.permissions,
     });
-    notify.success(`Karyawan baru "${params.name}" berhasil didaftarkan.`);
+    notify.success(`${params.name} ditambahkan`);
   };
 
   const handleUpdateEmployeeSubmit = (params: {
@@ -159,18 +155,18 @@ export default function EmployeesPage() {
       status: params.status,
       permissions: params.permissions,
     });
-    notify.success(`Data karyawan "${params.name}" berhasil diperbarui.`);
+    notify.success(`Data ${params.name} disimpan`);
   };
 
   const handleToggleStatus = (empId: string) => {
     toggleEmployeeStatus(empId);
-    notify.success("Status kepegawaian berhasil diubah.");
+    notify.success("Status kepegawaian diubah");
   };
 
   const handleDeleteEmployeeConfirm = () => {
     if (!deletingEmp) return;
     deleteEmployee(deletingEmp.id);
-    notify.success(`Data karyawan "${deletingEmp.name}" berhasil dihapus.`);
+    notify.success(`${deletingEmp.name} dihapus`);
     setIsDeleteModalOpen(false);
     setDeletingEmp(null);
   };
@@ -181,7 +177,7 @@ export default function EmployeesPage() {
       params.openingCash,
       user?.name || "Kasir Utama"
     );
-    notify.success(`Shift "${params.shiftName}" berhasil dibuka.`);
+    notify.success(`${params.shiftName} dibuka`);
   };
 
   const handleCloseShiftSubmit = (params: { actualCash: number; closingNotes?: string }) => {
@@ -191,7 +187,7 @@ export default function EmployeesPage() {
       params.actualCash,
       params.closingNotes
     );
-    notify.success("Shift berhasil ditutup dan saldo kas direkonsiliasi.");
+    notify.success("Shift ditutup", "Selisih kas sudah tercatat.");
   };
 
   const handleOpenClosingPDF = (shift: ShiftRecord) => {

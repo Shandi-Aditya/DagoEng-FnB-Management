@@ -98,8 +98,8 @@ describe("commercial-domain", () => {
     expect(getLeaseStatusTone("EXPIRED")).toBe("neutral");
 
     expect(getLeaseStatusLabel("ACTIVE")).toBe("Aktif");
-    expect(getLeaseStatusLabel("EXPIRING_SOON")).toBe("Segera Berakhir");
-    expect(getLeaseStatusLabel("TERMINATED")).toBe("Dibatalkan");
+    expect(getLeaseStatusLabel("EXPIRING_SOON")).toBe("Segera berakhir");
+    expect(getLeaseStatusLabel("TERMINATED")).toBe("Diakhiri");
     expect(getLeaseStatusLabel("EXPIRED")).toBe("Berakhir");
   });
 

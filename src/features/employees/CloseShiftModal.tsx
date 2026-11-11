@@ -55,7 +55,7 @@ export function CloseShiftModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-primary" />
-            <span>Tutup Shift & Rekonsiliasi Kas</span>
+            <span>Tutup shift</span>
           </DialogTitle>
           <DialogDescription>
             Pencocokan saldo uang tunai fisik di laci kas dengan kalkulasi sistem.
@@ -66,25 +66,25 @@ export function CloseShiftModal({
           {/* Shift Summary Breakdown */}
           <div className="p-3.5 rounded-lg border bg-muted/30 text-xs space-y-1.5">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Kas Awal Drawer:</span>
+              <span className="text-muted-foreground">Modal awal</span>
               <span className="font-mono font-medium text-foreground">
                 {formatCurrencyIDR(shift.openingCash)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Penjualan Tunai:</span>
+              <span className="text-muted-foreground">Penjualan tunai</span>
               <span className="font-mono font-medium text-foreground">
                 {formatCurrencyIDR(shift.cashSales)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Penjualan Non-Tunai:</span>
+              <span className="text-muted-foreground">Penjualan nontunai</span>
               <span className="font-mono text-muted-foreground">
                 {formatCurrencyIDR(shift.nonCashSales)}
               </span>
             </div>
             <div className="flex justify-between pt-1.5 border-t">
-              <span className="font-medium text-foreground">Ekspektasi Kas Fisik:</span>
+              <span className="font-medium text-foreground">Kas seharusnya</span>
               <span className="font-mono font-bold text-foreground">
                 {formatCurrencyIDR(expectedCash)}
               </span>
@@ -132,13 +132,13 @@ export function CloseShiftModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="close-notes" className="text-xs">Catatan Tutup Shift (Opsional)</Label>
+            <Label htmlFor="close-notes" className="text-xs">Catatan (opsional)</Label>
             <Textarea
               id="close-notes"
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Keterangan selisih kas atau insiden operasional..."
+              placeholder="Jelaskan selisih kas atau kejadian selama shift"
               className="text-xs"
             />
           </div>

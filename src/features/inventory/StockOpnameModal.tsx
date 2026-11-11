@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import type { IngredientItem, StockOpnameReason } from "@/types/inventory";
 
+import { OPNAME_REASONS, opnameReasonLabel } from "./inventory-domain";
+
 interface StockOpnameModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -92,7 +94,7 @@ export function StockOpnameModal({
         <DialogHeader>
           <div className="flex items-center gap-2">
             <Scale className="size-4 text-primary" />
-            <DialogTitle className="text-base font-medium">Catat Hasil Stock Opname</DialogTitle>
+            <DialogTitle className="text-base font-medium">Catat opname</DialogTitle>
           </div>
           <DialogDescription className="text-xs">
             Sinkronkan stok fisik hasil hitungan riil di gudang dengan catatan sistem.
@@ -107,7 +109,7 @@ export function StockOpnameModal({
 
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Bahan Baku Yang Diaudit</label>
+            <label className="text-xs font-medium text-foreground">Bahan</label>
             <NativeSelect
               value={itemId}
               onChange={(e) => {
@@ -169,34 +171,32 @@ export function StockOpnameModal({
             }`}
           >
             <div className="flex justify-between items-center">
-              <span>Selisih (Variance):</span>
+              <span>Selisih</span>
               <span className="font-mono tabular-nums text-sm">
                 {variance > 0 ? `+${variance}` : variance} {targetItem?.unit}
               </span>
             </div>
             <p className="mt-0.5 text-[11px] opacity-80">
               {variance === 0
-                ? "Stok fisik cocok dengan sistem. Tidak ada koreksi nilai."
+                ? "Stok fisik cocok dengan sistem."
                 : variance > 0
-                  ? "Surplus: stok fisik lebih banyak dari catatan sistem."
-                  : "Defisit: stok fisik berkurang dari catatan sistem."}
+                  ? "Fisik lebih banyak dari catatan sistem."
+                  : "Fisik lebih sedikit dari catatan sistem."}
             </p>
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Kategori Alasan Selisih</label>
+            <label className="text-xs font-medium text-foreground">Alasan selisih</label>
             <NativeSelect
               value={reason}
               onChange={(e) => setReason(e.target.value as StockOpnameReason)}
               className="w-full text-xs"
             >
-              <option value="RECORDING_ERROR">Kesalahan Pencatatan / Hitung</option>
-              <option value="WASTE">Waste Operasional</option>
-              <option value="LOSS">Kehilangan / Hilang</option>
-              <option value="DAMAGED">Kerusakan Fisik</option>
-              <option value="EXPIRATION">Kadaluwarsa</option>
-              <option value="SAMPLE_PROMO">Sample Promo</option>
-              <option value="OTHER">Lainnya</option>
+              {OPNAME_REASONS.map((reason) => (
+                <option key={reason} value={reason}>
+                  {opnameReasonLabel(reason)}
+                </option>
+              ))}
             </NativeSelect>
           </div>
 
@@ -210,13 +210,13 @@ export function StockOpnameModal({
                 setNotes(e.target.value);
                 setErrorMsg("");
               }}
-              placeholder="Wajib diisi jika terdapat selisih stok..."
+              placeholder="Wajib diisi kalau ada selisih"
               className="text-xs"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Nama Petugas Auditor</label>
+            <label className="text-xs font-medium text-foreground">Petugas</label>
             <Input
               required
               value={auditor}

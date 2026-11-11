@@ -34,19 +34,19 @@ export function AddAreaModal({ isOpen, onClose, outletName, onAddArea }: AddArea
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="text-base font-medium">
-            Tambah Area Baru · {outletName}
+            Tambah area
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Buat zona atau lantai baru untuk pengelompokan meja di outlet ini.
+            Area mengelompokkan meja, misalnya per lantai atau ruangan, di {outletName}.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Nama Area</label>
+            <label className="text-xs font-medium text-foreground">Nama area</label>
             <Input
               required
-              placeholder="Contoh: Rooftop Lounge"
+              placeholder="Misalnya Rooftop"
               value={areaName}
               onChange={(e) => setAreaName(e.target.value)}
               className="text-xs"

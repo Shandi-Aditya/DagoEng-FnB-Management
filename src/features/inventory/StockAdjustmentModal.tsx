@@ -55,7 +55,7 @@ export function StockAdjustmentModal({
     <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-base font-medium">Penyesuaian Stok Cepat</DialogTitle>
+          <DialogTitle className="text-base font-medium">Sesuaikan stok</DialogTitle>
           <DialogDescription className="text-xs">
             Catat penambahan atau pengurangan stok bahan baku di luar alur PO otomatis.
           </DialogDescription>
@@ -63,7 +63,7 @@ export function StockAdjustmentModal({
 
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Bahan Baku</label>
+            <label className="text-xs font-medium text-foreground">Bahan</label>
             <NativeSelect
               value={itemId}
               onChange={(e) => setItemId(e.target.value)}
@@ -79,14 +79,14 @@ export function StockAdjustmentModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Jenis Penyesuaian</label>
+              <label className="text-xs font-medium text-foreground">Jenis</label>
               <NativeSelect
                 value={type}
                 onChange={(e) => setType(e.target.value as "ADD" | "SUBTRACT")}
                 className="w-full text-xs font-medium"
               >
-                <option value="ADD">🟢 Tambah Stok (+)</option>
-                <option value="SUBTRACT">🔴 Kurang Stok (-)</option>
+                <option value="ADD">Tambah stok</option>
+                <option value="SUBTRACT">Kurangi stok</option>
               </NativeSelect>
             </div>
 
@@ -107,17 +107,17 @@ export function StockAdjustmentModal({
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Alasan Penyesuaian</label>
+            <label className="text-xs font-medium text-foreground">Alasan</label>
             <NativeSelect
               value={reason}
               onChange={(e) => setReason(e.target.value as StockAdjustmentLog["reason"])}
               className="w-full text-xs"
             >
-              <option value="PO_MASUK">Barang Masuk PO</option>
-              <option value="PRODUKSI_BOM">Produksi Dapur / Resep</option>
-              <option value="WASTE_RUSAK">Waste / Bahan Rusak</option>
-              <option value="KADALUWARSA">Kadaluwarsa</option>
-              <option value="KOREKSI_OPNAME">Koreksi Hitung Opname</option>
+              <option value="PO_MASUK">Barang masuk dari PO</option>
+              <option value="PRODUKSI_BOM">Dipakai produksi dapur</option>
+              <option value="WASTE_RUSAK">Limbah atau rusak</option>
+              <option value="KADALUWARSA">Kedaluwarsa</option>
+              <option value="KOREKSI_OPNAME">Koreksi hasil opname</option>
               <option value="LAINNYA">Lainnya</option>
             </NativeSelect>
           </div>

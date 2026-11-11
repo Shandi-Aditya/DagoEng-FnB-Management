@@ -27,8 +27,8 @@ export function EmployeesToolbar({
 }: EmployeesToolbarProps) {
   return (
     <PageHeader
-      title={`Karyawan & Shift Kasir · ${outletName}`}
-      description="Direktori staf outlet, penugasan hak akses, serta rekonsiliasi kasir tiap shift operasional."
+      title="Karyawan"
+      description="Data staf, hak akses, dan shift kasir."
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -38,7 +38,7 @@ export function EmployeesToolbar({
             className="gap-1.5 text-xs"
           >
             <FileSpreadsheet className="size-3.5 text-success" />
-            <span>Export Excel</span>
+            <span>Ekspor Excel</span>
           </Button>
 
           <Button
@@ -48,7 +48,7 @@ export function EmployeesToolbar({
             className="gap-1.5 text-xs"
           >
             <Download className="size-3.5 text-muted-foreground" />
-            <span>Export CSV</span>
+            <span>Ekspor CSV</span>
           </Button>
 
           <Button
@@ -69,7 +69,7 @@ export function EmployeesToolbar({
               className="gap-1.5 text-xs text-primary"
             >
               <Clock className="size-3.5 text-primary" />
-              <span>Buka Shift</span>
+              <span>Buka shift</span>
             </Button>
           )}
 
@@ -79,7 +79,7 @@ export function EmployeesToolbar({
             className="gap-1.5 text-xs font-medium"
           >
             <UserPlus className="size-3.5" />
-            <span>Tambah Staf</span>
+            <span>Tambah staf</span>
           </Button>
         </div>
       }

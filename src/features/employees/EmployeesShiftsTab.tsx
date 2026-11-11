@@ -76,7 +76,7 @@ export function EmployeesShiftsTab({
                   Shift Aktif: {activeShift.shiftName}
                 </CardTitle>
                 <StatusBadge status="info" className="text-xs">
-                  Sedang Berjalan
+                  Sedang berjalan
                 </StatusBadge>
               </div>
 
@@ -92,23 +92,23 @@ export function EmployeesShiftsTab({
           </CardHeader>
           <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-2">
             <div>
-              <span className="text-muted-foreground block text-[10px]">Kasir Bertugas</span>
+              <span className="text-muted-foreground block text-[10px]">Kasir</span>
               <span className="font-medium text-foreground">
                 {activeShift.assignedCashierName}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Waktu Buka</span>
+              <span className="text-muted-foreground block text-[10px]">Dibuka</span>
               <span className="font-mono text-muted-foreground">{activeShift.startTime}</span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Kas Awal (Drawer)</span>
+              <span className="text-muted-foreground block text-[10px]">Modal awal</span>
               <span className="font-mono font-medium text-foreground">
                 {formatCurrencyIDR(activeShift.openingCash)}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Penjualan Sementara</span>
+              <span className="text-muted-foreground block text-[10px]">Penjualan sejauh ini</span>
               <span className="font-mono font-medium text-foreground">
                 {formatCurrencyIDR((activeShift.cashSales || 0) + (activeShift.nonCashSales || 0))}
               </span>
@@ -120,7 +120,7 @@ export function EmployeesShiftsTab({
           <CardContent className="p-4 flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Clock className="w-4 h-4" />
-              <span>Tidak ada shift kasir yang sedang aktif di outlet ini.</span>
+              <span>Belum ada shift kasir yang dibuka di outlet ini.</span>
             </div>
             <Button
               size="sm"
@@ -145,7 +145,7 @@ export function EmployeesShiftsTab({
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Cari ID shift, nama shift, atau kasir..."
+              placeholder="Cari shift atau kasir"
               className="h-8 pl-8 text-xs"
             />
           </div>
@@ -158,10 +158,10 @@ export function EmployeesShiftsTab({
             }}
             className="h-8 text-xs font-medium"
           >
-            <option value="ALL">Semua Status Shift</option>
-            <option value="ACTIVE">Aktif (Sedang Berjalan)</option>
-            <option value="CLOSED">Selesai (Ditutup)</option>
-            <option value="NEEDS_RECONCILIATION">Selisih Kas</option>
+            <option value="ALL">Semua status</option>
+            <option value="ACTIVE">Aktif</option>
+            <option value="CLOSED">Ditutup</option>
+            <option value="NEEDS_RECONCILIATION">Selisih kas</option>
           </NativeSelect>
 
           {isFiltered && (
@@ -201,13 +201,13 @@ export function EmployeesShiftsTab({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[200px]">ID & Nama Shift</TableHead>
-                <TableHead>Kasir Bertugas</TableHead>
-                <TableHead>Waktu Operasional</TableHead>
-                <TableHead className="text-right">Kas Awal</TableHead>
-                <TableHead className="text-right">Total Penjualan</TableHead>
-                <TableHead className="text-right">Kas Aktual</TableHead>
-                <TableHead className="text-right">Selisih Kas</TableHead>
+                <TableHead className="w-[200px]">Shift</TableHead>
+                <TableHead>Kasir</TableHead>
+                <TableHead>Jam operasional</TableHead>
+                <TableHead className="text-right">Modal awal</TableHead>
+                <TableHead className="text-right">Penjualan</TableHead>
+                <TableHead className="text-right">Kas fisik</TableHead>
+                <TableHead className="text-right">Selisih kas</TableHead>
                 <TableHead className="text-center">Status</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
@@ -218,7 +218,7 @@ export function EmployeesShiftsTab({
                   <TableCell colSpan={9} className="h-48 text-center">
                     <EmptyState
                       icon={<Clock className="w-8 h-8 text-muted-foreground" />}
-                      title="Belum ada riwayat shift"
+                      title="Belum ada shift"
                       description={
                         isFiltered
                           ? "Tidak ada shift kasir yang cocok dengan filter pencarian."
@@ -249,7 +249,7 @@ export function EmployeesShiftsTab({
                       <TableCell className="text-xs text-muted-foreground">
                         <p>{s.startTime}</p>
                         <p className="text-[10px]">
-                          s/d {s.closedAt || s.endTime || "Sedang Berjalan"}
+                          s/d {s.closedAt || s.endTime || "sekarang"}
                         </p>
                       </TableCell>
 

@@ -22,8 +22,8 @@ export function CoworkingSpacesTab({
     return (
       <EmptyState
         icon={<Laptop className="size-8 text-muted-foreground" />}
-        title="Belum ada ruang atau meja terdaftar"
-        description="Tambahkan atau aktifkan ruang kerja melalui menu Master Data Ruangan di Pengaturan."
+        title="Belum ada ruang"
+        description="Tambahkan ruang kerja di Pengaturan, bagian data ruang."
       />
     );
   }
@@ -132,7 +132,7 @@ export function CoworkingSpacesTab({
                   className="text-xs h-7 px-2.5 font-medium gap-1 text-primary border-primary/30 hover:bg-primary/5"
                 >
                   <CalendarPlus className="size-3.5" />
-                  <span>Book Ruang</span>
+                  <span>Booking ruang</span>
                 </Button>
               )}
             </div>

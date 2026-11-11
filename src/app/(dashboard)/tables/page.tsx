@@ -22,6 +22,7 @@ import { TableDetailModal } from "@/features/tables/TableDetailModal";
 import {
   calculateTableSummary,
   filterReservations,
+  tableStatusLabel,
 } from "@/features/tables/tables-domain";
 import { TablesToolbar } from "@/features/tables/TablesToolbar";
 
@@ -78,17 +79,17 @@ export default function TablesPage() {
     setSelectedTableDetails((prev) =>
       prev ? { ...prev, table: { ...prev.table, status: newStatus } } : null
     );
-    notify.success("Status meja diubah", `Meja ${table.number || table.id} kini ${newStatus}.`);
+    notify.success(`Meja ${table.number || table.id}: ${tableStatusLabel(newStatus).toLowerCase()}`);
   };
 
   const handleAddTable = (areaId: string, name: string, cap: number) => {
     addTable(areaId, name, cap);
-    notify.success("Meja ditambahkan", `Meja ${name} berhasil didaftarkan.`);
+    notify.success(`Meja ${name} ditambahkan`);
   };
 
   const handleAddArea = (name: string) => {
     addArea(name, activeOutletId !== "ALL" ? activeOutletId : undefined);
-    notify.success("Area ditambahkan", `Area ${name} berhasil dibuat untuk ${outletName}.`);
+    notify.success(`Area ${name} ditambahkan`);
   };
 
   const handleAddReservation = (data: {
@@ -117,13 +118,13 @@ export default function TablesPage() {
 
     notify.success(
       "Reservasi dibuat",
-      `Reservasi atas nama ${data.customerName} pada Meja ${data.tableId} berhasil dicatat.`
+      `${data.customerName}, meja ${data.tableId}`
     );
   };
 
   const handleSeatReservation = (res: ScheduledReservation) => {
     seatReservation(res.id);
-    notify.success("Tamu didudukkan", `Meja ${res.tableId} kini berstatus terisi.`);
+    notify.success("Tamu didudukkan", `Meja ${res.tableId} sekarang terisi.`);
   };
 
   const handleCancelReservation = (resId: string, tableId: string) => {

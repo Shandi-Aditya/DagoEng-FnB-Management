@@ -60,7 +60,7 @@ export function TableDetailModal({
                 Informasi Tagihan Aktif
               </span>
               <div className="flex justify-between font-medium text-sm text-foreground">
-                <span>{table.customer || "Tamu Aktif"}</span>
+                <span>{table.customer || "Tamu"}</span>
                 <span className="font-mono text-primary">{table.total || "-"}</span>
               </div>
               <p className="text-[11px] text-muted-foreground">
@@ -71,7 +71,7 @@ export function TableDetailModal({
 
           {/* Status Switcher Buttons */}
           <div className="space-y-2">
-            <label className="text-xs font-medium text-foreground">Ubah status meja:</label>
+            <label className="text-xs font-medium text-foreground">Ubah status</label>
             <div className="grid grid-cols-2 gap-2">
               <Button
                 type="button"
@@ -124,7 +124,7 @@ export function TableDetailModal({
             className="gap-1.5 text-xs"
           >
             <Utensils className="size-3.5" />
-            <span>Buka POS Kasir</span>
+            <span>Buka di POS</span>
             <ArrowRight className="size-3.5" />
           </Button>
         </DialogFooter>

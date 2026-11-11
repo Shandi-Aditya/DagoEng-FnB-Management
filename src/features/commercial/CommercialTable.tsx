@@ -29,9 +29,9 @@ export interface CommercialTableProps {
 }
 
 const STATUS_OPTIONS = [
-  { value: "ALL", label: "Semua Status" },
+  { value: "ALL", label: "Semua status" },
   { value: "ACTIVE", label: "Aktif" },
-  { value: "EXPIRING_SOON", label: "Segera Berakhir" },
+  { value: "EXPIRING_SOON", label: "Segera berakhir" },
   { value: "EXPIRED", label: "Berakhir" },
   { value: "TERMINATED", label: "Dibatalkan" },
 ];
@@ -80,7 +80,7 @@ export function CommercialTable({
                 onSearchChange(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Cari tenant, no kontrak, atau unit lot..."
+              placeholder="Cari penyewa, nomor kontrak, atau unit"
               className="h-8 pl-8 text-xs"
             />
           </div>
@@ -114,7 +114,7 @@ export function CommercialTable({
 
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>Baris</span>
+            <span>baris</span>
             <NativeSelect
               value={String(pageSize)}
               onChange={(e) => {
@@ -137,11 +137,11 @@ export function CommercialTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[220px]">Tenant & Kontak</TableHead>
-                <TableHead>Unit / Lot</TableHead>
+                <TableHead className="w-[220px]">Penyewa</TableHead>
+                <TableHead>Unit</TableHead>
                 <TableHead>Luas</TableHead>
-                <TableHead>Nilai Sewa</TableHead>
-                <TableHead>Periode Kontrak</TableHead>
+                <TableHead>Sewa</TableHead>
+                <TableHead>Periode</TableHead>
                 <TableHead className="text-center">Status</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
@@ -152,11 +152,11 @@ export function CommercialTable({
                   <TableCell colSpan={7} className="h-48 text-center">
                     <EmptyState
                       icon={<Building2 className="w-8 h-8 text-muted-foreground" />}
-                      title="Tidak ada kontrak tenant ditemukan"
+                      title="Kontrak tidak ditemukan"
                       description={
                         searchTerm
-                          ? `Tidak ditemukan kontrak yang cocok dengan kata kunci "${searchTerm}".`
-                          : "Belum ada kontrak tenant terdaftar di outlet ini."
+                          ? `Tidak ada kontrak yang cocok dengan "${searchTerm}".`
+                          : "Belum ada kontrak sewa di outlet ini."
                       }
                     />
                   </TableCell>

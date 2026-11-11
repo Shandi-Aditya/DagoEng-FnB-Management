@@ -17,15 +17,15 @@ export function calculateTierFromPoints(points: number): LoyaltyTier {
 
 export function getTierHint(points: number): string {
   if (points >= 3000) {
-    return "Otomatis masuk Tier Platinum (>= 3.000 Pts)";
+    return "Masuk tier Platinum (3.000 poin ke atas)";
   }
   if (points >= 1500) {
-    return "Otomatis masuk Tier Gold (>= 1.500 Pts)";
+    return "Masuk tier Gold (1.500 poin ke atas)";
   }
   if (points >= 500) {
-    return "Otomatis masuk Tier Silver (>= 500 Pts)";
+    return "Masuk tier Silver (500 poin ke atas)";
   }
-  return "Otomatis masuk Tier Bronze (0 - 499 Pts)";
+  return "Masuk tier Bronze (di bawah 500 poin)";
 }
 
 export function getTierTone(tier: LoyaltyTier): StatusTone {

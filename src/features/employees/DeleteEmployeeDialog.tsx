@@ -31,7 +31,7 @@ export function DeleteEmployeeDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="w-5 h-5" />
-            <span>Hapus Data Karyawan</span>
+            <span>Hapus karyawan</span>
           </DialogTitle>
           <DialogDescription>
             Apakah Anda yakin ingin menghapus data karyawan{" "}

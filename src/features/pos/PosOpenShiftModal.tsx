@@ -87,12 +87,12 @@ export function PosOpenShiftModal({
               value={openingCash || ""}
               onChange={(e) => onOpeningCashChange(Number(e.target.value))}
               disabled={isSubmitting}
-              placeholder="Contoh: 500000"
+              placeholder="Misalnya 500000"
               className="font-mono tabular-nums"
             />
 
             <div className="pt-1 space-y-1">
-              <span className="text-[11px] text-muted-foreground">Preset cepat:</span>
+              <span className="text-[11px] text-muted-foreground">Cepat</span>
               <div className="grid grid-cols-4 gap-1.5">
                 {OPEN_SHIFT_PRESETS.map((amt) => (
                   <button
@@ -129,7 +129,7 @@ export function PosOpenShiftModal({
             </Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
-                <span>Membuka sesi...</span>
+                <span>Membuka shift</span>
               ) : (
                 <span>Buka shift dan mulai transaksi</span>
               )}

@@ -64,13 +64,13 @@ export function createWelcomeMessage(params: {
     sender: "AI",
     timestamp: nowTime,
     systemData: [
-      `Scope Outlet Aktif: ${params.outletName}`,
-      `Total Omset Transaksi: Rp ${params.totalRevenue.toLocaleString("id-ID")} (${params.ordersCount} Order)`,
-      `Bahan Baku Status Kritis/Habis: ${params.criticalItemsCount} item`,
+      `Outlet: ${params.outletName}`,
+      `Omzet: Rp ${params.totalRevenue.toLocaleString("id-ID")} dari ${params.ordersCount} pesanan`,
+      `Bahan kritis atau habis: ${params.criticalItemsCount}`,
     ],
-    aiAnalysis: `Halo ${params.userName}. Saya asisten AI Business Intelligence Dago Creative Hub. Saya menganalisis data operasional kasir, stok gudang, ruang coworking, tenant sewa, dan retensi loyalty secara langsung untuk gerai ${params.outletName}. Ajukan pertanyaan bisnis Anda atau gunakan pilihan cepat di bawah.`,
-    actionRecommendation: "Tinjau ringkasan performa harian gerai Anda.",
-    actionLabel: "Buka Laporan Penjualan",
+    aiAnalysis: `Halo ${params.userName}. Saya merangkum data kasir, stok, ruang kerja, dan member di ${params.outletName}. Ajukan pertanyaan atau pilih pertanyaan cepat di bawah.`,
+    actionRecommendation: "Lihat rincian penjualan per periode di Laporan.",
+    actionLabel: "Buka laporan",
     actionUrl: "/reports",
   };
 }
@@ -116,19 +116,19 @@ export function generateAIInsightResponse(params: AIResponseParams): AIChatMessa
       sender: "AI",
       timestamp: nowTime,
       systemData: [
-        `Total Bahan Terdaftar: ${materialsCount} SKU`,
-        `Item Kritis / Perlu Restock: ${criticalItems.length} SKU`,
-        `Item Prioritas: ${critList || "Semua stok dalam ambang batas aman"}`,
+        `Bahan terdaftar: ${materialsCount}`,
+        `Perlu dibeli: ${criticalItems.length} bahan`,
+        `Prioritas: ${critList || "tidak ada, semua di atas batas minimum"}`,
       ],
       aiAnalysis:
         criticalItems.length > 0
-          ? `Terdeteksi ${criticalItems.length} bahan baku berada di bawah ambang batas minimum. Konsumsi menu utama meningkat. Jika tidak segera restock dalam 24 jam, terdapat risiko bahan baku habis saat operasional kasir.`
-          : `Kondisi inventori di gerai ${outletName} berada pada level aman. Tidak ada bahan baku yang berada di bawah ambang batas minimum.`,
+          ? `${criticalItems.length} bahan ada di bawah batas minimum. Bahan yang habis akan membuat menu terkait tidak bisa dipesan di kasir.`
+          : `Semua bahan di ${outletName} masih di atas batas minimum.`,
       actionRecommendation:
         criticalItems.length > 0
-          ? "Buat Purchase Order atau lakukan penyesuaian stok manual."
-          : "Pertahankan jadwal stock opname berkala.",
-      actionLabel: "Kelola Stok Gudang",
+          ? "Buat PO untuk bahan prioritas, atau sesuaikan stok kalau angkanya tidak cocok dengan fisik."
+          : "Lanjutkan opname rutin supaya angka stok tetap akurat.",
+      actionLabel: "Buka inventori",
       actionUrl: "/inventory",
     };
   }
@@ -148,15 +148,15 @@ export function generateAIInsightResponse(params: AIResponseParams): AIChatMessa
       sender: "AI",
       timestamp: nowTime,
       systemData: [
-        `Akumulasi Penjualan: Rp ${totalRevenue.toLocaleString("id-ID")}`,
-        `Total Volume Transaksi: ${ordersCount} Pesanan`,
-        `Rata-rata Nilai Transaksi (AOV): Rp ${aov.toLocaleString("id-ID")}`,
-        `Menu Utama: ${topProductName}`,
+        `Omzet: Rp ${totalRevenue.toLocaleString("id-ID")}`,
+        `Pesanan: ${ordersCount}`,
+        `Rata-rata per pesanan: Rp ${aov.toLocaleString("id-ID")}`,
+        `Paling laris: ${topProductName}`,
       ],
-      aiAnalysis: `Performa omset di gerai ${outletName} menunjukkan kontribusi utama dari kategori produk unggulan. Margin kotor rata-rata berada pada kisaran optimal. Rekomendasi peningkatan margin difokuskan pada bundling menu minuman dengan pendamping di jam reguler.`,
+      aiAnalysis: `${outletName} mencatat omzet Rp ${totalRevenue.toLocaleString("id-ID")} dari ${ordersCount} pesanan, rata-rata Rp ${aov.toLocaleString("id-ID")} per pesanan. Menu paling laris: ${topProductName}.`,
       actionRecommendation:
-        "Aktifkan program promo bundling pada jam operasional sore hari.",
-      actionLabel: "Lihat Analisis Menu",
+        "Untuk menaikkan nilai per pesanan, coba paket menu laris dengan pendamping.",
+      actionLabel: "Buka menu",
       actionUrl: "/menu",
     };
   }
@@ -174,14 +174,14 @@ export function generateAIInsightResponse(params: AIResponseParams): AIChatMessa
       sender: "AI",
       timestamp: nowTime,
       systemData: [
-        `Area F&B Terdaftar: ${areasCount} Zona Meja`,
-        `Total Booking Co-working: ${bookingsCount} Reservasi Aktif`,
-        `Tenant Komersial Sewa: ${leasesCount} Tenant Aktif`,
+        `Area meja: ${areasCount}`,
+        `Booking ruang kerja aktif: ${bookingsCount}`,
+        `Penyewa komersial aktif: ${leasesCount}`,
       ],
-      aiAnalysis: `Pemanfaatan ruang co-working dan lot komersial memiliki tingkat retensi yang stabil. Disarankan meninjau kapasitas ruang rapat dan jadwal reservasi untuk memastikan rotasi pelanggan berjalan lancar.`,
+      aiAnalysis: `Ada ${bookingsCount} booking ruang kerja aktif dan ${leasesCount} penyewa komersial aktif.`,
       actionRecommendation:
-        "Tinjau ketersediaan ruang dan kelola status check-in reservasi.",
-      actionLabel: "Buka Co-working Space",
+        "Cek jadwal ruang hari ini dan check-in tamu yang sudah datang.",
+      actionLabel: "Buka co-working",
       actionUrl: "/coworking",
     };
   }
@@ -192,13 +192,13 @@ export function generateAIInsightResponse(params: AIResponseParams): AIChatMessa
     sender: "AI",
     timestamp: nowTime,
     systemData: [
-      `Gerai Scope: ${outletName}`,
-      `Member Loyalty Terdaftar: ${membersCount} Anggota`,
-      `Total SKU Menu Aktif: ${productsCount} Produk`,
+      `Outlet: ${outletName}`,
+      `Member terdaftar: ${membersCount}`,
+      `Menu aktif: ${productsCount}`,
     ],
-    aiAnalysis: `Berdasarkan metrik menyeluruh di ${outletName}, operasional berjalan stabil. Kami menyarankan penguatan program loyalitas pelanggan untuk meningkatkan frekuensi kunjungan ulang pelanggan tetap.`,
-    actionRecommendation: "Periksa daftar member loyalty dan promosi poin.",
-    actionLabel: "Lihat Member Loyalty",
+    aiAnalysis: `${outletName} punya ${membersCount} member dan ${productsCount} menu aktif. Coba tanyakan soal penjualan, stok, atau ruang kerja untuk angka yang lebih rinci.`,
+    actionRecommendation: "Lihat member yang paling sering datang dan saldo poinnya.",
+    actionLabel: "Buka pelanggan",
     actionUrl: "/customers",
   };
 }

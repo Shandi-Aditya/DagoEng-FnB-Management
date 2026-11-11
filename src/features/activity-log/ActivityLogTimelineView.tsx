@@ -42,8 +42,8 @@ export function ActivityLogTimelineView({
       <Card className="p-12">
         <EmptyState
           icon={<FileText />}
-          title="Tidak ada log aktivitas sesuai kriteria"
-          description="Coba ubah kata kunci pencarian, rentang waktu, atau filter modul."
+          title="Aktivitas tidak ditemukan"
+          description="Ubah kata kunci, periode, atau filter modul."
         />
       </Card>
     );
@@ -134,7 +134,7 @@ export function ActivityLogTimelineView({
                 <div className="flex items-center justify-between pt-2 text-xs">
                   <div className="flex items-center gap-1.5 text-muted-foreground text-[11px]">
                     <User className="h-3.5 w-3.5" />
-                    <span>Oleh:</span>
+                    <span>Oleh</span>
                     <span className="font-bold text-foreground">{log.actorName}</span>
                     <span className="text-primary font-medium">({log.actorRole})</span>
                     {log.outletName && (
@@ -151,7 +151,7 @@ export function ActivityLogTimelineView({
                     onClick={() => onSelectLog(log)}
                     className="h-6 px-2 text-[11px] gap-0.5 text-primary hover:text-primary"
                   >
-                    <span>Detail Lengkap</span>
+                    <span>Detail</span>
                     <ChevronRight className="h-3 w-3" />
                   </Button>
                 </div>
@@ -164,7 +164,7 @@ export function ActivityLogTimelineView({
       {/* Pagination Controls Bar for Timeline */}
       <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4">
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <span>Tampilkan:</span>
+          <span>Tampilkan</span>
           <NativeSelect
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}

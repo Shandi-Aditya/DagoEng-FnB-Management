@@ -95,7 +95,7 @@ export function AIInsightChatContainer({
                     <div className="space-y-1">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
                         <Lightbulb className="h-3.5 w-3.5" />
-                        <span>Analisis & Rekomendasi AI</span>
+                        <span>Ringkasan dan saran</span>
                       </p>
                       <p className="text-xs text-foreground leading-relaxed font-normal">
                         {msg.aiAnalysis}
@@ -132,7 +132,7 @@ export function AIInsightChatContainer({
         {isTyping && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground pl-11">
             <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
-            <span>AI sedang menganalisis data riil gerai {outletName}...</span>
+            <span>Menghitung data {outletName}</span>
           </div>
         )}
       </CardContent>
@@ -148,7 +148,7 @@ export function AIInsightChatContainer({
         >
           <Input
             type="text"
-            placeholder={`Tanyakan performa bisnis, stok kritis, atau omset di gerai ${outletName}...`}
+            placeholder="Tanya soal penjualan, stok, atau ruang kerja"
             value={inputQuery}
             onChange={(e) => onInputChange(e.target.value)}
             className="flex-1 text-xs h-9"

@@ -197,6 +197,17 @@ export function getDepartmentBadgeTone(dept: string): StatusTone {
   }
 }
 
+const EMPLOYEE_STATUS_LABEL: Record<string, string> = {
+  AKTIF: "Aktif",
+  CUTI: "Cuti",
+  "NON-AKTIF": "Nonaktif",
+};
+
+/** Display label for the stored employment status enum. */
+export function getEmployeeStatusLabel(status: string): string {
+  return EMPLOYEE_STATUS_LABEL[status] ?? status;
+}
+
 export function getEmployeeStatusTone(status: string): StatusTone {
   switch (status) {
     case "AKTIF":
@@ -251,7 +262,7 @@ export function buildEmployeeExportData(
       s.shiftName,
       s.assignedCashierName,
       s.startTime,
-      s.closedAt || s.endTime || "Sedang Berjalan",
+      s.closedAt || s.endTime || "Belum ditutup",
       `Rp ${(s.openingCash || 0).toLocaleString("id-ID")}`,
       `Rp ${(s.cashSales || 0).toLocaleString("id-ID")}`,
       `Rp ${(s.nonCashSales || 0).toLocaleString("id-ID")}`,

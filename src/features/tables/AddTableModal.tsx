@@ -44,15 +44,15 @@ export function AddTableModal({ isOpen, onClose, areas, onAddTable }: AddTableMo
     <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-base font-medium">Tambah Meja Baru</DialogTitle>
+          <DialogTitle className="text-base font-medium">Tambah meja</DialogTitle>
           <DialogDescription className="text-xs">
-            Daftarkan nomor meja dan kapasitas tempat duduk ke area terpilih.
+            Nomor meja dan jumlah kursinya.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Area Meja</label>
+            <label className="text-xs font-medium text-foreground">Area</label>
             <NativeSelect
               value={areaId}
               onChange={(e) => setAreaId(e.target.value)}
@@ -68,17 +68,17 @@ export function AddTableModal({ isOpen, onClose, areas, onAddTable }: AddTableMo
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Nomor Meja</label>
+              <label className="text-xs font-medium text-foreground">Nomor meja</label>
               <Input
                 required
-                placeholder="Contoh: T-06"
+                placeholder="Misalnya T-06"
                 value={tableName}
                 onChange={(e) => setTableName(e.target.value)}
                 className="text-xs font-mono"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Kapasitas (Orang)</label>
+              <label className="text-xs font-medium text-foreground">Kapasitas (orang)</label>
               <Input
                 type="number"
                 min={1}

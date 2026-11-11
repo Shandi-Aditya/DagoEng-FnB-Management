@@ -36,8 +36,8 @@ export function ActivityLogToolbar({
   return (
     <div className="flex flex-col gap-4 border-b border-border pb-4 lg:flex-row lg:items-center lg:justify-between">
       <PageHeader
-        title="Audit Trail & Activity Log"
-        description={`Pencatatan aktivitas terstruktur dan immutable di seluruh proses sistem. Gerai ${outletName}.`}
+        title="Log aktivitas"
+        description={`Semua perubahan data di ${outletName}. Catatan tidak bisa diubah atau dihapus.`}
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -45,10 +45,10 @@ export function ActivityLogToolbar({
           size="sm"
           onClick={onOpenPDF}
           className="gap-1.5"
-          title="Buka Dokumen PDF & Cetak Berkas Audit Resmi"
+          title="Cetak PDF"
         >
           <Printer className="h-4 w-4" />
-          <span>Cetak PDF Audit</span>
+          <span>Cetak PDF</span>
         </Button>
 
         <Button
@@ -56,10 +56,10 @@ export function ActivityLogToolbar({
           variant="outline"
           onClick={onExportExcel}
           className="gap-1.5"
-          title="Download Spreadsheet Excel (.xls)"
+          title="Ekspor Excel"
         >
           <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          <span>Excel (.xls)</span>
+          <span>Excel</span>
         </Button>
 
         <Button
@@ -67,7 +67,7 @@ export function ActivityLogToolbar({
           variant="outline"
           onClick={onExportCSV}
           className="gap-1.5"
-          title="Download Data CSV"
+          title="Ekspor CSV"
         >
           <Download className="h-4 w-4 text-muted-foreground" />
           <span>CSV</span>
@@ -78,7 +78,7 @@ export function ActivityLogToolbar({
           variant="outline"
           onClick={onExportJSON}
           className="gap-1.5"
-          title="Download Data JSON"
+          title="Ekspor JSON"
         >
           <Code className="h-4 w-4 text-muted-foreground" />
           <span>JSON</span>
@@ -109,7 +109,7 @@ export function ActivityLogToolbar({
             )}
           >
             <GitCommit className="h-3.5 w-3.5" />
-            <span>Timeline</span>
+            <span>Riwayat</span>
           </button>
         </div>
       </div>

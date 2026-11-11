@@ -8,7 +8,9 @@ import {
   orderStatusLabel,
   orderStatusTone,
   paymentStatusLabel,
+  paymentMethodLabel,
   paymentStatusTone,
+  slaStatusLabel,
   slaStatusTone,
 } from "@/features/orders/orders-domain";
 import type { OrderItemRecord, OrderRecord } from "@/types/order";
@@ -76,8 +78,10 @@ describe("orderStatusLabel and orderStatusTone", () => {
   it("translates order statuses into human Indonesian labels", () => {
     expect(orderStatusLabel("NEW")).toBe("Baru");
     expect(orderStatusLabel("CONFIRMED")).toBe("Dikonfirmasi");
-    expect(orderStatusLabel("COOKING")).toBe("Sedang Dimasak");
-    expect(orderStatusLabel("SERVED")).toBe("Siap Disajikan");
+    expect(orderStatusLabel("KITCHEN_RECEIVED")).toBe("Diterima dapur");
+    expect(orderStatusLabel("COOKING")).toBe("Dimasak");
+    expect(orderStatusLabel("READY")).toBe("Siap saji");
+    expect(orderStatusLabel("SERVED")).toBe("Disajikan");
     expect(orderStatusLabel("COMPLETED")).toBe("Selesai");
     expect(orderStatusLabel("CANCELLED")).toBe("Dibatalkan");
   });
@@ -93,8 +97,8 @@ describe("orderStatusLabel and orderStatusTone", () => {
 describe("paymentStatusLabel and paymentStatusTone", () => {
   it("translates payment status to Indonesian labels", () => {
     expect(paymentStatusLabel("PAID")).toBe("Lunas");
-    expect(paymentStatusLabel("REFUNDED")).toBe("Refund");
-    expect(paymentStatusLabel("UNPAID")).toBe("Belum Dibayar");
+    expect(paymentStatusLabel("REFUNDED")).toBe("Dikembalikan");
+    expect(paymentStatusLabel("PENDING")).toBe("Belum dibayar");
   });
 
   it("maps payment status to semantic tones", () => {
@@ -107,7 +111,7 @@ describe("paymentStatusLabel and paymentStatusTone", () => {
 describe("slaStatusTone", () => {
   it("maps SLA statuses correctly", () => {
     expect(slaStatusTone("COMPLETED")).toBe("success");
-    expect(slaStatusTone("ON_TRACK")).toBe("success");
+    expect(slaStatusTone("ON_TIME")).toBe("success");
     expect(slaStatusTone("AT_RISK")).toBe("warning");
     expect(slaStatusTone("DELAYED")).toBe("destructive");
   });
@@ -165,5 +169,22 @@ describe("buildOrderExportData", () => {
     expect(rows[0][4]).toBe("Diskon 10%");
     expect(rows[0][7]).toBe("Selesai");
     expect(rows[0][8]).toBe("Lunas");
+  });
+});
+
+describe("slaStatusLabel and paymentMethodLabel", () => {
+  it("never shows raw SLA enums", () => {
+    expect(slaStatusLabel("ON_TIME")).toBe("Tepat waktu");
+    expect(slaStatusLabel("AT_RISK")).toBe("Mendekati target");
+    expect(slaStatusLabel("DELAYED")).toBe("Lewat target");
+  });
+
+  it("labels payment methods and falls back to a dash", () => {
+    expect(paymentMethodLabel("CASH")).toBe("Tunai");
+    expect(paymentMethodLabel("QRIS")).toBe("QRIS");
+    expect(paymentMethodLabel("EDC")).toBe("Kartu (EDC)");
+    expect(paymentMethodLabel("TRANSFER")).toBe("Transfer");
+    expect(paymentMethodLabel("SPLIT")).toBe("Split bill");
+    expect(paymentMethodLabel(undefined)).toBe("—");
   });
 });

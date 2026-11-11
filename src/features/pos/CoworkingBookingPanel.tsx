@@ -191,7 +191,7 @@ export function CoworkingBookingPanel({
         </div>
 
         <div className="flex items-center justify-between gap-2 pt-1">
-          <span className="text-xs text-muted-foreground">Durasi lainnya:</span>
+          <span className="text-xs text-muted-foreground">Durasi lain</span>
           <NativeSelect
             value={cwDuration}
             onChange={(e) => onDurationChange(Number(e.target.value))}
@@ -211,7 +211,7 @@ export function CoworkingBookingPanel({
         <div className="flex items-center justify-between">
           <FieldLabel className="flex items-center gap-1.5">
             <Clock className="size-3.5 text-muted-foreground" />
-            <span>Jam mulai (09:00 - 18:00 WITA)</span>
+            <span>Jam mulai (09:00–18:00 WITA)</span>
           </FieldLabel>
           <Button
             type="button"
@@ -226,7 +226,7 @@ export function CoworkingBookingPanel({
 
         <div className="flex items-center justify-between rounded-lg border border-border bg-muted/20 p-2.5">
           <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">Mulai:</span>
+            <span className="text-muted-foreground">Mulai</span>
             <input
               type="time"
               value={cwStartTime}
@@ -294,8 +294,8 @@ export function CoworkingBookingPanel({
             onValueChange={(val) => onUsageTypeChange(val as "PERSONAL" | "GROUP")}
           >
             <TabsList>
-              <TabsTrigger value="PERSONAL">Personal</TabsTrigger>
-              <TabsTrigger value="GROUP">Group / Company</TabsTrigger>
+              <TabsTrigger value="PERSONAL">Pribadi</TabsTrigger>
+              <TabsTrigger value="GROUP">Grup atau perusahaan</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -354,7 +354,7 @@ export function CoworkingBookingPanel({
                 type="tel"
                 value={cwGuestPhone}
                 onChange={(e) => onGuestPhoneChange(e.target.value)}
-                placeholder="No. WhatsApp / HP"
+                placeholder="Nomor WhatsApp"
               />
               <Input
                 type="email"
@@ -392,7 +392,7 @@ export function CoworkingBookingPanel({
             <InputGroupInput
               value={cwVoucherCode}
               onChange={(e) => onVoucherCodeChange(e.target.value.toUpperCase())}
-              placeholder="Contoh: COWORK50"
+              placeholder="Misalnya COWORK50"
             />
           </InputGroup>
           <Button type="button" variant="secondary" onClick={onApplyVoucher}>

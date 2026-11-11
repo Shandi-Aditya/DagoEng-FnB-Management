@@ -58,7 +58,7 @@ export function BOMSimulatorModal({
 
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Pilih Menu</label>
+            <label className="text-xs font-medium text-foreground">Menu</label>
             <NativeSelect
               value={menuId}
               onChange={(e) => setMenuId(e.target.value)}
@@ -73,7 +73,7 @@ export function BOMSimulatorModal({
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Jumlah Porsi Pesanan</label>
+            <label className="text-xs font-medium text-foreground">Jumlah porsi</label>
             <Input
               type="number"
               min={1}
@@ -110,7 +110,7 @@ export function BOMSimulatorModal({
                           isShortage ? "text-destructive font-medium" : "text-foreground"
                         }`}
                       >
-                        Sisa: {currentStock} {ing.unit} {isShortage ? "(Kurang!)" : ""}
+                        Sisa: {currentStock} {ing.unit} {isShortage ? "(kurang)" : ""}
                       </span>
                     </div>
                   );

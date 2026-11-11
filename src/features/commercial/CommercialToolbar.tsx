@@ -21,8 +21,8 @@ export function CommercialToolbar({
 }: CommercialToolbarProps) {
   return (
     <PageHeader
-      title={`Kontrak Komersial & Retail · ${outletName}`}
-      description="Manajemen kontrak tenant retail, unit lot komersial, dan penagihan berkala."
+      title="Komersial"
+      description="Kontrak sewa unit retail dan tagihannya."
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -32,7 +32,7 @@ export function CommercialToolbar({
             className="gap-1.5 text-xs"
           >
             <FileSpreadsheet className="size-3.5 text-success" />
-            <span>Export Excel</span>
+            <span>Ekspor Excel</span>
           </Button>
 
           <Button
@@ -42,7 +42,7 @@ export function CommercialToolbar({
             className="gap-1.5 text-xs"
           >
             <Download className="size-3.5 text-muted-foreground" />
-            <span>Export CSV</span>
+            <span>Ekspor CSV</span>
           </Button>
 
           <Button
@@ -62,7 +62,7 @@ export function CommercialToolbar({
             className="gap-1.5 text-xs text-destructive hover:bg-destructive/10"
           >
             <PowerOff className="size-3.5" />
-            <span>Nonaktifkan</span>
+            <span>Nonaktifkan modul</span>
           </Button>
 
           <Button
@@ -71,7 +71,7 @@ export function CommercialToolbar({
             className="gap-1.5 text-xs font-medium"
           >
             <Plus className="size-3.5" />
-            <span>Tambah Kontrak</span>
+            <span>Tambah kontrak</span>
           </Button>
         </div>
       }

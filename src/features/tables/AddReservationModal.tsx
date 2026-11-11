@@ -88,19 +88,19 @@ export function AddReservationModal({
     <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="text-base font-medium">Buat Reservasi Meja Terjadwal</DialogTitle>
+          <DialogTitle className="text-base font-medium">Buat reservasi</DialogTitle>
           <DialogDescription className="text-xs">
-            Catat tamu yang memesan meja sebelum waktu kedatangan beserta uang muka.
+            Catat tamu yang memesan meja, jadwal datang, dan uang muka.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Nama Tamu</label>
+              <label className="text-xs font-medium text-foreground">Nama tamu</label>
               <Input
                 required
-                placeholder="Contoh: Ibu Maya"
+                placeholder="Misalnya Ibu Maya"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="text-xs"
@@ -110,7 +110,7 @@ export function AddReservationModal({
               <label className="text-xs font-medium text-foreground">Nomor WhatsApp</label>
               <Input
                 required
-                placeholder="Contoh: +62 812-3456-7890"
+                placeholder="08123456789"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 className="text-xs font-mono"
@@ -120,7 +120,7 @@ export function AddReservationModal({
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Pilih Meja</label>
+              <label className="text-xs font-medium text-foreground">Meja</label>
               <NativeSelect
                 value={tableId}
                 onChange={(e) => setTableId(e.target.value)}
@@ -136,7 +136,7 @@ export function AddReservationModal({
               </NativeSelect>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Jumlah Tamu (Pax)</label>
+              <label className="text-xs font-medium text-foreground">Jumlah tamu</label>
               <Input
                 type="number"
                 min={1}
@@ -148,7 +148,7 @@ export function AddReservationModal({
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Uang Muka / DP (Rp)</label>
+              <label className="text-xs font-medium text-foreground">Uang muka (Rp)</label>
               <Input
                 type="number"
                 min={0}
@@ -166,7 +166,7 @@ export function AddReservationModal({
             </span>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-[11px] text-muted-foreground">Pilih Tanggal</label>
+                <label className="text-[11px] text-muted-foreground">Tanggal</label>
                 <Input
                   type="date"
                   required
@@ -176,7 +176,7 @@ export function AddReservationModal({
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-[11px] text-muted-foreground">Pilih Jam (WITA)</label>
+                <label className="text-[11px] text-muted-foreground">Jam (WITA)</label>
                 <Input
                   type="time"
                   required
@@ -188,13 +188,13 @@ export function AddReservationModal({
             </div>
 
             <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-muted-foreground">
-              <span>Shortcut:</span>
+              <span>Cepat:</span>
               <button
                 type="button"
                 onClick={() => setShortcutDate(0)}
                 className="rounded border bg-background px-2 py-0.5 hover:bg-muted"
               >
-                Hari Ini
+                Hari ini
               </button>
               <button
                 type="button"
@@ -220,9 +220,9 @@ export function AddReservationModal({
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Catatan Khusus</label>
+            <label className="text-xs font-medium text-foreground">Catatan</label>
             <Input
-              placeholder="Contoh: Meja sudut, siapkan high chair..."
+              placeholder="Misalnya meja sudut, siapkan kursi bayi"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="text-xs"
@@ -234,7 +234,7 @@ export function AddReservationModal({
               Batal
             </Button>
             <Button type="submit" size="sm" className="text-xs">
-              Simpan Reservasi
+              Simpan reservasi
             </Button>
           </DialogFooter>
         </form>

@@ -15,25 +15,19 @@ export function filterOrdersByTenant(
   return orders.filter((o) => o.items.some((it) => it.tenantId === userTenantId));
 }
 
+const ORDER_STATUS_LABEL: Partial<Record<OrderRecord["status"], string>> = {
+  NEW: "Baru",
+  CONFIRMED: "Dikonfirmasi",
+  KITCHEN_RECEIVED: "Diterima dapur",
+  COOKING: "Dimasak",
+  READY: "Siap saji",
+  SERVED: "Disajikan",
+  COMPLETED: "Selesai",
+  CANCELLED: "Dibatalkan",
+};
+
 export function orderStatusLabel(status: OrderRecord["status"]): string {
-  switch (status) {
-    case "COMPLETED":
-      return "Selesai";
-    case "SERVED":
-      return "Siap Disajikan";
-    case "COOKING":
-      return "Sedang Dimasak";
-    case "KITCHEN_RECEIVED":
-      return "Diterima Dapur";
-    case "CONFIRMED":
-      return "Dikonfirmasi";
-    case "NEW":
-      return "Baru";
-    case "CANCELLED":
-      return "Dibatalkan";
-    default:
-      return status;
-  }
+  return ORDER_STATUS_LABEL[status] ?? status;
 }
 
 export function orderStatusTone(status: OrderRecord["status"]): StatusTone {
@@ -41,6 +35,8 @@ export function orderStatusTone(status: OrderRecord["status"]): StatusTone {
     case "COMPLETED":
       return "success";
     case "SERVED":
+      return "info";
+    case "READY":
       return "info";
     case "COOKING":
     case "KITCHEN_RECEIVED":
@@ -59,9 +55,9 @@ export function paymentStatusLabel(status: OrderRecord["paymentStatus"]): string
     case "PAID":
       return "Lunas";
     case "REFUNDED":
-      return "Refund";
+      return "Dikembalikan";
     default:
-      return "Belum Dibayar";
+      return "Belum dibayar";
   }
 }
 
@@ -79,7 +75,7 @@ export function paymentStatusTone(status: OrderRecord["paymentStatus"]): StatusT
 export function slaStatusTone(slaStatus: string): StatusTone {
   switch (slaStatus) {
     case "COMPLETED":
-    case "ON_TRACK":
+    case "ON_TIME":
       return "success";
     case "AT_RISK":
       return "warning";
@@ -88,6 +84,29 @@ export function slaStatusTone(slaStatus: string): StatusTone {
     default:
       return "neutral";
   }
+}
+
+const SLA_STATUS_LABEL: Record<string, string> = {
+  ON_TIME: "Tepat waktu",
+  AT_RISK: "Mendekati target",
+  DELAYED: "Lewat target",
+};
+
+/** Human label for an SLA status; raw enums never reach the UI. */
+export function slaStatusLabel(slaStatus: string): string {
+  return SLA_STATUS_LABEL[slaStatus] ?? "—";
+}
+
+const PAYMENT_METHOD_LABEL: Record<NonNullable<OrderRecord["paymentMethod"]>, string> = {
+  CASH: "Tunai",
+  QRIS: "QRIS",
+  EDC: "Kartu (EDC)",
+  TRANSFER: "Transfer",
+  SPLIT: "Split bill",
+};
+
+export function paymentMethodLabel(method: OrderRecord["paymentMethod"] | undefined): string {
+  return method ? PAYMENT_METHOD_LABEL[method] : "—";
 }
 
 export function buildReprintKitchenTicket(
@@ -135,7 +154,7 @@ export function buildOrderReceiptData(order: OrderRecord): POSReceiptData {
       hour: "2-digit",
       minute: "2-digit",
     }),
-    cashierName: "Kasir / Staff Bertugas",
+    cashierName: "Kasir",
     tenantId: posPublisher.tenantId || primaryTenantId,
     tenantName: posPublisher.brandName,
     outletName: posPublisher.outletName,

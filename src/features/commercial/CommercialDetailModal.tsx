@@ -61,33 +61,33 @@ export function CommercialDetailModal({
           {/* Overview Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 rounded-lg border bg-muted/30 text-xs">
             <div>
-              <span className="text-muted-foreground block text-[10px]">Unit / Lot</span>
+              <span className="text-muted-foreground block text-[10px]">Unit</span>
               <span className="font-medium text-foreground">{lease.unitCode}</span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Luas Ruang</span>
+              <span className="text-muted-foreground block text-[10px]">Luas</span>
               <span className="font-medium text-foreground">{lease.areaSquareMeters} m²</span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Sewa Bulanan</span>
+              <span className="text-muted-foreground block text-[10px]">Sewa per bulan</span>
               <span className="font-mono font-medium text-foreground">
                 {formatCurrencyIDR(lease.monthlyRent)}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Deposit Jaminan</span>
+              <span className="text-muted-foreground block text-[10px]">Deposit</span>
               <span className="font-mono font-medium text-foreground">
                 {formatCurrencyIDR(lease.depositAmount)}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Masa Sewa</span>
+              <span className="text-muted-foreground block text-[10px]">Masa sewa</span>
               <span className="font-medium text-foreground">
                 {lease.startDate} — {lease.endDate}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Status Kontrak</span>
+              <span className="text-muted-foreground block text-[10px]">Status</span>
               <StatusBadge status={tone} className="text-[11px] mt-0.5">
                 {label}
               </StatusBadge>
@@ -99,7 +99,7 @@ export function CommercialDetailModal({
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-medium text-foreground flex items-center gap-1.5">
                 <CreditCard className="w-4 h-4 text-primary" />
-                <span>Riwayat Pembayaran Sewa</span>
+                <span>Riwayat pembayaran</span>
               </h4>
               <Button
                 size="sm"
@@ -107,7 +107,7 @@ export function CommercialDetailModal({
                 className="text-xs h-7 gap-1"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>Catat Pembayaran</span>
+                <span>Catat pembayaran</span>
               </Button>
             </div>
 
@@ -122,8 +122,8 @@ export function CommercialDetailModal({
                     <TableRow>
                       <TableHead className="text-xs">Periode</TableHead>
                       <TableHead className="text-xs">Nominal</TableHead>
-                      <TableHead className="text-xs">Tgl Bayar</TableHead>
-                      <TableHead className="text-xs">Metode / Ref</TableHead>
+                      <TableHead className="text-xs">Dibayar</TableHead>
+                      <TableHead className="text-xs">Metode</TableHead>
                       <TableHead className="text-xs text-right">Status</TableHead>
                     </TableRow>
                   </TableHeader>

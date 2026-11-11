@@ -126,7 +126,7 @@ export function AddEmployeeModal({
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-primary" />
-            <span>Tambah Karyawan Baru</span>
+            <span>Tambah karyawan</span>
           </DialogTitle>
           <DialogDescription>
             Daftarkan staf baru dan sesuaikan penugasan shift serta hak akses.
@@ -141,7 +141,7 @@ export function AddEmployeeModal({
             <Input
               id="add-emp-name"
               required
-              placeholder="Contoh: Gusti Bagus"
+              placeholder="Misalnya Gusti Bagus"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="text-xs"
@@ -150,7 +150,7 @@ export function AddEmployeeModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="add-emp-role" className="text-xs">Jabatan / Role</Label>
+              <Label htmlFor="add-emp-role" className="text-xs">Jabatan</Label>
               <NativeSelect
                 id="add-emp-role"
                 value={role}
@@ -184,7 +184,7 @@ export function AddEmployeeModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="add-emp-contact" className="text-xs">Kontak WhatsApp</Label>
+              <Label htmlFor="add-emp-contact" className="text-xs">WhatsApp</Label>
               <Input
                 id="add-emp-contact"
                 value={contact}
@@ -206,7 +206,7 @@ export function AddEmployeeModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="add-emp-shift" className="text-xs">Shift Penugasan</Label>
+            <Label htmlFor="add-emp-shift" className="text-xs">Shift</Label>
             <NativeSelect
               id="add-emp-shift"
               value={assignedShift}
@@ -224,7 +224,7 @@ export function AddEmployeeModal({
           {/* Permissions Matrix */}
           <div className="space-y-2 pt-2 border-t">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium">Hak Izin Akses Sistem</Label>
+              <Label className="text-xs font-medium">Hak akses</Label>
               <span className="text-[11px] text-muted-foreground font-mono">
                 {permissions.length} izin dipilih
               </span>

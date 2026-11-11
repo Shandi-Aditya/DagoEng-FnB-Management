@@ -22,7 +22,7 @@ import { EmptyState } from "@/components/app/empty-state";
 import { NativeSelect } from "@/components/ui/native-select";
 import {
   getDepartmentBadgeTone,
-  getEmployeeStatusTone,
+  getEmployeeStatusLabel, getEmployeeStatusTone,
   ROLE_DEFAULT_PERMISSIONS,
 } from "./employees-domain";
 
@@ -98,7 +98,7 @@ export function EmployeesDirectoryTab({
                 onSearchChange(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Cari nama, role, NIK, atau departemen..."
+              placeholder="Cari nama, jabatan, NIK, atau departemen"
               className="h-8 pl-8 text-xs"
             />
           </div>
@@ -111,7 +111,7 @@ export function EmployeesDirectoryTab({
             }}
             className="h-8 text-xs font-medium"
           >
-            <option value="ALL">Semua Departemen</option>
+            <option value="ALL">Semua departemen</option>
             {DEPARTMENTS.filter((d) => d !== "ALL").map((dept) => (
               <option key={dept} value={dept}>
                 {dept}
@@ -127,10 +127,10 @@ export function EmployeesDirectoryTab({
             }}
             className="h-8 text-xs font-medium"
           >
-            <option value="ALL">Semua Status</option>
+            <option value="ALL">Semua status</option>
             {STATUSES.filter((s) => s !== "ALL").map((st) => (
               <option key={st} value={st}>
-                {st}
+                {getEmployeeStatusLabel(st)}
               </option>
             ))}
           </NativeSelect>
@@ -172,12 +172,12 @@ export function EmployeesDirectoryTab({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[200px]">NIK & Nama Staf</TableHead>
-                <TableHead>Jabatan & Departemen</TableHead>
-                <TableHead>Kontak & Email</TableHead>
-                <TableHead>Shift Ditugaskan</TableHead>
+                <TableHead className="w-[200px]">Staf</TableHead>
+                <TableHead>Jabatan</TableHead>
+                <TableHead>Kontak</TableHead>
+                <TableHead>Shift</TableHead>
                 <TableHead className="text-center">Status</TableHead>
-                <TableHead className="text-center">Hak Akses</TableHead>
+                <TableHead className="text-center">Hak akses</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>
@@ -187,7 +187,7 @@ export function EmployeesDirectoryTab({
                   <TableCell colSpan={7} className="h-48 text-center">
                     <EmptyState
                       icon={<Users className="w-8 h-8 text-muted-foreground" />}
-                      title="Tidak ada karyawan ditemukan"
+                      title="Karyawan tidak ditemukan"
                       description={
                         searchQuery
                           ? `Tidak ditemukan staf yang cocok dengan kata kunci "${searchQuery}".`
@@ -240,10 +240,10 @@ export function EmployeesDirectoryTab({
                         <button
                           type="button"
                           onClick={() => onToggleStatus(emp.id)}
-                          title="Klik untuk mengubah status (Aktif/Cuti/Non-Aktif)"
+                          title="Ubah status kepegawaian"
                         >
                           <StatusBadge status={statusTone} className="text-xs cursor-pointer">
-                            {emp.status}
+                            {getEmployeeStatusLabel(emp.status)}
                           </StatusBadge>
                         </button>
                       </TableCell>

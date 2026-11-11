@@ -63,8 +63,8 @@ export function ActivityLogTableView({
           <div className="p-12">
             <EmptyState
               icon={<FileText />}
-              title="Tidak ada log aktivitas sesuai kriteria"
-              description="Coba ubah kata kunci pencarian, rentang waktu, atau filter modul."
+              title="Aktivitas tidak ditemukan"
+              description="Ubah kata kunci, periode, atau filter modul."
             />
           </div>
         ) : (
@@ -195,7 +195,7 @@ export function ActivityLogTableView({
         {/* Pagination Controls Bar */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-t border-border bg-card">
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span>Tampilkan:</span>
+            <span>Tampilkan</span>
             <NativeSelect
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}

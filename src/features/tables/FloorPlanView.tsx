@@ -74,7 +74,7 @@ export function FloorPlanView({ areas, outletName, onTableClick }: FloorPlanView
                         {isOccupied ? (
                           <div className="border-t pt-1.5 text-[11px]">
                             <p className="truncate font-medium text-foreground">
-                              {t.customer || "Tamu Aktif"}
+                              {t.customer || "Tamu"}
                             </p>
                             <p className="font-mono text-xs tabular-nums text-primary">
                               {t.total || "-"}

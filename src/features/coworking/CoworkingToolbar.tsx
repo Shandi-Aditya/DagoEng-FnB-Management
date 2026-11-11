@@ -41,8 +41,8 @@ export function CoworkingToolbar({
   return (
     <div className="space-y-4">
       <PageHeader
-        title={`Co-working · ${outletName}`}
-        description="Penyewaan ruang kerja, meja harian, paket membership, dan log sesi check-in."
+        title="Co-working"
+        description="Ruang, booking, member, dan check-in."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -52,7 +52,7 @@ export function CoworkingToolbar({
               className="gap-1.5 text-xs"
             >
               <FileSpreadsheet className="size-3.5 text-success" />
-              <span>Export Excel</span>
+              <span>Ekspor Excel</span>
             </Button>
 
             <Button
@@ -62,7 +62,7 @@ export function CoworkingToolbar({
               className="gap-1.5 text-xs"
             >
               <Download className="size-3.5 text-muted-foreground" />
-              <span>Export CSV</span>
+              <span>Ekspor CSV</span>
             </Button>
 
             <Button

@@ -115,7 +115,7 @@ export default function ActivityLogPage() {
   const handleExportCSV = () => {
     const { headers, rows } = buildActivityLogExportRows(scopedLogs);
     downloadCSV(`Audit_Log_${activeOutlet?.name || "All"}_${Date.now()}`, headers, rows);
-    notify.success("Ekspor CSV berhasil", `${scopedLogs.length} baris log berhasil diunduh.`);
+    notify.success("Log diekspor ke CSV", `${scopedLogs.length} baris`);
   };
 
   const handleExportExcel = () => {
@@ -126,7 +126,7 @@ export default function ActivityLogPage() {
       headers,
       rows
     );
-    notify.success("Ekspor Excel berhasil", `${scopedLogs.length} baris log berhasil diunduh.`);
+    notify.success("Log diekspor ke Excel", `${scopedLogs.length} baris`);
   };
 
   const handleExportJSON = () => {
@@ -141,7 +141,7 @@ export default function ActivityLogPage() {
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
-    notify.success("Ekspor JSON berhasil", `${scopedLogs.length} entri audit berhasil diunduh.`);
+    notify.success("Log diekspor ke JSON", `${scopedLogs.length} entri`);
   };
 
   return (

@@ -53,7 +53,7 @@ export default function CustomersPage() {
       headers,
       rows
     );
-    notify.success("Data pelanggan berhasil diekspor ke CSV.");
+    notify.success("Data member diekspor ke CSV");
   };
 
   const handleExportExcel = () => {
@@ -64,7 +64,7 @@ export default function CustomersPage() {
       headers,
       rows
     );
-    notify.success("Data pelanggan berhasil diekspor ke Excel (.xls).");
+    notify.success("Data member diekspor ke Excel");
   };
 
   const handleAddMember = (data: {
@@ -75,17 +75,17 @@ export default function CustomersPage() {
     initialPoints: number;
   }) => {
     const newMem = createMember(data);
-    notify.success(`Member "${newMem.name}" berhasil didaftarkan dengan tier ${newMem.tier}.`);
+    notify.success(`${newMem.name} terdaftar`, `Tier ${newMem.tier}`);
   };
 
   const handleAddPointsQuick = (id: string, name: string) => {
     addPoints(id, 20, `Penambahan 20 Poin Manual untuk ${name}`);
-    notify.success(`+20 Poin berhasil ditambahkan untuk ${name}.`);
+    notify.success(`${name} +20 poin`);
   };
 
   const handleManualOverride = (memberId: string, newTier: LoyaltyTier, reason: string) => {
     manualOverrideTier(memberId, newTier, reason);
-    notify.success(`Tier berhasil diubah menjadi ${newTier}.`);
+    notify.success(`Tier diubah ke ${newTier}`);
   };
 
   return (

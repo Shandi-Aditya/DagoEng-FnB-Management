@@ -72,6 +72,7 @@ export function tableStatusTone(status: TableItem["status"]): StatusTone {
     case "OCCUPIED":
       return "info";
     case "RESERVED":
+    case "BILLING":
       return "warning";
     case "CLEANING":
       return "neutral";
@@ -88,8 +89,10 @@ export function tableStatusLabel(status: TableItem["status"]): string {
       return "Terisi";
     case "RESERVED":
       return "Reservasi";
+    case "BILLING":
+      return "Menunggu bayar";
     case "CLEANING":
-      return "Pembersihan";
+      return "Dibersihkan";
     default:
       return status;
   }
@@ -113,7 +116,7 @@ export function reservationStatusLabel(status: ScheduledReservation["status"]): 
     case "CONFIRMED":
       return "Menunggu";
     case "SEATED":
-      return "Sudah Duduk";
+      return "Sudah duduk";
     case "CANCELLED":
       return "Dibatalkan";
     default:
@@ -129,7 +132,7 @@ export function formatReservationDateTime(dateStr: string, timeStr: string): str
 
   let formattedDateLabel = "";
   if (dateStr === todayStr) {
-    formattedDateLabel = "Hari Ini";
+    formattedDateLabel = "Hari ini";
   } else if (dateStr === tomorrowStr) {
     formattedDateLabel = "Besok";
   } else {

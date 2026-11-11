@@ -48,11 +48,11 @@ export function PODetailModal({ po, isOpen, onClose, onReceivePO }: PODetailModa
           {/* Metadata Grid */}
           <div className="grid grid-cols-2 gap-2 rounded-lg border bg-muted/20 p-2.5">
             <div>
-              <span className="text-[10px] text-muted-foreground">Estimasi Kedatangan</span>
+              <span className="text-[10px] text-muted-foreground">Perkiraan tiba</span>
               <p className="font-medium text-foreground">{po.expectedDelivery || "-"}</p>
             </div>
             <div>
-              <span className="text-[10px] text-muted-foreground">Catatan PO</span>
+              <span className="text-[10px] text-muted-foreground">Catatan</span>
               <p className="text-muted-foreground">{po.notes || "-"}</p>
             </div>
           </div>
@@ -62,9 +62,9 @@ export function PODetailModal({ po, isOpen, onClose, onReceivePO }: PODetailModa
             <table className="w-full text-left">
               <thead className="border-b bg-muted/50 text-[10px] font-medium uppercase text-muted-foreground">
                 <tr>
-                  <th className="p-2">Nama Bahan</th>
+                  <th className="p-2">Bahan</th>
                   <th className="p-2 text-right">Jumlah</th>
-                  <th className="p-2 text-right">Harga Satuan</th>
+                  <th className="p-2 text-right">Harga satuan</th>
                   <th className="p-2 text-right">Subtotal</th>
                 </tr>
               </thead>
@@ -102,7 +102,7 @@ export function PODetailModal({ po, isOpen, onClose, onReceivePO }: PODetailModa
               </span>
             </div>
             <div className="flex justify-between border-t pt-1 font-medium text-foreground">
-              <span>Total Tagihan PO</span>
+              <span>Total</span>
               <span className="font-mono text-primary tabular-nums">
                 {formatCurrencyIDR(po.total)}
               </span>
@@ -125,7 +125,7 @@ export function PODetailModal({ po, isOpen, onClose, onReceivePO }: PODetailModa
               className="gap-1.5 text-xs"
             >
               <CheckCircle2 className="size-3.5" />
-              <span>Terima Barang Sekarang</span>
+              <span>Tandai diterima</span>
             </Button>
           ) : null}
         </DialogFooter>

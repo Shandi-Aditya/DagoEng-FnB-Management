@@ -15,6 +15,7 @@ import {
   calculateCommercialKPIs,
   filterLeases,
   buildCommercialExportData,
+  getLeaseStatusLabel,
 } from "@/features/commercial/commercial-domain";
 import { CommercialToolbar } from "@/features/commercial/CommercialToolbar";
 import { CommercialTable } from "@/features/commercial/CommercialTable";
@@ -75,7 +76,7 @@ export default function CommercialPage() {
       headers,
       rows
     );
-    notify.success("Data kontrak tenant komersial berhasil diekspor ke CSV.");
+    notify.success("Kontrak diekspor ke CSV");
   };
 
   const handleExportExcel = () => {
@@ -86,7 +87,7 @@ export default function CommercialPage() {
       headers,
       rows
     );
-    notify.success("Data kontrak tenant komersial berhasil diekspor ke Excel (.xls).");
+    notify.success("Kontrak diekspor ke Excel");
   };
 
   const handleCreateLeaseSubmit = (params: {
@@ -119,7 +120,7 @@ export default function CommercialPage() {
       status: "ACTIVE",
       notes: params.notes,
     });
-    notify.success(`Kontrak tenant "${params.tenantName}" berhasil didaftarkan.`);
+    notify.success(`Kontrak ${params.tenantName} ditambahkan`);
   };
 
   const handleRecordPaymentSubmit = (params: {
@@ -147,7 +148,7 @@ export default function CommercialPage() {
       referenceNo: params.referenceNo,
     });
 
-    notify.success(`Pembayaran sewa periode ${params.periodLabel} berhasil dicatat.`);
+    notify.success("Pembayaran sewa dicatat", params.periodLabel);
 
     if (selectedLease && selectedLease.id === params.leaseId) {
       const updated = filteredLeases.find((l) => l.id === params.leaseId);
@@ -161,7 +162,7 @@ export default function CommercialPage() {
     reason: string;
   }) => {
     updateLeaseStatus(params.leaseId, params.newStatus, params.reason);
-    notify.success(`Status kontrak berhasil diubah menjadi ${params.newStatus}.`);
+    notify.success(`Status kontrak: ${getLeaseStatusLabel(params.newStatus).toLowerCase()}`);
 
     if (selectedLease && selectedLease.id === params.leaseId) {
       const updated = filteredLeases.find((l) => l.id === params.leaseId);
@@ -188,7 +189,7 @@ export default function CommercialPage() {
         onOpenPDF={() => setIsPDFModalOpen(true)}
         onToggleModule={() => {
           toggleOrgModule("COMMERCIAL");
-          notify.info("Modul komersial dinonaktifkan.");
+          notify.info("Modul komersial dinonaktifkan");
         }}
         onOpenCreateModal={() => setIsCreateOpen(true)}
       />

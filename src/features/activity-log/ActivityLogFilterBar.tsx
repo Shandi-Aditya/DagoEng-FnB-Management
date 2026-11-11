@@ -53,7 +53,7 @@ export function ActivityLogFilterBar({
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Cari aksi, aktor, record ID, alasan..."
+            placeholder="Cari aksi, pelaku, ID data, atau alasan"
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9 text-xs"
@@ -68,7 +68,7 @@ export function ActivityLogFilterBar({
           </span>
           {[
             { key: "ALL", label: "Semua" },
-            { key: "TODAY", label: "Hari Ini" },
+            { key: "TODAY", label: "Hari ini" },
             { key: "LAST_7_DAYS", label: "7 Hari" },
             { key: "LAST_30_DAYS", label: "30 Hari" },
           ].map((d) => (
@@ -124,7 +124,7 @@ export function ActivityLogFilterBar({
             onChange={(e) => onActorChange(e.target.value)}
             className="h-8 text-xs font-medium"
           >
-            <option value="ALL">Semua User</option>
+            <option value="ALL">Semua pengguna</option>
             {uniqueActors.map((actor) => (
               <option key={actor} value={actor}>
                 {actor}
@@ -144,7 +144,7 @@ export function ActivityLogFilterBar({
             onChange={(e) => onRoleChange(e.target.value)}
             className="h-8 text-xs font-medium"
           >
-            <option value="ALL">Semua Role</option>
+            <option value="ALL">Semua jabatan</option>
             {uniqueRoles.map((role) => (
               <option key={role} value={role}>
                 {role}

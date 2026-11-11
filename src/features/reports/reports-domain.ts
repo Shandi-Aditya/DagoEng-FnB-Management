@@ -18,6 +18,7 @@ import { ActivityLogEntry } from "@/types/audit";
 import { EventTicketOrder } from "@/types/event";
 import { calculateSettlement, getTenantPayoutAccount, maskAccountNumber } from "@/lib/settlement";
 import { getOrderTaxBreakdown, aggregateOrdersTaxAndRevenue } from "@/lib/tax-breakdown";
+import { orderStatusLabel, paymentMethodLabel } from "@/features/orders/orders-domain";
 
 export type ReportType =
   | "SALES"
@@ -93,7 +94,7 @@ export function getReportCategories(params: {
     },
     {
       id: "SETTLEMENT",
-      label: "Settlement Mitra",
+      label: "Settlement mitra",
       count: `${params.tenantsCount} Tenant`,
     },
   ];
@@ -101,7 +102,7 @@ export function getReportCategories(params: {
   if (params.canAccessEvents) {
     categories.push({
       id: "EVENTS",
-      label: "Event & Tiket",
+      label: "Tiket event",
       count: `${params.paidEventsCount || 0} Peserta`,
     });
   }
@@ -109,22 +110,22 @@ export function getReportCategories(params: {
   categories.push(
     {
       id: "CLOSING",
-      label: "Closing Kasir",
+      label: "Closing kasir",
       count: `${params.shiftsCount} Shift`,
     },
     {
       id: "PRODUCTS",
-      label: "Sales & Margin",
+      label: "Produk dan margin",
       count: `${params.productsCount} Menu`,
     },
     {
       id: "INVENTORY",
-      label: "Mutasi Gudang",
+      label: "Stok bahan",
       count: `${params.materialsCount} Bahan`,
     },
     {
       id: "FINANCE_AUDIT",
-      label: "Finance Audit",
+      label: "Audit keuangan",
       count: `${params.logsCount} Log`,
     }
   );
@@ -198,50 +199,50 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         const disc = getOrderTaxBreakdown(o).discount;
         return [
           o.orderNumber || o.id,
-          o.customerName || "Walk-in Guest",
-          o.tableNumber ? `Meja ${o.tableNumber}` : o.orderType || "DINE_IN",
+          o.customerName || "Tamu",
+          o.tableNumber ? `Meja ${o.tableNumber}` : o.orderType === "DELIVERY" ? "Delivery" : "Takeaway",
           o.createdAt.split("T")[0],
           promoName,
           disc > 0 ? `-Rp ${disc.toLocaleString("id-ID")}` : "-",
-          o.status,
-          o.paymentMethod || "QRIS",
+          orderStatusLabel(o.status),
+          paymentMethodLabel(o.paymentMethod),
           `Rp ${o.total.toLocaleString("id-ID")}`,
         ];
       });
 
       return {
-        title: "Laporan Penjualan & Revenue POS",
-        subtitle: `Rincian seluruh transaksi kasir dan pesanan terselesaikan di ${scopeName}`,
+        title: "Laporan penjualan POS",
+        subtitle: `Semua transaksi kasir di ${scopeName}`,
         summaryCards: [
-          { label: "Total Omset (Revenue)", value: `Rp ${totalRevenue.toLocaleString("id-ID")}` },
-          { label: "Jumlah Transaksi", value: `${totalOrdersCount} Order` },
-          { label: "Total Diskon Promo", value: `Rp ${totalDiscounts.toLocaleString("id-ID")}` },
-          { label: "Item Terjual", value: `${totalItemsSold} Pcs` },
+          { label: "Omzet", value: `Rp ${totalRevenue.toLocaleString("id-ID")}` },
+          { label: "Transaksi", value: `${totalOrdersCount} pesanan` },
+          { label: "Diskon promo", value: `Rp ${totalDiscounts.toLocaleString("id-ID")}` },
+          { label: "Item terjual", value: `${totalItemsSold} item` },
         ],
         tableHeaders: [
-          "ID Order",
-          "Customer",
-          "Meja/Tipe",
-          "Waktu",
+          "Pesanan",
+          "Tamu",
+          "Meja atau tipe",
+          "Tanggal",
           "Promo",
           "Diskon",
           "Status",
-          "Metode Bayar",
+          "Metode bayar",
           "Total (Rp)",
         ],
         tableRows,
         reconciliationInfo: [
-          { label: "Total Pajak PB1", value: `Rp ${aggregatedTax.totalTaxPB1.toLocaleString("id-ID")}` },
+          { label: "PB1", value: `Rp ${aggregatedTax.totalTaxPB1.toLocaleString("id-ID")}` },
           {
-            label: "Total Service Charge",
+            label: "Service charge",
             value: `Rp ${aggregatedTax.totalServiceCharge.toLocaleString("id-ID")}`,
           },
-          { label: "Total Diskon Promo", value: `Rp ${totalDiscounts.toLocaleString("id-ID")}` },
+          { label: "Diskon promo", value: `Rp ${totalDiscounts.toLocaleString("id-ID")}` },
           {
-            label: "Metode Non-Tunai / QRIS",
+            label: "Nontunai",
             value: `Rp ${totalNonCashRevenue.toLocaleString("id-ID")}`,
           },
-          { label: "Metode Kas Tunai", value: `Rp ${totalCashRevenue.toLocaleString("id-ID")}` },
+          { label: "Tunai", value: `Rp ${totalCashRevenue.toLocaleString("id-ID")}` },
         ],
       };
     }
@@ -263,27 +264,27 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
       ]);
 
       return {
-        title: "Laporan Rekonsiliasi Kasir & Shift Closing",
-        subtitle: `Pencocokan modal awal, penjualan kas, dan fisik drawer di ${scopeName}`,
+        title: "Laporan closing kasir",
+        subtitle: `Modal awal, penjualan tunai, dan kas fisik per shift di ${scopeName}`,
         summaryCards: [
-          { label: "Total Shift Selesai", value: `${closedShifts.length} Shift` },
-          { label: "Akumulasi Kas Drawer", value: `Rp ${totalActualCash.toLocaleString("id-ID")}` },
-          { label: "Total Selisih Kas", value: `Rp ${totalVariance.toLocaleString("id-ID")}` },
+          { label: "Shift ditutup", value: `${closedShifts.length} shift` },
+          { label: "Kas fisik", value: `Rp ${totalActualCash.toLocaleString("id-ID")}` },
+          { label: "Selisih kas", value: `Rp ${totalVariance.toLocaleString("id-ID")}` },
         ],
         tableHeaders: [
-          "Shift ID",
-          "Nama Shift",
+          "ID shift",
+          "Shift",
           "Kasir",
-          "Modal Awal",
-          "Penjualan Tunai",
-          "Target Fisik",
-          "Kas Nyata",
+          "Modal awal",
+          "Penjualan tunai",
+          "Kas seharusnya",
+          "Kas fisik",
           "Selisih",
         ],
         tableRows,
         reconciliationInfo: [
-          { label: "Status Rekonsiliasi", value: "Tervalidasi Cashier Closing" },
-          { label: "Petugas Pelapor", value: operatorName || "Staf Operasional" },
+          { label: "Status kas", value: totalVariance === 0 ? "Seimbang" : "Ada selisih" },
+          { label: "Dibuat oleh", value: operatorName || "Staf" },
         ],
       };
     }
@@ -311,20 +312,20 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
       const topProduct = findTopProduct(orders);
 
       return {
-        title: "Laporan Penjualan Produk & COGS / Gross Margin",
-        subtitle: `Kinerja profitabilitas menu F&B dan margin kotor di ${scopeName}`,
+        title: "Laporan produk dan margin",
+        subtitle: `Harga jual, estimasi HPP, dan margin kotor menu di ${scopeName}`,
         summaryCards: [
-          { label: "Total SKU Terdaftar", value: `${products.length} Produk` },
-          { label: "Rata-rata Gross Margin", value: `${avgMarginPct}%` },
-          { label: "Top Product Terlaris", value: topProduct },
+          { label: "Menu terdaftar", value: `${products.length} menu` },
+          { label: "Rata-rata margin kotor", value: `${avgMarginPct}%` },
+          { label: "Paling laris", value: topProduct },
         ],
         tableHeaders: [
-          "Kode SKU",
-          "Nama Produk",
+          "SKU",
+          "Menu",
           "Kategori",
-          "Harga Jual",
+          "Harga jual",
           "Estimasi HPP",
-          "Margin Kotor (Rp)",
+          "Margin kotor (Rp)",
           "Margin (%)",
         ],
         tableRows,
@@ -349,24 +350,24 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
       ]);
 
       return {
-        title: "Laporan Mutasi Inventory & Stok Bahan Baku",
-        subtitle: `Posisi stok aktual, konsumsi resep (BOM), dan nilai gudang di ${scopeName}`,
+        title: "Laporan stok bahan",
+        subtitle: `Posisi stok, batas minimum, dan nilai stok di ${scopeName}`,
         summaryCards: [
-          { label: "Total Bahan Baku", value: `${ingredients.length} Item` },
-          { label: "Item Kritis / Habis", value: `${criticalItems.length} Item` },
+          { label: "Bahan terdaftar", value: `${ingredients.length} bahan` },
+          { label: "Kritis atau habis", value: `${criticalItems.length} bahan` },
           {
-            label: "Total Nilai Inventori",
+            label: "Nilai stok",
             value: `Rp ${totalInventoryValuation.toLocaleString("id-ID")}`,
           },
         ],
         tableHeaders: [
-          "Nama Bahan",
+          "Bahan",
           "Kategori",
-          "Stok Sistem",
-          "Min. Buffer",
+          "Stok",
+          "Minimum",
           "Satuan",
-          "Harga Satuan",
-          "Total Valuasi",
+          "Harga satuan",
+          "Nilai stok",
         ],
         tableRows,
       };
@@ -383,20 +384,22 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
       ]);
 
       return {
-        title: "Laporan Audit Trail Finansial & Void/Refund",
-        subtitle: `Rekam jejak seluruh mutasi dana, penyesuaian kas, dan transaksi di ${scopeName}`,
+        title: "Laporan audit keuangan",
+        subtitle: `Void, refund, penyesuaian kas, dan perubahan transaksi di ${scopeName}`,
         summaryCards: [
-          { label: "Total Aktivitas Keuangan", value: `${logs.length} Entri` },
-          { label: "Status Audit", value: "Terverifikasi Sistem" },
-          { label: "Keamanan Log", value: "Immutable (Kekal)" },
+          { label: "Aktivitas tercatat", value: `${logs.length} entri` },
+          {
+            label: "Pelaku",
+            value: `${new Set(logs.map((l) => l.actorName || l.userName || "-")).size} orang`,
+          },
         ],
         tableHeaders: [
-          "Timestamp",
-          "Aktor",
+          "Tanggal",
+          "Pelaku",
           "Modul",
           "Aksi",
-          "Perubahan Data / Nominal",
-          "Alasan / Notes",
+          "Perubahan",
+          "Alasan",
         ],
         tableRows,
       };
@@ -413,7 +416,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         const payout = getTenantPayoutAccount(s.tenantId);
         const payoutDisplay =
           s.tenantId === "DAGO_HUB"
-            ? "Rekening Pusat DAGO"
+            ? "Rekening pusat DAGO"
             : `${payout.bankName} ${maskAccountNumber(payout.accountNumber)}`;
         const splitDisplay =
           s.tenantId === "DAGO_HUB"
@@ -434,24 +437,24 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
       });
 
       return {
-        title: "Laporan Settlement & Bagi Hasil Mitra",
-        subtitle: `Rincian alokasi pendapatan, rekening tujuan pencairan, dan bagi hasil untuk Dago Hub dan Mitra di ${scopeName}`,
+        title: "Laporan settlement mitra",
+        subtitle: `Bagi hasil dan rekening pencairan tiap mitra di ${scopeName}`,
         summaryCards: [
-          { label: "Total Net Settlement", value: `Rp ${totalNetSettlement.toLocaleString("id-ID")}` },
-          { label: "Total Bagian Mitra", value: `Rp ${totalTenantShare.toLocaleString("id-ID")}` },
-          { label: "Total Bagian DAGO", value: `Rp ${totalDagoShare.toLocaleString("id-ID")}` },
-          { label: "Total Diskon (Prorata)", value: `Rp ${totalDiscount.toLocaleString("id-ID")}` },
+          { label: "Settlement bersih", value: `Rp ${totalNetSettlement.toLocaleString("id-ID")}` },
+          { label: "Bagian mitra", value: `Rp ${totalTenantShare.toLocaleString("id-ID")}` },
+          { label: "Bagian DAGO", value: `Rp ${totalDagoShare.toLocaleString("id-ID")}` },
+          { label: "Diskon (prorata)", value: `Rp ${totalDiscount.toLocaleString("id-ID")}` },
         ],
         tableHeaders: [
-          "Tenant ID",
-          "Tenant Name",
-          "Rekening Pencairan",
-          "Skema Bagi Hasil",
-          "Trx",
-          "Gross (Rp)",
-          "Bagian Mitra (Rp)",
+          "ID mitra",
+          "Mitra",
+          "Rekening pencairan",
+          "Bagi hasil",
+          "Transaksi",
+          "Kotor (Rp)",
+          "Bagian mitra (Rp)",
           "Bagian DAGO (Rp)",
-          "Net Settlement",
+          "Bersih (Rp)",
         ],
         tableRows,
       };
@@ -479,37 +482,36 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
       ]);
 
       return {
-        title: "Laporan Pendapatan & Tiket Event Komunitas",
-        subtitle: `Rekapitulasi penjualan tiket dan skema bagi hasil 20% Dago Creative Hub di ${scopeName}`,
+        title: "Laporan tiket event",
+        subtitle: `Penjualan tiket dan bagi hasil event komunitas di ${scopeName}`,
         summaryCards: [
-          { label: "Total Omset Tiket", value: `Rp ${totalEventGross.toLocaleString("id-ID")}` },
-          { label: "Total Tiket Terjual", value: `${totalTicketsCount} Tiket` },
+          { label: "Omzet tiket", value: `Rp ${totalEventGross.toLocaleString("id-ID")}` },
+          { label: "Tiket terjual", value: `${totalTicketsCount} tiket` },
           {
-            label: "Fee Platform Dago (20%)",
+            label: "Fee DAGO (20%)",
             value: `Rp ${totalEventPlatformFee.toLocaleString("id-ID")}`,
           },
           {
-            label: "Payout Komunitas (80%)",
+            label: "Bagian komunitas (80%)",
             value: `Rp ${totalEventOrganizerPayout.toLocaleString("id-ID")}`,
           },
         ],
         tableHeaders: [
-          "Kode Tiket",
-          "Nama Event",
-          "Nama Peserta",
-          "No WhatsApp",
-          "Qty Tiket",
-          "Metode Bayar",
-          "Status Bayar",
-          "Check-In",
-          "Total Omset (Rp)",
-          "Fee Dago 20% (Rp)",
-          "Payout Komunitas 80% (Rp)",
+          "Kode tiket",
+          "Event",
+          "Peserta",
+          "WhatsApp",
+          "Jumlah tiket",
+          "Metode bayar",
+          "Status bayar",
+          "Check-in",
+          "Omzet (Rp)",
+          "Fee DAGO 20% (Rp)",
+          "Bagian komunitas 80% (Rp)",
         ],
         tableRows,
         reconciliationInfo: [
-          { label: "Model Bagi Hasil", value: "20% Dago Creative Hub / 80% Komunitas" },
-          { label: "Gateway Tiket", value: "Sistem Terintegrasi DAGO (Simulasi QRIS / Tunai)" },
+          { label: "Bagi hasil", value: "20% DAGO, 80% komunitas" },
         ],
       };
     }

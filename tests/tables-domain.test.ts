@@ -36,7 +36,7 @@ function makeReservation(id: string, overrides: Partial<ScheduledReservation> = 
     tableId: "T-01",
     areaName: "Indoor AC",
     outletId: "outlet-sgr",
-    dateTime: "Hari Ini, 19:00 WITA",
+    dateTime: "Hari ini, 19:00 WITA",
     pax: 4,
     downPayment: 100000,
     status: "CONFIRMED",
@@ -93,7 +93,8 @@ describe("tableStatusTone and tableStatusLabel", () => {
     expect(tableStatusLabel("AVAILABLE")).toBe("Tersedia");
     expect(tableStatusLabel("OCCUPIED")).toBe("Terisi");
     expect(tableStatusLabel("RESERVED")).toBe("Reservasi");
-    expect(tableStatusLabel("CLEANING")).toBe("Pembersihan");
+    expect(tableStatusLabel("BILLING")).toBe("Menunggu bayar");
+    expect(tableStatusLabel("CLEANING")).toBe("Dibersihkan");
   });
 });
 
@@ -104,7 +105,7 @@ describe("reservationStatusTone and reservationStatusLabel", () => {
     expect(reservationStatusTone("CANCELLED")).toBe("destructive");
 
     expect(reservationStatusLabel("CONFIRMED")).toBe("Menunggu");
-    expect(reservationStatusLabel("SEATED")).toBe("Sudah Duduk");
+    expect(reservationStatusLabel("SEATED")).toBe("Sudah duduk");
     expect(reservationStatusLabel("CANCELLED")).toBe("Dibatalkan");
   });
 });
@@ -116,7 +117,7 @@ describe("formatReservationDateTime", () => {
     tomorrowDate.setDate(tomorrowDate.getDate() + 1);
     const tomorrow = tomorrowDate.toISOString().split("T")[0];
 
-    expect(formatReservationDateTime(today, "19:00")).toBe("Hari Ini, 19:00 WITA");
+    expect(formatReservationDateTime(today, "19:00")).toBe("Hari ini, 19:00 WITA");
     expect(formatReservationDateTime(tomorrow, "20:00")).toBe("Besok, 20:00 WITA");
   });
 });

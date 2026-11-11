@@ -68,7 +68,7 @@ export function CreatePOModal({
         <DialogHeader>
           <div className="flex items-center gap-2">
             <Truck className="size-4 text-primary" />
-            <DialogTitle className="text-base font-medium">Buat Purchase Order (PO)</DialogTitle>
+            <DialogTitle className="text-base font-medium">Buat PO</DialogTitle>
           </div>
           <DialogDescription className="text-xs">
             Terbitkan surat pesanan resmi pengadaan bahan baku ke supplier rekanan.
@@ -77,7 +77,7 @@ export function CreatePOModal({
 
         <form onSubmit={handleSubmit} className="space-y-3 text-xs">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Nama Supplier</label>
+            <label className="text-xs font-medium text-foreground">Pemasok</label>
             <Input
               required
               value={supplier}
@@ -88,7 +88,7 @@ export function CreatePOModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">Pilih Bahan Baku</label>
+              <label className="text-xs font-medium text-foreground">Bahan</label>
               <NativeSelect
                 value={itemId}
                 onChange={(e) => {
@@ -125,25 +125,25 @@ export function CreatePOModal({
           {/* Cost Summary Box */}
           <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">
             <div className="flex justify-between text-muted-foreground">
-              <span>Harga Satuan:</span>
+              <span>Harga satuan</span>
               <span className="font-mono tabular-nums text-foreground">
                 {formatCurrencyIDR(unitPrice)}
               </span>
             </div>
             <div className="flex justify-between text-muted-foreground">
-              <span>Subtotal:</span>
+              <span>Subtotal</span>
               <span className="font-mono tabular-nums text-foreground">
                 {formatCurrencyIDR(subtotal)}
               </span>
             </div>
             <div className="flex justify-between text-muted-foreground">
-              <span>PPN 11%:</span>
+              <span>PPN 11%</span>
               <span className="font-mono tabular-nums text-foreground">
                 +{formatCurrencyIDR(tax)}
               </span>
             </div>
             <div className="flex justify-between border-t pt-1 font-medium text-foreground">
-              <span>Total Estimasi Tagihan:</span>
+              <span>Perkiraan total</span>
               <span className="font-mono text-primary tabular-nums">
                 {formatCurrencyIDR(total)}
               </span>
@@ -151,7 +151,7 @@ export function CreatePOModal({
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-medium text-foreground">Catatan Pesanan</label>
+            <label className="text-xs font-medium text-foreground">Catatan</label>
             <Input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}

@@ -60,7 +60,7 @@ export function EmployeeDetailModal({
           {/* Info Grid */}
           <div className="grid grid-cols-2 gap-3 p-3.5 rounded-lg border bg-muted/30 text-xs">
             <div>
-              <span className="text-muted-foreground block text-[10px]">Kontak WhatsApp</span>
+              <span className="text-muted-foreground block text-[10px]">WhatsApp</span>
               <span className="font-mono font-medium text-foreground">{employee.contact}</span>
             </div>
             <div>
@@ -68,11 +68,11 @@ export function EmployeeDetailModal({
               <span className="font-medium text-foreground">{employee.email || "-"}</span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Shift Penugasan</span>
+              <span className="text-muted-foreground block text-[10px]">Shift</span>
               <span className="font-medium text-foreground">{employee.assignedShift}</span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Tanggal Bergabung</span>
+              <span className="text-muted-foreground block text-[10px]">Bergabung</span>
               <span className="font-medium text-foreground">{employee.joinedDate}</span>
             </div>
             <div>
@@ -82,7 +82,7 @@ export function EmployeeDetailModal({
               </StatusBadge>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Status Kepegawaian</span>
+              <span className="text-muted-foreground block text-[10px]">Status</span>
               <StatusBadge status={statusTone} className="text-[10px] mt-0.5">
                 {employee.status}
               </StatusBadge>

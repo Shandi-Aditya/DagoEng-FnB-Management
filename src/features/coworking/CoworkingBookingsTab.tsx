@@ -83,7 +83,7 @@ export function CoworkingBookingsTab({
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Cari kode booking, nama tamu, atau ruang..."
+              placeholder="Cari kode booking, tamu, atau ruang"
               className="h-8 pl-8 text-xs"
             />
           </div>
@@ -143,12 +143,12 @@ export function CoworkingBookingsTab({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[180px]">No. Booking & Tamu</TableHead>
-                <TableHead>Ruang / Meja</TableHead>
-                <TableHead>Jadwal & Durasi</TableHead>
-                <TableHead>Total Tagihan</TableHead>
-                <TableHead>Status Bayar</TableHead>
-                <TableHead>Status Sesi</TableHead>
+                <TableHead className="w-[180px]">Booking</TableHead>
+                <TableHead>Ruang</TableHead>
+                <TableHead>Jadwal</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Pembayaran</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
               </TableRow>
             </TableHeader>

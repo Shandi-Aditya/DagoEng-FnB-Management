@@ -191,24 +191,21 @@ export function poStatusLabel(status: PurchaseOrder["status"]): string {
   }
 }
 
+const OPNAME_REASON_LABEL: Record<StockOpnameReason, string> = {
+  RECORDING_ERROR: "Salah catat",
+  WASTE: "Limbah",
+  LOSS: "Hilang",
+  DAMAGED: "Rusak",
+  EXPIRATION: "Kedaluwarsa",
+  SAMPLE_PROMO: "Sampel promo",
+  OTHER: "Lainnya",
+};
+
+/** Opname variance reasons in display order; the single source for filters and forms. */
+export const OPNAME_REASONS = Object.keys(OPNAME_REASON_LABEL) as StockOpnameReason[];
+
 export function opnameReasonLabel(reason: StockOpnameReason): string {
-  switch (reason) {
-    case "RECORDING_ERROR":
-      return "Kesalahan Catat";
-    case "WASTE":
-      return "Waste Operasional";
-    case "LOSS":
-      return "Kehilangan / Hilang";
-    case "DAMAGED":
-      return "Kerusakan Fisik";
-    case "EXPIRATION":
-      return "Kadaluwarsa";
-    case "SAMPLE_PROMO":
-      return "Sample Promo";
-    case "OTHER":
-    default:
-      return "Lainnya";
-  }
+  return OPNAME_REASON_LABEL[reason] ?? OPNAME_REASON_LABEL.OTHER;
 }
 
 export function buildStockExportData(

@@ -99,7 +99,7 @@ export default function CoworkingPage() {
       outletScopeName
     );
     downloadCSV(`${filename}_${Date.now()}`, headers, rows);
-    notify.success("Ekspor CSV berhasil", `Data ${activeTab === "MEMBERS" ? "member" : "booking"} berhasil diunduh.`);
+    notify.success(`Data ${activeTab === "MEMBERS" ? "member" : "booking"} diekspor ke CSV`);
   };
 
   const handleExportExcel = () => {
@@ -110,7 +110,7 @@ export default function CoworkingPage() {
       outletScopeName
     );
     downloadExcel(`${filename}_${Date.now()}`, sheet, headers, rows);
-    notify.success("Ekspor Excel berhasil", `Data ${activeTab === "MEMBERS" ? "member" : "booking"} berhasil diunduh.`);
+    notify.success(`Data ${activeTab === "MEMBERS" ? "member" : "booking"} diekspor ke Excel`);
   };
 
   const handleCreateBooking = (bookingData: {
@@ -155,7 +155,7 @@ export default function CoworkingPage() {
       checkInStatus: bookingData.isImmediateCheckIn ? "CHECKED_IN" : "RESERVED",
     });
 
-    notify.success("Pemesanan dibuat", `Sesi co-working untuk ${bookingData.guestName} berhasil dicatat.`);
+    notify.success("Booking dibuat", bookingData.guestName);
   };
 
   const handleCreateMember = (params: {
@@ -198,17 +198,17 @@ export default function CoworkingPage() {
       }
     );
 
-    notify.success("Member didaftarkan", `Member ${params.name} aktif.`);
+    notify.success(`${params.name} terdaftar sebagai member`);
   };
 
   const handleCheckoutSpace = (spaceId: string) => {
     checkoutSpace(spaceId);
-    notify.success("Check-out selesai", "Ruang atau meja kembali tersedia.");
+    notify.success("Check-out selesai", "Ruang kembali tersedia.");
   };
 
   const handleCheckInBooking = (bookingId: string) => {
     checkInBooking(bookingId);
-    notify.success("Check-in berhasil", "Sesi operasional aktif.");
+    notify.success("Tamu sudah check-in");
   };
 
   const handleOpenReceipt = (b: CoworkingBooking) => {

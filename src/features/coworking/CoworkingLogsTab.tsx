@@ -21,8 +21,8 @@ export function CoworkingLogsTab({ logs }: CoworkingLogsTabProps) {
     return (
       <EmptyState
         icon={<History className="size-8 text-muted-foreground" />}
-        title="Belum ada riwayat aktivitas"
-        description="Aktivitas check-in dan check-out tamu akan tercatat secara otomatis di sini."
+        title="Belum ada aktivitas"
+        description="Check-in dan check-out tamu tercatat di sini."
       />
     );
   }
@@ -33,12 +33,12 @@ export function CoworkingLogsTab({ logs }: CoworkingLogsTabProps) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[200px]">Tamu & Kode Booking</TableHead>
-              <TableHead>Ruang / Meja</TableHead>
-              <TableHead>Waktu Check-In & PIC</TableHead>
-              <TableHead>Waktu Check-Out & PIC</TableHead>
-              <TableHead>Durasi Pemakaian</TableHead>
-              <TableHead className="text-center">Status Sesi</TableHead>
+              <TableHead className="w-[200px]">Tamu</TableHead>
+              <TableHead>Ruang</TableHead>
+              <TableHead>Check-in</TableHead>
+              <TableHead>Check-out</TableHead>
+              <TableHead>Durasi</TableHead>
+              <TableHead className="text-center">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

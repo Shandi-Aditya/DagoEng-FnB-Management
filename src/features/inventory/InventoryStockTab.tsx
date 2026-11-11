@@ -111,7 +111,7 @@ export function InventoryStockTab({
             <Input
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Cari nama bahan atau supplier..."
+              placeholder="Cari bahan atau pemasok"
               className="h-8 pl-8 text-xs"
             />
           </div>
@@ -121,7 +121,7 @@ export function InventoryStockTab({
             onChange={(e) => onCategoryFilterChange(e.target.value)}
             className="h-8 text-xs"
           >
-            <option value="ALL">Semua Kategori</option>
+            <option value="ALL">Semua kategori</option>
             {categories.map((c) => (
               <option key={c} value={c}>
                 {c}
@@ -134,11 +134,11 @@ export function InventoryStockTab({
             onChange={(e) => onStatusFilterChange(e.target.value)}
             className="h-8 text-xs"
           >
-            <option value="ALL">Semua Status</option>
+            <option value="ALL">Semua status</option>
             <option value="SAFE">Aman</option>
             <option value="LOW">Menipis</option>
             <option value="CRITICAL">Kritis</option>
-            <option value="OUT_OF_STOCK">Habis (0)</option>
+            <option value="OUT_OF_STOCK">Habis</option>
           </NativeSelect>
 
           {isFiltered ? (
@@ -184,13 +184,13 @@ export function InventoryStockTab({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[180px]">Bahan Baku</TableHead>
+              <TableHead className="w-[180px]">Bahan</TableHead>
               <TableHead>Kategori</TableHead>
-              <TableHead>Sisa Stok</TableHead>
-              <TableHead>Harga Pokok (HPP)</TableHead>
-              <TableHead>Total Nilai Aset</TableHead>
+              <TableHead>Stok</TableHead>
+              <TableHead>HPP</TableHead>
+              <TableHead>Nilai stok</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Supplier</TableHead>
+              <TableHead>Pemasok</TableHead>
               <TableHead className="text-right">Aksi</TableHead>
             </TableRow>
           </TableHeader>
@@ -200,8 +200,8 @@ export function InventoryStockTab({
                 <TableCell colSpan={8} className="py-12">
                   <EmptyState
                     icon={<Package className="size-6 text-muted-foreground" />}
-                    title="Tidak ada bahan baku ditemukan"
-                    description="Coba ubah kata kunci pencarian atau reset filter."
+                    title="Bahan tidak ditemukan"
+                    description="Ubah kata kunci atau filter."
                   />
                 </TableCell>
               </TableRow>
@@ -323,7 +323,7 @@ export function InventoryStockTab({
           <CardHeader className="py-3 border-b bg-muted/20">
             <CardTitle className="text-xs font-medium text-foreground flex items-center gap-1.5">
               <History className="size-3.5 text-muted-foreground" />
-              <span>Riwayat Mutasi & Penyesuaian Terkini</span>
+              <span>Perubahan stok terakhir</span>
             </CardTitle>
           </CardHeader>
           <CardContent className="p-3">
