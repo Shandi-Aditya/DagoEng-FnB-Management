@@ -1,36 +1,38 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Clock, Users } from "lucide-react";
-import { useOutlet } from "@/contexts/OutletContext";
+
+import { notify } from "@/components/app/notify";
+import { StatCard } from "@/components/app/stat-card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useOrders } from "@/contexts/OrderContext";
-import type { EmployeeProfile, ShiftRecord } from "@/types/shift";
-import { notify } from "@/components/app/notify";
-import { StatCard } from "@/components/app/stat-card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useOutlet } from "@/contexts/OutletContext";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
-import { DailyClosingPDFModal } from "@/features/pos/DailyClosingPDFModal";
-import { EmployeesReportPDFModal } from "@/features/employees/EmployeesReportPDFModal";
+import type { EmployeeProfile, ShiftRecord } from "@/types/shift";
 
-import {
-  calculateEmployeeKPIs,
-  filterEmployees,
-  filterShifts,
-  buildEmployeeExportData,
-  buildClosingReportData,
-  type EmployeeDepartment,
-} from "@/features/employees/employees-domain";
-import { EmployeesToolbar } from "@/features/employees/EmployeesToolbar";
-import { EmployeesShiftsTab } from "@/features/employees/EmployeesShiftsTab";
-import { EmployeesDirectoryTab } from "@/features/employees/EmployeesDirectoryTab";
 import { AddEmployeeModal } from "@/features/employees/AddEmployeeModal";
-import { EditEmployeeModal } from "@/features/employees/EditEmployeeModal";
-import { EmployeeDetailModal } from "@/features/employees/EmployeeDetailModal";
-import { OpenShiftModal } from "@/features/employees/OpenShiftModal";
 import { CloseShiftModal } from "@/features/employees/CloseShiftModal";
 import { DeleteEmployeeDialog } from "@/features/employees/DeleteEmployeeDialog";
+import { EditEmployeeModal } from "@/features/employees/EditEmployeeModal";
+import { EmployeeDetailModal } from "@/features/employees/EmployeeDetailModal";
+import {
+  buildClosingReportData,
+  buildEmployeeExportData,
+  calculateEmployeeKPIs,
+  type EmployeeDepartment,
+  filterEmployees,
+  filterShifts,
+} from "@/features/employees/employees-domain";
+import { EmployeesDirectoryTab } from "@/features/employees/EmployeesDirectoryTab";
+import { EmployeesReportPDFModal } from "@/features/employees/EmployeesReportPDFModal";
+import { EmployeesShiftsTab } from "@/features/employees/EmployeesShiftsTab";
+import { EmployeesToolbar } from "@/features/employees/EmployeesToolbar";
+import { OpenShiftModal } from "@/features/employees/OpenShiftModal";
+import { DailyClosingPDFModal } from "@/features/pos/DailyClosingPDFModal";
 
 export default function EmployeesPage() {
   const { activeOutlet, activeOutletId } = useOutlet();
@@ -210,26 +212,26 @@ export default function EmployeesPage() {
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <StatCard
-          label="Total Karyawan"
-          value={`${kpis.totalEmployeesCount}`}
-          hint="Staf terdaftar"
+          label="Staf aktif"
+          value={String(kpis.activeEmployeesCount)}
+          hint="status bertugas"
         />
         <StatCard
-          label="Staf Aktif"
-          value={`${kpis.activeEmployeesCount}`}
-          hint="Status bertugas"
+          label="Shift berjalan"
+          value={activeShift ? activeShift.shiftName : "Tidak ada"}
+          hint={activeShift ? `Kasir: ${activeShift.assignedCashierName}` : "shift kasir belum dibuka"}
         />
         <StatCard
-          label="Shift Berjalan"
-          value={`${kpis.activeShiftsCount}`}
-          hint={activeShift ? activeShift.shiftName : "Tidak ada shift"}
+          label="Total staf"
+          value={String(kpis.totalEmployeesCount)}
+          hint={`di ${activeOutlet?.name || "outlet aktif"}`}
         />
         <StatCard
-          label="Total Riwayat Shift"
-          value={`${kpis.totalShiftsCount}`}
-          hint="Shift terekam"
+          label="Riwayat shift"
+          value={String(kpis.totalShiftsCount)}
+          hint="shift tercatat"
         />
       </div>
 
@@ -242,20 +244,26 @@ export default function EmployeesPage() {
         }}
         className="space-y-4"
       >
-        <TabsList className="grid grid-cols-2 w-full sm:w-auto h-auto p-1 gap-1">
-          <TabsTrigger value="SHIFTS" className="text-xs gap-1.5 py-1.5">
-            <Clock className="w-3.5 h-3.5 text-primary" />
-            <span>Rekonsiliasi Shift ({filteredShifts.length})</span>
+        <TabsList aria-label="Pilihan modul karyawan dan shift">
+          <TabsTrigger value="SHIFTS">
+            <Clock />
+            <span>Rekonsiliasi shift</span>
+            <Badge variant="secondary" className="ml-1 tabular-nums">
+              {filteredShifts.length}
+            </Badge>
           </TabsTrigger>
-          <TabsTrigger value="EMPLOYEES" className="text-xs gap-1.5 py-1.5">
-            <Users className="w-3.5 h-3.5 text-primary" />
-            <span>Direktori Karyawan ({filteredEmployees.length})</span>
+          <TabsTrigger value="EMPLOYEES">
+            <Users />
+            <span>Direktori staf</span>
+            <Badge variant="secondary" className="ml-1 tabular-nums">
+              {filteredEmployees.length}
+            </Badge>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="SHIFTS">
           <EmployeesShiftsTab
-            shifts={filteredShifts}
+            shifts={displayedShifts}
             activeShift={activeShift}
             onOpenCloseShiftModal={() => setIsCloseShiftModalOpen(true)}
             onOpenStartShiftModal={() => setIsOpenShiftModalOpen(true)}

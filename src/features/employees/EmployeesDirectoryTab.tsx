@@ -1,11 +1,15 @@
-import { useState, useMemo } from "react";
-import {
-  Search,
-  Users,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
-import type { EmployeeProfile } from "@/types/shift";
+"use client";
+
+import { useMemo, useState } from "react";
+import { Search, Users } from "lucide-react";
+
+import { DataPagination } from "@/components/app/data-pagination";
+import { EmptyState } from "@/components/app/empty-state";
+import { StatusBadge } from "@/components/app/status-badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -14,16 +18,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { StatusBadge } from "@/components/app/status-badge";
-import { EmptyState } from "@/components/app/empty-state";
-import { NativeSelect } from "@/components/ui/native-select";
+import type { EmployeeProfile } from "@/types/shift";
+
 import {
+  emptyEmployeeMessage,
   getDepartmentBadgeTone,
-  getEmployeeStatusLabel, getEmployeeStatusTone,
-  ROLE_DEFAULT_PERMISSIONS,
+  getEmployeeStatusLabel,
+  getEmployeeStatusTone,
 } from "./employees-domain";
 
 export interface EmployeesDirectoryTabProps {
@@ -41,16 +42,21 @@ export interface EmployeesDirectoryTabProps {
 }
 
 const DEPARTMENTS = [
-  "ALL",
-  "Management",
-  "Service",
-  "Kitchen",
-  "Barista",
-  "Cashier",
-  "Inventory",
+  { id: "ALL", label: "Semua divisi" },
+  { id: "Management", label: "Management" },
+  { id: "Service", label: "Service" },
+  { id: "Kitchen", label: "Kitchen" },
+  { id: "Barista", label: "Barista" },
+  { id: "Cashier", label: "Cashier" },
+  { id: "Inventory", label: "Inventory" },
 ];
 
-const STATUSES = ["ALL", "AKTIF", "CUTI", "NON-AKTIF"];
+const STATUSES = [
+  { id: "ALL", label: "Semua status" },
+  { id: "AKTIF", label: "Aktif" },
+  { id: "CUTI", label: "Cuti" },
+  { id: "NON-AKTIF", label: "Nonaktif" },
+];
 
 export function EmployeesDirectoryTab({
   employees,
@@ -62,7 +68,7 @@ export function EmployeesDirectoryTab({
   onStatusFilterChange,
   onSelectDetail,
   onSelectEdit,
-  onToggleStatus,
+  onToggleStatus: _onToggleStatus,
   onSelectDelete,
 }: EmployeesDirectoryTabProps) {
   const [currentPage, setCurrentPage] = useState(1);
@@ -85,23 +91,28 @@ export function EmployeesDirectoryTab({
     return employees.slice(start, start + pageSize);
   }, [employees, safeCurrentPage, pageSize]);
 
+  const emptyCopy = emptyEmployeeMessage(isFiltered);
+
   return (
     <div className="space-y-4">
       {/* Controls Bar */}
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 flex-wrap items-center gap-2">
-          <div className="relative min-w-[200px] flex-1 max-w-xs">
-            <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
-            <Input
+          <InputGroup className="max-w-xs flex-1">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
               value={searchQuery}
               onChange={(e) => {
                 onSearchChange(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder="Cari nama, jabatan, NIK, atau departemen"
-              className="h-8 pl-8 text-xs"
+              placeholder="Cari nama, WhatsApp, email, atau peran"
+              aria-label="Cari staf"
             />
-          </div>
+          </InputGroup>
 
           <NativeSelect
             value={deptFilter}
@@ -109,12 +120,11 @@ export function EmployeesDirectoryTab({
               onDeptFilterChange(e.target.value);
               setCurrentPage(1);
             }}
-            className="h-8 text-xs font-medium"
+            aria-label="Filter divisi"
           >
-            <option value="ALL">Semua departemen</option>
-            {DEPARTMENTS.filter((d) => d !== "ALL").map((dept) => (
-              <option key={dept} value={dept}>
-                {dept}
+            {DEPARTMENTS.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.label}
               </option>
             ))}
           </NativeSelect>
@@ -125,12 +135,11 @@ export function EmployeesDirectoryTab({
               onStatusFilterChange(e.target.value);
               setCurrentPage(1);
             }}
-            className="h-8 text-xs font-medium"
+            aria-label="Filter status kepegawaian"
           >
-            <option value="ALL">Semua status</option>
-            {STATUSES.filter((s) => s !== "ALL").map((st) => (
-              <option key={st} value={st}>
-                {getEmployeeStatusLabel(st)}
+            {STATUSES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
               </option>
             ))}
           </NativeSelect>
@@ -140,59 +149,37 @@ export function EmployeesDirectoryTab({
               variant="ghost"
               size="sm"
               onClick={handleResetFilters}
-              className="h-8 text-xs text-muted-foreground hover:text-foreground"
             >
               Reset filter
             </Button>
           )}
         </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>Baris</span>
-            <NativeSelect
-              value={String(pageSize)}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="h-8 w-16 text-xs font-mono"
-            >
-              <option value="10">10</option>
-              <option value="25">25</option>
-              <option value="50">50</option>
-            </NativeSelect>
-          </div>
-        </div>
       </div>
 
-      {/* Employees Table */}
+      {/* Directory Table */}
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[200px]">Staf</TableHead>
-                <TableHead>Jabatan</TableHead>
-                <TableHead>Kontak</TableHead>
-                <TableHead>Shift</TableHead>
-                <TableHead className="text-center">Status</TableHead>
-                <TableHead className="text-center">Hak akses</TableHead>
-                <TableHead className="text-right">Aksi</TableHead>
+                <TableHead className="w-[220px]">Karyawan & Kontak</TableHead>
+                <TableHead>Peran & Divisi</TableHead>
+                <TableHead>Shift tugas</TableHead>
+                <TableHead className="hidden md:table-cell">Bergabung</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">
+                  <span className="sr-only">Aksi</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedEmployees.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-48 text-center">
+                  <TableCell colSpan={6} className="h-48 text-center">
                     <EmptyState
-                      icon={<Users className="w-8 h-8 text-muted-foreground" />}
-                      title="Karyawan tidak ditemukan"
-                      description={
-                        searchQuery
-                          ? `Tidak ditemukan staf yang cocok dengan kata kunci "${searchQuery}".`
-                          : "Belum ada karyawan terdaftar di outlet ini."
-                      }
+                      icon={<Users className="size-8 text-muted-foreground" />}
+                      title={emptyCopy.title}
+                      description={emptyCopy.description}
                     />
                   </TableCell>
                 </TableRow>
@@ -200,81 +187,66 @@ export function EmployeesDirectoryTab({
                 paginatedEmployees.map((emp) => {
                   const deptTone = getDepartmentBadgeTone(emp.department);
                   const statusTone = getEmployeeStatusTone(emp.status);
-                  const permCount = (
-                    emp.permissions ||
-                    ROLE_DEFAULT_PERMISSIONS[emp.role] || ["pos_access"]
-                  ).length;
 
                   return (
                     <TableRow key={emp.id}>
                       <TableCell className="font-medium">
                         <div className="space-y-0.5">
-                          <p className="text-foreground leading-snug">{emp.name}</p>
-                          <p className="font-mono text-primary text-[11px]">
+                          <p className="font-mono text-xs font-semibold text-primary">
                             {emp.employeeNumber}
                           </p>
+                          <p className="leading-snug text-foreground">{emp.name}</p>
+                          <p className="font-mono text-xs text-muted-foreground">{emp.contact}</p>
+                          {emp.email && (
+                            <p className="text-xs text-muted-foreground">{emp.email}</p>
+                          )}
                         </div>
                       </TableCell>
 
                       <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="text-xs font-medium text-foreground">{emp.role}</p>
-                          <StatusBadge status={deptTone} className="text-[10px]">
+                        <div className="space-y-1">
+                          <p className="font-medium text-foreground">{emp.role}</p>
+                          <StatusBadge status={deptTone}>
                             {emp.department}
                           </StatusBadge>
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        <div className="space-y-0.5 text-xs text-muted-foreground">
-                          <p className="font-mono">{emp.contact}</p>
-                          <p className="text-[11px]">{emp.email}</p>
-                        </div>
-                      </TableCell>
-
-                      <TableCell className="text-xs text-muted-foreground">
+                      <TableCell className="text-xs text-foreground">
                         {emp.assignedShift}
                       </TableCell>
 
-                      <TableCell className="text-center">
-                        <button
-                          type="button"
-                          onClick={() => onToggleStatus(emp.id)}
-                          title="Ubah status kepegawaian"
-                        >
-                          <StatusBadge status={statusTone} className="text-xs cursor-pointer">
-                            {getEmployeeStatusLabel(emp.status)}
-                          </StatusBadge>
-                        </button>
+                      <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground md:table-cell">
+                        {emp.joinedDate || "—"}
                       </TableCell>
 
-                      <TableCell className="text-center font-mono text-xs text-muted-foreground">
-                        {permCount} Izin
+                      <TableCell>
+                        <StatusBadge status={statusTone}>
+                          {getEmployeeStatusLabel(emp.status)}
+                        </StatusBadge>
                       </TableCell>
 
                       <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-1.5">
                           <Button
-                            variant="ghost"
                             size="sm"
+                            variant="outline"
                             onClick={() => onSelectDetail(emp)}
-                            className="h-7 px-2 text-xs font-medium"
                           >
                             Detail
                           </Button>
                           <Button
-                            variant="ghost"
                             size="sm"
+                            variant="outline"
                             onClick={() => onSelectEdit(emp)}
-                            className="h-7 px-2 text-xs font-medium"
                           >
                             Edit
                           </Button>
                           <Button
-                            variant="ghost"
                             size="sm"
+                            variant="ghost"
                             onClick={() => onSelectDelete(emp)}
-                            className="h-7 px-2 text-xs text-destructive hover:bg-destructive/10"
+                            className="text-destructive hover:text-destructive"
                           >
                             Hapus
                           </Button>
@@ -291,49 +263,17 @@ export function EmployeesDirectoryTab({
 
       {/* Pagination Bar */}
       {employees.length > 0 && (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground">
-          <div>
-            Menampilkan{" "}
-            <span className="font-mono font-medium text-foreground">
-              {Math.min((safeCurrentPage - 1) * pageSize + 1, employees.length)}
-            </span>{" "}
-            sampai{" "}
-            <span className="font-mono font-medium text-foreground">
-              {Math.min(safeCurrentPage * pageSize, employees.length)}
-            </span>{" "}
-            dari{" "}
-            <span className="font-mono font-medium text-foreground">
-              {employees.length}
-            </span>{" "}
-            karyawan
-          </div>
-
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={safeCurrentPage <= 1}
-              className="size-8"
-              aria-label="Halaman sebelumnya"
-            >
-              <ChevronLeft className="size-4" />
-            </Button>
-            <div className="px-2 font-mono text-xs">
-              {safeCurrentPage} / {totalPages}
-            </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={safeCurrentPage >= totalPages}
-              className="size-8"
-              aria-label="Halaman berikutnya"
-            >
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-        </div>
+        <DataPagination
+          currentPage={safeCurrentPage}
+          totalItems={employees.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setCurrentPage(1);
+          }}
+          itemLabel="staf"
+        />
       )}
     </div>
   );

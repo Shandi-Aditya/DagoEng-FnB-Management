@@ -236,6 +236,48 @@ export function getShiftStatusTone(status: ShiftStatus): StatusTone {
   }
 }
 
+const SHIFT_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Sedang berjalan",
+  OPEN: "Sedang berjalan",
+  CLOSED: "Ditutup",
+  NEEDS_RECONCILIATION: "Selisih kas",
+  CLOSING: "Proses closing",
+  SCHEDULED: "Terjadwal",
+};
+
+export function getShiftStatusLabel(status: ShiftStatus | string): string {
+  return SHIFT_STATUS_LABELS[status] ?? status;
+}
+
+export function emptyShiftMessage(hasFilter: boolean): { title: string; description: string } {
+  if (hasFilter) {
+    return {
+      title: "Tidak ada shift yang cocok",
+      description: "Ubah kata kunci pencarian atau pilih filter status lain.",
+    };
+  }
+
+  return {
+    title: "Belum ada shift",
+    description: "Shift kasir yang telah dibuka atau ditutup akan tercatat di sini.",
+  };
+}
+
+export function emptyEmployeeMessage(hasFilter: boolean): { title: string; description: string } {
+  if (hasFilter) {
+    return {
+      title: "Tidak ada staf yang cocok",
+      description: "Ubah kata kunci pencarian atau pilih filter departemen lain.",
+    };
+  }
+
+  return {
+    title: "Belum ada staf",
+    description: "Daftarkan karyawan outlet baru untuk mulai mengelola shift dan hak akses.",
+  };
+}
+
+
 export function buildEmployeeExportData(
   activeTab: "SHIFTS" | "EMPLOYEES",
   shifts: ShiftRecord[],

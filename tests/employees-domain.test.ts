@@ -7,6 +7,9 @@ import {
   getEmployeeStatusLabel,
   getEmployeeStatusTone,
   getShiftStatusTone,
+  getShiftStatusLabel,
+  emptyShiftMessage,
+  emptyEmployeeMessage,
   buildEmployeeExportData,
   ROLE_DEFAULT_PERMISSIONS,
 } from "@/features/employees/employees-domain";
@@ -141,3 +144,32 @@ describe("getEmployeeStatusLabel", () => {
     expect(getEmployeeStatusLabel("NON-AKTIF")).toBe("Nonaktif");
   });
 });
+
+describe("getShiftStatusLabel", () => {
+  it("maps shift statuses to human readable sentence case labels", () => {
+    expect(getShiftStatusLabel("ACTIVE")).toBe("Sedang berjalan");
+    expect(getShiftStatusLabel("CLOSED")).toBe("Ditutup");
+    expect(getShiftStatusLabel("NEEDS_RECONCILIATION")).toBe("Selisih kas");
+  });
+});
+
+describe("emptyShiftMessage and emptyEmployeeMessage", () => {
+  it("provides distinct empty-state copy for shifts when filtered vs empty data", () => {
+    const emptyShifts = emptyShiftMessage(false);
+    expect(emptyShifts.title).toBe("Belum ada shift");
+
+    const filteredShifts = emptyShiftMessage(true);
+    expect(filteredShifts.title).toBe("Tidak ada shift yang cocok");
+    expect(filteredShifts.description).toContain("Ubah kata kunci");
+  });
+
+  it("provides distinct empty-state copy for employees when filtered vs empty data", () => {
+    const emptyEmp = emptyEmployeeMessage(false);
+    expect(emptyEmp.title).toBe("Belum ada staf");
+
+    const filteredEmp = emptyEmployeeMessage(true);
+    expect(filteredEmp.title).toBe("Tidak ada staf yang cocok");
+    expect(filteredEmp.description).toContain("Ubah kata kunci");
+  });
+});
+

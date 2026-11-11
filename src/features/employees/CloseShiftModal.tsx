@@ -1,4 +1,6 @@
-import { useState, useMemo } from "react";
+"use client";
+
+import { useMemo, useState } from "react";
 import { AlertTriangle, Clock } from "lucide-react";
 import type { ShiftRecord } from "@/types/shift";
 import { formatCurrencyIDR } from "@/lib/utils";
@@ -53,108 +55,112 @@ export function CloseShiftModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-base font-medium">
+            <Clock className="size-4 text-primary" />
             <span>Tutup shift</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Pencocokan saldo uang tunai fisik di laci kas dengan kalkulasi sistem.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Shift Summary Breakdown */}
-          <div className="p-3.5 rounded-lg border bg-muted/30 text-xs space-y-1.5">
+          <div className="space-y-1.5 rounded-lg border bg-muted/30 p-3.5 text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Modal awal</span>
-              <span className="font-mono font-medium text-foreground">
+              <span className="font-mono font-medium tabular-nums text-foreground">
                 {formatCurrencyIDR(shift.openingCash)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Penjualan tunai</span>
-              <span className="font-mono font-medium text-foreground">
+              <span className="font-mono font-medium tabular-nums text-foreground">
                 {formatCurrencyIDR(shift.cashSales)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Penjualan nontunai</span>
-              <span className="font-mono text-muted-foreground">
+              <span className="font-mono tabular-nums text-muted-foreground">
                 {formatCurrencyIDR(shift.nonCashSales)}
               </span>
             </div>
-            <div className="flex justify-between pt-1.5 border-t">
+            <div className="flex justify-between border-t pt-1.5">
               <span className="font-medium text-foreground">Kas seharusnya</span>
-              <span className="font-mono font-bold text-foreground">
+              <span className="font-mono font-semibold tabular-nums text-foreground">
                 {formatCurrencyIDR(expectedCash)}
               </span>
             </div>
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="actual-cash" className="text-xs">
-              Uang Tunai Fisik Aktual di Laci (Rp) <span className="text-destructive">*</span>
+            <Label htmlFor="actual-cash" className="text-xs font-medium text-foreground">
+              Uang tunai fisik di laci (Rp) <span className="text-destructive">*</span>
             </Label>
             <Input
               id="actual-cash"
               type="number"
               min={0}
+              step={1000}
               required
               value={actualCash}
               onChange={(e) => setActualCash(Number(e.target.value))}
               className="text-xs font-mono font-medium"
             />
-            <p className="text-[11px] text-muted-foreground font-mono">
-              Terbaca: {formatCurrencyIDR(actualCash)}
-            </p>
           </div>
 
           {/* Variance Indicator */}
-          <div
-            className={`p-3 rounded-lg border text-xs flex items-center justify-between font-mono ${
-              variance === 0
-                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
-                : variance < 0
-                ? "bg-destructive/10 border-destructive/30 text-destructive"
-                : "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400"
-            }`}
-          >
-            <span className="font-medium">
-              {variance === 0
-                ? "Kas Seimbang (Match)"
-                : variance < 0
-                ? "Selisih Kurang (Shortage)"
-                : "Selisih Lebih (Overage)"}
-            </span>
-            <span className="font-bold tabular-nums">
-              {variance > 0 ? `+${formatCurrencyIDR(variance)}` : formatCurrencyIDR(variance)}
-            </span>
-          </div>
+          {actualCash > 0 && (
+            <div
+              className={`flex items-center justify-between rounded-lg border p-3 text-xs ${
+                variance === 0
+                  ? "border-success/30 bg-success/10 text-success"
+                  : variance < 0
+                  ? "border-destructive/30 bg-destructive/10 text-destructive"
+                  : "border-warning/30 bg-warning/10 text-warning"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="size-4 shrink-0" />
+                <span className="font-medium">
+                  {variance === 0
+                    ? "Kas fisik cocok sempurna"
+                    : variance < 0
+                    ? "Selisih kurang (kas tekor)"
+                    : "Selisih lebih (kas berlebih)"}
+                </span>
+              </div>
+              <span className="font-mono font-semibold tabular-nums">
+                {formatCurrencyIDR(Math.abs(variance))}
+              </span>
+            </div>
+          )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="close-notes" className="text-xs">Catatan (opsional)</Label>
+            <Label htmlFor="closing-notes" className="text-xs font-medium text-foreground">
+              Catatan closing
+            </Label>
             <Textarea
-              id="close-notes"
+              id="closing-notes"
               rows={2}
+              placeholder="Catatan kendala shift atau penjelasan selisih..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Jelaskan selisih kas atau kejadian selama shift"
               className="text-xs"
             />
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+          <DialogFooter className="gap-2 border-t pt-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={onClose}
-              className="text-xs"
             >
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs font-medium">
-              Tutup Shift Sekarang
+            <Button type="submit" size="sm">
+              Tutup shift
             </Button>
           </DialogFooter>
         </form>

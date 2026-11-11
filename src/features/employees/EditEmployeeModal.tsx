@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+"use client";
+
+import { useEffect, useState } from "react";
 import { UserCheck } from "lucide-react";
 import type { EmployeeProfile } from "@/types/shift";
 import {
@@ -124,21 +126,21 @@ export function EditEmployeeModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-lg">
         <DialogHeader className="shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <UserCheck className="w-5 h-5 text-primary" />
-            <span>Edit Profil & Hak Akses — {employee.name}</span>
+          <DialogTitle className="flex items-center gap-2 text-base font-medium">
+            <UserCheck className="size-4 text-primary" />
+            <span>Edit profil — {employee.name}</span>
           </DialogTitle>
-          <DialogDescription>
-            Perbarui data kepegawaian, penugasan shift, dan matriks izin staf.
+          <DialogDescription className="text-xs">
+            Perbarui data kepegawaian, penugasan shift, dan hak akses staf.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto space-y-3.5 pr-1 py-1">
+        <form onSubmit={handleSubmit} className="flex-1 space-y-3.5 overflow-y-auto py-1 pr-1 text-xs">
           <div className="space-y-1.5">
-            <Label htmlFor="edit-emp-name" className="text-xs">
-              Nama Lengkap <span className="text-destructive">*</span>
+            <Label htmlFor="edit-emp-name" className="text-xs font-medium text-foreground">
+              Nama lengkap <span className="text-destructive">*</span>
             </Label>
             <Input
               id="edit-emp-name"
@@ -151,7 +153,7 @@ export function EditEmployeeModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-emp-role" className="text-xs">Jabatan</Label>
+              <Label htmlFor="edit-emp-role" className="text-xs font-medium text-foreground">Jabatan</Label>
               <NativeSelect
                 id="edit-emp-role"
                 value={role}
@@ -167,7 +169,7 @@ export function EditEmployeeModal({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="edit-emp-dept" className="text-xs">Departemen</Label>
+              <Label htmlFor="edit-emp-dept" className="text-xs font-medium text-foreground">Divisi</Label>
               <NativeSelect
                 id="edit-emp-dept"
                 value={department}
@@ -185,7 +187,7 @@ export function EditEmployeeModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-emp-contact" className="text-xs">WhatsApp</Label>
+              <Label htmlFor="edit-emp-contact" className="text-xs font-medium text-foreground">WhatsApp</Label>
               <Input
                 id="edit-emp-contact"
                 value={contact}
@@ -194,20 +196,20 @@ export function EditEmployeeModal({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="edit-emp-email" className="text-xs">Email</Label>
+              <Label htmlFor="edit-emp-email" className="text-xs font-medium text-foreground">Email</Label>
               <Input
                 id="edit-emp-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="text-xs"
+                className="text-xs font-mono"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="edit-emp-shift" className="text-xs">Shift</Label>
+              <Label htmlFor="edit-emp-shift" className="text-xs font-medium text-foreground">Shift</Label>
               <NativeSelect
                 id="edit-emp-shift"
                 value={assignedShift}
@@ -223,7 +225,7 @@ export function EditEmployeeModal({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="edit-emp-status" className="text-xs">Status</Label>
+              <Label htmlFor="edit-emp-status" className="text-xs font-medium text-foreground">Status</Label>
               <NativeSelect
                 id="edit-emp-status"
                 value={status}
@@ -238,35 +240,35 @@ export function EditEmployeeModal({
           </div>
 
           {/* Permissions Matrix */}
-          <div className="space-y-2 pt-2 border-t">
+          <div className="space-y-2 border-t pt-2">
             <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium">Hak akses</Label>
-              <span className="text-[11px] text-muted-foreground font-mono">
+              <Label className="text-xs font-medium text-foreground">Hak akses</Label>
+              <span className="font-mono text-xs text-muted-foreground">
                 {permissions.length} izin dipilih
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 rounded-lg border bg-muted/20">
+            <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto rounded-lg border bg-muted/20 p-2 sm:grid-cols-2">
               {ALL_PERMISSIONS.map((perm) => {
                 const isChecked = permissions.includes(perm.id);
                 return (
                   <label
                     key={perm.id}
-                    className={`p-2 rounded-md border text-xs cursor-pointer flex items-start gap-2 transition-colors ${
-                      isChecked ? "bg-card border-primary/40" : "bg-card/50 border-border opacity-70"
+                    className={`flex cursor-pointer items-start gap-2 rounded-md border p-2 text-xs transition-colors ${
+                      isChecked ? "border-primary/40 bg-card" : "border-border bg-card/50 opacity-70"
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={isChecked}
                       onChange={() => togglePermission(perm.id)}
-                      className="mt-0.5 w-3.5 h-3.5 rounded text-primary"
+                      className="mt-0.5 size-3.5 rounded text-primary"
                     />
-                    <div className="space-y-0.5 min-w-0">
-                      <p className="font-medium text-foreground leading-tight text-[11px]">
+                    <div className="min-w-0 space-y-0.5">
+                      <p className="text-xs font-medium leading-tight text-foreground">
                         {perm.label}
                       </p>
-                      <p className="text-[10px] text-muted-foreground line-clamp-1">
+                      <p className="line-clamp-1 text-xs text-muted-foreground">
                         {perm.desc}
                       </p>
                     </div>
@@ -276,18 +278,17 @@ export function EditEmployeeModal({
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+          <DialogFooter className="gap-2 border-t pt-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={onClose}
-              className="text-xs"
             >
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs font-medium">
-              Simpan Perubahan
+            <Button type="submit" size="sm">
+              Simpan perubahan
             </Button>
           </DialogFooter>
         </form>

@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { Clock } from "lucide-react";
 import { formatCurrencyIDR } from "@/lib/utils";
@@ -51,19 +53,19 @@ export function OpenShiftModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-primary" />
+          <DialogTitle className="flex items-center gap-2 text-base font-medium">
+            <Clock className="size-4 text-primary" />
             <span>Buka shift kasir</span>
           </DialogTitle>
-          <DialogDescription>
-            Masukkan saldo awal uang tunai di laci kas (cash drawer) untuk memulai shift operasional.
+          <DialogDescription className="text-xs">
+            Masukkan saldo awal uang tunai di laci kas untuk memulai shift operasional.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div className="space-y-1.5">
-            <Label htmlFor="open-shift-name" className="text-xs">
-              Pilih Shift Operasional <span className="text-destructive">*</span>
+            <Label htmlFor="open-shift-name" className="text-xs font-medium text-foreground">
+              Pilih shift operasional <span className="text-destructive">*</span>
             </Label>
             <NativeSelect
               id="open-shift-name"
@@ -80,8 +82,8 @@ export function OpenShiftModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="open-shift-cash" className="text-xs">
-              Kas Awal di Laci (Rp) <span className="text-destructive">*</span>
+            <Label htmlFor="open-shift-cash" className="text-xs font-medium text-foreground">
+              Kas awal di laci (Rp) <span className="text-destructive">*</span>
             </Label>
             <Input
               id="open-shift-cash"
@@ -93,23 +95,22 @@ export function OpenShiftModal({
               onChange={(e) => setOpeningCash(Number(e.target.value))}
               className="text-xs font-mono font-medium"
             />
-            <p className="text-[11px] text-muted-foreground font-mono">
+            <p className="font-mono text-xs text-muted-foreground">
               Terbaca: {formatCurrencyIDR(openingCash)}
             </p>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+          <DialogFooter className="gap-2 border-t pt-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={onClose}
-              className="text-xs"
             >
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs font-medium">
-              Buka Shift Kasir
+            <Button type="submit" size="sm">
+              Mulai shift
             </Button>
           </DialogFooter>
         </form>
