@@ -1,10 +1,22 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { POSProductItem, POSVariantOption, POSModifierOption, POSCartItem } from "./types";
-import { formatCurrencyIDR } from "@/lib/utils";
-import { X, Plus, Minus, Check, Coffee } from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
+import { Check, Coffee, Minus, Plus } from "lucide-react";
+import React, { useEffect, useState } from "react";
+
+import { StatusBadge } from "@/components/app/status-badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { cn, formatCurrencyIDR } from "@/lib/utils";
+import type { POSCartItem, POSModifierOption, POSProductItem, POSVariantOption } from "./types";
 
 interface ModifierModalProps {
   product: POSProductItem | null;
@@ -13,6 +25,7 @@ interface ModifierModalProps {
   onAddToCart: (item: POSCartItem) => void;
 }
 
+/** Customization modal for variants, recipe modifiers, and notes. */
 export function ModifierModal({ product, isOpen, onClose, onAddToCart }: ModifierModalProps) {
   const [selectedVariant, setSelectedVariant] = useState<POSVariantOption | undefined>(undefined);
   const [selectedModifiers, setSelectedModifiers] = useState<POSModifierOption[]>([]);
@@ -23,14 +36,12 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
     if (product) {
       setQuantity(1);
       setNotes("");
-      // Default select first variant if available
       if (product.variants && product.variants.length > 0) {
         setSelectedVariant(product.variants[0]);
       } else {
         setSelectedVariant(undefined);
       }
 
-      // Default select required modifiers
       const defaults: POSModifierOption[] = [];
       product.modifierGroups?.forEach((group) => {
         if (group.isRequired && group.options.length > 0) {
@@ -41,7 +52,7 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
     }
   }, [product]);
 
-  if (!isOpen || !product) return null;
+  if (!product) return null;
 
   const variantAdjustment = Number(selectedVariant?.priceAdjustment) || 0;
   const modifiersTotal = selectedModifiers.reduce(
@@ -55,7 +66,6 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
     const isAlreadySelected = selectedModifiers.some((m) => m.name === opt.name);
 
     if (groupMax === 1) {
-      // Radio-like behavior
       const otherModifiers = selectedModifiers.filter((m) => {
         const groupOptions = product.modifierGroups?.find((g) => g.options.some((o) => o.name === m.name))?.options || [];
         return !groupOptions.some((o) => o.name === opt.name);
@@ -67,7 +77,6 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
         setSelectedModifiers([...otherModifiers, opt]);
       }
     } else {
-      // Checkbox-like behavior
       if (isAlreadySelected) {
         setSelectedModifiers(selectedModifiers.filter((m) => m.name !== opt.name));
       } else {
@@ -95,55 +104,47 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-850">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-              <Coffee className="w-4 h-4" />
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg gap-4 p-5 max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogHeader className="border-b border-border pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Coffee className="size-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">{product.name}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                Kustomisasi Varian & Tambahan Resep
-              </p>
+              <DialogTitle className="text-sm font-medium text-foreground">
+                {product.name}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Kustomisasi varian dan tambahan resep
+              </DialogDescription>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        </DialogHeader>
 
-        {/* Scrollable Content */}
-        <div className="p-5 overflow-y-auto space-y-5 flex-1 divide-y divide-slate-100 dark:divide-slate-800">
-          {/* Base Product Price & Description */}
-          <div className="pb-2">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                {product.category}
-              </span>
-              <span className="text-base font-bold text-primary font-mono">
-                {formatCurrencyIDR(product.basePrice)}
-              </span>
-            </div>
-            {product.description && (
-              <p className="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">{product.description}</p>
-            )}
+        <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+          {/* Base price & description */}
+          <div className="flex items-baseline justify-between border-b border-border pb-3">
+            <span className="text-xs text-muted-foreground">
+              {product.category}
+            </span>
+            <span className="font-mono text-base font-medium tabular-nums text-foreground">
+              {formatCurrencyIDR(product.basePrice)}
+            </span>
           </div>
+          {product.description && (
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {product.description}
+            </p>
+          )}
 
-          {/* 1. Variants Selection (if any) */}
+          {/* Variants */}
           {product.variants && product.variants.length > 0 && (
-            <div className="pt-4 space-y-2">
-              <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
-                <span>Pilih Ukuran / Varian:</span>
-                <span className="text-[10px] text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded font-medium">
-                  Wajib 1 Pilihan
-                </span>
-              </label>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <FieldLabel>Pilih ukuran atau varian</FieldLabel>
+                <StatusBadge status="neutral">Wajib 1 pilihan</StatusBadge>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {product.variants.map((v, i) => {
                   const isSelected = selectedVariant?.name === v.name;
@@ -152,15 +153,16 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
                       key={i}
                       type="button"
                       onClick={() => setSelectedVariant(v)}
-                      className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all ${
+                      className={cn(
+                        "flex items-center justify-between rounded-lg border p-2.5 text-left transition-colors touch-manipulation",
                         isSelected
-                          ? "border-primary bg-primary/10 text-slate-900 dark:text-slate-100 ring-1 ring-primary"
-                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300"
-                      }`}
+                          ? "border-primary bg-primary/5 ring-1 ring-primary text-foreground"
+                          : "border-border bg-card hover:bg-accent/40 text-foreground"
+                      )}
                     >
-                      <span className="text-xs font-semibold">{v.name}</span>
-                      <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">
-                        {v.priceAdjustment > 0 ? `+${formatCurrencyIDR(v.priceAdjustment)}` : "Include"}
+                      <span className="text-xs font-medium">{v.name}</span>
+                      <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                        {v.priceAdjustment > 0 ? `+${formatCurrencyIDR(v.priceAdjustment)}` : "Termasuk"}
                       </span>
                     </button>
                   );
@@ -169,20 +171,14 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
             </div>
           )}
 
-          {/* 2. Modifier Groups (Temperature, Sugar, Addons) */}
+          {/* Modifier Groups */}
           {product.modifierGroups?.map((group) => (
-            <div key={group.id} className="pt-4 space-y-2">
+            <div key={group.id} className="space-y-2 border-t border-border pt-3">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-800 dark:text-slate-200">{group.name}</label>
-                <span
-                  className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                    group.isRequired
-                      ? "bg-primary/15 text-primary border border-primary/20"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
-                  }`}
-                >
+                <FieldLabel>{group.name}</FieldLabel>
+                <StatusBadge status={group.isRequired ? "info" : "neutral"}>
                   {group.isRequired ? "Wajib" : "Opsional"}
-                </span>
+                </StatusBadge>
               </div>
 
               <div
@@ -192,6 +188,8 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
               >
                 {group.options.map((opt, optIdx) => {
                   const isChecked = selectedModifiers.some((m) => m.name === opt.name);
+                  const price = Number(opt.price) || Number((opt as any).priceAdjustment) || 0;
+
                   return (
                     <button
                       key={optIdx}
@@ -201,34 +199,35 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
                       onClick={() =>
                         handleToggleModifier(group.maxSelect, group.isRequired, opt)
                       }
-                      className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all ${
+                      className={cn(
+                        "flex items-center justify-between rounded-lg border p-2.5 text-left transition-colors touch-manipulation",
                         isChecked
-                          ? "border-primary bg-primary/10 text-slate-900 dark:text-slate-100 ring-1 ring-primary"
-                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300"
-                      }`}
+                          ? "border-primary bg-primary/5 ring-1 ring-primary text-foreground"
+                          : "border-border bg-card hover:bg-accent/40 text-foreground"
+                      )}
                     >
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center gap-2">
                         <div
-                          className={`w-4 h-4 ${group.maxSelect === 1 ? "rounded-full" : "rounded"} flex items-center justify-center border text-[10px] ${
+                          className={cn(
+                            "flex size-4 items-center justify-center border text-[10px]",
+                            group.maxSelect === 1 ? "rounded-full" : "rounded",
                             isChecked
-                              ? "bg-primary border-primary text-white"
-                              : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
-                          }`}
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-input bg-background"
+                          )}
                         >
                           {isChecked && (
                             group.maxSelect === 1 ? (
-                              <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                              <div className="size-1.5 rounded-full bg-primary-foreground" />
                             ) : (
-                              <Check className="w-3 h-3 stroke-3" />
+                              <Check className="size-3" />
                             )
                           )}
                         </div>
                         <span className="text-xs font-medium">{opt.name}</span>
                       </div>
-                      <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">
-                        {((Number(opt.price) || Number((opt as any).priceAdjustment) || 0) > 0)
-                          ? `+${formatCurrencyIDR(Number(opt.price) || Number((opt as any).priceAdjustment) || 0)}`
-                          : "Gratis"}
+                      <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                        {price > 0 ? `+${formatCurrencyIDR(price)}` : "Gratis"}
                       </span>
                     </button>
                   );
@@ -237,55 +236,53 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
             </div>
           ))}
 
-          {/* 3. Special Notes for Kitchen */}
-          <div className="pt-4 space-y-1.5">
-            <label className="text-xs font-bold text-slate-800 dark:text-slate-200">
-              Catatan Khusus Barista / Dapur:
-            </label>
-            <input
-              type="text"
+          {/* Notes */}
+          <div className="space-y-1.5 border-t border-border pt-3">
+            <FieldLabel>Catatan khusus barista / dapur</FieldLabel>
+            <Input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Contoh: Pisahkan es batu, sambal dipisah..."
-              className="w-full text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              placeholder="Contoh: Pisahkan es batu, sambal dipisah"
             />
           </div>
         </div>
 
-        {/* Footer: Quantity Stepper & Add Button */}
-        <div className="px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex items-center justify-between gap-4">
-          <div className="flex items-center space-x-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-1 shadow-sm">
-            <button
+        {/* Footer */}
+        <DialogFooter className="flex-row items-center justify-between gap-3 border-t border-border pt-3 sm:space-x-0">
+          <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95 transition-all"
             >
-              <Minus className="w-3.5 h-3.5" />
-            </button>
-            <span className="w-8 text-center text-xs font-bold font-mono text-slate-900 dark:text-slate-100">
+              <Minus className="size-3.5" />
+            </Button>
+            <span className="w-8 text-center font-mono text-xs font-medium tabular-nums text-foreground">
               {quantity}
             </span>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="icon-xs"
               onClick={() => setQuantity((q) => q + 1)}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 active:scale-95 transition-all"
             >
-              <Plus className="w-3.5 h-3.5" />
-            </button>
+              <Plus className="size-3.5" />
+            </Button>
           </div>
 
           <Button
             type="button"
             onClick={handleConfirmAdd}
-            className="flex-1 text-xs font-bold h-10 space-x-2 shadow-md bg-primary hover:bg-primary/90 text-white"
+            className="flex-1 text-xs font-medium"
           >
-            <span>Tambahkan ke Keranjang</span>
-            <span className="font-mono bg-black/15 px-2 py-0.5 rounded">
-              {formatCurrencyIDR(itemGrandTotal)}
+            <span>Tambahkan ke keranjang</span>
+            <span className="font-mono tabular-nums opacity-90">
+              ({formatCurrencyIDR(itemGrandTotal)})
             </span>
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

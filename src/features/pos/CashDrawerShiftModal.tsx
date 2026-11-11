@@ -4,7 +4,14 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { X, CheckCircle2 } from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { ProFeatureBadge } from "@/components/premium";
 
 interface CashDrawerShiftModalProps {
@@ -225,21 +232,17 @@ _Sent via POS DagoEng Platform_`;
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col animate-in zoom-in-95 duration-150 text-slate-900 dark:text-slate-100">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && !isClosing && onClose()}>
+      <DialogContent className="max-w-md gap-0 p-0 overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 flex items-center justify-between border-b border-slate-100 dark:border-slate-800">
-          <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">
-            Close Cashier Session
-          </h3>
-          <button
-            onClick={onClose}
-            disabled={isClosing}
-            className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        <DialogHeader className="px-6 py-4 border-b border-border bg-muted/30">
+          <DialogTitle className="text-sm font-medium text-foreground">
+            Tutup sesi kasir
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Konfirmasi penutupan sesi kasir dan hitung uang fisik
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Content Body */}
         <div className="p-6 space-y-4 text-xs">
@@ -302,24 +305,24 @@ _Sent via POS DagoEng Platform_`;
               type="button"
               disabled={isClosing || !confirmCashierName.trim()}
               onClick={handleConfirmCloseSession}
-              className="w-full py-2.5 text-xs font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-xl shadow-sm transition-all active:scale-98 flex items-center justify-center space-x-2"
+              className="w-full text-xs font-medium"
             >
               {isClosing ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Menutup Sesi & Mengirim Chatbot...</span>
+                  <div className="size-3.5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-1.5" />
+                  <span>Menutup sesi dan mengirim laporan...</span>
                 </>
               ) : (
-                <span>Confirm</span>
+                <span>Konfirmasi tutup sesi</span>
               )}
             </Button>
-            <div className="flex items-center justify-center space-x-1.5 text-[10px] text-slate-500 pt-1.5">
-              <span>Auto-Dispatch WhatsApp Closing:</span>
+            <div className="flex items-center justify-center space-x-1.5 text-[10px] text-muted-foreground pt-1.5">
+              <span>Auto-dispatch WhatsApp closing:</span>
               <ProFeatureBadge label="ADD-ON" variant="addon" size="xs" />
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

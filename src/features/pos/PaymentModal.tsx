@@ -19,9 +19,16 @@ import {
   Lock,
   KeyRound,
   RefreshCw,
-  Sparkles,
 } from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   QRISVerificationDetail,
 } from "@/lib/qris-verification";
@@ -349,81 +356,57 @@ export function PaymentModal({
   ].filter((v, i, a) => a.indexOf(v) === i && v >= grandTotal);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-2xl gap-0 p-0 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-900 text-white">
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-primary dark:text-primary-light uppercase tracking-wider">
-                Pembayaran Kasir POS
-              </span>
-              <span className="text-[11px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-mono">
+        <DialogHeader className="border-b border-border p-4 bg-muted/30">
+          <div className="flex items-center justify-between pr-6">
+            <div className="space-y-0.5">
+              <span className="text-xs text-muted-foreground">
                 {orderType === "DINE_IN" ? `Meja ${tableNumber}` : "Takeaway"}
               </span>
+              <DialogTitle className="text-base font-medium text-foreground">
+                Pembayaran kasir
+              </DialogTitle>
+              <DialogDescription className="sr-only">
+                Pilih metode pembayaran kasir POS
+              </DialogDescription>
             </div>
-            <h3 className="font-extrabold text-xl text-white mt-0.5">
-              Total Tagihan: {formatCurrencyIDR(grandTotal)}
-            </h3>
+            <div className="text-right">
+              <span className="text-xs text-muted-foreground block">Total tagihan</span>
+              <span className="font-mono text-base font-medium tabular-nums text-foreground">
+                {formatCurrencyIDR(grandTotal)}
+              </span>
+            </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Payment Tabs Navigation */}
-        <div className="grid grid-cols-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/80 text-xs font-bold">
-          <button
-            type="button"
-            onClick={() => setActiveTab("QRIS")}
-            className={`py-3 px-2 flex items-center justify-center space-x-1.5 border-b-2 transition-all ${
-              activeTab === "QRIS"
-                ? "border-primary bg-white dark:bg-slate-900 text-primary dark:text-primary-light shadow-xs"
-                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-            }`}
-          >
-            <QrCode className="w-4 h-4" />
-            <span>QRIS Dinamis</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("CASH")}
-            className={`py-3 px-2 flex items-center justify-center space-x-1.5 border-b-2 transition-all ${
-              activeTab === "CASH"
-                ? "border-primary bg-white dark:bg-slate-900 text-primary dark:text-primary-light shadow-xs"
-                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-            }`}
-          >
-            <Banknote className="w-4 h-4" />
-            <span>Tunai (Cash)</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("EDC")}
-            className={`py-3 px-2 flex items-center justify-center space-x-1.5 border-b-2 transition-all ${
-              activeTab === "EDC"
-                ? "border-primary bg-white dark:bg-slate-900 text-primary dark:text-primary-light shadow-xs"
-                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>Debit / EDC</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("SPLIT")}
-            className={`py-3 px-2 flex items-center justify-center space-x-1.5 border-b-2 transition-all ${
-              activeTab === "SPLIT"
-                ? "border-primary bg-white dark:bg-slate-900 text-primary dark:text-primary-light shadow-xs"
-                : "border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>Split Bill</span>
-          </button>
+        <div className="grid grid-cols-4 border-b border-border bg-muted/20 text-xs">
+          {[
+            { id: "QRIS", label: "QRIS dinamis", icon: QrCode },
+            { id: "CASH", label: "Tunai", icon: Banknote },
+            { id: "EDC", label: "Debit / EDC", icon: CreditCard },
+            { id: "SPLIT", label: "Split bill", icon: Users },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as POSPaymentMethod)}
+                className={`py-2.5 px-2 flex items-center justify-center gap-1.5 border-b-2 font-medium transition-colors ${
+                  isActive
+                    ? "border-primary bg-background text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Icon className="size-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Tab Body */}
@@ -851,12 +834,11 @@ export function PaymentModal({
         </div>
 
         {/* Footer: Confirm Payment Button */}
-        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 flex items-center justify-between gap-4">
+        <DialogFooter className="border-t border-border bg-muted/20 p-4 flex-row items-center justify-between gap-3 sm:space-x-0">
           <Button
             type="button"
             variant="outline"
             onClick={onClose}
-            className="text-xs font-semibold dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Batal
           </Button>
@@ -870,32 +852,28 @@ export function PaymentModal({
               isQrisProcessing
             }
             onClick={handleCompletePayment}
-            className={`flex-1 text-xs font-bold h-11 space-x-2 shadow-md ${
-              (activeTab === "SPLIT" && !isSplitValid) || (activeTab === "QRIS" && !isQrisVerified)
-                ? "bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed"
-                : "bg-primary hover:bg-primary/90 text-white"
-            }`}
+            className="flex-1 text-xs font-medium"
           >
             {isQrisProcessing ? (
-              <span>Memproses Transaksi...</span>
+              <span>Memproses transaksi...</span>
             ) : activeTab === "QRIS" && !isQrisVerified ? (
-              <span className="flex items-center space-x-2">
-                <Clock className="w-4 h-4 animate-spin text-amber-500" />
-                <span>Menunggu Pembayaran Tamu (QRIS) — {formatCurrencyIDR(grandTotal)}</span>
+              <span className="flex items-center gap-2">
+                <Clock className="size-4 animate-spin text-warning" />
+                <span>Menunggu pembayaran tamu (QRIS) - {formatCurrencyIDR(grandTotal)}</span>
               </span>
             ) : (
-              <>
-                <CheckCircle2 className="w-4 h-4" />
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="size-4" />
                 <span>
                   {activeTab === "QRIS"
-                    ? `Selesaikan QRIS (${supervisorOverrideData ? "Otorisasi Supervisor" : "Terverifikasi Gateway"}) — ${formatCurrencyIDR(grandTotal)}`
-                    : `Konfirmasi Pembayaran (${activeTab}) — ${formatCurrencyIDR(grandTotal)}`}
+                    ? `Selesaikan QRIS (${supervisorOverrideData ? "Otorisasi supervisor" : "Terverifikasi gateway"}) - ${formatCurrencyIDR(grandTotal)}`
+                    : `Konfirmasi pembayaran (${activeTab}) - ${formatCurrencyIDR(grandTotal)}`}
                 </span>
-              </>
+              </span>
             )}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

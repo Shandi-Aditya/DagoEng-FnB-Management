@@ -1,6 +1,7 @@
 // Application-level components composed from official shadcn/ui primitives.
 // See docs/DESIGN_SYSTEM.md section 7.
 export { ConfirmDialog, type ConfirmDialogProps } from "./confirm-dialog";
+export { DataPagination, TablePageSizeSelector, type DataPaginationProps, type TablePageSizeSelectorProps } from "./data-pagination";
 export { EmptyState, type EmptyStateProps } from "./empty-state";
 export { formatChange } from "./format-change";
 export { notify } from "./notify";

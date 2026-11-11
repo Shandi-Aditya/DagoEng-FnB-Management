@@ -13,7 +13,7 @@ import {
   DollarSign,
   Calendar,
 } from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
+import { Button } from "@/components/ui/button";
 
 interface CommercialReportPDFModalProps {
   isOpen: boolean;

@@ -4,7 +4,14 @@ import React from "react";
 import Image from "next/image";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { X, Printer, CheckCircle2, Laptop } from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export interface CoworkingReceiptData {
   bookingCode: string;
@@ -92,23 +99,20 @@ export function CoworkingReceiptModal({
         }
       `}</style>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-in fade-in duration-150">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 flex flex-col max-h-[90vh]">
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="max-w-md gap-0 p-0 overflow-hidden flex flex-col max-h-[90vh]">
           {/* Modal Header */}
-          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50 print:hidden">
-            <div className="flex items-center space-x-2">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-              <span className="font-bold text-xs text-slate-800">
-                Bukti Booking Co-working & Transaksi Lunas
-              </span>
+          <DialogHeader className="px-5 py-3 border-b border-border flex flex-row items-center justify-between bg-muted/40 print:hidden">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="size-4 text-primary" />
+              <DialogTitle className="text-xs font-medium text-foreground">
+                Bukti booking co-working dan transaksi lunas
+              </DialogTitle>
+              <DialogDescription className="sr-only">
+                Nota pembayaran sewa ruang co-working
+              </DialogDescription>
             </div>
-            <button
-              onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+          </DialogHeader>
 
           {/* Scrollable Receipt Body */}
           <div className="p-6 overflow-y-auto flex-1 bg-slate-100/50 flex justify-center">
@@ -291,22 +295,22 @@ export function CoworkingReceiptModal({
               type="button"
               variant="outline"
               onClick={handlePrint}
-              className="flex-1 text-xs font-bold space-x-1.5"
+              className="flex-1 text-xs font-medium"
             >
-              <Printer className="w-4 h-4 text-slate-600" />
-              <span>Cetak Nota Thermal</span>
+              <Printer className="size-4" />
+              <span>Cetak nota thermal</span>
             </Button>
 
             <Button
               type="button"
               onClick={onClose}
-              className="flex-1 text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white"
+              className="flex-1 text-xs font-medium"
             >
               <span>Tutup</span>
             </Button>
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

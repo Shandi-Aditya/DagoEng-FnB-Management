@@ -164,12 +164,17 @@ describe("POS Bagian C — Perbaikan Menengah", () => {
         path.resolve(process.cwd(), "src/app/(dashboard)/orders/page.tsx"),
         "utf-8"
       );
+      // The timeline lifecycle modal moved from orders/page.tsx to features/orders/OrderDetailModal.tsx
+      const orderDetailContent = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/orders/OrderDetailModal.tsx"),
+        "utf-8"
+      );
 
       expect(ordersPageContent).toContain('const isKitchenStaff = roleSlug === "KITCHEN_STAFF"');
       expect(ordersPageContent).toContain("canExportNominalReports");
       expect(ordersPageContent).toContain("canViewNominals");
-      expect(ordersPageContent).toContain('{canViewNominals ? formatCurrencyIDR(selectedOrder.total) : "—"}');
-      expect(ordersPageContent).toContain('canViewNominals && (() => {');
+      expect(orderDetailContent).toContain('{canViewNominals ? formatCurrencyIDR(selectedOrder.total) : "—"}');
+      expect(orderDetailContent).toContain('canViewNominals && (() => {');
     });
   });
 });

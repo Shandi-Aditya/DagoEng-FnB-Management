@@ -1,59 +1,48 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import { notify } from "@/components/app/notify";
+import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useOrders } from "@/contexts/OrderContext";
+import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useInventory } from "@/contexts/InventoryContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
-import { useTables } from "@/contexts/TableContext";
-import { useActivityLog } from "@/contexts/ActivityLogContext";
-import { useSettings } from "@/contexts/SettingsContext";
-import { OrderRecord } from "@/types/order";
-import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
-import { calculateOrderMetrics, formatMinutesToHuman } from "@/lib/order-analytics";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/legacy/ui/card";
-import { formatCurrencyIDR } from "@/lib/utils";
-import {
-  ClipboardList,
-  Eye,
-  Clock,
-  CheckCircle2,
-  AlertTriangle,
-  History,
-  X,
-  ArrowRight,
-  User,
-  Download,
-  CreditCard,
-  Sparkles,
-  Check,
-  FileText,
-  FileSpreadsheet,
-  Printer,
-} from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
-import { TablePagination, TablePageSizeSelector } from "@/components/legacy/ui/table-pagination";
-import { downloadCSV, downloadExcel } from "@/lib/export-utils";
-import { PaymentModal } from "@/features/pos/PaymentModal";
-import { POSCartItem, POSPaymentMethod, POSReceiptData, SplitGuestBill } from "@/features/pos/types";
-import { QRISVerificationDetail } from "@/lib/qris-verification";
-import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
-import { OrdersReportPDFModal } from "@/features/orders/OrdersReportPDFModal";
-import { ReceiptModal } from "@/features/pos/ReceiptModal";
-import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
+import { useOrders } from "@/contexts/OrderContext";
 import { usePrinter } from "@/contexts/PrinterContext";
-import { KitchenTicketData, PrintPurpose } from "@/types/printer";
-import { getTenantName } from "@/lib/tenant";
-import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
+import { useSettings } from "@/contexts/SettingsContext";
+import { useTables } from "@/contexts/TableContext";
+import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
+import { PaymentModal } from "@/features/pos/PaymentModal";
+import { ReceiptModal } from "@/features/pos/ReceiptModal";
+import type { POSCartItem, POSPaymentMethod, POSReceiptData, SplitGuestBill } from "@/features/pos/types";
+import { downloadCSV, downloadExcel } from "@/lib/export-utils";
+import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
+import { formatCurrencyIDR } from "@/lib/utils";
+import type { OrderRecord } from "@/types/order";
+import type { KitchenTicketData, PrintPurpose } from "@/types/printer";
+
+import { OrderDetailModal } from "@/features/orders/OrderDetailModal";
+import {
+  buildOrderExportData,
+  buildOrderReceiptData,
+  buildReprintKitchenTicket,
+  filterOrdersByTenant,
+} from "@/features/orders/orders-domain";
+import { OrdersReportPDFModal } from "@/features/orders/OrdersReportPDFModal";
+import { OrdersTable } from "@/features/orders/OrdersTable";
+import { OrdersToolbar } from "@/features/orders/OrdersToolbar";
 
 export default function OrdersPage() {
   const { user } = useAuth();
   const { filteredOrders, advanceOrderStatus } = useOrders();
-  const { simulateBOMDeduction, deductOrderBOM } = useInventory();
+  const { deductOrderBOM } = useInventory();
   const { members, addPoints } = useLoyalty();
   const { releaseTableToAvailable } = useTables();
   const { logActivity } = useActivityLog();
   const { settings } = useSettings();
+  const { recordShiftTransaction } = useEmployeeShift();
+  const { queue } = usePrinter();
 
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
   const userTenantId = user?.tenant?.id;
@@ -74,9 +63,8 @@ export default function OrdersPage() {
 
   // Strict tenant-aware order list
   const displayedOrders = useMemo(() => {
-    if (!isTenantOwner || !userTenantId) return filteredOrders;
-    return filteredOrders.filter((o) => o.items.some((it) => it.tenantId === userTenantId));
-  }, [filteredOrders, isTenantOwner, userTenantId]);
+    return filterOrdersByTenant(filteredOrders, userTenantId, isTenantOwner);
+  }, [filteredOrders, userTenantId, isTenantOwner]);
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -94,174 +82,31 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<OrderRecord | null>(null);
   const [paymentOrder, setPaymentOrder] = useState<OrderRecord | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState<boolean>(false);
-  const { recordShiftTransaction } = useEmployeeShift();
   const [isPDFModalOpen, setIsPDFModalOpen] = useState<boolean>(false);
   const [receiptModalOrder, setReceiptModalOrder] = useState<POSReceiptData | null>(null);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
   const [kitchenModalTicket, setKitchenModalTicket] = useState<KitchenTicketData | null>(null);
   const [isKitchenModalOpen, setIsKitchenModalOpen] = useState<boolean>(false);
-  const [successToast, setSuccessToast] = useState<string | null>(null);
-  const { queue } = usePrinter();
-
-  const convertOrderToKitchenTicket = (order: OrderRecord, purpose: PrintPurpose = "REPRINT"): KitchenTicketData => {
-    return {
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      outletId: order.outletId,
-      outletName: order.outletName || "Singaraja",
-      tableNumber: order.tableNumber,
-      customerName: order.customerName,
-      orderType: order.orderType,
-      purpose,
-      items: (order.items || []).map((i) => ({
-        id: i.id,
-        productName: i.productName,
-        quantity: i.quantity,
-        modifiers: i.modifiers,
-        notes: i.notes,
-      })),
-      cashierName: user?.name || "Kasir / Petugas",
-      timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
-      reprintedBy: purpose === "REPRINT" ? user?.name || "Petugas" : undefined,
-      kitchenNotes: order.notes,
-    };
-  };
-
-  const convertOrderToReceiptData = (order: OrderRecord): POSReceiptData => {
-    const primaryTenantId = order.items[0]?.tenantId || "tenant-ks";
-    const posPublisher = resolvePosReceiptPublisher(
-      order.items.map((i) => ({ tenantId: i.tenantId })),
-      { name: order.outletName || "Singaraja (Pusat)" },
-      primaryTenantId
-    );
-
-    return {
-      orderNumber: order.orderNumber,
-      date: new Date(order.createdAt).toLocaleDateString("id-ID", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      cashierName: "Kasir / Staff Bertugas",
-      tenantId: posPublisher.tenantId || primaryTenantId,
-      tenantName: posPublisher.brandName,
-      outletName: posPublisher.outletName,
-      outletAddress: posPublisher.outletAddress,
-      outletPhone: posPublisher.outletPhone,
-      tableNumber: order.tableNumber,
-      customerName: order.customerName,
-      orderType: (order.orderType as any) || "DINE_IN",
-      items: order.items.map((i) => ({
-        name: i.productName,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-        subtotal: i.quantity * i.unitPrice,
-        modifiers: i.modifiers,
-        notes: i.notes,
-        tenantId: i.tenantId,
-        tenantName: getTenantName(i.tenantId),
-      })),
-      subtotal: order.subtotal,
-      tax: getOrderTaxBreakdown(order).pb1,
-      serviceCharge: getOrderTaxBreakdown(order).serviceCharge,
-      promoName: order.promoId,
-      discount: getOrderTaxBreakdown(order).discount,
-      grandTotal: order.total,
-      paymentMethod: (order.paymentMethod as any) || "QRIS",
-      amountPaid: order.total,
-      changeDue: 0,
-    };
-  };
-
-  const getOrderExportData = () => {
-    const headers = [
-      "No. Pesanan",
-      "Meja",
-      "Pelanggan",
-      "Tipe Pesanan",
-      "Promo",
-      "Diskon (Rp)",
-      "Total Tagihan (Rp)",
-      "Status Operasional",
-      "Status Pembayaran",
-      "Metode Pembayaran",
-      "Jumlah Item",
-      "Waktu Dibuat",
-      "Waktu Pelunasan",
-    ];
-    const rows = displayedOrders.map((o) => {
-      const promoName = settings.promos.find((p) => p.id === o.promoId)?.name || o.promoId || "-";
-      const discountVal = getOrderTaxBreakdown(o).discount;
-      const opStatusLabel =
-        o.status === "COMPLETED"
-          ? "Selesai"
-          : o.status === "SERVED"
-          ? "Siap Disajikan"
-          : o.status === "COOKING"
-          ? "Sedang Dimasak"
-          : o.status === "KITCHEN_RECEIVED"
-          ? "Diterima Dapur"
-          : o.status === "CONFIRMED"
-          ? "Dikonfirmasi"
-          : o.status === "NEW"
-          ? "Baru"
-          : o.status === "CANCELLED"
-          ? "Dibatalkan"
-          : o.status;
-
-      const payStatusLabel =
-        o.paymentStatus === "PAID"
-          ? "Lunas"
-          : o.paymentStatus === "REFUNDED"
-          ? "Refund"
-          : "Belum Dibayar";
-
-      const settlementTime = o.completedAt
-        ? new Date(o.completedAt).toLocaleString("id-ID")
-        : o.paymentStatus === "PAID"
-        ? new Date(o.createdAt).toLocaleString("id-ID")
-        : "-";
-
-      return [
-        o.orderNumber,
-        o.tableNumber,
-        o.customerName,
-        o.orderType,
-        promoName,
-        discountVal > 0 ? `-Rp ${discountVal.toLocaleString("id-ID")}` : "Rp 0",
-        `Rp ${o.total.toLocaleString("id-ID")}`,
-        opStatusLabel,
-        payStatusLabel,
-        o.paymentMethod || "-",
-        o.items.length,
-        new Date(o.createdAt).toLocaleString("id-ID"),
-        settlementTime,
-      ];
-    });
-    return { headers, rows };
-  };
 
   const handleExportOrdersCSV = () => {
     if (!canExportNominalReports) return;
-    const { headers, rows } = getOrderExportData();
+    const { headers, rows } = buildOrderExportData(displayedOrders, settings.promos);
     downloadCSV(`Daftar_Pesanan_Transaksi_${Date.now()}`, headers, rows);
   };
 
   const handleExportOrdersExcel = () => {
     if (!canExportNominalReports) return;
-    const { headers, rows } = getOrderExportData();
+    const { headers, rows } = buildOrderExportData(displayedOrders, settings.promos);
     downloadExcel(`Daftar_Pesanan_Transaksi_${Date.now()}`, "Riwayat Pesanan", headers, rows);
   };
 
   const handleOpenPayment = (order: OrderRecord) => {
     if (order.paymentStatus === "PAID") {
-      setSuccessToast("Pesanan ini sudah berstatus LUNAS. Pembayaran kedua tidak dapat diproses.");
+      notify.warning("Pesanan sudah lunas", "Pembayaran kedua tidak dapat diproses.");
       return;
     }
     if (!canProcessPayment) {
-      setSuccessToast("Role Anda tidak memiliki akses untuk memproses pembayaran.");
+      notify.error("Akses ditolak", "Peran Anda tidak memiliki izin untuk memproses pembayaran.");
       return;
     }
     setPaymentOrder(order);
@@ -272,7 +117,6 @@ export default function OrdersPage() {
     method: POSPaymentMethod;
     amountPaid: number;
     changeDue: number;
-    qrisVerification?: QRISVerificationDetail;
     splitDetails?: SplitGuestBill[];
   }) => {
     if (!paymentOrder) return;
@@ -287,7 +131,6 @@ export default function OrdersPage() {
       {
         paymentStatus: "PAID",
         paymentMethod: chosenMethod,
-        qrisVerification: paymentData.qrisVerification,
       }
     );
 
@@ -301,7 +144,7 @@ export default function OrdersPage() {
           : 0;
     recordShiftTransaction(cashPortion, paymentOrder.total - cashPortion, paymentOrder.outletId, paymentOrder.id);
 
-    // 2. Inventory: Deduct ingredients based on Recipe BOM (POS-36 / B4)
+    // 2. Inventory: Deduct ingredients based on Recipe BOM
     const bomItems = paymentOrder.items.map((it) => ({
       productName: it.productName,
       quantity: it.quantity,
@@ -315,7 +158,7 @@ export default function OrdersPage() {
     );
     let pointsAdded = 0;
     if (matchingMember) {
-      pointsAdded = Math.floor(paymentOrder.total / 1000); // 1 pt per Rp 1.000 spend
+      pointsAdded = Math.floor(paymentOrder.total / 1000);
       if (pointsAdded > 0) {
         addPoints(
           matchingMember.id,
@@ -352,8 +195,9 @@ export default function OrdersPage() {
 
     // 6. UI Toast Feedback
     const memberMsg = matchingMember ? ` +${pointsAdded} Poin Loyalty (${matchingMember.name})` : "";
-    setSuccessToast(
-      `Pesanan ${paymentOrder.orderNumber} berhasil dibayar (${paymentData.method}) & COMPLETED! Stok BOM dipotong, Meja ${paymentOrder.tableNumber} RELEASED.${memberMsg}`
+    notify.success(
+      "Pembayaran berhasil",
+      `Pesanan ${paymentOrder.orderNumber} lunas via ${paymentData.method}. Stok BOM dipotong.${memberMsg}`
     );
     setIsPaymentModalOpen(false);
 
@@ -369,10 +213,6 @@ export default function OrdersPage() {
           : null
       );
     }
-
-    setTimeout(() => {
-      setSuccessToast(null);
-    }, 6000);
   };
 
   const modalCartItems: POSCartItem[] = paymentOrder
@@ -389,465 +229,54 @@ export default function OrdersPage() {
       }))
     : [];
 
+  const handlePrintReceipt = (order: OrderRecord) => {
+    setReceiptModalOrder(buildOrderReceiptData(order));
+    setIsReceiptModalOpen(true);
+  };
+
+  const handlePrintKitchenTicket = (order: OrderRecord, purpose: PrintPurpose) => {
+    setKitchenModalTicket(buildReprintKitchenTicket(order, purpose, user?.name));
+    setIsKitchenModalOpen(true);
+  };
+
   return (
     <div className="space-y-6">
-      {/* Success Notification Alert */}
-      {successToast && (
-        <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 shadow-sm flex items-start justify-between animate-in fade-in duration-200">
-          <div className="flex items-center space-x-3">
-            <div className="p-1.5 rounded-full bg-emerald-600 text-white">
-              <Check className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="font-bold text-xs text-emerald-950">Transaksi Selesai & Terintegrasi</p>
-              <p className="text-xs text-emerald-800 mt-0.5">{successToast}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setSuccessToast(null)}
-            className="text-emerald-600 hover:text-emerald-900 p-1"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      <OrdersToolbar
+        pageSize={pageSize}
+        onPageSizeChange={(sz) => {
+          setPageSize(sz);
+          setCurrentPage(1);
+        }}
+        canExportNominalReports={canExportNominalReports}
+        onExportExcel={handleExportOrdersExcel}
+        onExportCSV={handleExportOrdersCSV}
+        onOpenPDF={() => setIsPDFModalOpen(true)}
+      />
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-slate-200 gap-2">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900 flex items-center space-x-2">
-            <ClipboardList className="w-5 h-5 text-brand-orange" />
-            <span>Riwayat & Pelacakan Lifecycle Pesanan</span>
-          </h2>
-          <p className="text-xs text-slate-500">
-            Pelacakan end-to-end waktu tunggu, status dapur, pembayaran, dan riwayat mutasi
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <TablePageSizeSelector
-            pageSize={pageSize}
-            onPageSizeChange={(sz) => {
-              setPageSize(sz);
-              setCurrentPage(1);
-            }}
-            label="records"
-          />
-
-          {canExportNominalReports && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleExportOrdersExcel}
-                className="text-xs space-x-1.5 border-emerald-300 text-emerald-750 font-bold hover:bg-emerald-50 shadow-2xs text-emerald-800"
-              >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Export Excel</span>
-              </Button>
-
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleExportOrdersCSV}
-                className="text-xs space-x-1.5 border-slate-300 text-slate-700 font-bold hover:bg-slate-50 shadow-2xs"
-              >
-                <Download className="w-3.5 h-3.5 text-slate-600" />
-                <span>Export CSV</span>
-              </Button>
-
-              <Button
-                size="sm"
-                onClick={() => setIsPDFModalOpen(true)}
-                className="text-xs space-x-1.5 bg-brand-orange hover:bg-orange-600 text-white font-bold shadow-sm"
-              >
-                <FileText className="w-3.5 h-3.5 text-white" />
-                <span>Cetak PDF Resmi</span>
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <Card className="shadow-sm border-slate-200">
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-slate-50 border-b border-slate-100 font-semibold text-slate-600">
-                <tr>
-                  <th className="p-3">No. Pesanan</th>
-                  <th className="p-3">Meja / Pelanggan</th>
-                  <th className="p-3">Status Operasional</th>
-                  <th className="p-3">Status Pembayaran</th>
-                  <th className="p-3">Waktu Tunggu</th>
-                  <th className="p-3">SLA Status</th>
-                  <th className="p-3">Total Tagihan</th>
-                  <th className="p-3">Metode Bayar</th>
-                  <th className="p-3 text-right">Aksi & Riwayat</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
-                {displayedOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="p-8 text-center text-slate-400 text-xs">
-                      Belum ada riwayat transaksi pesanan pada periode ini.
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedOrders.map((o) => {
-                    const metrics = calculateOrderMetrics(o);
-                    const isDelayed = metrics.slaStatus === "DELAYED";
-                    const isCompleted = o.status === "COMPLETED";
-
-                    return (
-                      <tr key={o.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3 font-bold text-slate-900 whitespace-nowrap">{o.orderNumber}</td>
-                        <td className="p-3 font-semibold whitespace-nowrap">
-                          <p className="text-slate-900 font-bold">{o.tableNumber}</p>
-                          <p className="text-[10px] text-slate-500 dark:text-slate-300 font-medium">{o.customerName}</p>
-                        </td>
-                        <td className="p-3 whitespace-nowrap">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap inline-flex items-center ${
-                              isCompleted
-                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                                : o.status === "SERVED"
-                                ? "bg-teal-100 text-teal-800 border border-teal-200"
-                                : "bg-brand-orange/10 text-brand-orange border border-brand-orange/20"
-                            }`}
-                          >
-                            {o.status.replace("_", " ")}
-                          </span>
-                        </td>
-                        <td className="p-3 whitespace-nowrap">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap inline-flex items-center ${
-                              o.paymentStatus === "PAID"
-                                ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                                : o.paymentStatus === "REFUNDED"
-                                ? "bg-purple-100 text-purple-800 border border-purple-200"
-                                : "bg-amber-100 text-amber-800 border border-amber-200"
-                            }`}
-                          >
-                            {o.paymentStatus === "PAID" ? "LUNAS" : o.paymentStatus === "REFUNDED" ? "REFUND" : "BELUM LUNAS"}
-                          </span>
-                        </td>
-                        <td className="p-3 font-mono font-semibold whitespace-nowrap" suppressHydrationWarning>
-                          {formatMinutesToHuman(metrics.totalCustomerWaitingMinutes)}
-                        </td>
-                        <td className="p-3 whitespace-nowrap">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap inline-flex items-center ${
-                              isDelayed
-                                ? "bg-red-100 text-red-700 border border-red-200"
-                                : metrics.slaStatus === "AT_RISK"
-                                ? "bg-amber-100 text-amber-800 border border-amber-200"
-                                : "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                            }`}
-                          >
-                            {metrics.slaStatus.replace("_", " ")}
-                          </span>
-                        </td>
-                        <td className="p-3 font-bold text-slate-900 whitespace-nowrap">
-                          {canViewNominals ? formatCurrencyIDR(o.total) : "—"}
-                        </td>
-                        <td className="p-3 whitespace-nowrap">
-                          <span
-                            className="text-[10px] font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 whitespace-nowrap"
-                          >
-                            {o.paymentMethod || "-"}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end space-x-1.5 whitespace-nowrap shrink-0">
-                            {!isCompleted && o.status !== "CANCELLED" && o.paymentStatus !== "PAID" && canProcessPayment && (
-                              <Button
-                                size="sm"
-                                onClick={() => handleOpenPayment(o)}
-                                className="h-7 text-[11px] px-2.5 bg-brand-orange hover:bg-orange-600 text-white font-bold space-x-1 shadow-xs"
-                              >
-                                <CreditCard className="w-3 h-3" />
-                                <span>Proses Pembayaran</span>
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setSelectedOrder(o)}
-                              className="h-7 text-[11px] px-2.5 space-x-1"
-                            >
-                              <History className="w-3 h-3 text-brand-orange" />
-                              <span>Timeline</span>
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-          {displayedOrders.length > 0 && (
-            <TablePagination
-              currentPage={currentPage}
-              totalItems={displayedOrders.length}
-              pageSize={pageSize}
-              onPageChange={setCurrentPage}
-              onPageSizeChange={(sz) => {
-                setPageSize(sz);
-                setCurrentPage(1);
-              }}
-              itemLabel="pesanan"
-            />
-          )}
-        </CardContent>
-      </Card>
+      <OrdersTable
+        orders={paginatedOrders}
+        totalOrders={displayedOrders.length}
+        currentPage={currentPage}
+        pageSize={pageSize}
+        onPageChange={setCurrentPage}
+        canViewNominals={canViewNominals}
+        canProcessPayment={canProcessPayment}
+        onOpenPayment={handleOpenPayment}
+        onSelectOrder={setSelectedOrder}
+      />
 
       {/* Order Detail & Lifecycle History Modal */}
-      {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-150 p-6 space-y-5">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <div className="flex items-center space-x-2">
-                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
-                    Timeline Lifecycle: {selectedOrder.orderNumber}
-                  </h3>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      selectedOrder.status === "COMPLETED"
-                        ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800"
-                        : "bg-primary/10 text-primary border border-primary/20"
-                    }`}
-                  >
-                    {selectedOrder.status}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Meja {selectedOrder.tableNumber} • {selectedOrder.customerName} • Total:{" "}
-                  <strong className="text-slate-900 dark:text-slate-100">{canViewNominals ? formatCurrencyIDR(selectedOrder.total) : "—"}</strong>
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedOrder(null)}
-                className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Time Breakdown Cards */}
-            {(() => {
-              const m = calculateOrderMetrics(selectedOrder);
-              return (
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="p-2.5 rounded-lg bg-primary/10 border border-primary/20">
-                    <p className="text-[10px] text-primary font-bold uppercase">Kitchen Queue</p>
-                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5" suppressHydrationWarning>
-                      {formatMinutesToHuman(m.kitchenQueueMinutes)}
-                    </p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-                    <p className="text-[10px] text-slate-600 dark:text-slate-400 font-bold uppercase">Cooking Time</p>
-                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5" suppressHydrationWarning>
-                      {formatMinutesToHuman(m.cookingMinutes)}
-                    </p>
-                  </div>
-                  <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40">
-                    <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase">Serving Time</p>
-                    <p className="text-sm font-bold text-emerald-950 dark:text-emerald-300 mt-0.5" suppressHydrationWarning>
-                      {formatMinutesToHuman(m.servingMinutes)}
-                    </p>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Ordered Items Summary & Financial Breakdown */}
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-100 dark:border-slate-800 space-y-3">
-              <div>
-                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-2">
-                  Item Pesanan ({selectedOrder.items.length}):
-                </h4>
-                <div className="space-y-1.5">
-                  {selectedOrder.items.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs text-slate-700 dark:text-slate-300">
-                      <div>
-                        <span className="font-bold text-slate-900 dark:text-slate-100">{item.quantity}x</span> {item.productName}
-                        {item.modifiers && item.modifiers.length > 0 && (
-                          <span className="text-[10px] text-slate-400 ml-1">
-                            ({item.modifiers.join(", ")})
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-medium text-slate-900 dark:text-slate-100">
-                        {canViewNominals ? formatCurrencyIDR(item.unitPrice * item.quantity) : "—"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Financial Calculation (Subtotal, Promo, Discount, PB1, Service Charge, Total) */}
-              {canViewNominals && (() => {
-                const promoName = settings.promos.find((p) => p.id === selectedOrder.promoId)?.name || selectedOrder.promoId;
-                const breakdown = getOrderTaxBreakdown(selectedOrder);
-                const discountAmount = breakdown.discount;
-
-                return (
-                  <div className="pt-2.5 border-t border-slate-200/80 dark:border-slate-700 space-y-1 text-xs">
-                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                      <span>Subtotal:</span>
-                      <span className="font-semibold text-slate-800 dark:text-slate-200">{formatCurrencyIDR(selectedOrder.subtotal)}</span>
-                    </div>
-                    {promoName && (
-                      <div className="flex justify-between text-slate-700 dark:text-slate-300">
-                        <span>Promo:</span>
-                        <span className="font-bold text-primary">{promoName}</span>
-                      </div>
-                    )}
-                    {discountAmount > 0 && (
-                      <div className="flex justify-between text-emerald-700 dark:text-emerald-400 font-medium">
-                        <span>Discount:</span>
-                        <span>-{formatCurrencyIDR(discountAmount)}</span>
-                      </div>
-                    )}
-                    {breakdown.pb1 > 0 && (
-                      <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                        <span>Pajak PB1:</span>
-                        <span>+{formatCurrencyIDR(breakdown.pb1)}</span>
-                      </div>
-                    )}
-                    {breakdown.serviceCharge > 0 && (
-                      <div className="flex justify-between text-slate-500 dark:text-slate-400">
-                        <span>Service Charge:</span>
-                        <span>+{formatCurrencyIDR(breakdown.serviceCharge)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between font-bold text-slate-900 dark:text-slate-100 pt-1 border-t border-slate-200 dark:border-slate-700 text-sm">
-                      <span>Total:</span>
-                      <span className="text-primary">{formatCurrencyIDR(selectedOrder.total)}</span>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Step Timeline */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
-                Riwayat Perubahan Status:
-              </h4>
-              <div className="relative pl-6 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-700">
-                {selectedOrder.statusHistory.map((item, idx) => (
-                  <div key={idx} className="relative">
-                    <span className="absolute -left-6 top-1 w-3 h-3 rounded-full bg-primary border-2 border-white dark:border-slate-800 ring-2 ring-primary/20" />
-                    <div className="text-xs">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-slate-900 dark:text-slate-100">
-                          {item.toStatus.replace("_", " ")}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {new Date(item.timestamp).toLocaleTimeString("id-ID", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit",
-                          })}
-                        </span>
-                      </div>
-                      {item.actorName && (
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          Oleh: <strong className="text-slate-700">{item.actorName}</strong>
-                        </p>
-                      )}
-                      {item.note && (
-                        <p className="text-[11px] text-slate-600 bg-slate-50 p-1.5 rounded border border-slate-100 mt-1">
-                          Catatan: {item.note}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Modal Actions */}
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-              <div className="flex items-center space-x-2">
-                {selectedOrder.status !== "COMPLETED" && selectedOrder.status !== "CANCELLED" && selectedOrder.paymentStatus !== "PAID" && canProcessPayment && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      const target = selectedOrder;
-                      handleOpenPayment(target);
-                    }}
-                    className="text-xs bg-brand-orange hover:bg-orange-600 text-white font-bold space-x-1.5"
-                  >
-                    <CreditCard className="w-3.5 h-3.5" />
-                    <span>Proses Pembayaran</span>
-                  </Button>
-                )}
-
-                {selectedOrder.paymentStatus === "PAID" && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setReceiptModalOrder(convertOrderToReceiptData(selectedOrder));
-                      setIsReceiptModalOpen(true);
-                    }}
-                    className="text-xs font-bold space-x-1.5 border-slate-300 dark:border-slate-700"
-                    title="Cetak struk pembayaran pelanggan"
-                  >
-                    <Printer className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Struk Kasir</span>
-                  </Button>
-                )}
-
-                {/* Tombol Cetak Ulang Nota Dapur */}
-                {selectedOrder.status !== "CANCELLED" ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setKitchenModalTicket(convertOrderToKitchenTicket(selectedOrder, "REPRINT"));
-                      setIsKitchenModalOpen(true);
-                    }}
-                    className="text-xs font-bold space-x-1.5 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100"
-                    title="Cetak ulang tiket pesanan untuk staf dapur (Watermark REPRINT)"
-                  >
-                    <Printer className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Nota Dapur (Salinan)</span>
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setKitchenModalTicket(convertOrderToKitchenTicket(selectedOrder, "CANCELLATION"));
-                      setIsKitchenModalOpen(true);
-                    }}
-                    className="text-xs font-bold space-x-1.5 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100"
-                    title="Cetak slip pembatalan pesanan untuk dapur"
-                  >
-                    <Printer className="w-3.5 h-3.5 text-rose-600" />
-                    <span>Slip Pembatalan</span>
-                  </Button>
-                )}
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setSelectedOrder(null)}
-                className="text-xs px-4"
-              >
-                Tutup
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <OrderDetailModal
+        order={selectedOrder}
+        isOpen={Boolean(selectedOrder)}
+        onClose={() => setSelectedOrder(null)}
+        canViewNominals={canViewNominals}
+        canProcessPayment={canProcessPayment}
+        promos={settings.promos}
+        onOpenPayment={handleOpenPayment}
+        onPrintReceipt={handlePrintReceipt}
+        onPrintKitchenTicket={handlePrintKitchenTicket}
+      />
 
       {/* POS Payment Modal Integration */}
       {paymentOrder && (() => {

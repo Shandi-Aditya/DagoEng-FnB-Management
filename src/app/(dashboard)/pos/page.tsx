@@ -75,7 +75,7 @@ import {
   Building,
   Eye,
 } from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
+import { Button } from "@/components/ui/button";
 import { notify } from "@/components/app/notify";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -86,69 +86,20 @@ import { CartSummary } from "@/features/pos/CartSummary";
 import { ProductCatalog } from "@/features/pos/ProductCatalog";
 import { PosToolbar } from "@/features/pos/PosToolbar";
 import { cartItemCount, tenantClosedMessage } from "@/features/pos/pos-catalog";
-
-const COWORKING_TIME_SLOTS = [
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "13:00",
-  "14:00",
-  "15:00",
-  "16:00",
-  "17:00",
-  "18:00",
-];
-
-function parseHour(timeStr: string): number {
-  if (!timeStr) return 9;
-  const match = timeStr.match(/(\d{1,2}):(\d{2})/);
-  if (match) return parseInt(match[1], 10);
-  const matchNum = timeStr.match(/(\d{1,2})/);
-  if (matchNum) return parseInt(matchNum[1], 10);
-  return 9;
-}
-
-function getCurrentTimeFormatted(): string {
-  const now = new Date();
-  const hours = now.getHours().toString().padStart(2, "0");
-  const minutes = now.getMinutes().toString().padStart(2, "0");
-  return `${hours}:${minutes}`;
-}
-
-function getValidOperationalTime(targetDateStr?: string): string {
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  // If target date is in the future, default to opening time 09:00
-  if (targetDateStr && targetDateStr > todayStr) {
-    return "09:00";
-  }
-  const curH = now.getHours();
-  const curM = now.getMinutes();
-  // Before co-working opening hours (before 09:00)
-  if (curH < 9) return "09:00";
-  // During operating hours (09:00 - 17:00): round to current/next hour slot
-  if (curH >= 9 && curH <= 17) {
-    const slotHour = curM > 15 ? Math.min(curH + 1, 17) : curH;
-    return `${slotHour.toString().padStart(2, "0")}:00`;
-  }
-  // After 18:00, default to opening time 09:00
-  return "09:00";
-}
-
-function calculateEndTime(startTime: string, durationHours: number): string {
-  if (!startTime) return "11:00";
-  const match = startTime.match(/(\d{1,2}):(\d{2})/);
-  if (match) {
-    const startHour = parseInt(match[1], 10);
-    const startMin = match[2];
-    const endHour = (startHour + durationHours) % 24;
-    return `${endHour.toString().padStart(2, "0")}:${startMin}`;
-  }
-  const startHour = parseHour(startTime);
-  const endHour = (startHour + durationHours) % 24;
-  return `${endHour.toString().padStart(2, "0")}:00`;
-}
+import { CoworkingToolbar } from "@/features/pos/CoworkingToolbar";
+import { CoworkingRoomCard } from "@/features/pos/CoworkingRoomCard";
+import { CoworkingBookingPanel } from "@/features/pos/CoworkingBookingPanel";
+import { CoworkingPhotoModal } from "@/features/pos/CoworkingPhotoModal";
+import { PosVoucherModal } from "@/features/pos/PosVoucherModal";
+import { PosOpenShiftModal } from "@/features/pos/PosOpenShiftModal";
+import {
+  COWORKING_TIME_SLOTS,
+  parseHour,
+  getCurrentTimeFormatted,
+  getValidOperationalTime,
+  calculateEndTime,
+  checkSlotAvailability as checkSlotAvailabilityHelper,
+} from "@/features/pos/pos-coworking";
 
 export default function POSPage() {
   const { user } = useAuth();
@@ -838,36 +789,15 @@ export default function POSPage() {
     targetDate: string,
     startHour: number,
     durationHours: number
-  ): { isAvailable: boolean; reason?: string; conflictingBooking?: any } => {
-    const space = cwSpaces.find((s) => s.id === spaceId);
-    const maxCapacity = space?.type === "HOT_DESK" ? (space.capacity || 8) : 1;
-    const targetEndHour = startHour + durationHours;
-
-    const activeBookings = cwBookings.filter(
-      (b) =>
-        b.spaceId === spaceId &&
-        b.date === targetDate &&
-        b.checkInStatus !== "CANCELLED" &&
-        b.checkInStatus !== "COMPLETED"
-    );
-
-    for (let h = startHour; h < targetEndHour; h++) {
-      const overlapping = activeBookings.filter((b) => {
-        const bStart = parseHour(b.startTime);
-        const bEnd = bStart + (b.duration || 1);
-        return h >= bStart && h < bEnd;
-      });
-
-      if (overlapping.length >= maxCapacity) {
-        return {
-          isAvailable: false,
-          reason: "Sudah dibooking",
-          conflictingBooking: overlapping[0],
-        };
-      }
-    }
-
-    return { isAvailable: true };
+  ) => {
+    return checkSlotAvailabilityHelper({
+      spaceId,
+      spaces: cwSpaces,
+      bookings: cwBookings,
+      targetDate,
+      startHour,
+      durationHours,
+    });
   };
 
   const cwSelectedMember = useMemo(() => {
@@ -1209,102 +1139,55 @@ export default function POSPage() {
       {/* 2. CO-WORKING TRANSACTION MODE */}
       {/* ==================================================== */}
       {posMode === "COWORKING" && (
-        <div className="space-y-4 animate-in fade-in duration-200">
-          {/* Search, Filter & Date Bar */}
-          <div className="bg-white dark:bg-[#1E293B] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
-            {/* Search Input */}
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-2.5" />
-              <input
-                type="text"
-                value={cwSearchQuery}
-                onChange={(e) => setCwSearchQuery(e.target.value)}
-                placeholder="Cari nama ruang, meja, tipe..."
-                className="w-full pl-10 pr-3 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]/20 focus:border-brand-sage shadow-2xs"
-              />
-            </div>
+        <div className="space-y-4">
+          <CoworkingToolbar
+            searchQuery={cwSearchQuery}
+            onSearchChange={setCwSearchQuery}
+            spaceTypeFilter={cwSpaceTypeFilter}
+            onSpaceTypeFilterChange={setCwSpaceTypeFilter}
+            date={cwDate}
+            minDate={new Date().toISOString().split("T")[0]}
+            onDateChange={(newDate) => {
+              setCwDate(newDate);
+              if (!isManualTimeSet) {
+                setCwStartTime(getValidOperationalTime(newDate));
+              }
+            }}
+          />
 
-            {/* Workspace Type Pills */}
-            <div className="flex items-center space-x-1.5 overflow-x-auto pb-0.5 text-xs no-scrollbar">
-              {[
-                { key: "ALL", label: "Semua Tipe" },
-                { key: "HOT_DESK", label: "Hot Desk" },
-                { key: "DEDICATED_DESK", label: "Dedicated Desk" },
-                { key: "MEETING_ROOM", label: "Meeting Room" },
-                { key: "PRIVATE_POD", label: "Private Pod" },
-              ].map((f) => (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setCwSpaceTypeFilter(f.key)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all touch-manipulation ${
-                    cwSpaceTypeFilter === f.key
-                      ? "bg-brand-sage text-white shadow-xs"
-                      : "bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Date Picker */}
-            <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
-              <Calendar className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
-              <input
-                type="date"
-                value={cwDate}
-                min={new Date().toISOString().split("T")[0]}
-                onChange={(e) => {
-                  const newDate = e.target.value;
-                  setCwDate(newDate);
-                  if (!isManualTimeSet) {
-                    setCwStartTime(getValidOperationalTime(newDate));
-                  }
-                }}
-                className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-200 outline-hidden"
-              />
-            </div>
-          </div>
-
-          {/* Phased Workflow Layout: State A (Full Grid) vs State B (Grid + Configuration Panel) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-            {/* Left Workspace Grid */}
             <div className={selectedSpace ? "lg:col-span-7 xl:col-span-8 space-y-3" : "col-span-12 space-y-3"}>
-              {/* State A helper banner */}
               {!selectedSpace ? (
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3.5 bg-emerald-50/70 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl text-xs text-emerald-900 dark:text-emerald-200">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 bg-muted/40 border border-border rounded-xl text-xs text-muted-foreground">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-brand-sage/15 dark:bg-brand-sageBright/20 flex items-center justify-center text-brand-sage dark:text-brand-sageBright shrink-0">
-                      <Sparkles className="w-4 h-4" />
-                    </div>
                     <div>
-                      <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xs">Pilih Ruangan untuk Memulai Booking</h3>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-300">
-                        Ketuk salah satu kartu ruangan atau meja di bawah ini untuk mengonfigurasi durasi dan pembayaran.
+                      <h3 className="font-medium text-foreground text-xs">Pilih ruangan untuk memulai booking</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Pilih kartu ruangan atau meja di bawah untuk mengatur durasi dan pembayaran.
                       </p>
                     </div>
                   </div>
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 bg-white/80 dark:bg-slate-900/80 px-2.5 py-1 rounded-lg border border-emerald-200/50 dark:border-emerald-800/50 self-start sm:self-auto shrink-0">
-                    {filteredCwSpaces.length} Ruang Tersedia
+                  <span className="text-xs font-mono tabular-nums text-foreground bg-card px-2.5 py-1 rounded-md border border-border shrink-0 self-start sm:self-auto">
+                    {filteredCwSpaces.length} ruang tersedia
                   </span>
                 </div>
               ) : (
                 <div className="flex items-center justify-between px-1">
-                  <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Daftar Ruangan ({filteredCwSpaces.length})
+                  <h3 className="text-xs font-medium text-foreground">
+                    Daftar ruangan ({filteredCwSpaces.length})
                   </h3>
-                  <button
+                  <Button
                     type="button"
+                    variant="link"
+                    size="sm"
                     onClick={handleClosePanel}
-                    className="text-[11px] font-bold text-brand-sage dark:text-brand-sageBright hover:underline"
+                    className="h-auto p-0 text-xs"
                   >
-                    Buka Tampilan Penuh
-                  </button>
+                    Buka tampilan penuh
+                  </Button>
                 </div>
               )}
 
-              {/* Grid of Clean Room Cards */}
               <div
                 className={`grid gap-3 ${
                   selectedSpace
@@ -1318,637 +1201,91 @@ export default function POSPage() {
                   const avail = checkSlotAvailability(space.id, cwDate, startH, cwDuration);
 
                   return (
-                    <div
+                    <CoworkingRoomCard
                       key={space.id}
-                      onClick={() => {
+                      space={space}
+                      isAvailable={avail.isAvailable}
+                      isSelected={isSelected}
+                      onSelect={() => {
                         if (avail.isAvailable) {
                           handleSelectSpace(space.id);
                         }
                       }}
-                      className={`p-3.5 rounded-2xl border transition-all text-left flex flex-col justify-between min-h-[110px] touch-manipulation ${
-                        !avail.isAvailable
-                          ? "bg-slate-100/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 opacity-60 cursor-not-allowed"
-                          : isSelected
-                          ? "bg-emerald-50/60 dark:bg-emerald-950/40 border-brand-sage dark:border-brand-sageBright ring-2 ring-[#3B7A57]/30 shadow-sm cursor-pointer"
-                          : "bg-white dark:bg-[#1E293B] border-slate-200 dark:border-slate-800 hover:border-brand-sage/60 hover:shadow-xs cursor-pointer active:scale-[0.99]"
-                      }`}
-                    >
-                      {/* Top: Space Type + Name & Availability Badge */}
-                      <div className="space-y-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-sage dark:text-brand-sageBright block">
-                              {space.type.replace("_", " ")}
-                            </span>
-                            <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 truncate">
-                              {space.name}
-                            </h4>
-                          </div>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border shrink-0 ${
-                              avail.isAvailable
-                                ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                                : "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
-                            }`}
-                          >
-                            {avail.isAvailable ? "Tersedia" : "Terisi"}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Bottom: Hourly Rate & Action/Selection Indicator */}
-                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                        <div>
-                          <span className="font-mono font-black text-sm text-brand-sage dark:text-brand-sageBright">
-                            {formatCurrencyIDR(space.hourlyRate)}
-                          </span>
-                          <span className="text-[11px] text-slate-400 dark:text-slate-500 font-medium"> /jam</span>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          {/* Optional Photo Preview Modal Trigger */}
-                          {space.imageUrl && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPreviewSpacePhoto(space);
-                              }}
-                              className="p-1 text-slate-400 hover:text-brand-sage dark:hover:text-brand-sageBright rounded-md transition-colors"
-                              title="Lihat foto ruangan"
-                              aria-label={`Lihat foto ${space.name}`}
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {isSelected ? (
-                            <span className="text-[10px] font-bold text-brand-sage dark:text-brand-sageBright flex items-center gap-1 bg-emerald-100/80 dark:bg-emerald-900/50 px-2 py-0.5 rounded-md">
-                              <Check className="w-3 h-3" />
-                              <span>Dipilih</span>
-                            </span>
-                          ) : avail.isAvailable ? (
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
-                              Pilih
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                    </div>
+                      onPreviewPhoto={space.imageUrl ? () => setPreviewSpacePhoto(space) : undefined}
+                    />
                   );
                 })}
               </div>
             </div>
 
-            {/* State B: Booking Configuration & Payment Side Panel */}
             {selectedSpace && (
-              <div className="lg:col-span-5 xl:col-span-4 flex flex-col space-y-3">
-                <div className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 space-y-3.5 text-slate-900 dark:text-slate-100">
-                  {/* Panel Header with Dismiss / Change Room button */}
-                  <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-xl border border-emerald-200/70 dark:border-emerald-800/60 flex items-start justify-between">
-                    <div className="space-y-0.5">
-                      <span className="text-[9px] uppercase font-bold text-brand-sage dark:text-brand-sageBright">
-                        {selectedSpace.type.replace("_", " ")}
-                      </span>
-                      <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100">
-                        {selectedSpace.name}
-                      </h4>
-                      <p className="text-[11px] font-mono font-bold text-brand-sage dark:text-brand-sageBright">
-                        {formatCurrencyIDR(selectedSpace.hourlyRate)} /jam
-                        {selectedSpace.dailyRate && (
-                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-normal ml-1">
-                            (Full Day: {formatCurrencyIDR(selectedSpace.dailyRate)})
-                          </span>
-                        )}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleClosePanel}
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-800 transition-all flex items-center gap-1 text-[11px] font-bold"
-                      title="Tutup panel dan kembali ke katalog penuh"
-                    >
-                      <X className="w-4 h-4" />
-                      <span>Ganti Ruang</span>
-                    </button>
-                  </div>
-
-                  {/* Quick Duration Pills */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
-                        <span>Pilihan Durasi Sewa</span>
-                      </label>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {cwDuration} Jam Terpilih
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {[
-                        { hours: 1, label: "1 Jam", price: selectedSpace.hourlyRate * 1 },
-                        { hours: 2, label: "2 Jam", price: selectedSpace.hourlyRate * 2 },
-                        { hours: 3, label: "3 Jam", price: selectedSpace.hourlyRate * 3 },
-                        {
-                          hours: 8,
-                          label: "Full Day",
-                          price: selectedSpace.dailyRate || selectedSpace.hourlyRate * 8,
-                        },
-                      ].map((pill) => {
-                        const isActive = cwDuration === pill.hours;
-                        return (
-                          <button
-                            key={pill.hours}
-                            type="button"
-                            onClick={() => setCwDuration(pill.hours)}
-                            className={`min-h-[46px] p-2 rounded-xl border flex flex-col items-center justify-center transition-all touch-manipulation ${
-                              isActive
-                                ? "bg-brand-sage text-white border-brand-sage shadow-xs ring-2 ring-[#3B7A57]/20"
-                                : "bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
-                            }`}
-                          >
-                            <span className="text-xs font-bold leading-tight">{pill.label}</span>
-                            <span
-                              className={`text-[10px] font-mono font-semibold ${
-                                isActive ? "text-emerald-100" : "text-brand-sage dark:text-brand-sageBright"
-                              }`}
-                            >
-                              {formatCurrencyIDR(pill.price)}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Custom Duration Selector */}
-                    <div className="pt-1 flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-                        Durasi Lainnya:
-                      </span>
-                      <select
-                        value={cwDuration}
-                        onChange={(e) => setCwDuration(Number(e.target.value))}
-                        className="p-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-900 dark:text-slate-100 outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
-                      >
-                        <option value={1}>1 Jam</option>
-                        <option value={2}>2 Jam</option>
-                        <option value={3}>3 Jam</option>
-                        <option value={4}>4 Jam (Setengah Hari)</option>
-                        <option value={5}>5 Jam</option>
-                        <option value={6}>6 Jam</option>
-                        <option value={7}>7 Jam</option>
-                        <option value={8}>8 Jam (Full Day)</option>
-                        <option value={10}>10 Jam</option>
-                        <option value={12}>12 Jam (Maksimal)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* Jam Mulai & Operasional Time Validation */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
-                        <span>Jam Mulai (Operasional 09:00 - 18:00 WITA)</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsManualTimeSet(false);
-                          setCwStartTime(getValidOperationalTime(cwDate));
-                        }}
-                        className="text-[10px] text-brand-sage dark:text-brand-sageBright font-bold hover:underline"
-                        title="Reset ke jam saat ini / terdekat"
-                      >
-                        Auto Waktu Terdekat
-                      </button>
-                    </div>
-
-                    <div className="p-2.5 bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-800/50 rounded-xl text-xs space-y-1.5">
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-600 dark:text-slate-300 font-medium">Jam Mulai:</span>
-                        <input
-                          type="time"
-                          value={cwStartTime}
-                          min="09:00"
-                          max="18:00"
-                          onChange={(e) => {
-                            setIsManualTimeSet(true);
-                            setCwStartTime(e.target.value);
-                          }}
-                          className="px-2 py-1 bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg font-mono font-bold text-xs text-slate-900 dark:text-slate-100 outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
-                        />
-                      </div>
-
-                      <div className="flex justify-between items-center text-emerald-900 dark:text-emerald-300 font-bold pt-1 border-t border-emerald-100 dark:border-emerald-900/50">
-                        <span>Estimasi Selesai:</span>
-                        <span className="font-mono text-sm">
-                          {calculateEndTime(cwStartTime, cwDuration)} WITA
-                        </span>
-                      </div>
-
-                      {/* Exceeds Operating Hours Warning */}
-                      {parseHour(cwStartTime) + cwDuration > 18 && (
-                        <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200 text-[10px] flex items-center gap-1.5 font-medium">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                          <span>
-                            Waktu selesai ({calculateEndTime(cwStartTime, cwDuration)} WITA) melewati jam operasional Co-working (tutup pukul 18:00 WITA).
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Quick Slots (09:00 - 17:00) */}
-                    <div className="grid grid-cols-5 gap-1 pt-0.5">
-                      {COWORKING_TIME_SLOTS.slice(0, 9).map((slot) => {
-                        const startH = parseHour(slot);
-                        const avail = checkSlotAvailability(selectedSpace.id, cwDate, startH, cwDuration);
-                        const isSelected = cwStartTime === slot;
-
-                        return (
-                          <button
-                            key={slot}
-                            type="button"
-                            disabled={!avail.isAvailable}
-                            onClick={() => {
-                              setIsManualTimeSet(true);
-                              setCwStartTime(slot);
-                            }}
-                            className={`py-1.5 px-1 rounded-lg text-center transition-all flex flex-col items-center justify-center min-h-[38px] touch-manipulation ${
-                              !avail.isAvailable
-                                ? "bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-400 cursor-not-allowed opacity-50 line-through"
-                                : isSelected
-                                ? "bg-brand-sage text-white shadow-xs font-bold ring-1 ring-[#3B7A57]"
-                                : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-slate-700"
-                            }`}
-                          >
-                            <span className="text-[11px] font-mono leading-tight">{slot}</span>
-                            <span
-                              className={`text-[8px] font-bold ${
-                                !avail.isAvailable
-                                  ? "text-rose-600 dark:text-rose-400"
-                                  : isSelected
-                                  ? "text-emerald-100"
-                                  : "text-emerald-600 dark:text-emerald-400"
-                              }`}
-                            >
-                              {avail.isAvailable ? "Tersedia" : "Terisi"}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Tipe Penggunaan */}
-                  <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-                    <div className="flex items-center justify-between">
-                      <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                        <Building className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Tipe Penggunaan</span>
-                      </label>
-                      <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[10px] font-bold">
-                        <button
-                          type="button"
-                          onClick={() => setCwUsageType("PERSONAL")}
-                          className={`px-2 py-0.5 rounded ${
-                            cwUsageType === "PERSONAL"
-                              ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
-                              : "text-slate-500 dark:text-slate-400"
-                          }`}
-                        >
-                          Personal
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCwUsageType("GROUP")}
-                          className={`px-2 py-0.5 rounded ${
-                            cwUsageType === "GROUP"
-                              ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
-                              : "text-slate-500 dark:text-slate-400"
-                          }`}
-                        >
-                          Group / Company
-                        </button>
-                      </div>
-                    </div>
-
-                    {cwUsageType === "GROUP" && (
-                      <input
-                        type="text"
-                        placeholder="Nama Instansi / Perusahaan / Group *"
-                        value={cwCompanyName}
-                        onChange={(e) => setCwCompanyName(e.target.value)}
-                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
-                      />
-                    )}
-                  </div>
-
-                  {/* Customer / Guest Selection */}
-                  <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                    <div className="flex items-center justify-between text-xs">
-                      <label className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                        <User className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Identitas Pelanggan / Tamu</span>
-                      </label>
-                      <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-[10px] font-bold">
-                        <button
-                          type="button"
-                          onClick={() => setCwCustomerType("MEMBER")}
-                          className={`px-2 py-0.5 rounded ${
-                            cwCustomerType === "MEMBER"
-                              ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
-                              : "text-slate-500 dark:text-slate-400"
-                          }`}
-                        >
-                          Member
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCwCustomerType("WALK_IN")}
-                          className={`px-2 py-0.5 rounded ${
-                            cwCustomerType === "WALK_IN"
-                              ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
-                              : "text-slate-500 dark:text-slate-400"
-                          }`}
-                        >
-                          Walk-in
-                        </button>
-                      </div>
-                    </div>
-
-                    {cwCustomerType === "MEMBER" ? (
-                      <select
-                        value={cwMemberId}
-                        onChange={(e) => setCwMemberId(e.target.value)}
-                        className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-200 outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
-                      >
-                        <option value="">-- Pilih Member Terdaftar ({membersList.length}) --</option>
-                        {membersList.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.tier} • {m.points} Pts) - {m.phone}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <input
-                          type="text"
-                          placeholder="Nama Lengkap Tamu *"
-                          value={cwGuestName}
-                          onChange={(e) => setCwGuestName(e.target.value)}
-                          className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
-                        />
-                        <div className="grid grid-cols-2 gap-1.5">
-                          <input
-                            type="tel"
-                            placeholder="No. WhatsApp / HP"
-                            value={cwGuestPhone}
-                            onChange={(e) => setCwGuestPhone(e.target.value)}
-                            className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 outline-hidden"
-                          />
-                          <input
-                            type="email"
-                            placeholder="Email Tamu"
-                            value={cwGuestEmail}
-                            onChange={(e) => setCwGuestEmail(e.target.value)}
-                            className="w-full p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-900 dark:text-slate-100 outline-hidden"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Voucher / Promo Co-Working */}
-                  <div className="space-y-2 p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800">
-                    <div className="flex items-center justify-between text-xs">
-                      <label className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1">
-                        <Tag className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
-                        <span>Voucher Promo Co-Working</span>
-                      </label>
-                      {cwAppliedPromo && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCwAppliedPromo(null);
-                            setCwVoucherCode("");
-                            setCwVoucherValidationMsg(null);
-                          }}
-                          className="text-[10px] text-rose-600 font-bold hover:underline"
-                        >
-                          Hapus
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="flex space-x-1.5">
-                      <input
-                        type="text"
-                        placeholder="Kode: COWORK50 / DAGO20"
-                        value={cwVoucherCode}
-                        onChange={(e) => setCwVoucherCode(e.target.value.toUpperCase())}
-                        className="flex-1 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-mono font-bold uppercase text-slate-900 dark:text-slate-100 outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
-                      />
-                      <Button
-                        type="button"
-                        onClick={() => handleApplyCoworkVoucher()}
-                        className="h-8 px-3 text-xs font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-xl shadow-xs"
-                      >
-                        Terapkan
-                      </Button>
-                    </div>
-
-                    {cwVoucherValidationMsg && (
-                      <div
-                        className={`p-2 rounded-lg text-[11px] font-medium flex items-center space-x-1.5 ${
-                          cwVoucherValidationMsg.type === "SUCCESS"
-                            ? "bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
-                            : "bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300"
-                        }`}
-                      >
-                        {cwVoucherValidationMsg.type === "SUCCESS" ? (
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        ) : (
-                          <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
-                        )}
-                        <span>{cwVoucherValidationMsg.text}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Price Breakdown */}
-                  <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1.5 text-xs">
-                    <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                      <span>Sewa ({cwDuration} Jam)</span>
-                      <span className="font-mono">{formatCurrencyIDR(cwPricing.originalSubtotal)}</span>
-                    </div>
-                    {cwPricing.discountAmount > 0 && (
-                      <div className="flex justify-between text-emerald-600 dark:text-emerald-400 font-bold">
-                        <span>Diskon Promo {cwAppliedPromo ? `(${cwAppliedPromo.code || cwAppliedPromo.name})` : ""}</span>
-                        <span className="font-mono">-{formatCurrencyIDR(cwPricing.discountAmount)}</span>
-                      </div>
-                    )}
-                    {isTaxEnabled && (
-                      <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                        <span>Pajak PB1 ({taxRatePercent}%)</span>
-                        <span className="font-mono">{formatCurrencyIDR(cwPricing.tax)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between font-black text-slate-900 dark:text-slate-100 pt-1.5 border-t border-slate-200 dark:border-slate-800 text-sm">
-                      <span>Total Tagihan</span>
-                      <span className="text-brand-sage dark:text-brand-sageBright font-black font-mono">
-                        {formatCurrencyIDR(cwPricing.total)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Payment Method Selector */}
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Metode Pembayaran Kasir
-                    </label>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {[
-                        { id: "QRIS", label: "QRIS", desc: "e-Wallet" },
-                        { id: "CASH", label: "Kasir", desc: "Tunai" },
-                        { id: "EDC", label: "Debit/EDC", desc: "Kartu Bank" },
-                      ].map((pm) => (
-                        <button
-                          key={pm.id}
-                          type="button"
-                          onClick={() => setCwPaymentMethod(pm.id as POSPaymentMethod)}
-                          className={`min-h-[46px] p-2 rounded-xl border text-center transition-all touch-manipulation ${
-                            cwPaymentMethod === pm.id
-                              ? "bg-brand-sage text-white border-brand-sage shadow-xs"
-                              : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
-                          }`}
-                        >
-                          <span className="text-xs font-bold block">{pm.label}</span>
-                          <span
-                            className={`text-[9px] block ${
-                              cwPaymentMethod === pm.id ? "text-emerald-100" : "text-slate-400 dark:text-slate-500"
-                            }`}
-                          >
-                            {pm.desc}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Checkout & Print Action Button */}
-                  <Button
-                    type="button"
-                    onClick={handleCompleteCoworkingPayment}
-                    className="w-full min-h-[48px] h-12 bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-md space-x-2 transition-all active:scale-98 touch-manipulation"
-                  >
-                    <ShieldCheck className="w-4 h-4 text-emerald-300" />
-                    <span>Bayar & Cetak Nota Co-Working ({formatCurrencyIDR(cwPricing.total)})</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Workspace Photo Preview Modal (Triggered optionally when cashier or customer clicks "Foto") */}
-      {previewSpacePhoto && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1E293B] rounded-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            {previewSpacePhoto.imageUrl && (
-              <div className="relative w-full h-56 bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                <img
-                  src={previewSpacePhoto.imageUrl}
-                  alt={previewSpacePhoto.name}
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                    const fb = e.currentTarget.parentElement?.querySelector(".space-fallback-placeholder") as HTMLElement;
-                    if (fb) fb.classList.remove("hidden");
+              <div className="lg:col-span-5 xl:col-span-4">
+                <CoworkingBookingPanel
+                  selectedSpace={selectedSpace}
+                  onClosePanel={handleClosePanel}
+                  cwDuration={cwDuration}
+                  onDurationChange={setCwDuration}
+                  cwStartTime={cwStartTime}
+                  onStartTimeChange={(time) => {
+                    setIsManualTimeSet(true);
+                    setCwStartTime(time);
                   }}
-                  className="w-full h-full object-cover"
+                  onResetStartTime={() => {
+                    setIsManualTimeSet(false);
+                    setCwStartTime(getValidOperationalTime(cwDate));
+                  }}
+                  checkSlotAvailable={(slot) => {
+                    const startH = parseHour(slot);
+                    return checkSlotAvailability(selectedSpace.id, cwDate, startH, cwDuration).isAvailable;
+                  }}
+                  cwUsageType={cwUsageType}
+                  onUsageTypeChange={setCwUsageType}
+                  cwCompanyName={cwCompanyName}
+                  onCompanyNameChange={setCwCompanyName}
+                  cwCustomerType={cwCustomerType}
+                  onCustomerTypeChange={setCwCustomerType}
+                  membersList={membersList}
+                  cwMemberId={cwMemberId}
+                  onMemberIdChange={setCwMemberId}
+                  cwGuestName={cwGuestName}
+                  onGuestNameChange={setCwGuestName}
+                  cwGuestPhone={cwGuestPhone}
+                  onGuestPhoneChange={setCwGuestPhone}
+                  cwGuestEmail={cwGuestEmail}
+                  onGuestEmailChange={setCwGuestEmail}
+                  cwVoucherCode={cwVoucherCode}
+                  onVoucherCodeChange={setCwVoucherCode}
+                  onApplyVoucher={handleApplyCoworkVoucher}
+                  onRemoveVoucher={() => {
+                    setCwAppliedPromo(null);
+                    setCwVoucherCode("");
+                    setCwVoucherValidationMsg(null);
+                  }}
+                  cwAppliedPromo={cwAppliedPromo}
+                  cwVoucherValidationMsg={cwVoucherValidationMsg}
+                  cwPricing={cwPricing}
+                  isTaxEnabled={isTaxEnabled}
+                  taxRatePercent={taxRatePercent}
+                  cwPaymentMethod={cwPaymentMethod}
+                  onPaymentMethodChange={setCwPaymentMethod}
+                  onCompletePayment={handleCompleteCoworkingPayment}
                 />
-                <div className="space-fallback-placeholder hidden flex w-full h-full items-center justify-center text-slate-400">
-                  <Building className="w-10 h-10 opacity-30" />
-                </div>
               </div>
             )}
-            <div className="p-5 space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-brand-sage dark:text-brand-sageBright">
-                    {previewSpacePhoto.type.replace("_", " ")}
-                  </span>
-                  <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
-                    {previewSpacePhoto.name}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
-                    <MapPin className="w-3.5 h-3.5" />
-                    <span>{previewSpacePhoto.area}</span>
-                    <span>•</span>
-                    <Users className="w-3.5 h-3.5" />
-                    <span>Kapasitas {previewSpacePhoto.capacity} Tamu</span>
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="font-mono font-bold text-sm text-brand-sage dark:text-brand-sageBright">
-                    {formatCurrencyIDR(previewSpacePhoto.hourlyRate)}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block">/ jam</span>
-                </div>
-              </div>
-
-              {previewSpacePhoto.description && (
-                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                  {previewSpacePhoto.description}
-                </p>
-              )}
-
-              {previewSpacePhoto.amenities?.length > 0 && (
-                <div>
-                  <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                    Fasilitas:
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {previewSpacePhoto.amenities.map((a, i) => (
-                      <span
-                        key={i}
-                        className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                      >
-                        ✓ {a}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setPreviewSpacePhoto(null)}
-                  className="rounded-xl min-h-[40px] px-4 font-bold"
-                >
-                  Tutup
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setCwSelectedSpaceId(previewSpacePhoto.id);
-                    setPreviewSpacePhoto(null);
-                  }}
-                  className="bg-brand-sage hover:bg-[#2E6044] text-white font-bold rounded-xl min-h-[40px] px-4"
-                >
-                  Pilih Ruang Ini
-                </Button>
-              </div>
-            </div>
           </div>
         </div>
       )}
+
+      {/* Workspace Photo Preview Modal */}
+      <CoworkingPhotoModal
+        isOpen={Boolean(previewSpacePhoto)}
+        onClose={() => setPreviewSpacePhoto(null)}
+        space={previewSpacePhoto}
+        onSelectSpace={(spaceId) => {
+          setCwSelectedSpaceId(spaceId);
+          setPreviewSpacePhoto(null);
+        }}
+      />
 
       {/* MODALS */}
       {/* 1. Modifier Modal */}
@@ -2059,80 +1396,15 @@ export default function POSPage() {
       )}
 
       {/* 4. Voucher Modal */}
-      {isVoucherModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-5 border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center space-x-2">
-                <Ticket className="w-5 h-5 text-brand-orange" />
-                <h3 className="font-bold text-sm text-slate-900">Klaim Voucher Poin Loyalty</h3>
-              </div>
-              <button
-                onClick={() => setIsVoucherModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-2.5 text-xs">
-              <p className="text-slate-600">
-                Poin member <strong>{selectedMember?.name}</strong>:{" "}
-                <span className="font-bold text-brand-orange font-mono">{selectedMember?.points} Pts</span>
-              </p>
-
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {LOYALTY_VOUCHERS.map((voucher) => {
-                  const canAfford = (selectedMember?.points || 0) >= voucher.pointsCost;
-                  const isSelected = appliedVoucher?.id === voucher.id;
-
-                  return (
-                    <div
-                      key={voucher.id}
-                      onClick={() => canAfford && handleApplyVoucher(voucher)}
-                      className={`p-3 rounded-xl border flex items-center justify-between transition-all ${!canAfford
-                        ? "opacity-50 bg-slate-50 border-slate-200 cursor-not-allowed"
-                        : isSelected
-                          ? "bg-amber-50 border-amber-400 shadow-sm cursor-pointer"
-                          : "bg-white border-slate-200 hover:border-amber-300 cursor-pointer"
-                        }`}
-                    >
-                      <div className="space-y-0.5">
-                        <p className="font-bold text-slate-900">{voucher.title}</p>
-                        <p className="text-[10px] text-slate-500">{voucher.description}</p>
-                        <p className="text-[10px] font-bold text-brand-orange font-mono">
-                          Biaya: {voucher.pointsCost} Poin
-                        </p>
-                      </div>
-
-                      <Button
-                        size="sm"
-                        disabled={!canAfford}
-                        variant={isSelected ? "default" : "outline"}
-                        className={`text-[10px] h-7 px-2 font-bold ${isSelected ? "bg-amber-600 text-white" : ""
-                          }`}
-                      >
-                        {isSelected ? "Terpasang" : "Gunakan"}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2 border-t">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setIsVoucherModalOpen(false)}
-              >
-                Tutup
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PosVoucherModal
+        isOpen={isVoucherModalOpen}
+        onClose={() => setIsVoucherModalOpen(false)}
+        memberName={selectedMember?.name}
+        memberPoints={selectedMember?.points || 0}
+        vouchers={LOYALTY_VOUCHERS}
+        appliedVoucherId={appliedVoucher?.id}
+        onApplyVoucher={handleApplyVoucher}
+      />
 
       {/* 5. Coworking Receipt Modal */}
       {lastCoworkReceiptData && (
@@ -2174,156 +1446,48 @@ export default function POSPage() {
       )}
 
       {/* 7. Quick Open Shift Modal for POS Cashier */}
-      {isPosOpenShiftModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#1E293B] rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150 text-slate-900 dark:text-slate-100">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center space-x-2">
-                <Clock className="w-5 h-5 text-brand-sage dark:text-brand-sageBright" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Buka Shift Kasir Baru (POS)</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => !isSubmittingShift && setIsPosOpenShiftModalOpen(false)}
-                disabled={isSubmittingShift}
-                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <PosOpenShiftModal
+        isOpen={isPosOpenShiftModalOpen}
+        onClose={() => setIsPosOpenShiftModalOpen(false)}
+        isSubmitting={isSubmittingShift}
+        shiftName={posOpenShiftName}
+        onShiftNameChange={setPosOpenShiftName}
+        openingCash={posOpeningCashInput}
+        onOpeningCashChange={setPosOpeningCashInput}
+        onSubmit={async (e) => {
+          e.preventDefault();
+          if (isSubmittingShift) return;
+          setIsSubmittingShift(true);
 
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (isSubmittingShift) return;
-                setIsSubmittingShift(true);
+          const targetOutlet = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
+          const targetCashier = user?.name || "Kasir Bertugas";
 
-                const targetOutlet = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
-                const targetCashier = user?.name || "Kasir Bertugas";
+          try {
+            const res = await fetch("/api/shifts", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "OPEN",
+                shiftName: posOpenShiftName,
+                startingCash: Number(posOpeningCashInput) || 0,
+                cashierName: targetCashier,
+                outletId: targetOutlet,
+              }),
+            });
+            const data = await res.json().catch(() => null);
+            if (res.status === 409) {
+              notify.warning(data?.error || "Shift kasir sudah berjalan");
+            }
+          } catch (err) {
+            console.warn("[Shift Open Sync Warn]:", err);
+          }
 
-                try {
-                  const res = await fetch("/api/shifts", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      action: "OPEN",
-                      shiftName: posOpenShiftName,
-                      startingCash: Number(posOpeningCashInput) || 0,
-                      cashierName: targetCashier,
-                      outletId: targetOutlet,
-                    }),
-                  });
-                  const data = await res.json().catch(() => null);
-                  if (res.status === 409) {
-                    notify.warning(data?.error || "Shift kasir sudah berjalan");
-                  }
-                } catch (err) {
-                  console.warn("[Shift Open Sync Warn]:", err);
-                }
-
-                openShift(posOpenShiftName, Number(posOpeningCashInput) || 0, targetCashier);
-                setIsSubmittingShift(false);
-                setIsPosOpenShiftModalOpen(false);
-                notify.success(`${posOpenShiftName} dibuka`, `Modal kas ${formatCurrencyIDR(Number(posOpeningCashInput) || 0)}.`);
-              }}
-              className="space-y-4 text-xs"
-            >
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1.5">
-                  Nama Sesi Shift
-                </label>
-                <select
-                  value={posOpenShiftName}
-                  onChange={(e) => setPosOpenShiftName(e.target.value)}
-                  disabled={isSubmittingShift}
-                  className="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-xs font-semibold text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
-                >
-                  <option value="Shift Pagi (08:00 - 16:00)">Shift Pagi (08:00 - 16:00)</option>
-                  <option value="Shift Sore (14:00 - 22:00)">Shift Sore (14:00 - 22:00)</option>
-                  <option value="Shift Malam (16:00 - 23:00)">Shift Malam (16:00 - 23:00)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1.5">
-                  Modal Kas Awal di Laci / Cash Drawer (Rp) *
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-2.5 text-xs text-slate-400 font-mono">Rp</span>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    step={10000}
-                    value={posOpeningCashInput}
-                    onChange={(e) => setPosOpeningCashInput(Number(e.target.value))}
-                    disabled={isSubmittingShift}
-                    className="w-full pl-10 pr-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl font-mono text-sm font-bold text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
-                    placeholder="Contoh: 500000"
-                  />
-                </div>
-
-                {/* Quick Denomination Presets for Tablet */}
-                <div className="pt-2">
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block mb-1">
-                    Preset Cepat Tablet:
-                  </span>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[0, 100000, 200000, 500000].map((amt) => (
-                      <button
-                        key={amt}
-                        type="button"
-                        onClick={() => setPosOpeningCashInput(amt)}
-                        disabled={isSubmittingShift}
-                        className={`py-1.5 px-2 rounded-lg text-[11px] font-mono font-bold transition-all border ${
-                          posOpeningCashInput === amt
-                            ? "bg-brand-sage text-white border-brand-sage shadow-xs"
-                            : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100"
-                        }`}
-                      >
-                        {amt === 0 ? "Rp 0" : `${amt / 1000}k`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1.5">
-                  Uang pecahan fisik di laci kasir untuk modal uang kembalian transaksi tunai.
-                </p>
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setIsPosOpenShiftModalOpen(false)}
-                  disabled={isSubmittingShift}
-                  className="rounded-xl min-h-[44px] px-4 font-bold border-slate-300 dark:border-slate-700"
-                >
-                  Batal
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={isSubmittingShift}
-                  className="bg-brand-sage hover:bg-[#2E6044] text-white font-bold rounded-xl min-h-[44px] px-5 shadow-xs flex items-center space-x-2"
-                >
-                  {isSubmittingShift ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Membuka Sesi...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Clock className="w-4 h-4" />
-                      <span>Buka Shift & Mulai Transaksi</span>
-                    </>
-                  )}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+          openShift(posOpenShiftName, Number(posOpeningCashInput) || 0, targetCashier);
+          setIsSubmittingShift(false);
+          setIsPosOpenShiftModalOpen(false);
+          notify.success(`${posOpenShiftName} dibuka`, `Modal kas ${formatCurrencyIDR(Number(posOpeningCashInput) || 0)}.`);
+        }}
+      />
     </div>
   );
 }
