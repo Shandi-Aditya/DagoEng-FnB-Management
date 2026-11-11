@@ -123,10 +123,10 @@ export function StockAdjustmentModal({
           </div>
 
           <DialogFooter className="border-t pt-3">
-            <Button type="button" variant="outline" size="sm" onClick={onClose} className="text-xs">
+            <Button type="button" variant="outline" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs">
+            <Button type="submit">
               Simpan Penyesuaian
             </Button>
           </DialogFooter>

@@ -176,7 +176,7 @@ export function StockOpnameModal({
                 {variance > 0 ? `+${variance}` : variance} {targetItem?.unit}
               </span>
             </div>
-            <p className="mt-0.5 text-[11px] opacity-80">
+            <p className="mt-0.5 text-xs opacity-80">
               {variance === 0
                 ? "Stok fisik cocok dengan sistem."
                 : variance > 0
@@ -226,10 +226,10 @@ export function StockOpnameModal({
           </div>
 
           <DialogFooter className="border-t pt-3">
-            <Button type="button" variant="outline" size="sm" onClick={onClose} className="text-xs">
+            <Button type="button" variant="outline" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs">
+            <Button type="submit">
               Simpan & Selaraskan Stok
             </Button>
           </DialogFooter>

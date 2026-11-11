@@ -1,16 +1,9 @@
-import { CheckCircle2, Eye, Truck } from "lucide-react";
+import { Truck } from "lucide-react";
 
 import { EmptyState } from "@/components/app/empty-state";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { PurchaseOrder } from "@/types/inventory";
 
@@ -22,96 +15,66 @@ interface InventoryPurchaseOrdersTabProps {
   onPreviewPO: (po: PurchaseOrder) => void;
 }
 
-export function InventoryPurchaseOrdersTab({
-  purchaseOrders,
-  onReceivePO,
-  onPreviewPO,
-}: InventoryPurchaseOrdersTabProps) {
-  const hasOrders = purchaseOrders.length > 0;
+export function InventoryPurchaseOrdersTab({ purchaseOrders, onReceivePO, onPreviewPO }: InventoryPurchaseOrdersTabProps) {
+  if (purchaseOrders.length === 0) {
+    return (
+      <EmptyState
+        className="border"
+        icon={<Truck />}
+        title="Belum ada pesanan pembelian"
+        description="Buat PO untuk mencatat pembelian bahan dari pemasok."
+      />
+    );
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-lg border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[120px]">Nomor PO</TableHead>
-              <TableHead>Pemasok</TableHead>
-              <TableHead>Dipesan</TableHead>
-              <TableHead>Perkiraan tiba</TableHead>
-              <TableHead>Item</TableHead>
-              <TableHead>Total</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Aksi</TableHead>
+    <div className="rounded-lg border bg-card">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>PO</TableHead>
+            <TableHead className="hidden md:table-cell">Dipesan</TableHead>
+            <TableHead className="hidden md:table-cell">Perkiraan tiba</TableHead>
+            <TableHead className="text-right">Total</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead className="w-0">
+              <span className="sr-only">Aksi</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {purchaseOrders.map((po) => (
+            <TableRow key={po.id}>
+              <TableCell>
+                <div className="flex flex-col">
+                  <span className="font-medium">{po.supplier}</span>
+                  <span className="text-xs text-muted-foreground">
+                    <span className="font-mono tabular-nums">{po.poNumber}</span> · {po.items.length} bahan
+                  </span>
+                </div>
+              </TableCell>
+              <TableCell className="hidden md:table-cell text-muted-foreground">{po.orderDate}</TableCell>
+              <TableCell className="hidden md:table-cell text-muted-foreground">{po.expectedDelivery || "—"}</TableCell>
+              <TableCell className="text-right font-mono tabular-nums">{formatCurrencyIDR(po.total)}</TableCell>
+              <TableCell>
+                <StatusBadge status={poStatusTone(po.status)}>{poStatusLabel(po.status)}</StatusBadge>
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center justify-end gap-1.5">
+                  {po.status === "SENT" ? (
+                    <Button size="sm" onClick={() => onReceivePO(po.id)}>
+                      Terima
+                    </Button>
+                  ) : null}
+                  <Button size="sm" variant="ghost" onClick={() => onPreviewPO(po)}>
+                    Detail
+                  </Button>
+                </div>
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {!hasOrders ? (
-              <TableRow>
-                <TableCell colSpan={8} className="py-12">
-                  <EmptyState
-                    icon={<Truck className="size-6 text-muted-foreground" />}
-                    title="Belum ada pesanan pembelian"
-                    description="Buat PO untuk mencatat pembelian bahan dari pemasok."
-                  />
-                </TableCell>
-              </TableRow>
-            ) : (
-              purchaseOrders.map((po) => {
-                const isSent = po.status === "SENT";
-
-                return (
-                  <TableRow key={po.id}>
-                    <TableCell className="font-mono text-xs font-medium tabular-nums text-foreground">
-                      {po.poNumber}
-                    </TableCell>
-                    <TableCell className="font-medium text-foreground">{po.supplier}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{po.orderDate}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {po.expectedDelivery || "-"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {po.items.length} Macam Bahan
-                    </TableCell>
-                    <TableCell className="font-mono text-xs font-medium tabular-nums text-foreground">
-                      {formatCurrencyIDR(po.total)}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={poStatusTone(po.status)}>
-                        {poStatusLabel(po.status)}
-                      </StatusBadge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {isSent ? (
-                          <Button
-                            size="sm"
-                            onClick={() => onReceivePO(po.id)}
-                            className="h-8 gap-1 text-xs"
-                          >
-                            <CheckCircle2 className="size-3.5" />
-                            <span>Terima</span>
-                          </Button>
-                        ) : null}
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onPreviewPO(po)}
-                          className="h-8 gap-1 text-xs"
-                        >
-                          <Eye className="size-3.5 text-muted-foreground" />
-                          <span>Detail</span>
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

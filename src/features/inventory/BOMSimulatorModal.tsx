@@ -87,7 +87,7 @@ export function BOMSimulatorModal({
 
           {selectedRecipe ? (
             <div className="space-y-2 rounded-lg border bg-muted/20 p-3">
-              <span className="block text-[11px] font-medium text-foreground">
+              <span className="block text-xs font-medium text-foreground">
                 Estimasi Bahan Yang Akan Dipotong ({qty} Porsi):
               </span>
               <div className="space-y-1">
@@ -100,7 +100,7 @@ export function BOMSimulatorModal({
                   return (
                     <div
                       key={idx}
-                      className="flex items-center justify-between text-[11px] text-muted-foreground"
+                      className="flex items-center justify-between text-xs text-muted-foreground"
                     >
                       <span>
                         {ing.ingredientName} ({needed} {ing.unit})
@@ -120,10 +120,10 @@ export function BOMSimulatorModal({
           ) : null}
 
           <DialogFooter className="border-t pt-3">
-            <Button type="button" variant="outline" size="sm" onClick={onClose} className="text-xs">
+            <Button type="button" variant="outline" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs">
+            <Button type="submit">
               Jalankan Simulasi
             </Button>
           </DialogFooter>

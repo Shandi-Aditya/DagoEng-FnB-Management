@@ -48,11 +48,11 @@ export function PODetailModal({ po, isOpen, onClose, onReceivePO }: PODetailModa
           {/* Metadata Grid */}
           <div className="grid grid-cols-2 gap-2 rounded-lg border bg-muted/20 p-2.5">
             <div>
-              <span className="text-[10px] text-muted-foreground">Perkiraan tiba</span>
+              <span className="text-xs text-muted-foreground">Perkiraan tiba</span>
               <p className="font-medium text-foreground">{po.expectedDelivery || "-"}</p>
             </div>
             <div>
-              <span className="text-[10px] text-muted-foreground">Catatan</span>
+              <span className="text-xs text-muted-foreground">Catatan</span>
               <p className="text-muted-foreground">{po.notes || "-"}</p>
             </div>
           </div>
@@ -60,7 +60,7 @@ export function PODetailModal({ po, isOpen, onClose, onReceivePO }: PODetailModa
           {/* Items Table */}
           <div className="overflow-hidden rounded-lg border">
             <table className="w-full text-left">
-              <thead className="border-b bg-muted/50 text-[10px] font-medium uppercase text-muted-foreground">
+              <thead className="border-b bg-muted/50 text-xs text-muted-foreground">
                 <tr>
                   <th className="p-2">Bahan</th>
                   <th className="p-2 text-right">Jumlah</th>
@@ -111,21 +111,19 @@ export function PODetailModal({ po, isOpen, onClose, onReceivePO }: PODetailModa
         </div>
 
         <DialogFooter className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 sm:justify-between">
-          <Button variant="outline" size="sm" onClick={onClose} className="text-xs">
+          <Button variant="outline" onClick={onClose}>
             Tutup
           </Button>
 
           {isSent ? (
             <Button
-              size="sm"
               onClick={() => {
                 onReceivePO(po.id);
                 onClose();
               }}
-              className="gap-1.5 text-xs"
             >
-              <CheckCircle2 className="size-3.5" />
-              <span>Tandai diterima</span>
+              <CheckCircle2 />
+              Tandai diterima
             </Button>
           ) : null}
         </DialogFooter>

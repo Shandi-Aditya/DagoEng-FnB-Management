@@ -1,39 +1,33 @@
-import {
-  AlertTriangle,
-  ArrowUpDown,
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  FileSpreadsheet,
-  History,
-  Package,
-  Search,
-} from "lucide-react";
+"use client";
 
+import { ArrowUpDown, History, Package, Search } from "lucide-react";
+
+import { DataPagination } from "@/components/app/data-pagination";
 import { EmptyState } from "@/components/app/empty-state";
 import { StatusBadge } from "@/components/app/status-badge";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/native-select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { formatCurrencyIDR } from "@/lib/utils";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { cn, formatCurrencyIDR } from "@/lib/utils";
 import type { IngredientItem, StockAdjustmentLog } from "@/types/inventory";
 
 import { stockStatusLabel, stockStatusTone } from "./inventory-domain";
+import { adjustmentReasonLabel, ingredientCategoryLabel } from "./inventory-reorder";
+
+const RECENT_LOG_LIMIT = 8;
+const STATUS_OPTIONS = [
+  { value: "ALL", label: "Semua status" },
+  { value: "SAFE", label: "Aman" },
+  { value: "LOW", label: "Menipis" },
+  { value: "CRITICAL", label: "Kritis" },
+  { value: "OUT_OF_STOCK", label: "Habis" },
+] as const;
 
 interface InventoryStockTabProps {
   ingredients: IngredientItem[];
   allIngredientsCount: number;
-  criticalItems: IngredientItem[];
   categories: string[];
   statusFilter: string;
   categoryFilter: string;
@@ -47,16 +41,33 @@ interface InventoryStockTabProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
   onResetFilters: () => void;
-  onExportCSV: () => void;
-  onExportExcel: () => void;
-  onOpenRestockAlert: () => void;
   onOpenAdjustment: (item: IngredientItem) => void;
+}
+
+/** Stock level bar: how full the item is relative to twice its minimum. */
+function StockLevel({ item }: { item: IngredientItem }) {
+  const ratio = item.min > 0 ? item.stockNumber / (item.min * 2) : 1;
+  const percent = Math.max(4, Math.min(100, Math.round(ratio * 100)));
+  return (
+    <div className="flex flex-col gap-1">
+      <span>
+        <span className="font-mono tabular-nums">{item.stockNumber}</span>{" "}
+        <span className="text-xs text-muted-foreground">{item.unit}</span>
+      </span>
+      <span className="h-1 w-20 overflow-hidden rounded-full bg-muted" aria-hidden>
+        <span
+          className={cn("block h-full", item.stockNumber <= item.min ? "bg-warning" : "bg-muted-foreground/60", item.stockNumber <= 0 && "bg-destructive")}
+          style={{ width: `${percent}%` }}
+        />
+      </span>
+      <span className="text-xs text-muted-foreground">Minimum {item.min}</span>
+    </div>
+  );
 }
 
 export function InventoryStockTab({
   ingredients,
   allIngredientsCount,
-  criticalItems,
   categories,
   statusFilter,
   categoryFilter,
@@ -70,291 +81,140 @@ export function InventoryStockTab({
   onPageChange,
   onPageSizeChange,
   onResetFilters,
-  onExportCSV,
-  onExportExcel,
-  onOpenRestockAlert,
   onOpenAdjustment,
 }: InventoryStockTabProps) {
   const isFiltered = statusFilter !== "ALL" || categoryFilter !== "ALL" || searchQuery.trim() !== "";
-  const totalPages = Math.max(1, Math.ceil(allIngredientsCount / pageSize));
-  const hasItems = ingredients.length > 0;
 
   return (
-    <div className="space-y-4">
-      {/* Restock Alert Banner */}
-      {criticalItems.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="size-4 shrink-0 text-destructive" />
-            <span>
-              Perhatian: Ada{" "}
-              <strong className="font-semibold">{criticalItems.length} bahan baku</strong> dengan
-              stok habis atau kritis.
-            </span>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onOpenRestockAlert}
-            className="h-7 text-xs border-destructive/40 text-destructive hover:bg-destructive/10"
-          >
-            Lihat Rekomendasi Restock
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <InputGroup className="w-full sm:max-w-xs">
+          <InputGroupAddon>
+            <Search />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Cari bahan atau pemasok"
+            aria-label="Cari bahan"
+          />
+        </InputGroup>
+        <NativeSelect value={categoryFilter} onChange={(e) => onCategoryFilterChange(e.target.value)} aria-label="Kategori">
+          <NativeSelectOption value="ALL">Semua kategori</NativeSelectOption>
+          {categories.map((category) => (
+            <NativeSelectOption key={category} value={category}>
+              {ingredientCategoryLabel(category)}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+        <NativeSelect value={statusFilter} onChange={(e) => onStatusFilterChange(e.target.value)} aria-label="Status stok">
+          {STATUS_OPTIONS.map((option) => (
+            <NativeSelectOption key={option.value} value={option.value}>
+              {option.label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+        {isFiltered ? (
+          <Button variant="ghost" size="sm" onClick={onResetFilters}>
+            Hapus filter
           </Button>
-        </div>
-      ) : null}
-
-      {/* Controls Bar */}
-      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          <div className="relative min-w-[200px] flex-1 max-w-xs">
-            <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Cari bahan atau pemasok"
-              className="h-8 pl-8 text-xs"
-            />
-          </div>
-
-          <NativeSelect
-            value={categoryFilter}
-            onChange={(e) => onCategoryFilterChange(e.target.value)}
-            className="h-8 text-xs"
-          >
-            <option value="ALL">Semua kategori</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </NativeSelect>
-
-          <NativeSelect
-            value={statusFilter}
-            onChange={(e) => onStatusFilterChange(e.target.value)}
-            className="h-8 text-xs"
-          >
-            <option value="ALL">Semua status</option>
-            <option value="SAFE">Aman</option>
-            <option value="LOW">Menipis</option>
-            <option value="CRITICAL">Kritis</option>
-            <option value="OUT_OF_STOCK">Habis</option>
-          </NativeSelect>
-
-          {isFiltered ? (
-            <Button variant="ghost" size="sm" onClick={onResetFilters} className="h-8 text-xs">
-              Reset Filter
-            </Button>
-          ) : null}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>Baris</span>
-            <NativeSelect
-              value={String(pageSize)}
-              onChange={(e) => onPageSizeChange(Number(e.target.value))}
-              className="h-8 w-16 text-xs font-mono"
-            >
-              <option value="10">10</option>
-              <option value="20">20</option>
-              <option value="50">50</option>
-            </NativeSelect>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onExportExcel}
-            className="h-8 gap-1.5 text-xs"
-          >
-            <FileSpreadsheet className="size-3.5 text-success" />
-            <span className="hidden sm:inline">Excel</span>
-          </Button>
-
-          <Button variant="outline" size="sm" onClick={onExportCSV} className="h-8 gap-1.5 text-xs">
-            <Download className="size-3.5 text-muted-foreground" />
-            <span className="hidden sm:inline">CSV</span>
-          </Button>
-        </div>
+        ) : null}
       </div>
 
-      {/* Stock Table */}
-      <div className="rounded-lg border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[180px]">Bahan</TableHead>
-              <TableHead>Kategori</TableHead>
-              <TableHead>Stok</TableHead>
-              <TableHead>HPP</TableHead>
-              <TableHead>Nilai stok</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Pemasok</TableHead>
-              <TableHead className="text-right">Aksi</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {!hasItems ? (
-              <TableRow>
-                <TableCell colSpan={8} className="py-12">
-                  <EmptyState
-                    icon={<Package className="size-6 text-muted-foreground" />}
-                    title="Bahan tidak ditemukan"
-                    description="Ubah kata kunci atau filter."
-                  />
-                </TableCell>
-              </TableRow>
-            ) : (
-              ingredients.map((item) => {
-                const stockPercent = Math.min(100, Math.round((item.stockNumber / item.min) * 100));
-
-                return (
+      {ingredients.length === 0 ? (
+        <EmptyState
+          className="border"
+          icon={<Package />}
+          title={isFiltered ? "Bahan tidak ditemukan" : "Belum ada bahan"}
+          description={isFiltered ? "Ubah kata kunci atau filter." : "Tambahkan bahan di Pengaturan untuk mulai mencatat stok."}
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Bahan</TableHead>
+                  <TableHead>Stok</TableHead>
+                  <TableHead className="hidden md:table-cell text-right">HPP</TableHead>
+                  <TableHead className="hidden md:table-cell text-right">Nilai stok</TableHead>
+                  <TableHead className="hidden sm:table-cell">Status</TableHead>
+                  <TableHead className="w-0">
+                    <span className="sr-only">Aksi</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {ingredients.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell>
-                      <div className="font-medium text-foreground">{item.name}</div>
-                      <div className="font-mono text-[10px] text-muted-foreground">{item.id}</div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="text-[11px]">
-                        {item.category}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="font-mono text-xs font-medium tabular-nums text-foreground">
-                          {item.stockNumber}{" "}
-                          <span className="text-[11px] text-muted-foreground">{item.unit}</span>
-                        </div>
-                        <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={`h-full ${
-                              stockPercent <= 30
-                                ? "bg-destructive"
-                                : stockPercent <= 70
-                                  ? "bg-warning"
-                                  : "bg-success"
-                            }`}
-                            style={{ width: `${Math.max(5, stockPercent)}%` }}
-                          />
-                        </div>
-                        <span className="text-[10px] text-muted-foreground">Min {item.min}</span>
+                    <TableCell className="whitespace-normal">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{item.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {ingredientCategoryLabel(item.category)} · {item.supplier}
+                        </span>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs tabular-nums text-foreground">
+                    <TableCell>
+                      <StockLevel item={item} />
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-right font-mono tabular-nums">
                       {formatCurrencyIDR(item.costPerUnit)}
                     </TableCell>
-                    <TableCell className="font-mono text-xs font-medium tabular-nums text-foreground">
+                    <TableCell className="hidden md:table-cell text-right font-mono tabular-nums">
                       {formatCurrencyIDR(item.stockNumber * item.costPerUnit)}
                     </TableCell>
-                    <TableCell>
-                      <StatusBadge status={stockStatusTone(item.status)}>
-                        {stockStatusLabel(item.status)}
-                      </StatusBadge>
+                    <TableCell className="hidden sm:table-cell">
+                      <StatusBadge status={stockStatusTone(item.status)}>{stockStatusLabel(item.status)}</StatusBadge>
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{item.supplier}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onOpenAdjustment(item)}
-                        className="h-8 gap-1 text-xs"
-                      >
-                        <ArrowUpDown className="size-3 text-muted-foreground" />
-                        <span>Sesuaikan</span>
+                    <TableCell>
+                      <Button size="sm" variant="ghost" onClick={() => onOpenAdjustment(item)} aria-label={`Sesuaikan stok ${item.name}`}>
+                        <ArrowUpDown />
+                        <span className="hidden sm:inline">Sesuaikan</span>
                       </Button>
                     </TableCell>
                   </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      {/* Pagination Bar */}
-      {hasItems ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 px-1 text-xs text-muted-foreground">
-          <div>
-            Menampilkan{" "}
-            <span className="font-mono font-medium text-foreground">
-              {(currentPage - 1) * pageSize + 1}
-            </span>
-            –
-            <span className="font-mono font-medium text-foreground">
-              {Math.min(currentPage * pageSize, allIngredientsCount)}
-            </span>{" "}
-            dari{" "}
-            <span className="font-mono font-medium text-foreground">{allIngredientsCount}</span>{" "}
-            bahan
+                ))}
+              </TableBody>
+            </Table>
           </div>
-
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage <= 1}
-              onClick={() => onPageChange(currentPage - 1)}
-              className="h-8 gap-1 px-2 text-xs"
-            >
-              <ChevronLeft className="size-3.5" />
-              <span>Sebelumnya</span>
-            </Button>
-            <span className="px-2 font-mono tabular-nums">
-              {currentPage} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage >= totalPages}
-              onClick={() => onPageChange(currentPage + 1)}
-              className="h-8 gap-1 px-2 text-xs"
-            >
-              <span>Berikutnya</span>
-              <ChevronRight className="size-3.5" />
-            </Button>
-          </div>
+          <DataPagination
+            currentPage={currentPage}
+            totalItems={allIngredientsCount}
+            pageSize={pageSize}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
+            itemLabel="bahan"
+          />
         </div>
-      ) : null}
+      )}
 
-      {/* Real-time Movement Logs */}
       {logs.length > 0 ? (
-        <Card>
-          <CardHeader className="py-3 border-b bg-muted/20">
-            <CardTitle className="text-xs font-medium text-foreground flex items-center gap-1.5">
-              <History className="size-3.5 text-muted-foreground" />
-              <span>Perubahan stok terakhir</span>
+        <Card size="sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-sm font-medium">
+              <History className="size-4 text-muted-foreground" aria-hidden />
+              Perubahan stok terakhir
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-3">
-            <div className="space-y-1.5 max-h-48 overflow-y-auto">
-              {logs.slice(0, 8).map((log) => (
-                <div
-                  key={log.id}
-                  className="flex items-center justify-between text-xs py-1 border-b border-muted/50 last:border-0"
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`font-mono font-medium ${
-                        log.delta > 0 ? "text-success" : "text-destructive"
-                      }`}
-                    >
+          <CardContent>
+            <ul className="flex flex-col divide-y text-sm">
+              {logs.slice(0, RECENT_LOG_LIMIT).map((log) => (
+                <li key={log.id} className="flex items-center justify-between gap-3 py-1.5">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className={cn("w-12 shrink-0 font-mono tabular-nums", log.delta > 0 ? "text-success" : "text-destructive")}>
                       {log.delta > 0 ? `+${log.delta}` : log.delta}
                     </span>
-                    <span className="font-medium text-foreground">{log.ingredientName}</span>
-                    <Badge variant="outline" className="text-[10px]">
-                      {log.reason}
-                    </Badge>
-                  </div>
-                  <span className="font-mono text-[11px] text-muted-foreground">
-                    {new Date(log.timestamp).toLocaleTimeString("id-ID", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    <span className="truncate">{log.ingredientName}</span>
+                    <span className="hidden text-xs text-muted-foreground sm:inline">{adjustmentReasonLabel(log.reason)}</span>
                   </span>
-                </div>
+                  <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                    {new Date(log.timestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </li>
               ))}
-            </div>
+            </ul>
           </CardContent>
         </Card>
       ) : null}

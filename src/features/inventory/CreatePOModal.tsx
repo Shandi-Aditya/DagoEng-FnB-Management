@@ -15,6 +15,8 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { IngredientItem } from "@/types/inventory";
 
+import { suggestedReorderQuantity } from "./inventory-reorder";
+
 interface CreatePOModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -35,14 +37,13 @@ export function CreatePOModal({
     initialItem?.supplier || ingredients[0]?.supplier || "Bali Dairy Fresh"
   );
   const [quantity, setQuantity] = useState<number>(20);
-  const [notes, setNotes] = useState("Kebutuhan stok operasional mingguan.");
+  const [notes, setNotes] = useState("");
 
   useEffect(() => {
     if (initialItem) {
       setItemId(initialItem.id);
       setSupplier(initialItem.supplier);
-      const suggested = Math.max(initialItem.min, initialItem.min * 2 - initialItem.stockNumber);
-      setQuantity(suggested);
+      setQuantity(suggestedReorderQuantity(initialItem));
     } else if (ingredients[0]?.id && !itemId) {
       setItemId(ingredients[0].id);
       setSupplier(ingredients[0].supplier);
@@ -160,10 +161,10 @@ export function CreatePOModal({
           </div>
 
           <DialogFooter className="border-t pt-3">
-            <Button type="button" variant="outline" size="sm" onClick={onClose} className="text-xs">
+            <Button type="button" variant="outline" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs">
+            <Button type="submit">
               Terbitkan PO
             </Button>
           </DialogFooter>

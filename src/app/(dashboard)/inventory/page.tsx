@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ClipboardCheck, Package, Truck, Utensils } from "lucide-react";
 
 import { notify } from "@/components/app/notify";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInventory } from "@/contexts/InventoryContext";
 import { useOutlet } from "@/contexts/OutletContext";
@@ -35,7 +35,8 @@ import { InventoryReportPDFModal } from "@/features/inventory/InventoryReportPDF
 import { InventoryStockTab } from "@/features/inventory/InventoryStockTab";
 import { InventoryToolbar } from "@/features/inventory/InventoryToolbar";
 import { PODetailModal } from "@/features/inventory/PODetailModal";
-import { RestockAlertModal } from "@/features/inventory/RestockAlertModal";
+import { ReorderPanel } from "@/features/inventory/ReorderPanel";
+import { buildReorderList, deliveryDateLabel } from "@/features/inventory/inventory-reorder";
 import { StockAdjustmentModal } from "@/features/inventory/StockAdjustmentModal";
 import { StockOpnameModal } from "@/features/inventory/StockOpnameModal";
 import { StockOpnameReportPDFModal } from "@/features/inventory/StockOpnameReportPDFModal";
@@ -57,7 +58,7 @@ export default function InventoryPage() {
     receivePurchaseOrder,
   } = useInventory();
 
-  const outletName = activeOutlet?.name || "Singaraja";
+  const outletName = activeOutlet?.name ?? "Outlet";
 
   const [activeTab, setActiveTab] = useState<"STOCK" | "BOM" | "PO" | "OPNAME">("STOCK");
 
@@ -80,7 +81,6 @@ export default function InventoryPage() {
   const [selectedItemForPO, setSelectedItemForPO] = useState<IngredientItem | null>(null);
   const [selectedPOPreview, setSelectedPOPreview] = useState<PurchaseOrder | null>(null);
   const [isBOMSimulatorModalOpen, setIsBOMSimulatorModalOpen] = useState(false);
-  const [isRestockAlertModalOpen, setIsRestockAlertModalOpen] = useState(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [isOpnameModalOpen, setIsOpnameModalOpen] = useState(false);
   const [opnameInitialItemId, setOpnameInitialItemId] = useState<string | undefined>(undefined);
@@ -97,6 +97,8 @@ export default function InventoryPage() {
   const kpis = useMemo(() => {
     return calculateInventoryKPIs(filteredIngredients);
   }, [filteredIngredients]);
+
+  const reorderEntries = useMemo(() => buildReorderList(filteredIngredients), [filteredIngredients]);
 
   // Opname summary metrics
   const opnameSummary = useMemo(() => {
@@ -130,7 +132,7 @@ export default function InventoryPage() {
   ) => {
     const target = filteredIngredients.find((i) => i.id === itemId);
     adjustStock(itemId, delta, reason);
-    notify.success("Stok disesuaikan", `Stok ${target?.name || "bahan"} berhasil diperbarui.`);
+    notify.success("Stok disesuaikan", target ? `Stok ${target.name} diperbarui.` : undefined);
   };
 
   const handleRunBOMSimulation = (menuId: string, qty: number) => {
@@ -169,28 +171,28 @@ export default function InventoryPage() {
         month: "short",
         year: "numeric",
       }),
-      expectedDelivery: "2 Hari ke Depan",
+      expectedDelivery: deliveryDateLabel(new Date(), 2),
       notes,
     });
 
-    notify.success("PO diterbitkan", `Pesanan berhasil dikirim ke ${supplier}.`);
+    notify.success("PO dibuat", `${item.name}, ${quantity} ${item.unit} ke ${supplier}.`);
   };
 
   const handleReceivePO = (poId: string) => {
     receivePurchaseOrder(poId);
-    notify.success("Barang diterima", "Stok bahan baku otomatis bertambah ke gudang.");
+    notify.success("Barang diterima", "Stok bahan sudah ditambahkan.");
   };
 
   const handleExportStockCSV = () => {
     const { headers, rows } = buildStockExportData(filteredIngredients);
     downloadCSV(`Master_Stok_Bahan_Baku_${Date.now()}`, headers, rows);
-    notify.info("Ekspor selesai", "Data stok bahan baku diekspor ke CSV.");
+    notify.success("Stok diekspor ke CSV");
   };
 
   const handleExportStockExcel = () => {
     const { headers, rows } = buildStockExportData(filteredIngredients);
     downloadExcel(`Master_Stok_Bahan_Baku_${Date.now()}`, "Master Stok", headers, rows);
-    notify.info("Ekspor selesai", "Data stok bahan baku diekspor ke Excel.");
+    notify.success("Stok diekspor ke Excel");
   };
 
   const handleSaveStockOpname = (data: {
@@ -229,39 +231,44 @@ export default function InventoryPage() {
 
     setSessionAuditedIds((prev) => [...prev, target.id]);
     notify.success(
-      "Stock Opname disimpan",
-      `Audit ${result.opnameNumber} (${target.name}) selesai. Selisih: ${
-        variance > 0 ? `+${variance}` : variance
-      } ${target.unit}.`
+      "Opname disimpan",
+      `${result.opnameNumber}, ${target.name}: selisih ${variance > 0 ? `+${variance}` : variance} ${target.unit}.`
     );
   };
 
   const handleExportOpnameCSV = () => {
     const { headers, rows } = buildOpnameExportData(stockOpnames);
     downloadCSV(`Laporan_Stock_Opname_${Date.now()}`, headers, rows);
-    notify.info("Ekspor selesai", "Laporan Stock Opname diekspor ke CSV.");
+    notify.success("Opname diekspor ke CSV");
   };
 
   const handleExportOpnameExcel = () => {
     const { headers, rows } = buildOpnameExportData(stockOpnames);
     downloadExcel(`Laporan_Stock_Opname_${Date.now()}`, "Stock Opname", headers, rows);
-    notify.info("Ekspor selesai", "Laporan Stock Opname diekspor ke Excel.");
+    notify.success("Opname diekspor ke Excel");
   };
 
   return (
     <div className="space-y-6">
       <InventoryToolbar
-        outletName={outletName}
         totalStockValue={kpis.totalStockValue}
-        safeCount={kpis.safeCount}
+        ingredientCount={filteredIngredients.length}
         lowCount={kpis.lowCount}
-        criticalCount={kpis.criticalCount}
-        outOfStockCount={kpis.outOfStockCount}
+        reorderCount={reorderEntries.length}
         onOpenValuationPDF={() => setIsPDFModalOpen(true)}
-        onOpenRestockAlert={() => setIsRestockAlertModalOpen(true)}
         onOpenBOMSimulator={() => setIsBOMSimulatorModalOpen(true)}
+        onExportExcel={handleExportStockExcel}
+        onExportCSV={handleExportStockCSV}
         onOpenCreatePO={() => {
           setSelectedItemForPO(null);
+          setIsPOModalOpen(true);
+        }}
+      />
+
+      <ReorderPanel
+        entries={reorderEntries}
+        onCreatePO={(item) => {
+          setSelectedItemForPO(item);
           setIsPOModalOpen(true);
         }}
       />
@@ -270,22 +277,20 @@ export default function InventoryPage() {
         value={activeTab}
         onValueChange={(val) => setActiveTab(val as "STOCK" | "BOM" | "PO" | "OPNAME")}
       >
-        <TabsList className="h-9">
-          <TabsTrigger value="STOCK" className="gap-1.5 text-xs">
-            <Package className="size-3.5 text-muted-foreground" />
-            <span>Master Stok</span>
+        <TabsList>
+          <TabsTrigger value="STOCK">Stok</TabsTrigger>
+          <TabsTrigger value="BOM">
+            Resep
+            <Badge variant="secondary">{recipes.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="BOM" className="gap-1.5 text-xs">
-            <Utensils className="size-3.5 text-muted-foreground" />
-            <span>Resep BOM ({recipes.length})</span>
+          <TabsTrigger value="PO">
+            <span className="sm:hidden">PO</span>
+            <span className="hidden sm:inline">Pesanan pembelian</span>
+            <Badge variant="secondary">{filteredPurchaseOrders.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="PO" className="gap-1.5 text-xs">
-            <Truck className="size-3.5 text-muted-foreground" />
-            <span>Purchase Order ({filteredPurchaseOrders.length})</span>
-          </TabsTrigger>
-          <TabsTrigger value="OPNAME" className="gap-1.5 text-xs">
-            <ClipboardCheck className="size-3.5 text-muted-foreground" />
-            <span>Stock Opname ({stockOpnames.length})</span>
+          <TabsTrigger value="OPNAME">
+            Opname
+            <Badge variant="secondary">{stockOpnames.length}</Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -294,7 +299,6 @@ export default function InventoryPage() {
             <InventoryStockTab
               ingredients={paginatedIngredients}
               allIngredientsCount={displayedIngredients.length}
-              criticalItems={kpis.criticalItems}
               categories={ingredientCategories}
               statusFilter={statusFilter}
               categoryFilter={categoryFilter}
@@ -315,9 +319,6 @@ export default function InventoryPage() {
                 setCategoryFilter("ALL");
                 setSearchQuery("");
               }}
-              onExportCSV={handleExportStockCSV}
-              onExportExcel={handleExportStockExcel}
-              onOpenRestockAlert={() => setIsRestockAlertModalOpen(true)}
               onOpenAdjustment={(item) => {
                 setSelectedItemForAdj(item);
                 setIsStockAdjModalOpen(true);
@@ -364,17 +365,6 @@ export default function InventoryPage() {
           </TabsContent>
         </div>
       </Tabs>
-
-      {/* Restock Alert Modal */}
-      <RestockAlertModal
-        isOpen={isRestockAlertModalOpen}
-        onClose={() => setIsRestockAlertModalOpen(false)}
-        criticalItems={kpis.criticalItems}
-        onTriggerPO={(item) => {
-          setSelectedItemForPO(item);
-          setIsPOModalOpen(true);
-        }}
-      />
 
       {/* Stock Adjustment Modal */}
       <StockAdjustmentModal
@@ -457,7 +447,7 @@ export default function InventoryPage() {
         ingredients={filteredIngredients}
         onSaveRecipe={(recipe) => {
           upsertRecipe(recipe);
-          notify.success("Resep disimpan", `Formula resep ${recipe.menuName} berhasil diperbarui.`);
+          notify.success("Resep disimpan", recipe.menuName);
         }}
         initialRecipe={selectedRecipeForEdit}
       />

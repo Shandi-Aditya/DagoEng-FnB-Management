@@ -1,114 +1,96 @@
-import { AlertTriangle, BellRing, FileText, Plus, RefreshCw } from "lucide-react";
+"use client";
+
+import { ChevronDown, Download, FileSpreadsheet, FileText, FlaskConical, Plus } from "lucide-react";
 
 import { PageHeader } from "@/components/app/page-header";
 import { StatCard } from "@/components/app/stat-card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatCurrencyIDR } from "@/lib/utils";
 
 interface InventoryToolbarProps {
-  outletName: string;
   totalStockValue: number;
-  safeCount: number;
+  ingredientCount: number;
   lowCount: number;
-  criticalCount: number;
-  outOfStockCount: number;
-  onOpenValuationPDF: () => void;
-  onOpenRestockAlert: () => void;
-  onOpenBOMSimulator: () => void;
+  reorderCount: number;
   onOpenCreatePO: () => void;
+  onOpenBOMSimulator: () => void;
+  onOpenValuationPDF: () => void;
+  onExportExcel: () => void;
+  onExportCSV: () => void;
 }
 
+/** Page title, one primary action (Buat PO) and the three numbers that matter. */
 export function InventoryToolbar({
-  outletName,
   totalStockValue,
-  safeCount,
+  ingredientCount,
   lowCount,
-  criticalCount,
-  outOfStockCount,
-  onOpenValuationPDF,
-  onOpenRestockAlert,
-  onOpenBOMSimulator,
+  reorderCount,
   onOpenCreatePO,
+  onOpenBOMSimulator,
+  onOpenValuationPDF,
+  onExportExcel,
+  onExportCSV,
 }: InventoryToolbarProps) {
-  const needsAttention = criticalCount + outOfStockCount > 0;
-
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       <PageHeader
         title="Inventori"
         description="Stok bahan, resep, pesanan pembelian, dan opname."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onOpenValuationPDF}
-              className="gap-1.5 text-xs"
-            >
-              <FileText className="size-3.5 text-muted-foreground" />
-              <span>Laporan nilai stok</span>
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" />}>
+                Lainnya
+                <ChevronDown className="text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-52">
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={onOpenBOMSimulator}>
+                    <FlaskConical />
+                    Simulasi resep
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onOpenValuationPDF}>
+                    <FileText />
+                    Laporan nilai stok
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem onClick={onExportExcel}>
+                    <FileSpreadsheet />
+                    Ekspor stok ke Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onExportCSV}>
+                    <Download />
+                    Ekspor stok ke CSV
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button onClick={onOpenCreatePO}>
+              <Plus />
+              Buat PO
             </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onOpenRestockAlert}
-              className="gap-1.5 text-xs"
-            >
-              <BellRing className="size-3.5 text-muted-foreground" />
-              <span>Perlu dibeli</span>
-              {needsAttention ? (
-                <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
-                  {criticalCount + outOfStockCount}
-                </Badge>
-              ) : null}
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onOpenBOMSimulator}
-              className="gap-1.5 text-xs"
-            >
-              <RefreshCw className="size-3.5 text-muted-foreground" />
-              <span>Simulasi resep</span>
-            </Button>
-
-            <Button size="sm" onClick={onOpenCreatePO} className="gap-1.5 text-xs">
-              <Plus className="size-3.5" />
-              <span>Buat PO</span>
-            </Button>
-          </div>
+          </>
         }
       />
 
-      {/* KPI Stat Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <StatCard
-          label="Nilai stok"
-          value={formatCurrencyIDR(totalStockValue)}
-          hint="Dihitung dari HPP per satuan"
+          className="col-span-2 sm:col-span-1"
+          label="Nilai stok"           value={formatCurrencyIDR(totalStockValue)}
+          hint={`${ingredientCount} bahan, dihitung dari HPP`}
         />
-        <StatCard
-          label="Aman"
-          value={String(safeCount)}
-          hint="bahan di atas batas minimum"
-        />
-        <StatCard
-          label="Menipis"
-          value={String(lowCount)}
-          hint="bahan mendekati batas minimum"
-        />
-        <StatCard
-          label="Kritis atau habis"
-          value={String(criticalCount + outOfStockCount)}
-          hint={
-            outOfStockCount > 0
-              ? `${outOfStockCount} habis, ${criticalCount} kritis`
-              : "bahan perlu dibeli"
-          }
-        />
+        <StatCard label="Menipis" value={String(lowCount)} hint="bahan mendekati batas minimum" />
+        <StatCard label="Perlu dibeli" value={String(reorderCount)} hint="bahan kritis atau habis" />
       </div>
     </div>
   );
