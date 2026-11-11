@@ -1743,7 +1743,21 @@ export default function SettingsPage() {
                             <td className="py-3 font-bold text-slate-900">
                               <div className="flex items-center space-x-2">
                                 {p.imageUrl ? (
-                                  <img src={p.imageUrl} alt={p.name} className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+                                  <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-slate-100 flex items-center justify-center">
+                                    <img
+                                      src={p.imageUrl}
+                                      alt={p.name}
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = "none";
+                                        const fb = e.currentTarget.parentElement?.querySelector(".settings-fallback-placeholder") as HTMLElement;
+                                        if (fb) fb.classList.remove("hidden");
+                                      }}
+                                      className="w-full h-full object-cover"
+                                    />
+                                    <div className="settings-fallback-placeholder hidden flex w-full h-full items-center justify-center text-slate-400">
+                                      <UtensilsCrossed className="w-4 h-4" />
+                                    </div>
+                                  </div>
                                 ) : (
                                   <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
                                     <UtensilsCrossed className="w-4 h-4" />
@@ -2893,7 +2907,21 @@ export default function SettingsPage() {
                               <td className="py-3 font-bold text-slate-900">
                                 <div className="flex items-center space-x-2">
                                   {p.imageUrl ? (
-                                    <img src={p.imageUrl} alt={p.name} className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0" />
+                                    <div className="relative w-8 h-8 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-slate-100 flex items-center justify-center">
+                                      <img
+                                        src={p.imageUrl}
+                                        alt={p.name}
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = "none";
+                                          const fb = e.currentTarget.parentElement?.querySelector(".settings-fallback-placeholder") as HTMLElement;
+                                          if (fb) fb.classList.remove("hidden");
+                                        }}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      <div className="settings-fallback-placeholder hidden flex w-full h-full items-center justify-center text-slate-400">
+                                        <UtensilsCrossed className="w-4 h-4" />
+                                      </div>
+                                    </div>
                                   ) : (
                                     <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-400 shrink-0">
                                       <UtensilsCrossed className="w-4 h-4" />
@@ -8242,7 +8270,21 @@ export default function SettingsPage() {
                                   />
                                   <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
                                     {p.imageUrl ? (
-                                      <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                                      <>
+                                        <img
+                                          src={p.imageUrl}
+                                          alt={p.name}
+                                          onError={(e) => {
+                                            e.currentTarget.style.display = "none";
+                                            const fb = e.currentTarget.parentElement?.querySelector(".modal-product-fallback-placeholder") as HTMLElement;
+                                            if (fb) fb.classList.remove("hidden");
+                                          }}
+                                          className="w-full h-full object-cover"
+                                        />
+                                        <div className="modal-product-fallback-placeholder hidden flex w-full h-full items-center justify-center text-slate-400">
+                                          <UtensilsCrossed className="w-4 h-4 text-slate-400" />
+                                        </div>
+                                      </>
                                     ) : (
                                       <UtensilsCrossed className="w-4 h-4 text-slate-400" />
                                     )}

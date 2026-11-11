@@ -44,6 +44,10 @@ export const DEMO_OUTLETS: OutletItem[] = [
   },
 ];
 
+export const ACTIVE_OUTLETS: OutletItem[] = DEMO_OUTLETS.filter(
+  (o) => o.status === "ACTIVE"
+);
+
 export interface MasterOutletInfo {
   name: string;
   address: string;

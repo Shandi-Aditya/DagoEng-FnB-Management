@@ -433,7 +433,8 @@ export default function POSPage() {
     const tId = product.tenantId || "tenant-ks";
     const tenantOp = isTenantAcceptingOrders(tId, settings?.tenantOperations);
     if (!tenantOp.isOpen) {
-      setPosToast(`Mitra [${getTenantName(tId) || "F&B"}] sedang Tutup Sementara. Tidak dapat menerima pesanan baru.`);
+      const reopenMsg = tenantOp.estimatedReopenTime ? ` (${tenantOp.estimatedReopenTime})` : "";
+      setPosToast(`Mitra [${getTenantName(tId) || "F&B"}] Tutup Sementara: ${tenantOp.reason}.${reopenMsg}`);
       return;
     }
 
@@ -449,7 +450,8 @@ export default function POSPage() {
     const tId = item.tenantId || "tenant-ks";
     const tenantOp = isTenantAcceptingOrders(tId, settings?.tenantOperations);
     if (!tenantOp.isOpen) {
-      setPosToast(`Mitra [${getTenantName(tId) || "F&B"}] sedang Tutup Sementara.`);
+      const reopenMsg = tenantOp.estimatedReopenTime ? ` (${tenantOp.estimatedReopenTime})` : "";
+      setPosToast(`Mitra [${getTenantName(tId) || "F&B"}] Tutup Sementara: ${tenantOp.reason}.${reopenMsg}`);
       return;
     }
     setCartItems((prev) => {
@@ -1241,7 +1243,8 @@ export default function POSPage() {
             {/* Product Cards Grid with Live Stock Status & Disabled Out of Stock */}
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
               {filteredProducts.map((product) => {
-                const isTenantClosed = !isTenantAcceptingOrders(product.tenantId || "tenant-ks", settings?.tenantOperations).isOpen;
+                const tenantOp = isTenantAcceptingOrders(product.tenantId || "tenant-ks", settings?.tenantOperations);
+                const isTenantClosed = !tenantOp.isOpen;
                 const isOutOfStock = product.stockStatus === "OUT_OF_STOCK" || !product.isAvailable;
                 const isCriticalStock = product.stockStatus === "CRITICAL";
 
@@ -1258,7 +1261,10 @@ export default function POSPage() {
                   >
                     {/* Stock or Tenant Closed Status Badge */}
                     {isTenantClosed ? (
-                      <div className="absolute top-2 right-2 z-10 bg-amber-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded shadow-sm flex items-center space-x-1">
+                      <div
+                        className="absolute top-2 right-2 z-10 bg-amber-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded shadow-sm flex items-center space-x-1"
+                        title={`${tenantOp.reason}${tenantOp.estimatedReopenTime ? ` • ${tenantOp.estimatedReopenTime}` : ""}`}
+                      >
                         <Clock className="w-2.5 h-2.5" />
                         <span>Tutup Sementara</span>
                       </div>
@@ -1276,12 +1282,20 @@ export default function POSPage() {
 
                     <div className="space-y-2">
                       {product.imageUrl ? (
-                        <div className="relative w-full h-24 rounded-lg overflow-hidden bg-slate-100 border border-slate-100">
+                        <div className="relative w-full h-24 rounded-lg overflow-hidden bg-slate-100 border border-slate-100 flex items-center justify-center">
                           <img
                             src={product.imageUrl}
                             alt={product.name}
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                              const fallback = e.currentTarget.parentElement?.querySelector(".product-fallback-placeholder") as HTMLElement;
+                              if (fallback) fallback.classList.remove("hidden");
+                            }}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                           />
+                          <div className="product-fallback-placeholder hidden flex w-full h-full items-center justify-center text-slate-400">
+                            <Utensils className="w-6 h-6 opacity-30" />
+                          </div>
                         </div>
                       ) : (
                         <div className="w-full h-16 rounded-lg bg-slate-100 border border-slate-100 flex items-center justify-center text-slate-400">
@@ -1293,10 +1307,16 @@ export default function POSPage() {
                         <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
                           {product.category}
                         </span>
-                        <h4 className={`font-bold text-xs line-clamp-2 transition-colors ${isOutOfStock ? "text-slate-500" : "text-slate-900 group-hover:text-brand-orange"
+                        <h4 className={`font-bold text-xs line-clamp-2 transition-colors ${isOutOfStock ? "text-slate-500" : isTenantClosed ? "text-amber-900" : "text-slate-900 group-hover:text-brand-orange"
                           }`}>
                           {product.name}
                         </h4>
+                        {isTenantClosed && (
+                          <p className="text-[9px] text-amber-700 font-semibold line-clamp-1 mt-0.5" title={tenantOp.reason}>
+                            {tenantOp.reason}
+                            {tenantOp.estimatedReopenTime ? ` • ${tenantOp.estimatedReopenTime}` : ""}
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -2365,12 +2385,20 @@ export default function POSPage() {
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-[#1E293B] rounded-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {previewSpacePhoto.imageUrl && (
-              <div className="relative w-full h-56 bg-slate-100 dark:bg-slate-800">
+              <div className="relative w-full h-56 bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
                 <img
                   src={previewSpacePhoto.imageUrl}
                   alt={previewSpacePhoto.name}
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                    const fb = e.currentTarget.parentElement?.querySelector(".space-fallback-placeholder") as HTMLElement;
+                    if (fb) fb.classList.remove("hidden");
+                  }}
                   className="w-full h-full object-cover"
                 />
+                <div className="space-fallback-placeholder hidden flex w-full h-full items-center justify-center text-slate-400">
+                  <Building className="w-10 h-10 opacity-30" />
+                </div>
               </div>
             )}
             <div className="p-5 space-y-3">

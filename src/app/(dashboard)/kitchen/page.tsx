@@ -93,7 +93,8 @@ export default function KitchenKDSPage() {
           if (!hasStationItem) return false;
         }
         return true;
-      });
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [filteredOrders, userTenantId, selectedTypeFilter, isMultiStationActive, selectedStationFilter]);
 
   // Ring bell when new ticket arrives
@@ -379,7 +380,7 @@ export default function KitchenKDSPage() {
                       Tidak ada tiket antrean
                     </div>
                   ) : (
-                    ticketsInCol.map((order) => {
+                    ticketsInCol.map((order, ticketIdx) => {
                       // POS-38 / TC-K09: Filter items on ticket strictly to logged in tenant
                       const displayItems = userTenantId
                         ? order.items.filter((it) => it.tenantId === userTenantId)
@@ -402,12 +403,17 @@ export default function KitchenKDSPage() {
                               : "border-slate-200 hover:border-slate-300"
                           }`}
                         >
-                          {/* Card Header: Table + Live Timer */}
+                          {/* Card Header: Queue Number + Table + Live Timer */}
                           <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                             <div className="min-w-0 pr-2">
-                              <span className="font-bold text-xs text-slate-900 dark:text-slate-100 block truncate">
-                                {order.orderNumber}
-                              </span>
+                              <div className="flex items-center space-x-1.5">
+                                <span className="font-extrabold text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 text-white shrink-0">
+                                  #{ticketIdx + 1}
+                                </span>
+                                <span className="font-bold text-xs text-slate-900 dark:text-slate-100 block truncate">
+                                  {order.orderNumber}
+                                </span>
+                              </div>
                               <span className="text-[10px] text-slate-500 dark:text-slate-300 font-medium block truncate">
                                 {order.customerName || "Customer"}
                               </span>
@@ -504,6 +510,7 @@ export default function KitchenKDSPage() {
                                   customerName: order.customerName,
                                   orderType: order.orderType,
                                   purpose: "REPRINT",
+                                  sequenceNumber: ticketIdx + 1,
                                   items: displayItems.map((it) => ({
                                     id: it.id,
                                     productName: it.productName,

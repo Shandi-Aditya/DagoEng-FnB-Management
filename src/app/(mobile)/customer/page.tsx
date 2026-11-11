@@ -2639,9 +2639,14 @@ function CustomerPortalContent() {
                               const tenantOp = isTenantAcceptingOrders(item.tenantId || "tenant-ks", settings?.tenantOperations);
                               if (!tenantOp.isOpen) {
                                 return (
-                                  <Button size="sm" disabled className="bg-slate-100 text-amber-700 font-bold text-[11px] h-9 px-3 rounded-xl border border-amber-200/80 cursor-not-allowed">
-                                    Tutup Sementara
-                                  </Button>
+                                  <div className="flex flex-col items-end">
+                                    <Button size="sm" disabled className="bg-slate-100 text-amber-700 font-bold text-[11px] h-8 px-2.5 rounded-xl border border-amber-200/80 cursor-not-allowed">
+                                      Tutup Sementara
+                                    </Button>
+                                    <span className="text-[9px] text-amber-600 font-semibold mt-0.5 max-w-[120px] text-right truncate" title={`${tenantOp.reason}${tenantOp.estimatedReopenTime ? ` • ${tenantOp.estimatedReopenTime}` : ""}`}>
+                                      {tenantOp.estimatedReopenTime || tenantOp.reason}
+                                    </span>
+                                  </div>
                                 );
                               }
                               if (!isAvailable) {

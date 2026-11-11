@@ -10,9 +10,7 @@ export function OutletCompareCard() {
   const { orders } = useOrders();
 
   const outletBases = [
-    { id: "outlet-sgr", name: "Singaraja", code: "KS-SGR" },
-    { id: "outlet-dps", name: "Denpasar", code: "KS-DPS" },
-    { id: "outlet-ubd", name: "Ubud", code: "KS-UBD" },
+    { id: "outlet-sgr", name: "Singaraja (Pusat)", code: "KS-SGR" },
   ];
 
   const outlets = outletBases.map((o) => {
@@ -40,7 +38,7 @@ export function OutletCompareCard() {
             <span>Komparasi Antar Outlet</span>
           </CardTitle>
           <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-            3 Cabang
+            {outletBases.length} Cabang Aktif
           </span>
         </div>
         <CardDescription className="text-xs text-slate-500 dark:text-slate-400">
