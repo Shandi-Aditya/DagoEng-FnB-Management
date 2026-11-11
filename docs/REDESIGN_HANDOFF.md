@@ -26,8 +26,8 @@ Status: `selesai` (sudah di-commit), `selesai, belum commit`, `berjalan`, `belum
 | 3 | App shell: sidebar inset, `SiteHeader`, `NavUser` | selesai | `7137efa` |
 | 4 | Dashboard eksekutif | selesai | `67cb541` |
 | 5 | Landing + login | selesai | `c7e3907` |
-| 5b | Login dua kolom (`login-02`) + tombol 3D gaya Cloudflare Kumo | selesai, belum commit | – |
-| 6 | Layar operasional (rincian di bawah) | berjalan | – |
+| 5b | Login dua kolom (`login-02`) + tombol 3D gaya Cloudflare Kumo | selesai | `3d00557` |
+| 6 | Layar operasional (rincian di bawah) | berjalan | `5f98197` (KDS, POS F&B) |
 | 7 | Pecah dan migrasi `settings`, portal `customer`, `events/portal`, halaman `events/*`, `checkout-link-v2` | belum | – |
 | 8 | Hapus `legacy-dark.css` dan `components/legacy`, skrip `lint:ui`, dokumentasi | belum | – |
 
@@ -37,8 +37,8 @@ Urutan mengikuti seberapa sering staf memakai halaman. Kerjakan satu halaman sam
 
 | Halaman | Baris (awal) | Status | Catatan |
 | --- | --- | --- | --- |
-| `/kitchen` (KDS) | 572 | selesai, belum commit | `src/features/kitchen/*`, test `kitchen-board.test.ts` |
-| `/pos` mode F&B + kerangka | 2856 → 2329 | selesai, belum commit | `src/features/pos/{PosToolbar,ProductCatalog,ProductCard,Cart*}.tsx`, `pos-catalog.ts` |
+| `/kitchen` (KDS) | 572 | selesai (`5f98197`) | `src/features/kitchen/*`, test `kitchen-board.test.ts` |
+| `/pos` mode F&B + kerangka | 2856 → 2329 | selesai (`5f98197`) | `src/features/pos/{PosToolbar,ProductCatalog,ProductCard,Cart*}.tsx`, `pos-catalog.ts` |
 | `/pos` mode co-working | (bagian dari 2329) | belum | Baris 1209–1953 di `pos/page.tsx` (blok `2. CO-WORKING TRANSACTION MODE` sampai `MODALS`) |
 | Modal POS | 2765 total | belum | `ModifierModal`, `PaymentModal` (901), `ReceiptModal`, `KitchenOrderReceiptModal`, `CashDrawerShiftModal`, `DailyClosingPDFModal`, plus modal inline buka shift, voucher, foto ruang, closing |
 | `/orders` | 896 | belum | |
@@ -58,16 +58,7 @@ Masih ada 50 file yang meng-import `components/legacy`. Cek dengan `grep -rl "co
 
 ## 3. Kondisi working tree saat handoff
 
-Belum di-commit (pekerjaan redesign):
-
-- `src/components/ui/button.tsx`, `src/app/globals.css` (token `--button-*`, utility `no-scrollbar`)
-- `src/app/(auth)/login/page.tsx` (layout `login-02`)
-- `src/app/(dashboard)/kitchen/page.tsx`, `src/features/kitchen/*`, `tests/kitchen-board.test.ts`
-- `src/app/(dashboard)/pos/page.tsx`, file baru di `src/features/pos/`, `tests/pos-catalog.test.ts`
-- `tests/pos-c-bagian-c.test.ts`, `tests/pos-d-bagian-d.test.ts` (diarahkan ke file baru)
-- `docs/DESIGN_SYSTEM.md`, `docs/SHADCN_UI_IMPLEMENTATION_PLAN.md`, dokumen ini
-
-**Jangan pernah ikut di-commit** (bukan bagian redesign): `data/*`, `.audit/`, `Laporan_Settlement_Mingguan_Dago_Mitra.xlsx`, `docs/KLARIFIKASI_SETTLEMENT_MITRA.md`, `panduan.md`. Stage file satu per satu, jangan `git add -A`.
+Semua pekerjaan redesign sudah di-commit. Yang tersisa di working tree bukan bagian redesign dan **tidak boleh ikut di-commit**: `data/*`, `.audit/`, `Laporan_Settlement_Mingguan_Dago_Mitra.xlsx`, `docs/KLARIFIKASI_SETTLEMENT_MITRA.md`, `panduan.md`. Stage file satu per satu, jangan `git add -A`.
 
 ## 4. Aturan yang sudah disepakati
 
@@ -157,10 +148,6 @@ Ini cara kerja yang dipakai untuk KDS dan POS. Ikuti urutannya.
 
 ## 8. Langkah berikutnya
 
-1. Minta user meng-commit pekerjaan yang belum di-commit (bagian 3). Usulan pemisahan:
-   - `feat(ui): two-column login and tactile buttons`
-   - `feat(kitchen): rebuild KDS with shadcn components`
-   - `feat(pos): rebuild POS catalog and cart with shadcn components`
-2. POS tahap 2: mode co-working (`CoworkingBookingPanel`, grid ruang, pemilih durasi dan jam memakai `Tabs`/`NativeSelect`), lalu modal-modal POS memakai `Dialog`/`AlertDialog`. Test yang mengunci teks modal: D1 (`ModifierModal`, semantik radio untuk grup sekali pilih), C3 (`PaymentModal`, nominal tunai tidak terisi otomatis), C4 (`ReceiptModal`, tanpa password Wi-Fi statis).
-3. Lanjutkan Fase 6 sesuai tabel. Halaman di atas 1500 baris dipecah dulu tanpa mengubah tampilan.
-4. Fase 7, lalu Fase 8 (hapus legacy, `lint:ui`).
+1. POS tahap 2: mode co-working (`CoworkingBookingPanel`, grid ruang, pemilih durasi dan jam memakai `Tabs`/`NativeSelect`), lalu modal-modal POS memakai `Dialog`/`AlertDialog`. Test yang mengunci teks modal: D1 (`ModifierModal`, semantik radio untuk grup sekali pilih), C3 (`PaymentModal`, nominal tunai tidak terisi otomatis), C4 (`ReceiptModal`, tanpa password Wi-Fi statis).
+2. Lanjutkan Fase 6 sesuai tabel. Halaman di atas 1500 baris dipecah dulu tanpa mengubah tampilan.
+3. Fase 7, lalu Fase 8 (hapus legacy, `lint:ui`).
