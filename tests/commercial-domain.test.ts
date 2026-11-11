@@ -4,6 +4,8 @@ import {
   filterLeases,
   getLeaseStatusTone,
   getLeaseStatusLabel,
+  paymentScheduleLabel,
+  emptyCommercialMessage,
   buildCommercialExportData,
 } from "@/features/commercial/commercial-domain";
 import type { CommercialLease } from "@/types/commercial";
@@ -110,4 +112,20 @@ describe("commercial-domain", () => {
     expect(exportData.rows[0][1]).toBe("Kopi Kenangan");
     expect(exportData.rows[0][4]).toBe("Lot A-01");
   });
+
+  it("converts raw payment schedule enums to Indonesian labels", () => {
+    expect(paymentScheduleLabel("MONTHLY")).toBe("Bulanan");
+    expect(paymentScheduleLabel("QUARTERLY")).toBe("Triwulan");
+    expect(paymentScheduleLabel("ANNUALLY")).toBe("Tahunan");
+  });
+
+  it("provides distinct empty-state copy for commercial leases", () => {
+    const emptyDb = emptyCommercialMessage(false);
+    expect(emptyDb.title).toBe("Belum ada kontrak sewa");
+
+    const filtered = emptyCommercialMessage(true);
+    expect(filtered.title).toBe("Tidak ada kontrak yang cocok");
+    expect(filtered.description).toContain("Ubah kata kunci");
+  });
 });
+

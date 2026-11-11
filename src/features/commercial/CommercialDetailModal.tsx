@@ -1,3 +1,5 @@
+"use client";
+
 import { Building2, CreditCard, Plus } from "lucide-react";
 import type { CommercialLease } from "@/types/commercial";
 import { formatCurrencyIDR } from "@/lib/utils";
@@ -41,54 +43,54 @@ export function CommercialDetailModal({
 
   return (
     <Dialog open={Boolean(lease)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+      <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
         <DialogHeader className="shrink-0">
           <div className="flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-primary" />
+            <Building2 className="size-4 text-primary" />
             <div className="space-y-0.5">
-              <span className="font-mono text-xs text-primary font-medium">
+              <span className="font-mono text-xs font-medium text-primary">
                 {lease.leaseNumber}
               </span>
-              <DialogTitle className="text-base">{lease.tenantName}</DialogTitle>
+              <DialogTitle className="text-base font-medium">{lease.tenantName}</DialogTitle>
             </div>
           </div>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Detail kontrak unit retail dan riwayat pembayaran sewa tenant.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-4 pr-1 py-1">
+        <div className="flex-1 space-y-4 overflow-y-auto py-1 pr-1 text-xs">
           {/* Overview Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3.5 rounded-lg border bg-muted/30 text-xs">
+          <div className="grid grid-cols-2 gap-3 rounded-lg border bg-muted/30 p-3.5 text-xs sm:grid-cols-3">
             <div>
-              <span className="text-muted-foreground block text-[10px]">Unit</span>
+              <span className="block text-xs text-muted-foreground">Unit</span>
               <span className="font-medium text-foreground">{lease.unitCode}</span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Luas</span>
+              <span className="block text-xs text-muted-foreground">Luas</span>
               <span className="font-medium text-foreground">{lease.areaSquareMeters} m²</span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Sewa per bulan</span>
-              <span className="font-mono font-medium text-foreground">
+              <span className="block text-xs text-muted-foreground">Sewa per bulan</span>
+              <span className="font-mono font-medium tabular-nums text-foreground">
                 {formatCurrencyIDR(lease.monthlyRent)}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Deposit</span>
-              <span className="font-mono font-medium text-foreground">
+              <span className="block text-xs text-muted-foreground">Deposit</span>
+              <span className="font-mono font-medium tabular-nums text-foreground">
                 {formatCurrencyIDR(lease.depositAmount)}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Masa sewa</span>
+              <span className="block text-xs text-muted-foreground">Masa sewa</span>
               <span className="font-medium text-foreground">
                 {lease.startDate} — {lease.endDate}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Status</span>
-              <StatusBadge status={tone} className="text-[11px] mt-0.5">
+              <span className="block text-xs text-muted-foreground">Status</span>
+              <StatusBadge status={tone} className="mt-0.5">
                 {label}
               </StatusBadge>
             </div>
@@ -97,21 +99,21 @@ export function CommercialDetailModal({
           {/* Payment History */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h4 className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                <CreditCard className="w-4 h-4 text-primary" />
+              <h4 className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                <CreditCard className="size-4 text-primary" />
                 <span>Riwayat pembayaran</span>
               </h4>
               <Button
                 size="sm"
+                variant="outline"
                 onClick={() => onOpenPaymentModal(lease)}
-                className="text-xs h-7 gap-1"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <Plus />
                 <span>Catat pembayaran</span>
               </Button>
             </div>
 
-            <div className="rounded-lg border overflow-hidden">
+            <div className="overflow-hidden rounded-lg border">
               {lease.paymentHistory.length === 0 ? (
                 <p className="p-4 text-center text-xs text-muted-foreground">
                   Belum ada riwayat pembayaran tercatat.
@@ -120,30 +122,30 @@ export function CommercialDetailModal({
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-xs">Periode</TableHead>
-                      <TableHead className="text-xs">Nominal</TableHead>
-                      <TableHead className="text-xs">Dibayar</TableHead>
-                      <TableHead className="text-xs">Metode</TableHead>
-                      <TableHead className="text-xs text-right">Status</TableHead>
+                      <TableHead>Periode</TableHead>
+                      <TableHead>Nominal</TableHead>
+                      <TableHead>Dibayar</TableHead>
+                      <TableHead>Metode</TableHead>
+                      <TableHead className="text-right">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {lease.paymentHistory.map((pm) => (
                       <TableRow key={pm.id}>
-                        <TableCell className="text-xs font-medium text-foreground">
+                        <TableCell className="font-medium text-foreground">
                           {pm.periodLabel}
                         </TableCell>
-                        <TableCell className="text-xs font-mono font-medium tabular-nums text-foreground">
+                        <TableCell className="font-mono font-medium tabular-nums text-foreground">
                           {formatCurrencyIDR(pm.amount)}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
+                        <TableCell className="text-muted-foreground">
                           {pm.paidDate}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground font-mono">
+                        <TableCell className="font-mono text-muted-foreground">
                           {pm.paymentMethod} {pm.referenceNo ? `(${pm.referenceNo})` : ""}
                         </TableCell>
                         <TableCell className="text-right">
-                          <StatusBadge status="success" className="text-[10px]">
+                          <StatusBadge status="success">
                             {pm.status}
                           </StatusBadge>
                         </TableCell>
@@ -156,20 +158,18 @@ export function CommercialDetailModal({
           </div>
         </div>
 
-        <DialogFooter className="flex-row items-center justify-between sm:justify-between pt-3 border-t">
+        <DialogFooter className="flex-row items-center justify-between border-t pt-3 sm:justify-between">
           <Button
             size="sm"
             variant="outline"
             onClick={() => onOpenChangeStatusModal(lease)}
-            className="text-xs text-amber-700 dark:text-amber-400"
           >
-            Ubah Status
+            Ubah status
           </Button>
           <Button
             size="sm"
             variant="outline"
             onClick={onClose}
-            className="text-xs"
           >
             Tutup
           </Button>

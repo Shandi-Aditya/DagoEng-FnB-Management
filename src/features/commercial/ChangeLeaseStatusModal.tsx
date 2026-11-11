@@ -1,4 +1,6 @@
-import { useState, useEffect } from "react";
+"use client";
+
+import { useEffect, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import type { CommercialLease, LeaseStatus } from "@/types/commercial";
 import {
@@ -60,25 +62,25 @@ export function ChangeLeaseStatusModal({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-amber-600" />
+          <DialogTitle className="flex items-center gap-2 text-base font-medium">
+            <AlertCircle className="size-4 text-warning" />
             <span>Ubah status kontrak</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Memperbarui status sewa tenant {lease.tenantName} ({lease.unitCode}).
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-3.5">
+        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
           <div className="space-y-1.5">
-            <Label htmlFor="new-status" className="text-xs">
-              Pilih Status Baru <span className="text-destructive">*</span>
+            <Label htmlFor="new-status" className="text-xs font-medium text-foreground">
+              Pilih status baru <span className="text-destructive">*</span>
             </Label>
             <NativeSelect
               id="new-status"
               value={status}
               onChange={(e) => setStatus(e.target.value as LeaseStatus)}
-              className="w-full text-xs font-medium"
+              className="w-full text-xs"
             >
               <option value="ACTIVE">Aktif</option>
               <option value="EXPIRING_SOON">Segera berakhir</option>
@@ -88,8 +90,8 @@ export function ChangeLeaseStatusModal({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="status-reason" className="text-xs">
-              Alasan Perubahan Status (Wajib Audit Log) <span className="text-destructive">*</span>
+            <Label htmlFor="status-reason" className="text-xs font-medium text-foreground">
+              Alasan perubahan status <span className="text-destructive">*</span>
             </Label>
             <Textarea
               id="status-reason"
@@ -102,18 +104,17 @@ export function ChangeLeaseStatusModal({
             />
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+          <DialogFooter className="gap-2 border-t pt-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={onClose}
-              className="text-xs"
             >
               Batal
             </Button>
-            <Button type="submit" size="sm" className="text-xs font-medium">
-              Update Status
+            <Button type="submit" size="sm">
+              Simpan perubahan
             </Button>
           </DialogFooter>
         </form>

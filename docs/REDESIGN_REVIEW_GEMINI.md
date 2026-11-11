@@ -127,7 +127,7 @@ Kerjakan per halaman, mulai dari `/orders`, `/inventory`, `/tables`, lalu `/cowo
 | `/coworking` | Melihat dan mengatur pemakaian ruang hari ini (selesai P3) | Toolbar bersih 1 primary + dropdown ekspor, tabel booking & member memakai DataPagination standar, data palsu dihapus. |
 | `/customers` | Mencari pelanggan atau member lalu bertindak (selesai P3) | Toolbar bersih 1 primary + dropdown ekspor, banner CRM dihapus, tabel memakai DataPagination, modal riwayat memakai token semantik. |
 | `/employees` | Memantau shift kasir dan data staf (selesai P3) | Toolbar bersih 1 primary + dropdown ekspor, tabel shift & staf memakai DataPagination, prefill telepon dibersihkan. |
-| `/commercial` | Mencari kontrak lalu bertindak | Pola tabel yang sama dengan `/orders` (pencarian, filter, `Sheet` detail), sehingga satu komponen `DataTableToolbar` bisa dipakai bersama. |
+| `/commercial` | Mencari kontrak lalu bertindak (selesai P3) | Toolbar bersih 1 primary + dropdown ekspor, tabel sewa memakai DataPagination standar, form sewa bersih dari data palsu. |
 | `/reports`, `/activity-log` | Membaca dan mengekspor data | Satu `ReportPreviewDialog` menggantikan 8 modal PDF yang hampir sama. Pratinjau dibuat seperti kertas laporan sungguhan. |
 
 Hapus override `h-8 text-xs` pada `Button`. Ukuran cukup lewat prop `size`.

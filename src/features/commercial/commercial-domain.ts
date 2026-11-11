@@ -112,3 +112,28 @@ export function buildCommercialExportData(leases: CommercialLease[]) {
 
   return { headers, rows };
 }
+
+const PAYMENT_SCHEDULE_LABELS: Record<string, string> = {
+  MONTHLY: "Bulanan",
+  QUARTERLY: "Triwulan",
+  ANNUALLY: "Tahunan",
+};
+
+export function paymentScheduleLabel(schedule: string): string {
+  return PAYMENT_SCHEDULE_LABELS[schedule] ?? schedule;
+}
+
+export function emptyCommercialMessage(hasFilter: boolean): { title: string; description: string } {
+  if (hasFilter) {
+    return {
+      title: "Tidak ada kontrak yang cocok",
+      description: "Ubah kata kunci pencarian atau pilih filter status lain.",
+    };
+  }
+
+  return {
+    title: "Belum ada kontrak sewa",
+    description: "Kontrak sewa unit retail yang ditambahkan akan tercatat di sini.",
+  };
+}
+

@@ -1,6 +1,23 @@
-import { FileSpreadsheet, Download, FileText, Plus, PowerOff } from "lucide-react";
+"use client";
+
+import {
+  ChevronDown,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Plus,
+  PowerOff,
+} from "lucide-react";
+
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export interface CommercialToolbarProps {
   outletName: string;
@@ -22,56 +39,41 @@ export function CommercialToolbar({
   return (
     <PageHeader
       title="Komersial"
-      description="Kontrak sewa unit retail dan tagihannya."
+      description={`Kontrak sewa unit retail dan tagihannya di ${outletName}.`}
       actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onExportExcel}
-            className="gap-1.5 text-xs"
-          >
-            <FileSpreadsheet className="size-3.5 text-success" />
-            <span>Ekspor Excel</span>
-          </Button>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" />}>
+              Lainnya
+              <ChevronDown className="text-muted-foreground" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-48">
+              <DropdownMenuItem onClick={onExportExcel}>
+                <FileSpreadsheet />
+                Ekspor Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onExportCSV}>
+                <Download />
+                Ekspor CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onOpenPDF}>
+                <FileText />
+                Laporan PDF
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={onToggleModule}
+                className="text-destructive focus:text-destructive"
+              >
+                <PowerOff />
+                Nonaktifkan modul
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onExportCSV}
-            className="gap-1.5 text-xs"
-          >
-            <Download className="size-3.5 text-muted-foreground" />
-            <span>Ekspor CSV</span>
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onOpenPDF}
-            className="gap-1.5 text-xs"
-          >
-            <FileText className="size-3.5 text-muted-foreground" />
-            <span>Cetak PDF</span>
-          </Button>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={onToggleModule}
-            className="gap-1.5 text-xs text-destructive hover:bg-destructive/10"
-          >
-            <PowerOff className="size-3.5" />
-            <span>Nonaktifkan modul</span>
-          </Button>
-
-          <Button
-            size="sm"
-            onClick={onOpenCreateModal}
-            className="gap-1.5 text-xs font-medium"
-          >
-            <Plus className="size-3.5" />
-            <span>Tambah kontrak</span>
+          <Button onClick={onOpenCreateModal}>
+            <Plus />
+            Tambah kontrak
           </Button>
         </div>
       }

@@ -1,29 +1,31 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Building2 } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { useOutlet } from "@/contexts/OutletContext";
-import { useCommercial } from "@/contexts/CommercialContext";
-import type { CommercialLease, LeaseStatus } from "@/types/commercial";
+
 import { notify } from "@/components/app/notify";
 import { StatCard } from "@/components/app/stat-card";
-import { formatCurrencyIDR } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCommercial } from "@/contexts/CommercialContext";
+import { useOutlet } from "@/contexts/OutletContext";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
+import { formatCurrencyIDR } from "@/lib/utils";
+import type { CommercialLease, LeaseStatus } from "@/types/commercial";
 
+import { ChangeLeaseStatusModal } from "@/features/commercial/ChangeLeaseStatusModal";
 import {
+  buildCommercialExportData,
   calculateCommercialKPIs,
   filterLeases,
-  buildCommercialExportData,
   getLeaseStatusLabel,
 } from "@/features/commercial/commercial-domain";
-import { CommercialToolbar } from "@/features/commercial/CommercialToolbar";
-import { CommercialTable } from "@/features/commercial/CommercialTable";
 import { CommercialDetailModal } from "@/features/commercial/CommercialDetailModal";
+import { CommercialReportPDFModal } from "@/features/commercial/CommercialReportPDFModal";
+import { CommercialTable } from "@/features/commercial/CommercialTable";
+import { CommercialToolbar } from "@/features/commercial/CommercialToolbar";
 import { CreateLeaseModal } from "@/features/commercial/CreateLeaseModal";
 import { RecordPaymentModal } from "@/features/commercial/RecordPaymentModal";
-import { ChangeLeaseStatusModal } from "@/features/commercial/ChangeLeaseStatusModal";
-import { CommercialReportPDFModal } from "@/features/commercial/CommercialReportPDFModal";
 
 export default function CommercialPage() {
   const { activeOrgModules, toggleOrgModule } = useAuth();
@@ -49,21 +51,26 @@ export default function CommercialPage() {
 
   if (!isModuleActive) {
     return (
-      <div className="p-8 text-center bg-card rounded-2xl border max-w-lg mx-auto mt-10 space-y-4">
-        <div className="w-12 h-12 bg-primary/10 text-primary rounded-full flex items-center justify-center mx-auto">
-          <Building2 className="w-6 h-6" />
+      <div className="mx-auto mt-10 max-w-lg space-y-4 rounded-2xl border bg-card p-8 text-center">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
+          <Building2 className="size-6" />
         </div>
         <div className="space-y-1">
-          <h3 className="text-base font-medium text-foreground">Modul Komersial Dinonaktifkan</h3>
+          <h3 className="text-base font-medium text-foreground">Modul komersial dinonaktifkan</h3>
           <p className="text-xs text-muted-foreground">
-            Modul Commercial (Retail Leases & Tenant Contracts) saat ini berstatus non-aktif.
+            Modul sewa retail dan kontrak tenant saat ini berstatus nonaktif.
           </p>
         </div>
-        <div className="p-3 bg-muted/40 rounded-xl border text-xs text-muted-foreground text-left space-y-1">
-          <p className="font-medium text-foreground">Akses Dibatasi</p>
-          <p className="text-[11px] leading-relaxed">
-            Aktifkan modul kembali melalui menu Pengaturan Organisasi atau tombol kelola akses.
+        <div className="space-y-1 rounded-xl border bg-muted/40 p-3 text-left text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">Akses dibatasi</p>
+          <p className="text-xs leading-relaxed">
+            Aktifkan modul kembali melalui tombol di bawah ini atau melalui menu Pengaturan Organisasi.
           </p>
+        </div>
+        <div className="pt-2">
+          <Button onClick={() => toggleOrgModule("COMMERCIAL")}>
+            Aktifkan modul komersial
+          </Button>
         </div>
       </div>
     );
@@ -195,26 +202,26 @@ export default function CommercialPage() {
       />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
         <StatCard
-          label="Total Unit Tersewa"
-          value={`${kpis.activeUnitsCount}`}
-          hint="Tenant aktif"
+          label="Unit aktif"
+          value={String(kpis.activeUnitsCount)}
+          hint="tenant bertugas"
         />
         <StatCard
-          label="Monthly Billing Run-Rate"
+          label="Tagihan bulanan"
           value={formatCurrencyIDR(kpis.totalMonthlyBilling)}
-          hint="Estimasi pendapatan sewa / bln"
+          hint="estimasi per bulan"
         />
         <StatCard
-          label="Total Security Deposit"
+          label="Deposit jaminan"
           value={formatCurrencyIDR(kpis.totalSecurityDeposit)}
-          hint="Deposit jaminan tersimpan"
+          hint="tersimpan di sistem"
         />
         <StatCard
-          label="Scope Outlet Aktif"
+          label="Outlet aktif"
           value={activeOutlet?.name || "Semua Outlet"}
-          hint="Filter data saat ini"
+          hint="cakupan filter"
         />
       </div>
 

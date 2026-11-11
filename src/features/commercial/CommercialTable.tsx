@@ -1,7 +1,15 @@
-import { useState, useMemo, useEffect } from "react";
-import { Search, Building2, ChevronLeft, ChevronRight } from "lucide-react";
-import type { CommercialLease } from "@/types/commercial";
-import { formatCurrencyIDR } from "@/lib/utils";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Building2, Search } from "lucide-react";
+
+import { DataPagination } from "@/components/app/data-pagination";
+import { EmptyState } from "@/components/app/empty-state";
+import { StatusBadge } from "@/components/app/status-badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { NativeSelect } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -10,13 +18,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { NativeSelect } from "@/components/ui/native-select";
-import { StatusBadge } from "@/components/app/status-badge";
-import { EmptyState } from "@/components/app/empty-state";
-import { getLeaseStatusTone, getLeaseStatusLabel } from "./commercial-domain";
+import type { CommercialLease } from "@/types/commercial";
+import { formatCurrencyIDR } from "@/lib/utils";
+
+import {
+  emptyCommercialMessage,
+  getLeaseStatusLabel,
+  getLeaseStatusTone,
+  paymentScheduleLabel,
+} from "./commercial-domain";
 
 export interface CommercialTableProps {
   leases: CommercialLease[];
@@ -33,7 +43,7 @@ const STATUS_OPTIONS = [
   { value: "ACTIVE", label: "Aktif" },
   { value: "EXPIRING_SOON", label: "Segera berakhir" },
   { value: "EXPIRED", label: "Berakhir" },
-  { value: "TERMINATED", label: "Dibatalkan" },
+  { value: "TERMINATED", label: "Diakhiri" },
 ];
 
 export function CommercialTable({
@@ -67,31 +77,30 @@ export function CommercialTable({
     return leases.slice(start, start + pageSize);
   }, [leases, safeCurrentPage, pageSize]);
 
+  const emptyCopy = emptyCommercialMessage(isFiltered);
+
   return (
     <div className="space-y-4">
       {/* Controls Bar */}
       <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 flex-wrap items-center gap-2">
-          <div className="relative min-w-[200px] flex-1 max-w-xs">
-            <Search className="absolute left-3 top-2.5 size-3.5 text-muted-foreground" />
-            <Input
+          <InputGroup className="max-w-xs flex-1">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
               value={searchTerm}
-              onChange={(e) => {
-                onSearchChange(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Cari penyewa, nomor kontrak, atau unit"
-              className="h-8 pl-8 text-xs"
+              aria-label="Cari kontrak"
             />
-          </div>
+          </InputGroup>
 
           <NativeSelect
             value={statusFilter}
-            onChange={(e) => {
-              onStatusFilterChange(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="h-8 text-xs font-medium"
+            onChange={(e) => onStatusFilterChange(e.target.value)}
+            aria-label="Filter status kontrak"
           >
             {STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -105,29 +114,10 @@ export function CommercialTable({
               variant="ghost"
               size="sm"
               onClick={handleResetFilters}
-              className="h-8 text-xs text-muted-foreground hover:text-foreground"
             >
               Reset filter
             </Button>
           )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>baris</span>
-            <NativeSelect
-              value={String(pageSize)}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="h-8 w-16 text-xs font-mono"
-            >
-              <option value="10">10</option>
-              <option value="25">25</option>
-              <option value="50">50</option>
-            </NativeSelect>
-          </div>
         </div>
       </div>
 
@@ -137,26 +127,27 @@ export function CommercialTable({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[220px]">Penyewa</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead>Luas</TableHead>
-                <TableHead>Sewa</TableHead>
-                <TableHead>Periode</TableHead>
-                <TableHead className="text-center">Status</TableHead>
-                <TableHead className="text-right">Aksi</TableHead>
+                <TableHead className="w-[220px]">Penyewa & Kontrak</TableHead>
+                <TableHead>Unit & Luas</TableHead>
+                <TableHead className="text-right">Sewa & Deposit</TableHead>
+                <TableHead>Periode sewa</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">
+                  <span className="sr-only">Aksi</span>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedLeases.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-48 text-center">
+                  <TableCell colSpan={6} className="h-48 text-center">
                     <EmptyState
-                      icon={<Building2 className="w-8 h-8 text-muted-foreground" />}
-                      title="Kontrak tidak ditemukan"
+                      icon={<Building2 className="size-8 text-muted-foreground" />}
+                      title={emptyCopy.title}
                       description={
                         searchTerm
                           ? `Tidak ada kontrak yang cocok dengan "${searchTerm}".`
-                          : "Belum ada kontrak sewa di outlet ini."
+                          : emptyCopy.description
                       }
                     />
                   </TableCell>
@@ -170,49 +161,47 @@ export function CommercialTable({
                     <TableRow key={lease.id}>
                       <TableCell className="font-medium">
                         <div className="space-y-0.5">
-                          <p className="text-foreground leading-snug">{lease.tenantName}</p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {lease.tenantContact} ·{" "}
-                            <span className="font-mono text-primary font-medium">
-                              {lease.leaseNumber}
-                            </span>
+                          <p className="font-mono text-xs font-semibold text-primary">
+                            {lease.leaseNumber}
+                          </p>
+                          <p className="leading-snug text-foreground">{lease.tenantName}</p>
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {lease.tenantContact}
                           </p>
                         </div>
                       </TableCell>
 
-                      <TableCell className="font-medium text-foreground text-xs">
-                        {lease.unitCode}
-                      </TableCell>
-
-                      <TableCell className="text-xs text-muted-foreground">
-                        {lease.areaSquareMeters} m²
-                      </TableCell>
-
                       <TableCell>
-                        <div className="space-y-0.5 text-xs">
-                          <p className="font-mono font-medium tabular-nums text-foreground">
-                            {formatCurrencyIDR(lease.monthlyRent)}
-                            <span className="text-[10px] font-normal text-muted-foreground">/bln</span>
+                        <div className="space-y-0.5">
+                          <p className="font-medium text-foreground">{lease.unitCode}</p>
+                          <p className="text-xs text-muted-foreground">{lease.areaSquareMeters} m²</p>
+                        </div>
+                      </TableCell>
+
+                      <TableCell className="text-right">
+                        <div className="space-y-0.5">
+                          <p className="font-mono text-xs font-medium tabular-nums text-foreground">
+                            {formatCurrencyIDR(lease.monthlyRent)} / bln
                           </p>
-                          <p className="text-[10px] text-muted-foreground font-mono">
+                          <p className="font-mono text-xs tabular-nums text-muted-foreground">
                             Deposit: {formatCurrencyIDR(lease.depositAmount)}
                           </p>
                         </div>
                       </TableCell>
 
                       <TableCell>
-                        <div className="space-y-0.5 text-xs">
-                          <p className="text-foreground">
+                        <div className="space-y-0.5">
+                          <p className="font-mono text-xs font-medium text-foreground">
                             {lease.startDate} s/d {lease.endDate}
                           </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            Jadwal: {lease.paymentSchedule}
+                          <p className="text-xs text-muted-foreground">
+                            Jadwal: {paymentScheduleLabel(lease.paymentSchedule)}
                           </p>
                         </div>
                       </TableCell>
 
-                      <TableCell className="text-center">
-                        <StatusBadge status={tone} className="text-xs">
+                      <TableCell>
+                        <StatusBadge status={tone}>
                           {label}
                         </StatusBadge>
                       </TableCell>
@@ -221,9 +210,8 @@ export function CommercialTable({
                         <div className="flex items-center justify-end gap-1.5">
                           <Button
                             size="sm"
-                            variant="ghost"
+                            variant="outline"
                             onClick={() => onSelectLease(lease)}
-                            className="h-7 px-2 text-xs font-medium"
                           >
                             Detail
                           </Button>
@@ -231,7 +219,6 @@ export function CommercialTable({
                             size="sm"
                             variant="outline"
                             onClick={() => onOpenPaymentModal(lease)}
-                            className="h-7 px-2 text-xs font-medium"
                           >
                             Bayar
                           </Button>
@@ -248,49 +235,17 @@ export function CommercialTable({
 
       {/* Pagination Bar */}
       {leases.length > 0 && (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground">
-          <div>
-            Menampilkan{" "}
-            <span className="font-mono font-medium text-foreground">
-              {Math.min((safeCurrentPage - 1) * pageSize + 1, leases.length)}
-            </span>{" "}
-            sampai{" "}
-            <span className="font-mono font-medium text-foreground">
-              {Math.min(safeCurrentPage * pageSize, leases.length)}
-            </span>{" "}
-            dari{" "}
-            <span className="font-mono font-medium text-foreground">
-              {leases.length}
-            </span>{" "}
-            kontrak
-          </div>
-
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={safeCurrentPage <= 1}
-              className="size-8"
-              aria-label="Halaman sebelumnya"
-            >
-              <ChevronLeft className="size-4" />
-            </Button>
-            <div className="px-2 font-mono text-xs">
-              {safeCurrentPage} / {totalPages}
-            </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={safeCurrentPage >= totalPages}
-              className="size-8"
-              aria-label="Halaman berikutnya"
-            >
-              <ChevronRight className="size-4" />
-            </Button>
-          </div>
-        </div>
+        <DataPagination
+          currentPage={safeCurrentPage}
+          totalItems={leases.length}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={(newSize) => {
+            setPageSize(newSize);
+            setCurrentPage(1);
+          }}
+          itemLabel="kontrak"
+        />
       )}
     </div>
   );
