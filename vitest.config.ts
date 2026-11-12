@@ -6,6 +6,11 @@ export default defineConfig({
   esbuild: {
     jsx: "automatic",
   },
+  css: {
+    postcss: {
+      plugins: [],
+    },
+  },
   test: {
     globals: true,
     environment: "node",
