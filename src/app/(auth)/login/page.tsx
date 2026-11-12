@@ -8,13 +8,14 @@ import { AlertCircle, ArrowLeft, Eye, EyeOff, Search, Ticket } from "lucide-reac
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
-import { HERO } from "@/features/landing/landing-content";
+import { HERO_PHOTO, PARTNER_ROLES } from "@/features/landing/home/home-content";
 import { ModeToggle } from "@/features/layout/ModeToggle";
 
 interface PasswordInputProps {
@@ -68,6 +69,31 @@ function sanitizeReturnTo(url: string | null | undefined): string | null {
     return trimmed;
   }
   return null;
+}
+
+/** Right-hand stage: the hub's photo with a card naming who signs in here, like the landing page's product frames. */
+function LoginStage() {
+  return (
+    <div className="relative isolate hidden overflow-hidden bg-muted p-10 lg:flex lg:items-end" data-alt={HERO_PHOTO.wanted}>
+      <Image src={HERO_PHOTO.src} alt={HERO_PHOTO.alt} fill priority sizes="50vw" className="-z-10 object-cover saturate-75 dark:brightness-[0.35]" />
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader>
+          <CardTitle>Satu akun untuk semua yang bekerja di sini</CardTitle>
+          <CardDescription>Setelah masuk, Anda diarahkan ke halaman sesuai peran.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ul className="flex flex-col divide-y">
+            {PARTNER_ROLES.map((role) => (
+              <li key={role.id} className="flex flex-col gap-0.5 py-2.5 first:pt-0 last:pb-0">
+                <span className="text-sm font-medium">{role.title}</span>
+                <span className="text-xs text-muted-foreground">{role.line}</span>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 function LoginContent() {
@@ -243,7 +269,6 @@ function LoginContent() {
     }
   };
 
-
   const switchMode = (register: boolean) => {
     setErrorMessage(null);
     setIsRegisterMode(register);
@@ -253,9 +278,9 @@ function LoginContent() {
     <div className="grid min-h-svh lg:grid-cols-2">
       <div className="flex flex-col gap-4 p-6 md:p-10">
         <div className="flex items-center justify-between gap-2">
-          <Link href="/" className="flex items-center gap-2 font-medium">
-            <Image src="/logo-dago.png" alt="" width={24} height={28} priority className="object-contain" />
-            DagoEng
+          <Link href="/" className="flex items-center gap-2 text-sm font-medium">
+            <Image src="/logo-dago.png" alt="" width={20} height={26} priority className="object-contain" />
+            Dago Creative Hub
           </Link>
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" render={<Link href={backHref} />} nativeButton={false}>
@@ -267,15 +292,21 @@ function LoginContent() {
         </div>
 
         <div className="flex flex-1 items-center justify-center py-6">
-          <div className="flex w-full max-w-xs flex-col gap-6">
-            <div className="flex flex-col items-center gap-1 text-center">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {isRegisterMode ? "Daftar member" : "Masuk ke akun"}
-              </h1>
+          <div className="flex w-full max-w-sm flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <Image
+                src="/logo-dago.png"
+                alt="Logo Dago Creative Hub"
+                width={60}
+                height={81}
+                priority
+                className="mb-4 self-center object-contain"
+              />
+              <h1 className="text-3xl font-medium tracking-tight">{isRegisterMode ? "Daftar member" : "Masuk"}</h1>
               <p className="text-sm text-balance text-muted-foreground">
                 {isRegisterMode
-                  ? "Daftar gratis dan dapatkan 50 poin pertama."
-                  : "Masukkan email dan password akun DagoEng."}
+                  ? "Gratis, dan langsung dapat 50 poin."
+                  : "Satu akun untuk staf, mitra, penyelenggara, dan member."}
               </p>
             </div>
 
@@ -315,7 +346,7 @@ function LoginContent() {
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="nama@bisnis.com atau nama@gmail.com"
+                      placeholder="nama@contoh.com"
                       autoComplete="email"
                       required
                     />
@@ -333,7 +364,7 @@ function LoginContent() {
                   </Field>
                   <Button type="submit" size="lg" disabled={isLoading} className="w-full">
                     {isLoading ? <Spinner /> : null}
-                    {isLoading ? "Memproses..." : "Masuk ke Sistem"}
+                    {isLoading ? "Memeriksa akun" : "Masuk"}
                   </Button>
                 </FieldGroup>
               </form>
@@ -375,15 +406,15 @@ function LoginContent() {
                   </Field>
                   <Button type="submit" size="lg" disabled={isLoading} className="w-full">
                     {isLoading ? <Spinner /> : null}
-                    {isLoading ? "Mendaftarkan..." : "Daftar dan klaim 50 poin"}
+                    {isLoading ? "Mendaftarkan" : "Daftar dan ambil 50 poin"}
                   </Button>
                 </FieldGroup>
               </form>
             )}
 
-            <p className="text-center text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               {isRegisterMode ? "Sudah punya akun?" : "Belum punya akun member?"}
-              <Button variant="link" size="sm" className="px-1" onClick={() => switchMode(!isRegisterMode)}>
+              <Button variant="link" size="sm" onClick={() => switchMode(!isRegisterMode)}>
                 {isRegisterMode ? "Masuk" : "Daftar"}
               </Button>
             </p>
@@ -391,16 +422,7 @@ function LoginContent() {
         </div>
       </div>
 
-      <div className="relative hidden bg-muted lg:block">
-        <Image
-          src={HERO.image}
-          alt={HERO.imageAlt}
-          fill
-          priority
-          sizes="50vw"
-          className="object-cover dark:brightness-[0.35] dark:grayscale"
-        />
-      </div>
+      <LoginStage />
     </div>
   );
 }
