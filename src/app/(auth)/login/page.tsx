@@ -4,18 +4,45 @@ import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertCircle, ArrowLeft, Eye, EyeOff, Search, Ticket } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  Search,
+  Ticket,
+} from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
-import { HERO_PHOTO, PARTNER_ROLES } from "@/features/landing/home/home-content";
+import {
+  HERO_PHOTO,
+  PARTNER_ROLES,
+} from "@/features/landing/home/home-content";
+import { BrandLink } from "@/features/landing/home/HomeNav";
 import { ModeToggle } from "@/features/layout/ModeToggle";
 
 interface PasswordInputProps {
@@ -28,7 +55,14 @@ interface PasswordInputProps {
 }
 
 /** Password field with a show/hide toggle inside the input group. */
-function PasswordInput({ id, value, onChange, visible, onToggle, autoComplete }: PasswordInputProps) {
+function PasswordInput({
+  id,
+  value,
+  onChange,
+  visible,
+  onToggle,
+  autoComplete,
+}: PasswordInputProps) {
   return (
     <InputGroup>
       <InputGroupInput
@@ -74,19 +108,36 @@ function sanitizeReturnTo(url: string | null | undefined): string | null {
 /** Right-hand stage: the hub's photo with a card naming who signs in here, like the landing page's product frames. */
 function LoginStage() {
   return (
-    <div className="relative isolate hidden overflow-hidden bg-muted p-10 lg:flex lg:items-end" data-alt={HERO_PHOTO.wanted}>
-      <Image src={HERO_PHOTO.src} alt={HERO_PHOTO.alt} fill priority sizes="50vw" className="-z-10 object-cover saturate-75 dark:brightness-[0.35]" />
+    <div
+      className="relative isolate hidden overflow-hidden bg-muted p-10 lg:flex lg:items-end"
+      data-alt={HERO_PHOTO.wanted}
+    >
+      <Image
+        src={HERO_PHOTO.src}
+        alt={HERO_PHOTO.alt}
+        fill
+        priority
+        sizes="50vw"
+        className="-z-10 object-cover saturate-75 dark:brightness-[0.35]"
+      />
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader>
           <CardTitle>Satu akun untuk semua yang bekerja di sini</CardTitle>
-          <CardDescription>Setelah masuk, Anda diarahkan ke halaman sesuai peran.</CardDescription>
+          <CardDescription>
+            Setelah masuk, Anda diarahkan ke halaman sesuai peran.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="flex flex-col divide-y">
             {PARTNER_ROLES.map((role) => (
-              <li key={role.id} className="flex flex-col gap-0.5 py-2.5 first:pt-0 last:pb-0">
+              <li
+                key={role.id}
+                className="flex flex-col gap-0.5 py-2.5 first:pt-0 last:pb-0"
+              >
                 <span className="text-sm font-medium">{role.title}</span>
-                <span className="text-xs text-muted-foreground">{role.line}</span>
+                <span className="text-xs text-muted-foreground">
+                  {role.line}
+                </span>
               </li>
             ))}
           </ul>
@@ -103,10 +154,13 @@ function LoginContent() {
   const { getOrCreateMember } = useLoyalty();
 
   const fromParam = searchParams.get("from");
-  const returnTo = sanitizeReturnTo(searchParams.get("returnTo") || searchParams.get("redirect"));
+  const returnTo = sanitizeReturnTo(
+    searchParams.get("returnTo") || searchParams.get("redirect"),
+  );
   const initialMode = searchParams.get("mode");
 
-  const isFromEvents = fromParam === "events" || returnTo?.startsWith("/events");
+  const isFromEvents =
+    fromParam === "events" || returnTo?.startsWith("/events");
 
   // Determine back navigation link explicitly based on source context.
   // NEVER send the visitor to returnTo (which may be a protected destination) on cancel/back!
@@ -153,7 +207,9 @@ function LoginContent() {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        setErrorMessage(data.error || "Gagal masuk. Periksa kembali email dan password Anda.");
+        setErrorMessage(
+          data.error || "Gagal masuk. Periksa kembali email dan password Anda.",
+        );
         setIsLoading(false);
         return;
       }
@@ -201,7 +257,9 @@ function LoginContent() {
       router.push(targetDestination);
     } catch (err: any) {
       console.error("Universal login error:", err);
-      setErrorMessage("Terjadi kendala jaringan saat menghubungi server autentikasi.");
+      setErrorMessage(
+        "Terjadi kendala jaringan saat menghubungi server autentikasi.",
+      );
       setIsLoading(false);
     }
   };
@@ -221,7 +279,9 @@ function LoginContent() {
 
     try {
       const cleanPhone = regPhone.trim();
-      const cleanEmail = regEmail.trim() || `${cleanPhone.replace(/[^0-9]/g, "")}@customer.dagoeng.com`;
+      const cleanEmail =
+        regEmail.trim() ||
+        `${cleanPhone.replace(/[^0-9]/g, "")}@customer.dagoeng.com`;
 
       const res = await fetch("/api/auth/register", {
         method: "POST",
@@ -236,7 +296,9 @@ function LoginContent() {
 
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setErrorMessage(data.error || "Pendaftaran gagal. Periksa kembali data Anda.");
+        setErrorMessage(
+          data.error || "Pendaftaran gagal. Periksa kembali data Anda.",
+        );
         setIsLoading(false);
         return;
       }
@@ -278,12 +340,14 @@ function LoginContent() {
     <div className="grid min-h-svh lg:grid-cols-2">
       <div className="flex flex-col gap-4 p-6 md:p-10">
         <div className="flex items-center justify-between gap-2">
-          <Link href="/" className="flex items-center gap-2 text-sm font-medium">
-            <Image src="/logo-dago.png" alt="" width={20} height={26} priority className="object-contain" />
-            Dago Creative Hub
-          </Link>
+          <BrandLink />
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" render={<Link href={backHref} />} nativeButton={false}>
+            <Button
+              variant="ghost"
+              size="sm"
+              render={<Link href={backHref} />}
+              nativeButton={false}
+            >
               <ArrowLeft />
               Kembali
             </Button>
@@ -302,7 +366,9 @@ function LoginContent() {
                 priority
                 className="mb-4 self-center object-contain"
               />
-              <h1 className="text-3xl font-medium tracking-tight">{isRegisterMode ? "Daftar member" : "Masuk"}</h1>
+              <h1 className="text-3xl font-medium tracking-tight">
+                {isRegisterMode ? "Daftar member" : "Masuk"}
+              </h1>
               <p className="text-sm text-balance text-muted-foreground">
                 {isRegisterMode
                   ? "Gratis, dan langsung dapat 50 poin."
@@ -317,11 +383,21 @@ function LoginContent() {
                 <AlertDescription>
                   <p>Tiket tanpa akun bisa dicari lewat kode pesanan.</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" render={<Link href="/events/tickets/recovery" />} nativeButton={false}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      render={<Link href="/events/tickets/recovery" />}
+                      nativeButton={false}
+                    >
                       <Search />
                       Cari tiket tamu
                     </Button>
-                    <Button size="sm" variant="ghost" render={<Link href="/events" />} nativeButton={false}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      render={<Link href="/events" />}
+                      nativeButton={false}
+                    >
                       Lihat event
                     </Button>
                   </div>
@@ -362,7 +438,12 @@ function LoginContent() {
                       autoComplete="current-password"
                     />
                   </Field>
-                  <Button type="submit" size="lg" disabled={isLoading} className="w-full">
+                  <Button
+                    type="submit"
+                    size="lg"
+                    disabled={isLoading}
+                    className="w-full"
+                  >
                     {isLoading ? <Spinner /> : null}
                     {isLoading ? "Memeriksa akun" : "Masuk"}
                   </Button>
@@ -373,7 +454,13 @@ function LoginContent() {
                 <FieldGroup>
                   <Field>
                     <FieldLabel htmlFor="reg-name">Nama lengkap</FieldLabel>
-                    <Input id="reg-name" value={regName} onChange={(e) => setRegName(e.target.value)} autoComplete="name" required />
+                    <Input
+                      id="reg-name"
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      autoComplete="name"
+                      required
+                    />
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="reg-phone">Nomor WhatsApp</FieldLabel>
@@ -390,7 +477,13 @@ function LoginContent() {
                   </Field>
                   <Field>
                     <FieldLabel htmlFor="reg-email">Email</FieldLabel>
-                    <Input id="reg-email" type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} autoComplete="email" />
+                    <Input
+                      id="reg-email"
+                      type="email"
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      autoComplete="email"
+                    />
                     <FieldDescription>Opsional.</FieldDescription>
                   </Field>
                   <Field>
@@ -404,7 +497,12 @@ function LoginContent() {
                       autoComplete="new-password"
                     />
                   </Field>
-                  <Button type="submit" size="lg" disabled={isLoading} className="w-full">
+                  <Button
+                    type="submit"
+                    size="lg"
+                    disabled={isLoading}
+                    className="w-full"
+                  >
                     {isLoading ? <Spinner /> : null}
                     {isLoading ? "Mendaftarkan" : "Daftar dan ambil 50 poin"}
                   </Button>
@@ -413,8 +511,14 @@ function LoginContent() {
             )}
 
             <p className="text-sm text-muted-foreground">
-              {isRegisterMode ? "Sudah punya akun?" : "Belum punya akun member?"}
-              <Button variant="link" size="sm" onClick={() => switchMode(!isRegisterMode)}>
+              {isRegisterMode
+                ? "Sudah punya akun?"
+                : "Belum punya akun member?"}
+              <Button
+                variant="link"
+                size="sm"
+                onClick={() => switchMode(!isRegisterMode)}
+              >
                 {isRegisterMode ? "Masuk" : "Daftar"}
               </Button>
             </p>

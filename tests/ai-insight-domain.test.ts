@@ -98,7 +98,34 @@ describe("ai-insight-domain", () => {
     expect(res.actionUrl).toBe("/customers");
   });
 
-  it("provides quick prompt list", () => {
+  it("provides quick prompt list adhering to glossary", () => {
     expect(QUICK_PROMPTS.length).toBeGreaterThan(0);
+    expect(QUICK_PROMPTS.some((p) => p.includes("omzet"))).toBe(true);
+    expect(QUICK_PROMPTS.some((p) => p.includes("omset"))).toBe(false);
+  });
+
+  it("handles zero critical items gracefully with calm feedback", () => {
+    const res = generateAIInsightResponse({
+      ...baseParams,
+      criticalItems: [],
+      query: "Cek stok bahan saat ini",
+    });
+
+    expect(res.sender).toBe("AI");
+    expect(res.systemData?.[1]).toContain("0 bahan");
+    expect(res.aiAnalysis).toContain("Semua bahan di Outlet Singaraja masih di atas batas minimum.");
+    expect(res.actionLabel).toBe("Buka inventori");
+  });
+
+  it("formats fallback outlet name consistently", () => {
+    const welcome = createWelcomeMessage({
+      userName: "Budi",
+      outletName: "",
+      totalRevenue: 0,
+      ordersCount: 0,
+      criticalItemsCount: 0,
+    });
+
+    expect(welcome.systemData?.[0]).toContain("Semua outlet");
   });
 });

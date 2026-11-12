@@ -5,10 +5,10 @@
 import { CONTACT } from "@/features/landing/landing-content";
 
 export const NAV_LINKS: readonly { href: string; label: string }[] = [
-  { href: "#kerja", label: "Ruang kerja" },
-  { href: "#makan", label: "Makan" },
-  { href: "#event", label: "Event" },
-  { href: "#mitra", label: "Untuk mitra" },
+  { href: "/#kerja", label: "Ruang kerja" },
+  { href: "/#makan", label: "Makan" },
+  { href: "/#event", label: "Event" },
+  { href: "/#mitra", label: "Untuk mitra" },
 ];
 
 export const HOURS = "Buka setiap hari, 08.00 sampai 22.00 WITA";

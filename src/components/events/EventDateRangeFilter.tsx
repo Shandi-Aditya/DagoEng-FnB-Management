@@ -1,8 +1,12 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import { Calendar, AlertCircle, RotateCcw, Check, Clock, ChevronDown, X } from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
+import React, { useState, useEffect, useMemo } from "react";
+import { Calendar, Check, ChevronDown, Clock, RotateCcw, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 export interface DateRange {
   startDate: string; // YYYY-MM-DD
@@ -22,14 +26,13 @@ export interface EventDateRangeFilterProps {
 }
 
 /**
- * Calculates date string (YYYY-MM-DD) in WITA timezone (Asia/Makassar, UTC+8).
+ * Menghitung format tanggal (YYYY-MM-DD) dalam zona waktu WITA (Asia/Makassar, UTC+8).
  */
 export function getWitaDateString(date: Date = new Date()): string {
   try {
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(date);
   } catch {
-    // Fallback if Intl timeZone unavailable
-    const tzOffset = 8 * 60; // WITA is UTC+8
+    const tzOffset = 8 * 60;
     const utc = date.getTime() + date.getTimezoneOffset() * 60000;
     const witaDate = new Date(utc + tzOffset * 60000);
     return witaDate.toISOString().slice(0, 10);
@@ -37,7 +40,7 @@ export function getWitaDateString(date: Date = new Date()): string {
 }
 
 /**
- * Calculates date string (YYYY-MM-DD) in WITA for N days ago.
+ * Menghitung tanggal N hari lalu dalam WITA.
  */
 export function getWitaDaysAgoString(daysAgo: number): string {
   const d = new Date();
@@ -46,57 +49,57 @@ export function getWitaDaysAgoString(daysAgo: number): string {
 }
 
 /**
- * Calculates start of month (YYYY-MM-01) in WITA timezone.
+ * Menghitung tanggal awal bulan ini dalam WITA (YYYY-MM-01).
  */
 export function getWitaStartOfMonthString(): string {
-  const todayStr = getWitaDateString();
-  const [year, month] = todayStr.split("-");
-  return `${year}-${month}-01`;
+  const todayWita = getWitaDateString();
+  return `${todayWita.slice(0, 7)}-01`;
 }
 
 /**
- * Calculates start-of-day timestamp in WITA timezone (UTC+8).
+ * Menghitung epoch timestamp (ms) untuk 00:00:00.000 WITA pada tanggal YYYY-MM-DD.
  */
 export function getWitaStartOfDay(dateStr: string): number {
-  if (!dateStr) return 0;
-  return new Date(`${dateStr}T00:00:00.000+08:00`).getTime();
+  return new Date(`${dateStr}T00:00:00+08:00`).getTime();
 }
 
 /**
- * Calculates end-of-day timestamp in WITA timezone (UTC+8) to prevent missing end-of-day records.
+ * Menghitung epoch timestamp (ms) untuk 23:59:59.999 WITA pada tanggal YYYY-MM-DD.
  */
 export function getWitaEndOfDay(dateStr: string): number {
-  if (!dateStr) return Number.MAX_SAFE_INTEGER;
   return new Date(`${dateStr}T23:59:59.999+08:00`).getTime();
 }
 
 /**
- * Helper: checks if event execution interval intersects with the filtered period.
+ * Memeriksa apakah event bersinggungan dengan rentang waktu periode WITA.
  */
 export function isEventInWitaPeriod(
-  event: { startDate: string; endDate: string },
+  event: { startDate: string; endDate?: string | null },
   range?: DateRange | null
 ): boolean {
   if (!range || !range.startDate || !range.endDate) return true;
-  const startMs = range.startMs ?? getWitaStartOfDay(range.startDate);
-  const endMs = range.endMs ?? getWitaEndOfDay(range.endDate);
 
-  const eventStart = new Date(event.startDate).getTime();
-  const eventEnd = new Date(event.endDate).getTime();
+  const filterStartMs = range.startMs ?? getWitaStartOfDay(range.startDate);
+  const filterEndMs = range.endMs ?? getWitaEndOfDay(range.endDate);
 
-  // Event intersects if event starts before period ends AND event ends after period starts
-  return eventStart <= endMs && eventEnd >= startMs;
+  const eventStartMs = new Date(event.startDate).getTime();
+  const eventEndMs = event.endDate
+    ? new Date(event.endDate).getTime()
+    : eventStartMs + 24 * 60 * 60 * 1000;
+
+  if (isNaN(eventStartMs) || isNaN(eventEndMs)) return true;
+
+  return eventStartMs <= filterEndMs && eventEndMs >= filterStartMs;
 }
 
 /**
- * Helper: checks if booking/transaction timestamp falls within the filtered period.
+ * Memeriksa apakah timestamp berada di dalam rentang filter tanggal WITA.
  */
 export function isTimestampInWitaPeriod(
-  timestamp: string | number | undefined | null,
+  timestamp: string | number,
   range?: DateRange | null
 ): boolean {
   if (!range || !range.startDate || !range.endDate) return true;
-  if (!timestamp) return false;
 
   const startMs = range.startMs ?? getWitaStartOfDay(range.startDate);
   const endMs = range.endMs ?? getWitaEndOfDay(range.endDate);
@@ -111,7 +114,7 @@ export function EventDateRangeFilter({
   onApplyFilter,
   initialRange = null,
   className = "",
-  label = "Filter Periode",
+  label = "Filter tanggal",
   align = "left",
 }: EventDateRangeFilterProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -121,7 +124,6 @@ export function EventDateRangeFilter({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showCustomInputs, setShowCustomInputs] = useState(false);
 
-  // Sync with initialRange changes
   useEffect(() => {
     if (initialRange) {
       setStartDate(initialRange.startDate);
@@ -134,7 +136,6 @@ export function EventDateRangeFilter({
     }
   }, [initialRange]);
 
-  // Determine active preset
   const activePreset = useMemo<PresetKey>(() => {
     if (!appliedRange || (!appliedRange.startDate && !appliedRange.endDate)) {
       return "ALL";
@@ -164,13 +165,13 @@ export function EventDateRangeFilter({
   const activeLabel = useMemo(() => {
     switch (activePreset) {
       case "TODAY":
-        return "Hari Ini (WITA)";
+        return "Hari ini";
       case "7D":
-        return "7 Hari Terakhir";
+        return "7 hari terakhir";
       case "30D":
-        return "30 Hari Terakhir";
+        return "30 hari terakhir";
       case "MONTH":
-        return "Bulan Ini";
+        return "Bulan ini";
       case "CUSTOM":
         if (appliedRange?.startDate && appliedRange?.endDate) {
           try {
@@ -182,15 +183,15 @@ export function EventDateRangeFilter({
               day: "numeric",
               month: "short",
             });
-            return `${s} - ${e}`;
+            return `${s} – ${e}`;
           } catch {
-            return `${appliedRange.startDate} - ${appliedRange.endDate}`;
+            return `${appliedRange.startDate} – ${appliedRange.endDate}`;
           }
         }
-        return "Kustom";
+        return "Rentang kustom";
       case "ALL":
       default:
-        return "Semua Waktu";
+        return "Semua tanggal";
     }
   }, [activePreset, appliedRange]);
 
@@ -250,7 +251,7 @@ export function EventDateRangeFilter({
     setValidationError(null);
 
     if ((startDate && !endDate) || (!startDate && endDate)) {
-      setValidationError("Harap lengkapi tanggal mulai dan tanggal akhir.");
+      setValidationError("Lengkapi tanggal mulai dan tanggal akhir.");
       return;
     }
 
@@ -263,7 +264,7 @@ export function EventDateRangeFilter({
     const endMs = getWitaEndOfDay(endDate);
 
     if (startMs > endMs) {
-      setValidationError("Tanggal mulai tidak boleh lebih besar dari tanggal akhir.");
+      setValidationError("Tanggal mulai tidak boleh melebihi tanggal akhir.");
       return;
     }
 
@@ -292,163 +293,131 @@ export function EventDateRangeFilter({
   const isFilterActive = Boolean(appliedRange && appliedRange.startDate && appliedRange.endDate);
 
   const presets: { key: PresetKey; label: string }[] = [
-    { key: "ALL", label: "Semua Waktu" },
-    { key: "TODAY", label: "Hari Ini" },
-    { key: "7D", label: "7 Hari Terakhir" },
-    { key: "30D", label: "30 Hari Terakhir" },
-    { key: "MONTH", label: "Bulan Ini" },
-    { key: "CUSTOM", label: "Kustom Rentang" },
+    { key: "ALL", label: "Semua tanggal" },
+    { key: "TODAY", label: "Hari ini" },
+    { key: "7D", label: "7 hari terakhir" },
+    { key: "30D", label: "30 hari terakhir" },
+    { key: "MONTH", label: "Bulan ini" },
+    { key: "CUSTOM", label: "Rentang kustom" },
   ];
 
   return (
-    <div className={`relative inline-block ${className}`}>
-      {/* Dropdown Trigger Button */}
-      <div className="inline-flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => setIsOpen((prev) => !prev)}
-          className={`flex items-center space-x-2 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border shadow-xs cursor-pointer ${
-            isFilterActive
-              ? "bg-brand-sage/10 dark:bg-brand-sage/20 border-brand-sage text-brand-sage dark:text-brand-sageBright"
-              : "bg-white dark:bg-[#1E293B] border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600"
-          }`}
-          title="Filter rentang tanggal pelaksanaan event (WITA)"
-        >
-          <Calendar className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
-          <span className="truncate max-w-[140px] sm:max-w-[180px]">{activeLabel}</span>
-          {isFilterActive && (
-            <span className="w-1.5 h-1.5 rounded-full bg-brand-sage dark:bg-brand-sageBright shrink-0" />
-          )}
-          <ChevronDown
-            className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform duration-150 ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
-        </button>
-
-        {isFilterActive && (
-          <button
-            type="button"
-            onClick={handleReset}
-            className="p-1 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
-            title="Reset Filter Tanggal"
-            aria-label="Reset filter"
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-
-      {/* Popover Dropdown */}
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div
-            className={`absolute top-full mt-1.5 z-50 w-72 sm:w-80 bg-white dark:bg-[#1E293B] rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-100 ${
-              align === "right" ? "right-0 left-auto" : "left-0 right-auto"
-            }`}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
-                <Calendar className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
-                <span className="truncate">{label}</span>
-              </span>
-              {isFilterActive && (
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  Reset
-                </button>
-              )}
-            </div>
-
-            {/* Presets Grid */}
-            <div className="grid grid-cols-2 gap-1.5">
-              {presets.map((p) => {
-                const isSelected = activePreset === p.key;
-                return (
-                  <button
-                    key={p.key}
-                    type="button"
-                    onClick={() => handleApplyPreset(p.key)}
-                    className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold text-left transition-all flex items-center justify-between cursor-pointer ${
-                      isSelected
-                        ? "bg-brand-sage text-white shadow-xs font-bold"
-                        : "bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
-                    }`}
-                  >
-                    <span>{p.label}</span>
-                    {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Custom Range Section */}
-            {(showCustomInputs || activePreset === "CUSTOM") && (
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2 animate-in fade-in">
-                <div className="text-[11px] font-semibold text-slate-500">Rentang Tanggal (WITA):</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-0.5">Mulai</label>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => {
-                        setStartDate(e.target.value);
-                        setValidationError(null);
-                      }}
-                      className="w-full text-xs font-medium py-1 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-0.5">Selesai</label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => {
-                        setEndDate(e.target.value);
-                        setValidationError(null);
-                      }}
-                      className="w-full text-xs font-medium py-1 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
-                    />
-                  </div>
-                </div>
-
-                {validationError && (
-                  <div className="flex items-center space-x-1.5 text-[11px] text-rose-600 dark:text-rose-400 font-medium bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 px-2 py-1 rounded-lg">
-                    <AlertCircle className="w-3 h-3 shrink-0" />
-                    <span>{validationError}</span>
-                  </div>
-                )}
-
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handleApplyCustom}
-                  className="w-full h-8 text-xs font-semibold bg-brand-sage hover:bg-[#2E6044] text-white rounded-xl shadow-xs cursor-pointer mt-1"
-                >
-                  <Check className="w-3.5 h-3.5 mr-1" />
-                  Terapkan Filter
-                </Button>
-              </div>
-            )}
-
-            {/* Active Period Note */}
-            {isFilterActive && !validationError && (
-              <div className="flex items-center space-x-1.5 text-[10px] text-brand-sage dark:text-brand-sageBright bg-brand-sage/5 dark:bg-brand-sage/10 p-2 rounded-lg">
-                <Clock className="w-3 h-3 shrink-0" />
-                <span className="truncate">
-                  WITA (Asia/Makassar): {appliedRange!.startDate} s/d {appliedRange!.endDate}
-                </span>
-              </div>
+    <div className={cn("inline-flex items-center gap-1.5", className)}>
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
+        <PopoverTrigger render={<Button variant="outline" size="sm" className="gap-1.5" />}>
+          <Calendar />
+          <span className="truncate max-w-[160px] font-normal">{activeLabel}</span>
+          <ChevronDown className="text-muted-foreground" />
+        </PopoverTrigger>
+        <PopoverContent align={align === "right" ? "end" : "start"} className="w-80 p-3 flex flex-col gap-3">
+          <div className="flex items-center justify-between pb-2 border-b">
+            <span className="text-xs font-medium text-foreground flex items-center gap-1.5">
+              <Calendar className="size-3.5 text-muted-foreground" />
+              <span>{label}</span>
+            </span>
+            {isFilterActive && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleReset}
+              >
+                <RotateCcw />
+                <span>Reset</span>
+              </Button>
             )}
           </div>
-        </>
+
+          <div className="grid grid-cols-2 gap-1.5">
+            {presets.map((p) => {
+              const isSelected = activePreset === p.key;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => handleApplyPreset(p.key)}
+                  className={cn(
+                    "flex items-center justify-between rounded-md px-2.5 py-1.5 text-left text-xs transition-colors cursor-pointer",
+                    isSelected
+                      ? "bg-accent font-medium text-accent-foreground"
+                      : "hover:bg-muted text-foreground"
+                  )}
+                >
+                  <span>{p.label}</span>
+                  {isSelected && <Check className="size-3.5 text-foreground" />}
+                </button>
+              );
+            })}
+          </div>
+
+          {(showCustomInputs || activePreset === "CUSTOM") && (
+            <div className="pt-2 border-t flex flex-col gap-2.5">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="customStart" className="text-xs text-muted-foreground">Mulai</Label>
+                  <Input
+                    id="customStart"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => {
+                      setStartDate(e.target.value);
+                      setValidationError(null);
+                    }}
+                    className="text-xs"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <Label htmlFor="customEnd" className="text-xs text-muted-foreground">Selesai</Label>
+                  <Input
+                    id="customEnd"
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => {
+                      setEndDate(e.target.value);
+                      setValidationError(null);
+                    }}
+                    className="text-xs"
+                  />
+                </div>
+              </div>
+
+              {validationError && (
+                <p className="text-xs text-destructive">
+                  {validationError}
+                </p>
+              )}
+
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleApplyCustom}
+                className="w-full"
+              >
+                Terapkan
+              </Button>
+            </div>
+          )}
+
+          {isFilterActive && (
+            <div className="pt-2 border-t flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Clock className="size-3 text-muted-foreground" />
+              <span className="truncate font-mono tabular-nums">
+                WITA: {appliedRange!.startDate} s/d {appliedRange!.endDate}
+              </span>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+
+      {isFilterActive && (
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={handleReset}
+          aria-label="Hapus filter tanggal"
+          title="Hapus filter tanggal"
+        >
+          <X />
+        </Button>
       )}
     </div>
   );
