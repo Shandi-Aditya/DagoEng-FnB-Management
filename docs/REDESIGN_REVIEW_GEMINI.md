@@ -129,7 +129,7 @@ Kerjakan per halaman, mulai dari `/orders`, `/inventory`, `/tables`, lalu `/cowo
 | `/employees` | Memantau shift kasir dan data staf (selesai P3) | Toolbar bersih 1 primary + dropdown ekspor, tabel shift & staf memakai DataPagination, prefill telepon dibersihkan. |
 | `/commercial` | Mencari kontrak lalu bertindak (selesai P3) | Toolbar bersih 1 primary + dropdown ekspor, tabel sewa memakai DataPagination standar, form sewa bersih dari data palsu. |
 | `/reports` | Memilih jenis laporan, membaca dan mencari rinciannya, lalu cetak/ekspor (berjalan P3, menunggu cek visual) | Kategori jadi bar `Tabs` seperti `/orders` dengan angka murni, tabel tanpa `<Card>` (nol gap kosong) + `DataPagination` + pencarian, enum mentah di `EVENTS`/`INVENTORY`/`FINANCE_AUDIT` dibersihkan (`lint:ui` 0 di file disentuh, `tsc` 0 error, `vitest` 1047/1051, `build` hijau). |
-| `/activity-log` | Membaca dan mengekspor data | Satu ReportPreviewDialog menggantikan modal PDF. Pratinjau dibuat seperti kertas laporan sungguhan. |
+| `/activity-log` | Menelusuri catatan perubahan data lalu periksa detail/ekspor (berjalan P3, menunggu cek visual & build) | Header 1 primary + dropdown `Ekspor`, 3 `StatCard` faktual, `Tabs` `Tabel`/`Riwayat` + `NativeSelect`, tabel 5 kolom tanpa `<Card>` + `DataPagination`, detail di `Sheet` samping, seluruh enum diterjemahkan (`lint:ui` 0 di 9 file disentuh, `tsc` 0 error, `vitest` 1050/1054; `ActivityLogPDFModal` ditunda ke P4). |
 
 Hapus override `h-8 text-xs` pada `Button`. Ukuran cukup lewat prop `size`.
 

@@ -1,191 +1,190 @@
 "use client";
 
-import React, { useState } from "react";
-import { ShieldCheck, Copy, Lock, ArrowRight } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { useState } from "react";
+import { Copy, Lock } from "lucide-react";
+
+import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/app";
-import { ActivityLogEntry } from "@/types/audit";
+import { Separator } from "@/components/ui/separator";
 import {
-  getStatusTone,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  auditActionLabel,
+  auditModuleLabel,
+  auditSeverityLabel,
+  auditStatusLabel,
   getSeverityTone,
+  getStatusTone,
 } from "@/features/activity-log/activity-log-domain";
+import type { ActivityLogEntry } from "@/types/audit";
 
 export interface ActivityLogDetailModalProps {
   log: ActivityLogEntry | null;
   onClose: () => void;
 }
 
+function formatFullTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  return `${date.toLocaleString("id-ID", {
+    dateStyle: "long",
+    timeStyle: "medium",
+    timeZone: "Asia/Makassar",
+  })} WITA`;
+}
+
 export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalProps) {
   const [copiedJson, setCopiedJson] = useState(false);
 
-  if (!log) return null;
-
-  const copyLogJson = () => {
-    navigator.clipboard.writeText(JSON.stringify(log, null, 2));
+  const copyLogJson = (entry: ActivityLogEntry) => {
+    navigator.clipboard.writeText(JSON.stringify(entry, null, 2));
     setCopiedJson(true);
     setTimeout(() => setCopiedJson(false), 2000);
   };
 
   return (
-    <Dialog open={!!log} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="border-b border-border pb-3">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <ShieldCheck className="h-4 w-4" />
-            </div>
-            <div>
-              <DialogTitle className="text-base font-bold">
-                Rincian Rekam Jejak Audit
-              </DialogTitle>
-              <DialogDescription className="text-xs font-mono">
-                ID: {log.id}
-              </DialogDescription>
-            </div>
-          </div>
-        </DialogHeader>
-
-        <div className="space-y-4 py-2">
-          {/* Core Metadata Grid */}
-          <div className="space-y-2 text-xs bg-muted/40 p-3.5 rounded-xl border border-border">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground font-medium">Waktu</span>
-              <span className="font-mono font-bold text-foreground tabular-nums">
-                {new Date(log.timestamp).toLocaleString("id-ID", {
-                  dateStyle: "full",
-                  timeStyle: "medium",
-                })}{" "}
-                WITA
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground font-medium">Pelaku</span>
-              <span className="font-semibold text-foreground">
-                {log.actorName}{" "}
-                <span className="text-primary">({log.actorRole})</span>
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground font-medium">Outlet</span>
-              <span className="font-medium text-foreground">
-                {log.organizationName || "Dago Creative Hub"} • {log.outletName || "Semua"}
-              </span>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground font-medium">Modul dan aksi</span>
-              <span className="font-mono font-bold text-primary">
-                [{log.module}] {log.action}
-              </span>
-            </div>
-
-            {log.recordId && (
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground font-medium">ID data</span>
-                <span className="font-mono font-bold text-foreground bg-muted px-2 py-0.5 rounded">
-                  {log.recordId}
-                </span>
-              </div>
-            )}
-
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground font-medium">Status</span>
-              <div className="flex items-center gap-1.5">
+    <Sheet open={log !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <SheetContent side="right" className="w-full gap-0 sm:max-w-md">
+        {log ? (
+          <>
+            <SheetHeader className="gap-2 border-b">
+              <div className="flex flex-wrap items-center gap-2 pr-8">
+                <SheetTitle className="text-base font-medium">
+                  {auditActionLabel(log.action)}
+                </SheetTitle>
                 <StatusBadge status={getStatusTone(log.status)}>
-                  {log.status || "SUCCESS"}
-                </StatusBadge>
-                <StatusBadge status={getSeverityTone(log.severity)}>
-                  {log.severity || "INFO"}
+                  {auditStatusLabel(log.status)}
                 </StatusBadge>
               </div>
-            </div>
-          </div>
+              <SheetDescription className="font-mono text-xs">
+                {log.id}
+              </SheetDescription>
+            </SheetHeader>
 
-          {/* Before vs After Visual Diff */}
-          {(log.previousValue || log.newValue) && (
-            <div className="space-y-1.5">
-              <span className="text-xs font-semibold text-foreground block">
-                Transformasi Data (Before ➔ After):
+            <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-6 text-sm">
+              <dl className="grid grid-cols-1 gap-2 rounded-lg border bg-muted/40 p-3 text-xs">
+                <div className="flex items-start justify-between gap-3">
+                  <dt className="text-muted-foreground">Waktu</dt>
+                  <dd className="text-right font-mono tabular-nums text-foreground">
+                    {formatFullTime(log.timestamp)}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <dt className="text-muted-foreground">Pelaku</dt>
+                  <dd className="text-right font-medium text-foreground">
+                    {log.actorName || "—"}
+                    {log.actorRole ? (
+                      <span className="font-normal text-muted-foreground"> ({log.actorRole})</span>
+                    ) : null}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <dt className="text-muted-foreground">Outlet</dt>
+                  <dd className="text-right text-foreground">
+                    {log.outletName || "Semua outlet"}
+                  </dd>
+                </div>
+                <div className="flex items-start justify-between gap-3">
+                  <dt className="text-muted-foreground">Modul</dt>
+                  <dd className="text-right text-foreground">{auditModuleLabel(log.module)}</dd>
+                </div>
+                {log.recordId ? (
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-muted-foreground">ID data</dt>
+                    <dd className="text-right font-mono text-foreground">{log.recordId}</dd>
+                  </div>
+                ) : null}
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Dampak</dt>
+                  <dd>
+                    <StatusBadge status={getSeverityTone(log.severity)}>
+                      {auditSeverityLabel(log.severity)}
+                    </StatusBadge>
+                  </dd>
+                </div>
+              </dl>
+
+              <section className="flex flex-col gap-2">
+                <h3 className="text-xs text-muted-foreground">Keterangan</h3>
+                <p className="rounded-lg border bg-card p-3 text-sm text-foreground">
+                  {log.description}
+                </p>
+                {log.reason ? (
+                  <p className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
+                    Alasan: {log.reason}
+                  </p>
+                ) : null}
+              </section>
+
+              {log.previousValue || log.newValue ? (
+                <>
+                  <Separator />
+                  <section className="flex flex-col gap-2">
+                    <h3 className="text-xs text-muted-foreground">Perubahan nilai</h3>
+                    <div className="space-y-2 rounded-lg border bg-muted/30 p-3 font-mono text-xs">
+                      {log.previousValue ? (
+                        <div className="rounded-md border border-destructive/20 bg-destructive/10 p-2 text-destructive">
+                          <span className="mb-0.5 block font-sans text-muted-foreground">
+                            Sebelum
+                          </span>
+                          {log.previousValue}
+                        </div>
+                      ) : null}
+                      {log.newValue ? (
+                        <div className="rounded-md border border-success/20 bg-success/10 p-2 text-success">
+                          <span className="mb-0.5 block font-sans text-muted-foreground">
+                            Sesudah
+                          </span>
+                          {log.newValue}
+                        </div>
+                      ) : null}
+                    </div>
+                  </section>
+                </>
+              ) : null}
+
+              {log.metadata ? (
+                <>
+                  <Separator />
+                  <section className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs text-muted-foreground">Metadata JSON</h3>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => copyLogJson(log)}
+                      >
+                        <Copy />
+                        {copiedJson ? "Tersalin" : "Salin JSON"}
+                      </Button>
+                    </div>
+                    <pre className="max-h-40 overflow-x-auto rounded-lg border bg-muted p-3 font-mono text-xs text-foreground">
+                      {JSON.stringify(log.metadata, null, 2)}
+                    </pre>
+                  </section>
+                </>
+              ) : null}
+            </div>
+
+            <SheetFooter className="flex-row items-center justify-between border-t sm:justify-between">
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Lock className="size-3.5" aria-hidden />
+                Tidak bisa diubah
               </span>
-              <div className="p-3 bg-muted/30 rounded-xl border border-border space-y-1.5 font-mono text-xs">
-                {log.previousValue && (
-                  <div className="text-destructive bg-destructive/10 p-2 rounded border border-destructive/20">
-                    <strong className="block text-[10px] uppercase font-bold text-destructive">
-                      NILAI SEBELUMNYA:
-                    </strong>
-                    {log.previousValue}
-                  </div>
-                )}
-                {log.newValue && (
-                  <div className="text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 p-2 rounded border border-emerald-500/20">
-                    <strong className="block text-[10px] uppercase font-bold text-emerald-800 dark:text-emerald-300">
-                      NILAI SESUDAH:
-                    </strong>
-                    {log.newValue}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Description & Audit Reason */}
-          <div className="space-y-2">
-            <span className="text-xs font-semibold text-foreground block">
-              Deskripsi & Narasi Aksi:
-            </span>
-            <p className="p-3 bg-card rounded-xl border border-border text-xs text-foreground">
-              {log.description}
-            </p>
-            {log.reason && (
-              <div className="p-2.5 bg-amber-500/10 rounded-lg border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400">
-                <span className="font-semibold">Alasan</span> {log.reason}
-              </div>
-            )}
-          </div>
-
-          {/* Raw JSON Payload */}
-          {log.metadata && (
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-foreground">
-                  Payload Metadata (JSON):
-                </span>
-                <button
-                  type="button"
-                  onClick={copyLogJson}
-                  className="text-[11px] text-primary hover:underline flex items-center gap-1 font-semibold cursor-pointer"
-                >
-                  <Copy className="h-3 w-3" />
-                  <span>{copiedJson ? "Tersalin!" : "Salin JSON"}</span>
-                </button>
-              </div>
-              <pre className="p-3 bg-slate-950 text-slate-100 rounded-xl text-[10px] font-mono overflow-x-auto max-h-36">
-                {JSON.stringify(log.metadata, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
-
-        <DialogFooter className="flex flex-row items-center justify-between border-t border-border pt-3">
-          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-            <Lock className="h-3.5 w-3.5" />
-            <span>Tidak bisa diubah</span>
-          </div>
-          <Button size="sm" onClick={onClose} variant="outline">
-            Tutup
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+              <Button size="sm" variant="outline" onClick={onClose}>
+                Tutup
+              </Button>
+            </SheetFooter>
+          </>
+        ) : null}
+      </SheetContent>
+    </Sheet>
   );
 }

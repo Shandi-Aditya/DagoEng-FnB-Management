@@ -1,22 +1,22 @@
 /**
  * Domain murni pelacakan aktivitas dan audit trail.
- * Mengelola pemfilteran, kalkulasi KPI, aggregasi aktor/role, dan pembuat data ekspor.
+ * Mengelola pemfilteran, kalkulasi KPI, aggregasi aktor/role, label terjemahan, dan pembuat data ekspor.
  *
  * Importer:
  * - src/app/(dashboard)/activity-log/page.tsx
  * - src/features/activity-log/ActivityLogTableView.tsx
  * - src/features/activity-log/ActivityLogTimelineView.tsx
  * - src/features/activity-log/ActivityLogFilterBar.tsx
+ * - src/features/activity-log/ActivityLogDetailModal.tsx
  * - tests/activity-log-domain.test.ts
  */
 
-import {
+import type { StatusTone } from "@/components/app/status-badge";
+import type {
   ActivityLogEntry,
-  ActivityModule,
-  AuditStatus,
   ActivitySeverity,
+  AuditStatus,
 } from "@/types/audit";
-import { StatusTone } from "@/components/app/status-badge";
 
 export type ViewMode = "TABLE" | "TIMELINE";
 export type DateFilterType = "ALL" | "TODAY" | "LAST_7_DAYS" | "LAST_30_DAYS";
@@ -49,19 +49,105 @@ export interface ModuleOption {
 }
 
 export const MODULE_OPTIONS: ModuleOption[] = [
-  { key: "ALL", label: "Semua Modul" },
-  { key: "POS", label: "POS & Kasir" },
-  { key: "TABLES", label: "Meja & Reservasi" },
-  { key: "INVENTORY", label: "Smart Inventory" },
-  { key: "MENU", label: "Katalog Menu" },
-  { key: "LOYALTY", label: "Loyalty CRM" },
+  { key: "ALL", label: "Semua modul" },
+  { key: "POS", label: "POS dan kasir" },
+  { key: "TABLES", label: "Meja" },
+  { key: "INVENTORY", label: "Inventori" },
+  { key: "MENU", label: "Menu" },
+  { key: "LOYALTY", label: "Pelanggan" },
   { key: "COWORKING", label: "Co-working" },
-  { key: "COMMERCIAL", label: "Commercial Leases" },
-  { key: "EMPLOYEES_SHIFT", label: "Shift & Staf" },
-  { key: "SETTINGS", label: "Pengaturan Platform" },
-  { key: "AUTH", label: "Keamanan & Auth" },
-  { key: "AI_INSIGHT", label: "AI Advisor" },
+  { key: "COMMERCIAL", label: "Komersial" },
+  { key: "EMPLOYEES_SHIFT", label: "Karyawan dan shift" },
+  { key: "FINANCE", label: "Keuangan" },
+  { key: "SETTINGS", label: "Pengaturan" },
+  { key: "AUTH", label: "Keamanan" },
+  { key: "AI_INSIGHT", label: "Asisten analisis" },
 ];
+
+const AUDIT_STATUS_LABEL: Record<AuditStatus, string> = {
+  SUCCESS: "Berhasil",
+  WARNING: "Peringatan",
+  FAILED: "Gagal",
+};
+
+export function auditStatusLabel(status?: AuditStatus): string {
+  return status ? (AUDIT_STATUS_LABEL[status] ?? status) : "Berhasil";
+}
+
+const AUDIT_SEVERITY_LABEL: Record<ActivitySeverity, string> = {
+  INFO: "Info",
+  LOW: "Rendah",
+  MEDIUM: "Sedang",
+  HIGH: "Tinggi",
+  CRITICAL: "Kritis",
+};
+
+export function auditSeverityLabel(severity?: ActivitySeverity): string {
+  return severity ? (AUDIT_SEVERITY_LABEL[severity] ?? severity) : "Info";
+}
+
+const AUDIT_MODULE_LABEL: Record<string, string> = {
+  POS: "POS",
+  TABLES: "Meja",
+  INVENTORY: "Inventori",
+  MENU: "Menu",
+  LOYALTY: "Pelanggan",
+  COWORKING: "Co-working",
+  COMMERCIAL: "Komersial",
+  EMPLOYEES_SHIFT: "Karyawan & shift",
+  FINANCE: "Keuangan",
+  USER_RBAC: "Hak akses",
+  SETTINGS: "Pengaturan",
+  AI_INSIGHT: "Asisten analisis",
+  AUTH: "Keamanan",
+  SECURITY: "Keamanan",
+  SYSTEM: "Sistem",
+};
+
+export function auditModuleLabel(module: string): string {
+  if (!module) return "—";
+  return AUDIT_MODULE_LABEL[module] ?? module;
+}
+
+const AUDIT_ACTION_LABEL: Record<string, string> = {
+  VOID_ITEM: "Void item",
+  ORDER_VOIDED: "Pembatalan pesanan",
+  ORDER_CREATED: "Pesanan dibuat",
+  ORDER_CANCELLED: "Pesanan dibatalkan",
+  ORDER_PAYMENT_AND_COMPLETED: "Pembayaran pesanan",
+  PAYMENT_CONFIRMED: "Pembayaran dikonfirmasi",
+  STOCK_ADJUSTMENT: "Penyesuaian stok",
+  STOCK_OPNAME: "Opname stok",
+  OPEN_SHIFT: "Buka shift",
+  CLOSE_SHIFT: "Tutup shift",
+  UPDATE_CONFIG: "Ubah konfigurasi",
+  UPDATE_TAX_CONFIGURATION: "Ubah pengaturan pajak",
+  OCCUPY_TABLE: "Meja ditempati",
+  RELEASE_TABLE: "Meja dibersihkan",
+  LEASE_CREATED: "Kontrak dibuat",
+  LEASE_PAYMENT: "Pembayaran sewa",
+  LEASE_STATUS_CHANGED: "Ubah status kontrak",
+};
+
+export function auditActionLabel(action: string): string {
+  if (!action) return "—";
+  if (AUDIT_ACTION_LABEL[action]) return AUDIT_ACTION_LABEL[action];
+  const normalized = action.toLowerCase().replace(/_/g, " ");
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+export function emptyActivityLogMessage(hasFilter: boolean): { title: string; description: string } {
+  if (hasFilter) {
+    return {
+      title: "Aktivitas tidak ditemukan",
+      description: "Ubah kata kunci pencarian, waktu, atau filter modul.",
+    };
+  }
+  return {
+    title: "Belum ada aktivitas",
+    description: "Perubahan transaksi, stok, dan pengaturan akan tercatat di sini.",
+  };
+}
 
 /**
  * Mendapatkan tone visual semantik untuk status audit.
@@ -88,7 +174,7 @@ export function getSeverityTone(severity?: ActivitySeverity): StatusTone {
  */
 export function getPeriodLabel(dateFilter: DateFilterType): string {
   if (dateFilter === "TODAY") {
-    return `Hari Ini (${new Date().toLocaleDateString("id-ID")})`;
+    return `Hari Ini (${new Date().toLocaleDateString("id-ID", { timeZone: "Asia/Makassar" })})`;
   }
   if (dateFilter === "LAST_7_DAYS") return "7 Hari Terakhir";
   if (dateFilter === "LAST_30_DAYS") return "30 Hari Terakhir";
@@ -274,7 +360,7 @@ export function buildActivityLogExportRows(logs: ActivityLogEntry[]): {
   ];
 
   const rows = logs.map((l) => [
-    new Date(l.timestamp).toLocaleString("id-ID"),
+    new Date(l.timestamp).toLocaleString("id-ID", { timeZone: "Asia/Makassar" }),
     l.actorName || "-",
     l.actorRole || "-",
     l.outletName || "-",

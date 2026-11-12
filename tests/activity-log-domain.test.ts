@@ -8,6 +8,11 @@ import {
   getSeverityTone,
   getPeriodLabel,
   buildActivityLogExportRows,
+  auditStatusLabel,
+  auditSeverityLabel,
+  auditModuleLabel,
+  auditActionLabel,
+  emptyActivityLogMessage,
 } from "@/features/activity-log/activity-log-domain";
 import { ActivityLogEntry } from "@/types/audit";
 
@@ -133,5 +138,40 @@ describe("activity-log-domain", () => {
     expect(getPeriodLabel("LAST_7_DAYS")).toBe("7 Hari Terakhir");
     expect(getPeriodLabel("LAST_30_DAYS")).toBe("30 Hari Terakhir");
     expect(getPeriodLabel("TODAY")).toContain("Hari Ini");
+  });
+
+  it("maps audit statuses and severities to Indonesian sentence case labels", () => {
+    expect(auditStatusLabel("SUCCESS")).toBe("Berhasil");
+    expect(auditStatusLabel("WARNING")).toBe("Peringatan");
+    expect(auditStatusLabel("FAILED")).toBe("Gagal");
+    expect(auditStatusLabel(undefined)).toBe("Berhasil");
+
+    expect(auditSeverityLabel("INFO")).toBe("Info");
+    expect(auditSeverityLabel("LOW")).toBe("Rendah");
+    expect(auditSeverityLabel("MEDIUM")).toBe("Sedang");
+    expect(auditSeverityLabel("HIGH")).toBe("Tinggi");
+    expect(auditSeverityLabel("CRITICAL")).toBe("Kritis");
+    expect(auditSeverityLabel(undefined)).toBe("Info");
+  });
+
+  it("translates module and action enums into readable Indonesian labels", () => {
+    expect(auditModuleLabel("POS")).toBe("POS");
+    expect(auditModuleLabel("INVENTORY")).toBe("Inventori");
+    expect(auditModuleLabel("COMMERCIAL")).toBe("Komersial");
+    expect(auditModuleLabel("FINANCE")).toBe("Keuangan");
+
+    expect(auditActionLabel("VOID_ITEM")).toBe("Void item");
+    expect(auditActionLabel("STOCK_ADJUSTMENT")).toBe("Penyesuaian stok");
+    expect(auditActionLabel("OPEN_SHIFT")).toBe("Buka shift");
+    expect(auditActionLabel("CUSTOM_ACTION_KEY")).toBe("Custom action key");
+  });
+
+  it("returns distinct empty-state messages for empty database vs filtered search", () => {
+    const noData = emptyActivityLogMessage(false);
+    expect(noData.title).toBe("Belum ada aktivitas");
+
+    const filtered = emptyActivityLogMessage(true);
+    expect(filtered.title).toBe("Aktivitas tidak ditemukan");
+    expect(filtered.description).toContain("Ubah kata kunci");
   });
 });

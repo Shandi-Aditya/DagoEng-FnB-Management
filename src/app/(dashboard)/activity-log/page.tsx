@@ -1,30 +1,32 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import { useOutlet } from "@/contexts/OutletContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { useActivityLog } from "@/contexts/ActivityLogContext";
-import { ActivityLogEntry } from "@/types/audit";
-import { downloadCSV, downloadExcel } from "@/lib/export-utils";
+import { useEffect, useMemo, useState } from "react";
+
 import { notify } from "@/components/app/notify";
+import { useActivityLog } from "@/contexts/ActivityLogContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useOutlet } from "@/contexts/OutletContext";
 import {
-  ViewMode,
-  DateFilterType,
-  filterActivityLogs,
-  computeActivityLogStats,
-  getUniqueRoles,
-  getUniqueActors,
-  getPeriodLabel,
   buildActivityLogExportRows,
+  computeActivityLogStats,
+  type DateFilterType,
+  emptyActivityLogMessage,
+  filterActivityLogs,
+  getPeriodLabel,
+  getUniqueActors,
+  getUniqueRoles,
+  type ViewMode,
 } from "@/features/activity-log/activity-log-domain";
-import { ActivityLogRestrictedGuard } from "@/features/activity-log/ActivityLogRestrictedGuard";
-import { ActivityLogToolbar } from "@/features/activity-log/ActivityLogToolbar";
-import { ActivityLogStatsCards } from "@/features/activity-log/ActivityLogStatsCards";
+import { ActivityLogDetailModal } from "@/features/activity-log/ActivityLogDetailModal";
 import { ActivityLogFilterBar } from "@/features/activity-log/ActivityLogFilterBar";
+import ActivityLogPDFModal from "@/features/activity-log/ActivityLogPDFModal";
+import { ActivityLogRestrictedGuard } from "@/features/activity-log/ActivityLogRestrictedGuard";
+import { ActivityLogStatsCards } from "@/features/activity-log/ActivityLogStatsCards";
 import { ActivityLogTableView } from "@/features/activity-log/ActivityLogTableView";
 import { ActivityLogTimelineView } from "@/features/activity-log/ActivityLogTimelineView";
-import { ActivityLogDetailModal } from "@/features/activity-log/ActivityLogDetailModal";
-import ActivityLogPDFModal from "@/features/activity-log/ActivityLogPDFModal";
+import { ActivityLogToolbar } from "@/features/activity-log/ActivityLogToolbar";
+import { downloadCSV, downloadExcel } from "@/lib/export-utils";
+import type { ActivityLogEntry } from "@/types/audit";
 
 export default function ActivityLogPage() {
   const { user } = useAuth();
@@ -101,6 +103,25 @@ export default function ActivityLogPage() {
 
   const stats = useMemo(() => computeActivityLogStats(scopedLogs), [scopedLogs]);
 
+  const hasActiveFilters =
+    searchTerm.trim() !== "" ||
+    selectedModule !== "ALL" ||
+    selectedStatus !== "ALL" ||
+    selectedSeverity !== "ALL" ||
+    selectedRole !== "ALL" ||
+    selectedActor !== "ALL" ||
+    dateFilter !== "ALL";
+
+  const handleResetFilters = () => {
+    setSearchTerm("");
+    setSelectedModule("ALL");
+    setSelectedStatus("ALL");
+    setSelectedSeverity("ALL");
+    setSelectedRole("ALL");
+    setSelectedActor("ALL");
+    setDateFilter("ALL");
+  };
+
   const currentRoleStr =
     typeof user?.role === "object" && user.role
       ? user.role.name
@@ -109,8 +130,11 @@ export default function ActivityLogPage() {
       : "Owner";
 
   if (!canAccessAudit) {
-    return <ActivityLogRestrictedGuard roleName={user?.role.name || "Staf / Kasir"} />;
+    return <ActivityLogRestrictedGuard roleName={user?.role.name || "Staf"} />;
   }
+
+  const outletScopeName = activeOutlet?.name || "Semua outlet";
+  const emptyMessage = emptyActivityLogMessage(hasActiveFilters);
 
   const handleExportCSV = () => {
     const { headers, rows } = buildActivityLogExportRows(scopedLogs);
@@ -145,11 +169,9 @@ export default function ActivityLogPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-6">
       <ActivityLogToolbar
-        outletName={activeOutlet?.name || "Semua Gerai"}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
+        outletName={outletScopeName}
         onOpenPDF={() => setIsPdfModalOpen(true)}
         onExportExcel={handleExportExcel}
         onExportCSV={handleExportCSV}
@@ -158,56 +180,62 @@ export default function ActivityLogPage() {
 
       <ActivityLogStatsCards stats={stats} />
 
-      <ActivityLogFilterBar
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        dateFilter={dateFilter}
-        onDateFilterChange={setDateFilter}
-        selectedStatus={selectedStatus}
-        onStatusChange={setSelectedStatus}
-        selectedActor={selectedActor}
-        onActorChange={setSelectedActor}
-        uniqueActors={uniqueActors}
-        selectedRole={selectedRole}
-        onRoleChange={setSelectedRole}
-        uniqueRoles={uniqueRoles}
-        selectedModule={selectedModule}
-        onModuleChange={setSelectedModule}
-      />
-
-      {viewMode === "TABLE" ? (
-        <ActivityLogTableView
-          logs={scopedLogs}
-          totalLogsCount={scopedLogs.length}
-          currentPage={currentPage}
-          pageSize={pageSize}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={setPageSize}
-          onSelectLog={setSelectedLog}
+      <div className="flex flex-col gap-4">
+        <ActivityLogFilterBar
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          dateFilter={dateFilter}
+          onDateFilterChange={setDateFilter}
+          selectedStatus={selectedStatus}
+          onStatusChange={setSelectedStatus}
+          selectedActor={selectedActor}
+          onActorChange={setSelectedActor}
+          uniqueActors={uniqueActors}
+          selectedRole={selectedRole}
+          onRoleChange={setSelectedRole}
+          uniqueRoles={uniqueRoles}
+          selectedModule={selectedModule}
+          onModuleChange={setSelectedModule}
+          hasActiveFilters={hasActiveFilters}
+          onResetFilters={handleResetFilters}
         />
-      ) : (
-        <ActivityLogTimelineView
-          logs={scopedLogs}
-          totalLogsCount={scopedLogs.length}
-          currentPage={currentPage}
-          pageSize={pageSize}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={setPageSize}
-          onSelectLog={setSelectedLog}
-        />
-      )}
 
-      {selectedLog && (
-        <ActivityLogDetailModal log={selectedLog} onClose={() => setSelectedLog(null)} />
-      )}
+        {viewMode === "TABLE" ? (
+          <ActivityLogTableView
+            logs={scopedLogs}
+            totalLogsCount={scopedLogs.length}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            onSelectLog={setSelectedLog}
+            emptyMessage={emptyMessage}
+          />
+        ) : (
+          <ActivityLogTimelineView
+            logs={scopedLogs}
+            totalLogsCount={scopedLogs.length}
+            currentPage={currentPage}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            onSelectLog={setSelectedLog}
+            emptyMessage={emptyMessage}
+          />
+        )}
+      </div>
+
+      <ActivityLogDetailModal log={selectedLog} onClose={() => setSelectedLog(null)} />
 
       {isPdfModalOpen && (
         <ActivityLogPDFModal
           isOpen={isPdfModalOpen}
           onClose={() => setIsPdfModalOpen(false)}
           logs={scopedLogs}
-          outletName={activeOutlet?.name || "Semua Gerai"}
-          generatedBy={user?.name || "Hendra Wijaya"}
+          outletName={outletScopeName}
+          generatedBy={user?.name || "Staf operasional"}
           generatedRole={currentRoleStr}
           periodLabel={getPeriodLabel(dateFilter)}
         />

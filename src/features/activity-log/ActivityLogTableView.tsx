@@ -1,25 +1,28 @@
 "use client";
 
-import React from "react";
-import { ArrowRight, Eye, ChevronLeft, ChevronRight, FileText } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { ArrowRight, Eye, FileText } from "lucide-react";
+
+import { DataPagination } from "@/components/app/data-pagination";
+import { EmptyState } from "@/components/app/empty-state";
+import { StatusBadge } from "@/components/app/status-badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
-  TableHeader,
   TableBody,
-  TableHead,
-  TableRow,
   TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { NativeSelect } from "@/components/ui/native-select";
-import { StatusBadge } from "@/components/app";
-import { EmptyState } from "@/components/app";
-import { ActivityLogEntry } from "@/types/audit";
 import {
-  getStatusTone,
+  auditActionLabel,
+  auditModuleLabel,
+  auditSeverityLabel,
+  auditStatusLabel,
   getSeverityTone,
+  getStatusTone,
 } from "@/features/activity-log/activity-log-domain";
+import type { ActivityLogEntry } from "@/types/audit";
 
 export interface ActivityLogTableViewProps {
   logs: ActivityLogEntry[];
@@ -29,6 +32,28 @@ export interface ActivityLogTableViewProps {
   onPageChange: (p: number) => void;
   onPageSizeChange: (s: number) => void;
   onSelectLog: (log: ActivityLogEntry) => void;
+  emptyMessage: { title: string; description: string };
+}
+
+function formatDate(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  return date.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Makassar",
+  });
+}
+
+function formatTime(timestamp: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.toLocaleTimeString("id-ID", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Makassar",
+  })} WITA`;
 }
 
 export function ActivityLogTableView({
@@ -39,205 +64,146 @@ export function ActivityLogTableView({
   onPageChange,
   onPageSizeChange,
   onSelectLog,
+  emptyMessage,
 }: ActivityLogTableViewProps) {
   const totalPages = Math.max(1, Math.ceil(totalLogsCount / pageSize));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
   const paginatedLogs = logs.slice(
     (safeCurrentPage - 1) * pageSize,
     safeCurrentPage * pageSize
   );
 
+  if (totalLogsCount === 0) {
+    return (
+      <EmptyState
+        className="border"
+        icon={<FileText />}
+        title={emptyMessage.title}
+        description={emptyMessage.description}
+      />
+    );
+  }
+
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between border-b border-border bg-muted/30 py-3 px-4">
-        <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Daftar Rekam Jejak Audit ({totalLogsCount} Entri Ditemukan)
-        </CardTitle>
-        <span className="text-[11px] font-medium text-muted-foreground">
-          Halaman {safeCurrentPage} dari {totalPages}
-        </span>
-      </CardHeader>
+    <div className="flex flex-col gap-3">
+      <div className="overflow-hidden rounded-lg border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="hidden sm:table-cell">Waktu</TableHead>
+              <TableHead className="hidden md:table-cell">Pelaku</TableHead>
+              <TableHead>Aktivitas</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-0">
+                <span className="sr-only">Aksi</span>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {paginatedLogs.map((log) => {
+              const showSeverity = log.severity === "HIGH" || log.severity === "CRITICAL";
+              return (
+                <TableRow
+                  key={log.id}
+                  className="cursor-pointer"
+                  onClick={() => onSelectLog(log)}
+                >
+                  <TableCell className="hidden sm:table-cell whitespace-nowrap font-mono text-xs text-muted-foreground tabular-nums">
+                    <div className="flex flex-col">
+                      <span className="text-foreground">{formatDate(log.timestamp)}</span>
+                      <span>{formatTime(log.timestamp)}</span>
+                    </div>
+                  </TableCell>
 
-      <CardContent className="p-0">
-        {totalLogsCount === 0 ? (
-          <div className="p-12">
-            <EmptyState
-              icon={<FileText />}
-              title="Aktivitas tidak ditemukan"
-              description="Ubah kata kunci, periode, atau filter modul."
-            />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table className="min-w-[900px]">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[140px] text-xs uppercase tracking-wider">
-                    Waktu
-                  </TableHead>
-                  <TableHead className="w-[160px] text-xs uppercase tracking-wider">
-                    Aktor & Role
-                  </TableHead>
-                  <TableHead className="w-[160px] text-xs uppercase tracking-wider">
-                    Modul & Aksi
-                  </TableHead>
-                  <TableHead className="text-xs uppercase tracking-wider">
-                    Perubahan Nilai / Deskripsi
-                  </TableHead>
-                  <TableHead className="w-[140px] text-xs uppercase tracking-wider">
-                    Alasan
-                  </TableHead>
-                  <TableHead className="w-[100px] text-center text-xs uppercase tracking-wider">
-                    Severity
-                  </TableHead>
-                  <TableHead className="w-[100px] text-center text-xs uppercase tracking-wider">
-                    Status
-                  </TableHead>
-                  <TableHead className="w-[80px] text-right text-xs uppercase tracking-wider">
-                    Aksi
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedLogs.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="font-mono text-[11px] text-muted-foreground whitespace-nowrap">
-                      <div>
-                        {new Date(log.timestamp).toLocaleDateString("id-ID", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground font-semibold">
-                        {new Date(log.timestamp).toLocaleTimeString("id-ID", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}{" "}
-                        WITA
-                      </div>
-                    </TableCell>
+                  <TableCell className="hidden md:table-cell whitespace-normal">
+                    <div className="flex flex-col">
+                      <span className="font-medium text-foreground">{log.actorName || "—"}</span>
+                      <span className="text-xs text-muted-foreground">{log.actorRole || "—"}</span>
+                    </div>
+                  </TableCell>
 
-                    <TableCell className="whitespace-nowrap">
-                      <div className="font-semibold text-foreground text-xs">
-                        {log.actorName || "-"}
-                      </div>
-                      <div className="text-[10px] text-primary font-semibold">
-                        {log.actorRole || "-"}
-                      </div>
-                    </TableCell>
-
-                    <TableCell className="whitespace-nowrap">
-                      <span className="inline-block px-1.5 py-0.5 bg-muted text-muted-foreground rounded text-[10px] font-mono font-semibold mb-0.5">
-                        {log.module}
-                      </span>
-                      <div className="font-semibold text-foreground text-xs">
-                        {log.action}
-                      </div>
-                      {log.recordId && (
-                        <span className="text-[10px] text-muted-foreground font-mono">
-                          #{log.recordId}
-                        </span>
-                      )}
-                    </TableCell>
-
-                    <TableCell className="max-w-sm">
-                      <div className="text-foreground line-clamp-1 text-xs">
+                  <TableCell className="whitespace-normal">
+                    <div className="flex flex-col gap-1">
+                      <button
+                        type="button"
+                        className="text-left font-medium text-foreground outline-none focus-visible:underline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectLog(log);
+                        }}
+                      >
                         {log.description}
-                      </div>
-                      {log.previousValue && log.newValue && (
-                        <div className="text-[10px] text-muted-foreground flex items-center gap-1 mt-1 font-mono bg-muted/50 p-1 rounded border border-border">
-                          <span className="text-destructive line-through truncate max-w-[120px]">
+                      </button>
+                      <span className="text-xs text-muted-foreground">
+                        {auditModuleLabel(log.module)} · {auditActionLabel(log.action)}
+                        {log.recordId ? (
+                          <span className="font-mono"> · #{log.recordId}</span>
+                        ) : null}
+                      </span>
+                      <span className="text-xs text-muted-foreground md:hidden">
+                        {log.actorName || "—"}
+                        <span className="sm:hidden font-mono tabular-nums">
+                          {" "}
+                          · {formatTime(log.timestamp)}
+                        </span>
+                      </span>
+                      {log.previousValue && log.newValue ? (
+                        <div className="flex flex-wrap items-center gap-1 rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs text-muted-foreground">
+                          <span className="max-w-44 truncate text-destructive line-through">
                             {log.previousValue}
                           </span>
-                          <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                          <span className="text-emerald-600 dark:text-emerald-400 font-semibold truncate max-w-[150px]">
+                          <ArrowRight className="size-3 shrink-0" aria-hidden />
+                          <span className="max-w-44 truncate text-success">
                             {log.newValue}
                           </span>
                         </div>
-                      )}
-                    </TableCell>
+                      ) : null}
+                    </div>
+                  </TableCell>
 
-                    <TableCell className="text-muted-foreground italic max-w-xs truncate text-[11px] whitespace-nowrap">
-                      {log.reason || "-"}
-                    </TableCell>
-
-                    <TableCell className="text-center whitespace-nowrap">
-                      <StatusBadge status={getSeverityTone(log.severity)}>
-                        {log.severity || "INFO"}
-                      </StatusBadge>
-                    </TableCell>
-
-                    <TableCell className="text-center whitespace-nowrap">
+                  <TableCell>
+                    <div className="flex flex-col items-start gap-1">
                       <StatusBadge status={getStatusTone(log.status)}>
-                        {log.status || "SUCCESS"}
+                        {auditStatusLabel(log.status)}
                       </StatusBadge>
-                    </TableCell>
+                      {showSeverity ? (
+                        <StatusBadge status={getSeverityTone(log.severity)}>
+                          {auditSeverityLabel(log.severity)}
+                        </StatusBadge>
+                      ) : null}
+                    </div>
+                  </TableCell>
 
-                    <TableCell className="text-right whitespace-nowrap">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onSelectLog(log)}
-                        className="h-7 px-2 text-xs gap-1"
-                      >
-                        <Eye className="h-3 w-3" />
-                        <span>Detail</span>
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectLog(log);
+                      }}
+                      aria-label={`Lihat detail ${auditActionLabel(log.action)}`}
+                    >
+                      <Eye />
+                      <span className="hidden sm:inline">Detail</span>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
 
-        {/* Pagination Controls Bar */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-t border-border bg-card">
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span>Tampilkan</span>
-            <NativeSelect
-              value={pageSize}
-              onChange={(e) => onPageSizeChange(Number(e.target.value))}
-              className="h-8 text-xs font-medium"
-            >
-              <option value={10}>10 per halaman</option>
-              <option value={15}>15 per halaman</option>
-              <option value={25}>25 per halaman</option>
-              <option value={50}>50 per halaman</option>
-            </NativeSelect>
-            <span className="text-border">|</span>
-            <span className="tabular-nums font-mono text-[11px]">
-              Menampilkan {totalLogsCount === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1} -{" "}
-              {Math.min(safeCurrentPage * pageSize, totalLogsCount)} dari {totalLogsCount} entri
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={safeCurrentPage <= 1}
-              onClick={() => onPageChange(Math.max(1, safeCurrentPage - 1))}
-              className="h-8 px-2.5 text-xs gap-1"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              <span>Sebelumnya</span>
-            </Button>
-
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={safeCurrentPage >= totalPages}
-              onClick={() => onPageChange(Math.min(totalPages, safeCurrentPage + 1))}
-              className="h-8 px-2.5 text-xs gap-1"
-            >
-              <span>Berikutnya</span>
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+      <DataPagination
+        currentPage={safeCurrentPage}
+        totalItems={totalLogsCount}
+        pageSize={pageSize}
+        onPageChange={onPageChange}
+        onPageSizeChange={onPageSizeChange}
+        pageSizeOptions={[10, 15, 25, 50]}
+        itemLabel="catatan"
+      />
+    </div>
   );
 }
