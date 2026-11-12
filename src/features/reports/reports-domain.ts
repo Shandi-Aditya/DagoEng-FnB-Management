@@ -19,6 +19,7 @@ import { EventTicketOrder } from "@/types/event";
 import { calculateSettlement, getTenantPayoutAccount, maskAccountNumber } from "@/lib/settlement";
 import { getOrderTaxBreakdown, aggregateOrdersTaxAndRevenue } from "@/lib/tax-breakdown";
 import { orderStatusLabel, paymentMethodLabel } from "@/features/orders/orders-domain";
+import type { StatusTone } from "@/components/app/status-badge";
 
 export type ReportType =
   | "SALES"
@@ -28,6 +29,33 @@ export type ReportType =
   | "FINANCE_AUDIT"
   | "SETTLEMENT"
   | "EVENTS";
+
+export function getReportTypeBadgeTone(type: ReportType): StatusTone {
+  switch (type) {
+    case "SALES":
+      return "success";
+    case "SETTLEMENT":
+    case "PRODUCTS":
+      return "info";
+    case "EVENTS":
+    case "INVENTORY":
+      return "warning";
+    case "CLOSING":
+    case "FINANCE_AUDIT":
+    default:
+      return "neutral";
+  }
+}
+
+export function emptyReportMessage(
+  scopeName: string,
+  periodLabel: string
+): { title: string; description: string } {
+  return {
+    title: "Tidak ada data pada periode ini",
+    description: `Belum ada catatan untuk ${scopeName} pada ${periodLabel}. Coba ubah rentang tanggal.`,
+  };
+}
 
 export interface ReportSummaryCard {
   label: string;

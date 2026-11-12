@@ -1,16 +1,17 @@
 "use client";
 
-import React from "react";
 import {
-  DollarSign,
-  Building2,
-  Ticket,
-  Clock,
-  TrendingUp,
   Boxes,
+  Building2,
+  Clock,
+  DollarSign,
   ShieldCheck,
+  Ticket,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
 import { ReportCategoryMeta, ReportType } from "@/features/reports/reports-domain";
 import { cn } from "@/lib/utils";
 
@@ -47,35 +48,31 @@ export function ReportsCategorySelector({
             type="button"
             onClick={() => onSelectType(cat.id)}
             className={cn(
-              "flex flex-col justify-between overflow-hidden rounded-xl border p-3 text-left transition-colors cursor-pointer",
+              "flex flex-col justify-between overflow-hidden rounded-xl border p-3 text-left transition-colors cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
               isSelected
-                ? "border-primary bg-primary/10 text-primary ring-1 ring-primary/20 font-semibold"
+                ? "border-primary bg-primary/10 text-primary ring-1 ring-primary/20"
                 : "border-border bg-card text-card-foreground hover:bg-muted/50"
             )}
           >
             <div className="flex items-center justify-between gap-1">
               <div
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-lg transition-colors shrink-0",
+                  "flex size-8 items-center justify-center rounded-lg transition-colors shrink-0",
                   isSelected
                     ? "bg-primary/20 text-primary"
                     : "bg-muted text-muted-foreground"
                 )}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="size-4" />
               </div>
-              <span
-                className={cn(
-                  "font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 tabular-nums",
-                  isSelected
-                    ? "bg-primary/20 text-primary"
-                    : "bg-muted text-muted-foreground"
-                )}
+              <Badge
+                variant={isSelected ? "default" : "secondary"}
+                className="font-mono text-xs tabular-nums"
               >
                 {cat.count}
-              </span>
+              </Badge>
             </div>
-            <p className="mt-3 truncate text-xs font-semibold tracking-tight">
+            <p className="mt-3 truncate text-xs font-medium">
               {cat.label}
             </p>
           </button>

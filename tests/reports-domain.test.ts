@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   buildReportData,
   getReportCategories,
+  getReportTypeBadgeTone,
+  emptyReportMessage,
 } from "@/features/reports/reports-domain";
 import { OrderRecord } from "@/types/order";
 import { MasterProduct } from "@/types/product";
@@ -316,4 +318,19 @@ describe("reports-domain", () => {
     expect(categoriesWithEvents.some((c) => c.id === "EVENTS")).toBe(true);
     expect(categoriesWithEvents.find((c) => c.id === "EVENTS")?.count).toBe("5 Peserta");
   });
+
+  it("maps report types to semantic badge status tones", () => {
+    expect(getReportTypeBadgeTone("SALES")).toBe("success");
+    expect(getReportTypeBadgeTone("SETTLEMENT")).toBe("info");
+    expect(getReportTypeBadgeTone("EVENTS")).toBe("warning");
+    expect(getReportTypeBadgeTone("CLOSING")).toBe("neutral");
+  });
+
+  it("generates honest empty-state copy for reports without data", () => {
+    const emptyMsg = emptyReportMessage("Singaraja", "01 Nov - 12 Nov 2026");
+    expect(emptyMsg.title).toBe("Tidak ada data pada periode ini");
+    expect(emptyMsg.description).toContain("Singaraja");
+    expect(emptyMsg.description).toContain("01 Nov - 12 Nov 2026");
+  });
 });
+

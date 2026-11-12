@@ -128,7 +128,8 @@ Kerjakan per halaman, mulai dari `/orders`, `/inventory`, `/tables`, lalu `/cowo
 | `/customers` | Mencari pelanggan atau member lalu bertindak (selesai P3) | Toolbar bersih 1 primary + dropdown ekspor, banner CRM dihapus, tabel memakai DataPagination, modal riwayat memakai token semantik. |
 | `/employees` | Memantau shift kasir dan data staf (selesai P3) | Toolbar bersih 1 primary + dropdown ekspor, tabel shift & staf memakai DataPagination, prefill telepon dibersihkan. |
 | `/commercial` | Mencari kontrak lalu bertindak (selesai P3) | Toolbar bersih 1 primary + dropdown ekspor, tabel sewa memakai DataPagination standar, form sewa bersih dari data palsu. |
-| `/reports`, `/activity-log` | Membaca dan mengekspor data | Satu `ReportPreviewDialog` menggantikan 8 modal PDF yang hampir sama. Pratinjau dibuat seperti kertas laporan sungguhan. |
+| `/reports` | Membaca dan mengekspor data (selesai P3) | Toolbar bersih 1 primary + dropdown ekspor, badge palsu PRO dihapus, kartu memakai StatCard, tabel dan selector bersih dari slop. |
+| `/activity-log` | Membaca dan mengekspor data | Satu ReportPreviewDialog menggantikan modal PDF. Pratinjau dibuat seperti kertas laporan sungguhan. |
 
 Hapus override `h-8 text-xs` pada `Button`. Ukuran cukup lewat prop `size`.
 

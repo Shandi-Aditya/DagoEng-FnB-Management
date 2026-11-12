@@ -1,18 +1,20 @@
 "use client";
 
-import React from "react";
-import { ShieldCheck, FileText } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { FileText, ShieldCheck } from "lucide-react";
+
+import { EmptyState } from "@/components/app/empty-state";
+import { StatCard } from "@/components/app/stat-card";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
-  TableHeader,
   TableBody,
-  TableHead,
-  TableRow,
   TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "@/components/ui/table";
-import { EmptyState } from "@/components/app";
-import { ReportDataset } from "@/features/reports/reports-domain";
+import { emptyReportMessage, ReportDataset } from "@/features/reports/reports-domain";
 
 export interface ReportsPreviewTableProps {
   report: ReportDataset;
@@ -27,112 +29,104 @@ export function ReportsPreviewTable({
 }: ReportsPreviewTableProps) {
   const previewRows = report.tableRows.slice(0, 10);
   const remainingCount = Math.max(0, report.tableRows.length - 10);
+  const emptyCopy = emptyReportMessage(scopeName, periodLabel);
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6">
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {report.summaryCards.map((card, idx) => (
-          <Card key={idx} className="p-4 space-y-1">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider truncate">
-              {card.label}
-            </p>
-            <p className="text-2xl font-bold tracking-tight truncate font-mono tabular-nums">
-              {card.value}
-            </p>
-            {card.sub && (
-              <p className="text-[11px] text-muted-foreground font-medium truncate">
-                {card.sub}
-              </p>
-            )}
-          </Card>
+          <StatCard
+            key={idx}
+            label={card.label}
+            value={card.value}
+            hint={card.sub}
+          />
         ))}
       </div>
 
       {/* Table Card */}
-      <Card className="overflow-hidden">
+      <Card className="w-full min-w-0 max-w-full overflow-hidden">
         <CardHeader className="flex flex-col gap-2 border-b border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle className="text-sm font-semibold tracking-tight">
+            <CardTitle className="text-base font-medium">
               {report.title}
             </CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">{report.subtitle}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{report.subtitle}</p>
           </div>
-          <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-foreground self-start sm:self-center shrink-0">
-            {report.tableRows.length} Baris Data
-          </span>
+          <Badge variant="secondary" className="self-start font-mono text-xs tabular-nums sm:self-center">
+            {report.tableRows.length} baris data
+          </Badge>
         </CardHeader>
 
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table className="min-w-[720px]">
-              <TableHeader>
+        <CardContent className="min-w-0 max-w-full overflow-hidden p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {report.tableHeaders.map((header, i) => (
+                  <TableHead key={i} className="whitespace-nowrap text-xs font-medium">
+                    {header}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {report.tableRows.length === 0 ? (
                 <TableRow>
-                  {report.tableHeaders.map((header, i) => (
-                    <TableHead key={i} className="whitespace-nowrap text-xs font-bold uppercase tracking-wider">
-                      {header}
-                    </TableHead>
-                  ))}
+                  <TableCell colSpan={report.tableHeaders.length} className="p-8">
+                    <EmptyState
+                      icon={<FileText className="size-8 text-muted-foreground" />}
+                      title={emptyCopy.title}
+                      description={emptyCopy.description}
+                    />
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {report.tableRows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={report.tableHeaders.length} className="p-8">
-                      <EmptyState
-                        icon={<FileText />}
-                        title="Tidak ada data pada periode ini"
-                        description={`Belum ada catatan untuk ${scopeName} pada ${periodLabel}. Coba ubah periode.`}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  previewRows.map((row, rIdx) => (
-                    <TableRow key={rIdx}>
-                      {row.map((cell, cIdx) => {
-                        const isNumeric =
-                          typeof cell === "number" ||
-                          (typeof cell === "string" &&
-                            (cell.startsWith("Rp") ||
-                              cell.startsWith("+Rp") ||
-                              cell.startsWith("-Rp") ||
-                              cell.endsWith("%")));
+              ) : (
+                previewRows.map((row, rIdx) => (
+                  <TableRow key={rIdx}>
+                    {row.map((cell, cIdx) => {
+                      const isNumeric =
+                        typeof cell === "number" ||
+                        (typeof cell === "string" &&
+                          (cell.startsWith("Rp") ||
+                            cell.startsWith("+Rp") ||
+                            cell.startsWith("-Rp") ||
+                            cell.endsWith("%")));
 
-                        return (
-                          <TableCell
-                            key={cIdx}
-                            className={`whitespace-nowrap max-w-[220px] truncate text-xs ${
-                              isNumeric
-                                ? "font-mono font-medium tabular-nums text-foreground"
-                                : "text-muted-foreground"
-                            }`}
-                            title={String(cell)}
-                          >
-                            {cell}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                      return (
+                        <TableCell
+                          key={cIdx}
+                          className={`max-w-[220px] truncate text-xs ${
+                            isNumeric
+                              ? "font-mono font-medium tabular-nums text-foreground"
+                              : "text-muted-foreground"
+                          }`}
+                          title={String(cell)}
+                        >
+                          {cell}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
 
           {remainingCount > 0 && (
             <div className="border-t border-border bg-muted/20 p-3 text-center text-xs text-muted-foreground">
               Menampilkan 10 baris pratinjau pertama dari total{" "}
-              <strong className="text-foreground">{report.tableRows.length}</strong> baris data. Gunakan tombol Cetak PDF Resmi atau Excel (.xls) di atas untuk melihat seluruh data.
+              <span className="font-mono font-medium text-foreground">{report.tableRows.length}</span> baris data. Gunakan tombol Cetak PDF atau Ekspor Excel di atas untuk melihat seluruh data.
             </div>
           )}
 
           {/* Reconciliation / Integrity Audit Breakdown */}
           {report.reconciliationInfo && report.reconciliationInfo.length > 0 && (
-            <div className="border-t border-border bg-muted/30 p-4 sm:p-5 space-y-3">
-              <div className="flex items-center gap-2 pb-2 border-b border-border">
-                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground">
-                  Ringkasan Rekonsiliasi & Audit Terkait
+            <div className="space-y-3 border-t border-border bg-muted/30 p-4 sm:p-5">
+              <div className="flex items-center gap-2 border-b border-border pb-2">
+                <ShieldCheck className="size-4 shrink-0 text-success" />
+                <h4 className="text-xs font-medium text-foreground">
+                  Ringkasan rekonsiliasi dan audit
                 </h4>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -141,10 +135,10 @@ export function ReportsPreviewTable({
                     key={rIdx}
                     className="flex items-center justify-between gap-2 rounded-lg border border-border bg-card p-3 text-xs"
                   >
-                    <span className="text-[11px] text-muted-foreground truncate">
+                    <span className="truncate text-xs text-muted-foreground">
                       {rec.label}
                     </span>
-                    <span className="font-mono font-semibold tabular-nums text-foreground shrink-0 ml-2">
+                    <span className="font-mono text-xs font-medium tabular-nums text-foreground">
                       {rec.value}
                     </span>
                   </div>

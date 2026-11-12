@@ -75,12 +75,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <SidebarProvider style={SHELL_STYLE}>
       <AppSidebar variant="inset" />
-      <SidebarInset>
+      <SidebarInset className="min-w-0 max-w-full overflow-x-hidden">
         <SiteHeader />
         <div
           className={cn(
-            "flex w-full flex-1 flex-col",
-            isFullWidthPage ? "p-2 sm:p-4" : "mx-auto max-w-7xl p-4 lg:p-6",
+            "flex w-full flex-1 flex-col min-w-0",
+            isFullWidthPage ? "p-2 sm:p-4" : "mx-auto w-full max-w-7xl min-w-0 p-4 lg:p-6",
           )}
         >
           {children}

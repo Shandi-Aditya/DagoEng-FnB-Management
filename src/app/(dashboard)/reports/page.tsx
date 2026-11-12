@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,7 +13,7 @@ import { useSettings } from "@/contexts/SettingsContext";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { calculateSettlement } from "@/lib/settlement";
 import { notify } from "@/components/app/notify";
-import { EventTicketOrder } from "@/types/event";
+import type { EventTicketOrder } from "@/types/event";
 import {
   buildReportData,
   getReportCategories,
@@ -104,7 +104,7 @@ export default function ReportsPage() {
       currentReport.tableHeaders,
       currentReport.tableRows
     );
-    notify.success("Ekspor CSV berhasil", `Laporan ${currentReport.title} berhasil diunduh.`);
+    notify.success("Laporan diekspor ke CSV", currentReport.title);
   };
 
   const handleExportExcel = () => {
@@ -114,11 +114,11 @@ export default function ReportsPage() {
       currentReport.tableHeaders,
       currentReport.tableRows
     );
-    notify.success("Ekspor Excel berhasil", `Laporan ${currentReport.title} berhasil diunduh.`);
+    notify.success("Laporan diekspor ke Excel", currentReport.title);
   };
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 max-w-full space-y-6">
       <ReportsToolbar
         scopeName={activeOutlet?.name || "Singaraja"}
         periodLabel={formattedRangeLabel}
