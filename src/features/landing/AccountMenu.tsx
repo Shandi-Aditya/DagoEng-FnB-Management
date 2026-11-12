@@ -37,7 +37,7 @@ export function AccountMenu() {
   const handleLogout = async () => {
     localStorage.removeItem(ORGANIZER_EMAIL_KEY);
     await logout();
-    router.push("/login");
+    router.replace("/login");
   };
 
   const initial = user.name ? user.name.charAt(0).toUpperCase() : "U";

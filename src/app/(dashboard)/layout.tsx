@@ -57,8 +57,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, [user, isLoading, pathname, router]);
 
   if (!user && !isLoading) {
-    // During active logout, let LogoutOverlay render without the fallback screen
-    if (isLoggingOut) return null;
     return <StatusScreen message="Sesi telah berakhir. Mengarahkan ke halaman login" />;
   }
 

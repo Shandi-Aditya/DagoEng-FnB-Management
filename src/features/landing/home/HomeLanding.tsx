@@ -1,0 +1,517 @@
+import Image from "next/image";
+import Link from "next/link";
+import {
+  Building2,
+  CalendarDays,
+  ChefHat,
+  Clock,
+  Laptop,
+  Mail,
+  MapPin,
+  MonitorSmartphone,
+  Ticket,
+  UtensilsCrossed,
+} from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
+import {
+  ADDRESS,
+  EMAIL,
+  EVENT_FEATURES,
+  FOOD_FEATURES,
+  FOOD_PHOTO,
+  HERO_PHOTO,
+  HOURS,
+  KITCHENS,
+  MAP_URL,
+  PARTNER_ROLES,
+  WORK_FEATURES,
+  type PartnerRoleId,
+} from "./home-content";
+import { BrandRings } from "./BrandRings";
+import { HomeHero } from "./HomeHero";
+import { HomeNav } from "./HomeNav";
+import { Reveal } from "./Reveal";
+import { EventsPanel, FoodPanel, WorkspacePanel } from "./ShowcasePanels";
+
+const SECTION = "mx-auto max-w-6xl px-4 sm:px-6";
+const SPLIT_STAGE = "aspect-4/5 sm:aspect-4/3";
+
+// Static class names so Tailwind can detect them: each tile takes its business unit's logo colour.
+const SUMMARY: readonly {
+  href: string;
+  icon: React.ReactNode;
+  tile: string;
+  title: string;
+  line: string;
+}[] = [
+  {
+    href: "#kerja",
+    icon: <Laptop />,
+    tile: "bg-unit-coworking/15 text-unit-coworking",
+    title: "Ruang kerja",
+    line: "Hot desk, audio pod, dan meeting room yang dipesan per jam.",
+  },
+  {
+    href: "#makan",
+    icon: <UtensilsCrossed />,
+    tile: "bg-unit-fnb/15 text-unit-fnb",
+    title: "Makan dan minum",
+    line: "Pesan dari meja lewat QR, langsung ke empat dapur mitra.",
+  },
+  {
+    href: "#event",
+    icon: <CalendarDays />,
+    tile: "bg-unit-event/15 text-unit-event",
+    title: "Event komunitas",
+    line: "Workshop dan meetup dari komunitas sekitar, dengan tiket online.",
+  },
+];
+
+const ROLE_ICON: Record<
+  PartnerRoleId,
+  { icon: React.ReactNode; tile: string }
+> = {
+  kitchen: { icon: <ChefHat />, tile: "bg-unit-fnb/15 text-unit-fnb" },
+  tenant: {
+    icon: <Building2 />,
+    tile: "bg-unit-coworking/15 text-unit-coworking",
+  },
+  organizer: { icon: <Ticket />, tile: "bg-unit-event/15 text-unit-event" },
+  staff: {
+    icon: <MonitorSmartphone />,
+    tile: "bg-unit-loyalty/20 text-unit-loyalty",
+  },
+};
+
+const KITCHEN_DOT: readonly string[] = [
+  "bg-unit-fnb",
+  "bg-unit-coworking",
+  "bg-unit-event",
+  "bg-unit-loyalty",
+];
+
+const STAGGER = 100;
+
+const LIFT =
+  "transition-[translate,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-md";
+
+function Summary() {
+  return (
+    <section
+      className={`${SECTION} grid gap-4 pb-20 md:grid-cols-3`}
+      aria-label="Yang ada di Dago Creative Hub"
+    >
+      {SUMMARY.map((item, index) => (
+        <Reveal key={item.href} delay={index * STAGGER} className="h-full">
+          <a
+            href={item.href}
+            className={`flex h-full flex-col gap-3 rounded-xl border bg-card p-6 ${LIFT}`}
+          >
+            <span
+              className={`flex size-10 items-center justify-center rounded-lg [&_svg]:size-5 ${item.tile}`}
+            >
+              {item.icon}
+            </span>
+            <span className="font-medium">{item.title}</span>
+            <span className="text-sm text-muted-foreground">{item.line}</span>
+          </a>
+        </Reveal>
+      ))}
+    </section>
+  );
+}
+
+function KitchenStrip() {
+  return (
+    <section
+      className="border-y bg-muted/40 py-12"
+      aria-labelledby="kitchens-title"
+    >
+      <div className={`${SECTION} flex flex-col items-center gap-8`}>
+        <Reveal>
+          <h2
+            id="kitchens-title"
+            className="text-center text-sm text-muted-foreground"
+          >
+            Empat dapur mitra memasak di Dago Creative Hub setiap hari
+          </h2>
+        </Reveal>
+        <Reveal delay={100}>
+          <ul className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
+            {KITCHENS.map((kitchen, index) => (
+              <li
+                key={kitchen}
+                className="flex items-center gap-3 text-2xl font-medium tracking-tight"
+              >
+                <span
+                  className={`size-3 rounded-full ${KITCHEN_DOT[index % KITCHEN_DOT.length]}`}
+                  aria-hidden
+                />
+                {kitchen}
+              </li>
+            ))}
+          </ul>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+interface FeatureSplitProps {
+  id: string;
+  title: string;
+  line: string;
+  features: readonly string[];
+  action: { href: string; label: string };
+  children: React.ReactNode;
+}
+
+function FeatureSplit({
+  id,
+  title,
+  line,
+  features,
+  action,
+  children,
+}: FeatureSplitProps) {
+  return (
+    <section
+      id={id}
+      className={`${SECTION} grid scroll-mt-20 items-center gap-10 py-16 lg:grid-cols-[5fr_7fr] lg:gap-16 lg:py-24`}
+      aria-labelledby={`${id}-title`}
+    >
+      <Reveal className="flex flex-col items-start gap-6">
+        <div className="flex flex-col gap-3">
+          <h2
+            id={`${id}-title`}
+            className="text-3xl font-medium tracking-tight text-balance sm:text-5xl"
+          >
+            {title}
+          </h2>
+          <p className="text-base text-pretty text-muted-foreground sm:text-lg">
+            {line}
+          </p>
+        </div>
+        <ul className="flex flex-wrap gap-2" aria-label="Yang termasuk">
+          {features.map((feature) => (
+            <li key={feature}>
+              <Badge variant="outline">{feature}</Badge>
+            </li>
+          ))}
+        </ul>
+        <Button render={<Link href={action.href} />} nativeButton={false}>
+          {action.label}
+        </Button>
+      </Reveal>
+      <Reveal delay={150}>{children}</Reveal>
+    </section>
+  );
+}
+
+function PartnerRoles() {
+  return (
+    <section
+      id="mitra"
+      className={`${SECTION} flex scroll-mt-20 flex-col items-center gap-12 py-16 lg:py-24`}
+      aria-labelledby="mitra-title"
+    >
+      <Reveal className="flex max-w-2xl flex-col items-center gap-4 text-center">
+        <h2
+          id="mitra-title"
+          className="text-3xl font-medium tracking-tight text-balance sm:text-5xl"
+        >
+          Satu sistem untuk semua yang bekerja di sini
+        </h2>
+        <p className="text-base text-pretty text-muted-foreground sm:text-lg">
+          Dapur mitra, tenant, penyelenggara event, dan kasir memakai aplikasi
+          yang sama, jadi pesanan dan penjualan tidak dicatat dua kali.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button render={<Link href="/login" />} nativeButton={false}>
+            Masuk sebagai mitra
+          </Button>
+          <Button
+            variant="outline"
+            render={<Link href="/events/submit" />}
+            nativeButton={false}
+          >
+            Ajukan event
+          </Button>
+        </div>
+      </Reveal>
+      <div className="grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {PARTNER_ROLES.map((role, index) => (
+          <Reveal key={role.id} delay={index * STAGGER} className="h-full">
+            <Card className={`h-full ${LIFT}`}>
+              <CardHeader>
+                <span
+                  className={`mb-2 flex size-10 items-center justify-center rounded-lg [&_svg]:size-5 ${ROLE_ICON[role.id].tile}`}
+                >
+                  {ROLE_ICON[role.id].icon}
+                </span>
+                <CardTitle>{role.title}</CardTitle>
+                <CardDescription>{role.line}</CardDescription>
+              </CardHeader>
+            </Card>
+          </Reveal>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Visit() {
+  const facts: readonly {
+    icon: React.ReactNode;
+    title: string;
+    body: React.ReactNode;
+  }[] = [
+    {
+      icon: <MapPin />,
+      title: "Alamat",
+      body: (
+        <>
+          {ADDRESS}.{" "}
+          <a
+            href={MAP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-foreground underline underline-offset-4"
+          >
+            Buka di peta
+          </a>
+        </>
+      ),
+    },
+    { icon: <Clock />, title: "Jam buka", body: HOURS },
+    {
+      icon: <Mail />,
+      title: "Email",
+      body: (
+        <a
+          href={`mailto:${EMAIL}`}
+          className="font-medium text-foreground underline underline-offset-4"
+        >
+          {EMAIL}
+        </a>
+      ),
+    },
+  ];
+
+  return (
+    <section
+      id="kunjungi"
+      className={`${SECTION} flex scroll-mt-20 flex-col items-center gap-12 border-t py-16 lg:py-24`}
+      aria-labelledby="kunjungi-title"
+    >
+      <Reveal>
+        <h2
+          id="kunjungi-title"
+          className="text-center text-3xl font-medium tracking-tight sm:text-5xl"
+        >
+          Mampir ke Dago Creative Hub
+        </h2>
+      </Reveal>
+      <div className="grid w-full gap-8 md:grid-cols-3">
+        {facts.map((fact, index) => (
+          <Reveal
+            key={fact.title}
+            delay={index * STAGGER}
+            className="flex flex-col gap-2"
+          >
+            <span className="flex items-center gap-2 font-medium [&_svg]:size-4 [&_svg]:text-muted-foreground">
+              {fact.icon}
+              {fact.title}
+            </span>
+            <p className="text-sm text-muted-foreground">{fact.body}</p>
+          </Reveal>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ClosingCta() {
+  return (
+    <section
+      className="relative isolate overflow-hidden border-t bg-muted/40 py-24"
+      aria-labelledby="closing-title"
+    >
+      <BrandRings className="absolute top-1/2 -left-24 -z-10 hidden h-[140%] -translate-y-1/2 opacity-25 md:block" />
+      <BrandRings className="absolute top-1/2 -right-24 -z-10 hidden h-[140%] -translate-y-1/2 rotate-180 opacity-25 md:block" />
+      <Reveal
+        className={`${SECTION} flex flex-col items-center gap-6 text-center`}
+      >
+        <h2
+          id="closing-title"
+          className="text-3xl font-medium tracking-tight text-balance sm:text-5xl"
+        >
+          Meja Anda sudah menunggu
+        </h2>
+        <p className="max-w-xl text-base text-muted-foreground sm:text-lg">
+          Pesan ruang kerja dari ponsel, lalu datang dan mulai bekerja.
+        </p>
+        <Button
+          size="lg"
+          render={<Link href="/customer?tab=COWORKING" />}
+          nativeButton={false}
+        >
+          Pesan ruang kerja
+        </Button>
+      </Reveal>
+    </section>
+  );
+}
+
+const FOOTER_COLUMNS: readonly {
+  title: string;
+  links: readonly { href: string; label: string }[];
+}[] = [
+  {
+    title: "Tamu",
+    links: [
+      { href: "/customer?tab=MENU", label: "Menu" },
+      { href: "/customer?tab=COWORKING", label: "Ruang kerja" },
+      { href: "/customer?tab=LOYALTY", label: "Program member" },
+      { href: "/events/tickets/recovery", label: "Cari tiket" },
+    ],
+  },
+  {
+    title: "Mitra",
+    links: [
+      { href: "/login", label: "Masuk" },
+      { href: "/events/submit", label: "Ajukan event" },
+      { href: "/events/portal", label: "Portal penyelenggara" },
+    ],
+  },
+  {
+    title: "Event",
+    links: [
+      { href: "/events", label: "Semua event" },
+      { href: "#event", label: "Event berikutnya" },
+    ],
+  },
+];
+
+function Footer() {
+  const photos = [HERO_PHOTO, FOOD_PHOTO];
+  return (
+    <footer className="border-t">
+      <div
+        className={`${SECTION} grid gap-10 py-14 md:grid-cols-[2fr_1fr_1fr_1fr]`}
+      >
+        <div className="flex flex-col gap-3">
+          <Link href="/" className="flex items-center gap-2 font-medium">
+            <Image src="/logo-dagoeng.svg" alt="" width={20} height={26} />
+            Dago Creative Hub
+          </Link>
+          <p className="max-w-xs text-sm text-muted-foreground">{ADDRESS}</p>
+        </div>
+        {FOOTER_COLUMNS.map((column) => (
+          <nav
+            key={column.title}
+            aria-labelledby={`foot-${column.title}`}
+            className="flex flex-col gap-3"
+          >
+            <h2 id={`foot-${column.title}`} className="text-sm font-medium">
+              {column.title}
+            </h2>
+            <ul className="flex flex-col gap-2 text-sm text-muted-foreground">
+              {column.links.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href} className="hover:text-foreground">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ))}
+      </div>
+      <div
+        className={`${SECTION} flex flex-col gap-2 border-t py-6 text-xs text-muted-foreground sm:flex-row sm:justify-between`}
+      >
+        <p>© 2026 Dago Creative Hub</p>
+        <p>
+          Foto:{" "}
+          {photos.map((photo, index) => (
+            <span key={photo.wanted}>
+              {photo.credit.href ? (
+                <a
+                  href={photo.credit.href}
+                  className="underline underline-offset-2"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {photo.credit.author}
+                </a>
+              ) : (
+                <span>{photo.credit.author}</span>
+              )}{" "}
+              ({photo.credit.license}
+              {photo.credit.license.startsWith("CC") ? ", Wikimedia Commons" : ""})
+              {index < photos.length - 1 ? ", " : ""}
+            </span>
+          ))}
+        </p>
+      </div>
+    </footer>
+  );
+}
+
+/** Public landing page, laid out like a product site: hero with a switchable stage, feature splits, roles, visit. */
+export function HomeLanding() {
+  return (
+    <div className="min-h-svh bg-background text-foreground">
+      <HomeNav />
+      <main>
+        <HomeHero />
+        <Summary />
+        <KitchenStrip />
+        <FeatureSplit
+          id="kerja"
+          title="Kerja nyaman, bayar per jam"
+          line="Pilih ruang, pesan jamnya dari ponsel, lalu datang. Internet fiber dan air minum gratis di semua ruang."
+          features={WORK_FEATURES}
+          action={{
+            href: "/customer?tab=COWORKING",
+            label: "Pesan ruang kerja",
+          }}
+        >
+          <WorkspacePanel className={SPLIT_STAGE} />
+        </FeatureSplit>
+        <FeatureSplit
+          id="makan"
+          title="Pesan dari meja, langsung ke dapur"
+          line="Pindai QR di meja, pilih dari empat dapur mitra, dan pesanan masuk ke dapur yang memasaknya."
+          features={FOOD_FEATURES}
+          action={{ href: "/customer?tab=MENU", label: "Lihat menu" }}
+        >
+          <FoodPanel className={SPLIT_STAGE} />
+        </FeatureSplit>
+        <FeatureSplit
+          id="event"
+          title="Ikut event, atau buat sendiri"
+          line="Komunitas sekitar mengadakan workshop dan meetup di sini. Tiket dibeli online, check-in pakai QR."
+          features={EVENT_FEATURES}
+          action={{ href: "/events", label: "Lihat event" }}
+        >
+          <EventsPanel className={SPLIT_STAGE} />
+        </FeatureSplit>
+        <PartnerRoles />
+        <Visit />
+        <ClosingCta />
+      </main>
+      <Footer />
+    </div>
+  );
+}
