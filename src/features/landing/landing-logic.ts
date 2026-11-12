@@ -50,3 +50,35 @@ const EVENT_CATEGORY_LABEL: Record<EventCategory, string> = {
 export function eventCategoryLabel(category: EventCategory): string {
   return EVENT_CATEGORY_LABEL[category];
 }
+
+const WITA = "Asia/Makassar";
+
+export interface EventNoticeRow {
+  day: string;
+  month: string;
+  /** Short weekday and start time, e.g. "Jum, 10.00". */
+  time: string;
+  price: string;
+  /** Null when the server does not report capacity. */
+  ticket: "tersedia" | "habis" | null;
+}
+
+function datePart(date: Date, options: Intl.DateTimeFormatOptions): string {
+  return new Intl.DateTimeFormat("id-ID", { ...options, timeZone: WITA }).format(date);
+}
+
+/** One row on the landing page's event notice board. */
+export function eventNoticeRow(event: PublicCommunityEvent): EventNoticeRow {
+  const start = new Date(event.startDate);
+  const weekday = datePart(start, { weekday: "short" });
+  const hour = datePart(start, { hour: "2-digit", minute: "2-digit", hour12: false });
+  const availability = event.availability;
+
+  return {
+    day: datePart(start, { day: "numeric" }),
+    month: datePart(start, { month: "short" }),
+    time: `${weekday}, ${hour}`,
+    price: event.isPaid && event.price > 0 ? `Rp ${event.price.toLocaleString("id-ID")}` : "Gratis",
+    ticket: availability ? (availability.isSoldOut ? "habis" : "tersedia") : null,
+  };
+}

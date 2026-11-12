@@ -28,7 +28,7 @@ export const LANDING_NAV: readonly LandingNavItem[] = [
 ];
 
 export const HERO = {
-  title: "Kerja, makan, dan kumpul di satu tempat",
+  title: "Kerja, makan, dan event di satu tempat",
   description:
     "DagoEng Creative Hub di Singaraja: kopi dan makanan dari empat mitra dapur, ruang kerja yang bisa dipesan per jam, dan event dari komunitas sekitar.",
   image: "https://images.unsplash.com/photo-1527192491265-7e15c55b1ed2?q=80&w=1920&auto=format&fit=crop",
@@ -84,7 +84,7 @@ export const LOYALTY = {
 } as const;
 
 export const CONTACT = {
-  address: "Jl. Ngurah Rai No. 45, Singaraja, Buleleng, Bali 81116",
+  address: "Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116",
   hours: "Setiap hari, 08:00–22:00 WITA",
   phone: "+62 811-2233-4455",
   email: "info@dagoeng.com",

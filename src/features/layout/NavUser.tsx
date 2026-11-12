@@ -76,7 +76,7 @@ export function NavUser() {
       return;
     }
     await logout();
-    router.push("/login");
+    router.replace("/login");
   };
 
   return (
