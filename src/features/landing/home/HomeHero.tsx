@@ -4,18 +4,15 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   CalendarDays,
-  Clock,
   Laptop,
   Store,
   UtensilsCrossed,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
-import { HOURS } from "./home-content";
 import {
   EventsPanel,
   FoodPanel,
@@ -93,10 +90,6 @@ export function HomeHero() {
       <div
         className={`flex max-w-3xl flex-col items-center gap-6 text-center ${ENTER}`}
       >
-        <Badge variant="outline" className="gap-1.5">
-          <Clock />
-          {HOURS}
-        </Badge>
         <h1 className="text-4xl font-medium tracking-tight text-balance sm:text-6xl">
           <Marked className="decoration-unit-coworking">Kerja</Marked>,{" "}
           <Marked className="decoration-unit-fnb">makan</Marked>, dan ikuti{" "}

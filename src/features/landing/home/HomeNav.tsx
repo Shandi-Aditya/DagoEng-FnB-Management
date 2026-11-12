@@ -11,40 +11,84 @@ import { ModeToggle } from "@/features/layout/ModeToggle";
 import { NAV_LINKS } from "./home-content";
 
 /** Where the account link goes: staff to the dashboard, members to their portal, guests to login. */
-function accountLink(roleSlug: string | undefined, signedIn: boolean): { href: string; label: string } {
+function accountLink(
+  roleSlug: string | undefined,
+  signedIn: boolean,
+): { href: string; label: string } {
   if (!signedIn) return { href: "/login", label: "Masuk" };
-  if (canOpenDashboard(roleSlug)) return { href: "/dashboard", label: "Buka dashboard" };
+  if (canOpenDashboard(roleSlug))
+    return { href: "/dashboard", label: "Buka dashboard" };
   return { href: "/customer", label: "Akun saya" };
 }
 
-export function HomeNav() {
+/** The logo and name exactly as the landing header shows them, for any page that needs the brand mark. */
+export function BrandLink() {
+  return (
+    <Link
+      href="/"
+      className="flex items-center gap-2 font-medium whitespace-nowrap"
+    >
+      <Image src="/logo-dagoeng.svg" alt="" width={20} height={26} priority />
+      Dago Creative Hub
+    </Link>
+  );
+}
+
+interface HomeNavProps {
+  /** Extra items shown before the theme toggle, e.g. the table badge on the customer app. */
+  extra?: React.ReactNode;
+  /** The "Pesan ruang kerja" call to action; hidden on pages that are already the booking flow. */
+  showCta?: boolean;
+  /** The section links; only meaningful on the landing page itself. */
+  showLinks?: boolean;
+}
+
+/** The public site header, shared by the landing page, the customer app and login. */
+export function HomeNav({
+  extra,
+  showCta = true,
+  showLinks = true,
+}: HomeNavProps) {
   const { user } = useAuth();
   const account = accountLink(user?.role?.slug, Boolean(user));
 
   return (
     <header className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <nav className="mx-auto flex h-16 max-w-6xl items-center gap-8 px-4 sm:px-6" aria-label="Utama">
-        <Link href="/" className="flex items-center gap-2 font-medium">
-          <Image src="/logo-dagoeng.svg" alt="" width={20} height={26} priority />
-          Dago Creative Hub
-        </Link>
-        <ul className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
-          {NAV_LINKS.map((link) => (
-            <li key={link.href}>
-              <a href={link.href} className="hover:text-foreground">
-                {link.label}
-              </a>
-            </li>
-          ))}
-        </ul>
+      <nav
+        className="mx-auto flex h-16 max-w-6xl items-center gap-8 px-4 sm:px-6"
+        aria-label="Utama"
+      >
+        <BrandLink />
+        {showLinks ? (
+          <ul className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
+            {NAV_LINKS.map((link) => (
+              <li key={link.href}>
+                <a href={link.href} className="hover:text-foreground">
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <div className="ml-auto flex items-center gap-2">
+          {extra}
           <ModeToggle />
-          <Button variant="ghost" render={<Link href={account.href} />} nativeButton={false}>
+          <Button
+            variant="ghost"
+            render={<Link href={account.href} />}
+            nativeButton={false}
+          >
             {account.label}
           </Button>
-          <Button className="hidden sm:inline-flex" render={<Link href="/customer?tab=COWORKING" />} nativeButton={false}>
-            Pesan ruang kerja
-          </Button>
+          {showCta ? (
+            <Button
+              className="hidden sm:inline-flex"
+              render={<Link href="/customer?tab=COWORKING" />}
+              nativeButton={false}
+            >
+              Pesan ruang kerja
+            </Button>
+          ) : null}
         </div>
       </nav>
     </header>

@@ -40,6 +40,8 @@ export interface OrderRecord {
   outletName: string;
   tableNumber: string;
   customerName: string;
+  /** Phone left by the guest at self-order checkout; the customer app finds "my orders" by this, never by name. */
+  customerPhone?: string;
   orderType: "DINE_IN" | "TAKEAWAY" | "DELIVERY";
   status: OrderStatus;
   items: OrderItemRecord[];
