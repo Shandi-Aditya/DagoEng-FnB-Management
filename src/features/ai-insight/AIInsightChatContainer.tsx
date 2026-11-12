@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Bot, User as UserIcon, Lightbulb, RefreshCw, Send, ArrowUpRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { AIChatMessage } from "@/features/ai-insight/ai-insight-domain";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +35,7 @@ export function AIInsightChatContainer({
   }, [messages, isTyping]);
 
   return (
-    <Card className="flex flex-col h-[520px] overflow-hidden">
+    <Card className="flex flex-col h-[560px] overflow-hidden">
       <CardContent ref={scrollRef} className="flex-1 p-4 overflow-y-auto space-y-4 bg-muted/20">
         {messages.map((msg) => (
           <div
@@ -48,41 +48,41 @@ export function AIInsightChatContainer({
             {/* Avatar Icon */}
             <div
               className={cn(
-                "flex h-8 w-8 items-center justify-center rounded-full shrink-0 shadow-2xs",
+                "flex size-8 items-center justify-center rounded-full shrink-0 shadow-xs",
                 msg.sender === "AI"
                   ? "bg-primary text-primary-foreground"
-                  : "bg-foreground text-background"
+                  : "bg-muted text-muted-foreground border"
               )}
             >
               {msg.sender === "AI" ? (
-                <Bot className="h-4 w-4" />
+                <Bot className="size-4" />
               ) : (
-                <UserIcon className="h-4 w-4" />
+                <UserIcon className="size-4" />
               )}
             </div>
 
             {/* Bubble Content */}
             <div
               className={cn(
-                "max-w-2xl space-y-2",
+                "max-w-xl space-y-1.5",
                 msg.sender === "USER" ? "text-right" : "text-left"
               )}
             >
               {msg.sender === "USER" ? (
-                <div className="inline-block bg-primary text-primary-foreground px-4 py-2.5 rounded-2xl rounded-tr-xs text-xs font-medium shadow-2xs">
+                <div className="inline-block bg-primary text-primary-foreground px-4 py-2.5 rounded-2xl rounded-tr-xs text-xs font-medium shadow-xs">
                   {msg.query}
                 </div>
               ) : (
-                <div className="bg-card border border-border rounded-2xl rounded-tl-xs p-4 shadow-2xs space-y-3">
+                <div className="bg-card border rounded-2xl rounded-tl-xs p-4 shadow-xs space-y-3">
                   {/* Live System Data Box */}
                   {msg.systemData && msg.systemData.length > 0 && (
-                    <div className="rounded-xl border border-border bg-muted/40 p-3 space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                        Data Aktual Sistem ({outletName})
+                    <div className="rounded-lg border bg-muted/50 p-3 space-y-1.5">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Data sistem · {outletName}
                       </p>
-                      <ul className="text-xs text-foreground space-y-0.5 list-disc list-inside">
+                      <ul className="text-xs text-foreground space-y-1 list-disc list-inside">
                         {msg.systemData.map((d, i) => (
-                          <li key={i} className="font-medium">
+                          <li key={i}>
                             {d}
                           </li>
                         ))}
@@ -93,11 +93,11 @@ export function AIInsightChatContainer({
                   {/* AI Strategic Analysis */}
                   {msg.aiAnalysis && (
                     <div className="space-y-1">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
-                        <Lightbulb className="h-3.5 w-3.5" />
+                      <p className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                        <Lightbulb className="size-3.5 text-muted-foreground" />
                         <span>Ringkasan dan saran</span>
                       </p>
-                      <p className="text-xs text-foreground leading-relaxed font-normal">
+                      <p className="text-xs text-muted-foreground leading-relaxed">
                         {msg.aiAnalysis}
                       </p>
                     </div>
@@ -105,24 +105,26 @@ export function AIInsightChatContainer({
 
                   {/* Suggested Action Link */}
                   {msg.actionRecommendation && (
-                    <div className="pt-2 border-t border-border flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-muted-foreground italic">
+                    <div className="pt-2.5 border-t flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs text-muted-foreground">
                         {msg.actionRecommendation}
                       </span>
                       {msg.actionLabel && msg.actionUrl && (
-                        <Link
-                          href={msg.actionUrl}
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline shrink-0"
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          render={<Link href={msg.actionUrl} />}
+                          nativeButton={false}
                         >
                           <span>{msg.actionLabel}</span>
-                          <ArrowUpRight className="h-3.5 w-3.5" />
-                        </Link>
+                          <ArrowUpRight />
+                        </Button>
                       )}
                     </div>
                   )}
                 </div>
               )}
-              <p className="text-[10px] text-muted-foreground px-1 font-mono tabular-nums">
+              <p className="text-xs text-muted-foreground px-1 font-mono tabular-nums">
                 {msg.timestamp}
               </p>
             </div>
@@ -131,14 +133,14 @@ export function AIInsightChatContainer({
 
         {isTyping && (
           <div className="flex items-center gap-2 text-xs text-muted-foreground pl-11">
-            <RefreshCw className="h-3.5 w-3.5 animate-spin text-primary" />
+            <RefreshCw className="size-3.5 animate-spin text-muted-foreground" />
             <span>Menghitung data {outletName}</span>
           </div>
         )}
       </CardContent>
 
       {/* Input Bar */}
-      <div className="p-3 border-t border-border bg-card">
+      <div className="p-3 border-t bg-card">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -148,18 +150,18 @@ export function AIInsightChatContainer({
         >
           <Input
             type="text"
-            placeholder="Tanya soal penjualan, stok, atau ruang kerja"
+            placeholder="Tanya soal penjualan, stok, atau ruang kerja…"
             value={inputQuery}
             onChange={(e) => onInputChange(e.target.value)}
-            className="flex-1 text-xs h-9"
+            className="flex-1 text-xs"
+            aria-label="Pertanyaan analisis data"
           />
           <Button
             type="submit"
-            size="sm"
+            size="default"
             disabled={!inputQuery.trim() || isTyping}
-            className="gap-1.5 h-9 px-4"
           >
-            <Send className="h-3.5 w-3.5" />
+            <Send />
             <span>Kirim</span>
           </Button>
         </form>
