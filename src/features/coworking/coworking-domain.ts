@@ -154,6 +154,25 @@ export function filterCoworkingMembers(
   });
 }
 
+export function filterCoworkingBookings(
+  bookings: readonly CoworkingBooking[],
+  statusFilter: string,
+  query: string
+): CoworkingBooking[] {
+  const q = query.trim().toLowerCase();
+
+  return bookings.filter((b) => {
+    const matchStatus = statusFilter === "ALL" || b.checkInStatus === statusFilter;
+    const matchQuery =
+      !q ||
+      b.guestName.toLowerCase().includes(q) ||
+      Boolean(b.bookingCode && b.bookingCode.toLowerCase().includes(q)) ||
+      Boolean(b.guestPhone && b.guestPhone.includes(q)) ||
+      Boolean(b.spaceName && b.spaceName.toLowerCase().includes(q));
+    return matchStatus && matchQuery;
+  });
+}
+
 export function getSpaceStatusTone(status: SpaceStatus): StatusTone {
   switch (status) {
     case "AVAILABLE":

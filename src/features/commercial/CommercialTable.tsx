@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Building2, Search } from "lucide-react";
+import { Building2, CreditCard, Eye } from "lucide-react";
 
 import { DataPagination } from "@/components/app/data-pagination";
+import { DataTableToolbar } from "@/components/app/data-table-toolbar";
 import { EmptyState } from "@/components/app/empty-state";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { NativeSelect } from "@/components/ui/native-select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -18,8 +17,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { CommercialLease } from "@/types/commercial";
 import { formatCurrencyIDR } from "@/lib/utils";
+import type { CommercialLease } from "@/types/commercial";
 
 import {
   emptyCommercialMessage,
@@ -80,172 +79,153 @@ export function CommercialTable({
   const emptyCopy = emptyCommercialMessage(isFiltered);
 
   return (
-    <div className="space-y-4">
-      {/* Controls Bar */}
-      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          <InputGroup className="max-w-xs flex-1">
-            <InputGroupAddon>
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              value={searchTerm}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Cari penyewa, nomor kontrak, atau unit"
-              aria-label="Cari kontrak"
-            />
-          </InputGroup>
+    <div className="flex flex-col gap-4">
+      <DataTableToolbar
+        searchValue={searchTerm}
+        onSearchChange={onSearchChange}
+        searchPlaceholder="Cari penyewa, nomor kontrak, atau unit"
+        searchAriaLabel="Cari kontrak"
+        hasActiveFilters={isFiltered}
+        onResetFilters={handleResetFilters}
+      >
+        <NativeSelect
+          value={statusFilter}
+          onChange={(e) => onStatusFilterChange(e.target.value)}
+          aria-label="Filter status kontrak"
+        >
+          {STATUS_OPTIONS.map((opt) => (
+            <NativeSelectOption key={opt.value} value={opt.value}>
+              {opt.label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </DataTableToolbar>
 
-          <NativeSelect
-            value={statusFilter}
-            onChange={(e) => onStatusFilterChange(e.target.value)}
-            aria-label="Filter status kontrak"
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </NativeSelect>
-
-          {isFiltered && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleResetFilters}
-            >
-              Reset filter
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Leases Table Card */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[220px]">Penyewa & Kontrak</TableHead>
-                <TableHead>Unit & Luas</TableHead>
-                <TableHead className="text-right">Sewa & Deposit</TableHead>
-                <TableHead>Periode sewa</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">
-                  <span className="sr-only">Aksi</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedLeases.length === 0 ? (
+      {paginatedLeases.length === 0 ? (
+        <EmptyState
+          className="border"
+          icon={<Building2 />}
+          title={emptyCopy.title}
+          description={
+            searchTerm.trim()
+              ? `Tidak ada kontrak yang cocok dengan "${searchTerm.trim()}".`
+              : emptyCopy.description
+          }
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="overflow-hidden rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="h-48 text-center">
-                    <EmptyState
-                      icon={<Building2 className="size-8 text-muted-foreground" />}
-                      title={emptyCopy.title}
-                      description={
-                        searchTerm
-                          ? `Tidak ada kontrak yang cocok dengan "${searchTerm}".`
-                          : emptyCopy.description
-                      }
-                    />
-                  </TableCell>
+                  <TableHead>Penyewa</TableHead>
+                  <TableHead className="hidden sm:table-cell">Unit</TableHead>
+                  <TableHead className="text-right">Sewa</TableHead>
+                  <TableHead className="hidden md:table-cell">Periode</TableHead>
+                  <TableHead className="hidden sm:table-cell">Status</TableHead>
+                  <TableHead className="w-0">
+                    <span className="sr-only">Aksi</span>
+                  </TableHead>
                 </TableRow>
-              ) : (
-                paginatedLeases.map((lease) => {
+              </TableHeader>
+              <TableBody>
+                {paginatedLeases.map((lease) => {
                   const tone = getLeaseStatusTone(lease.status);
                   const label = getLeaseStatusLabel(lease.status);
 
                   return (
                     <TableRow key={lease.id}>
-                      <TableCell className="font-medium">
-                        <div className="space-y-0.5">
-                          <p className="font-mono text-xs font-semibold text-primary">
+                      <TableCell className="whitespace-normal">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-mono text-xs font-medium text-primary">
                             {lease.leaseNumber}
-                          </p>
-                          <p className="leading-snug text-foreground">{lease.tenantName}</p>
-                          <p className="font-mono text-xs text-muted-foreground">
+                          </span>
+                          <span className="font-medium text-foreground">{lease.tenantName}</span>
+                          <span className="font-mono text-xs text-muted-foreground tabular-nums">
                             {lease.tenantContact}
-                          </p>
+                          </span>
+                          <span className="text-xs text-muted-foreground sm:hidden">
+                            {lease.unitCode} · {label}
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="font-medium text-foreground">{lease.unitCode}</p>
-                          <p className="text-xs text-muted-foreground">{lease.areaSquareMeters} m²</p>
+                      <TableCell className="hidden sm:table-cell whitespace-normal">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-foreground">{lease.unitCode}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {lease.areaSquareMeters} m²
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell className="text-right">
-                        <div className="space-y-0.5">
-                          <p className="font-mono text-xs font-medium tabular-nums text-foreground">
+                      <TableCell className="text-right whitespace-nowrap">
+                        <div className="flex flex-col items-end">
+                          <span className="font-mono text-xs font-medium tabular-nums text-foreground">
                             {formatCurrencyIDR(lease.monthlyRent)} / bln
-                          </p>
-                          <p className="font-mono text-xs tabular-nums text-muted-foreground">
-                            Deposit: {formatCurrencyIDR(lease.depositAmount)}
-                          </p>
+                          </span>
+                          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                            Deposit {formatCurrencyIDR(lease.depositAmount)}
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="font-mono text-xs font-medium text-foreground">
+                      <TableCell className="hidden md:table-cell">
+                        <div className="flex flex-col">
+                          <span className="font-mono text-xs font-medium text-foreground tabular-nums">
                             {lease.startDate} s/d {lease.endDate}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
+                          </span>
+                          <span className="text-xs text-muted-foreground">
                             Jadwal: {paymentScheduleLabel(lease.paymentSchedule)}
-                          </p>
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        <StatusBadge status={tone}>
-                          {label}
-                        </StatusBadge>
+                      <TableCell className="hidden sm:table-cell">
+                        <StatusBadge status={tone}>{label}</StatusBadge>
                       </TableCell>
 
-                      <TableCell className="text-right">
+                      <TableCell>
                         <div className="flex items-center justify-end gap-1.5">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => onSelectLease(lease)}
+                            aria-label={`Detail kontrak ${lease.tenantName}`}
                           >
-                            Detail
+                            <Eye className="sm:hidden" />
+                            <span className="hidden sm:inline">Detail</span>
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => onOpenPaymentModal(lease)}
+                            aria-label={`Catat pembayaran ${lease.tenantName}`}
                           >
-                            Bayar
+                            <CreditCard className="sm:hidden" />
+                            <span className="hidden sm:inline">Bayar</span>
                           </Button>
                         </div>
                       </TableCell>
                     </TableRow>
                   );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                })}
+              </TableBody>
+            </Table>
+          </div>
 
-      {/* Pagination Bar */}
-      {leases.length > 0 && (
-        <DataPagination
-          currentPage={safeCurrentPage}
-          totalItems={leases.length}
-          pageSize={pageSize}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setCurrentPage(1);
-          }}
-          itemLabel="kontrak"
-        />
+          <DataPagination
+            currentPage={safeCurrentPage}
+            totalItems={leases.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+            itemLabel="kontrak"
+          />
+        </div>
       )}
     </div>
   );

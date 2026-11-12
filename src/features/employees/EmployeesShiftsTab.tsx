@@ -1,15 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Clock, Printer, Search } from "lucide-react";
+import { Clock, Printer } from "lucide-react";
 
 import { DataPagination } from "@/components/app/data-pagination";
+import { DataTableToolbar } from "@/components/app/data-table-toolbar";
 import { EmptyState } from "@/components/app/empty-state";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { NativeSelect } from "@/components/ui/native-select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -18,8 +18,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { ShiftRecord } from "@/types/shift";
 import { formatCurrencyIDR } from "@/lib/utils";
+import type { ShiftRecord } from "@/types/shift";
 
 import {
   emptyShiftMessage,
@@ -70,20 +70,18 @@ export function EmployeesShiftsTab({
   const emptyCopy = emptyShiftMessage(isFiltered);
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* Active Shift Card */}
       {activeShift ? (
-        <Card className="border-info/40 bg-info/5">
-          <CardHeader className="pb-2">
+        <Card size="sm" className="border-info/40 bg-info/5">
+          <CardHeader>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2">
-                <Clock className="size-4 animate-pulse text-primary" />
+              <div className="flex flex-wrap items-center gap-2">
+                <Clock className="size-4 animate-pulse text-primary" aria-hidden />
                 <CardTitle className="text-sm font-medium text-foreground">
                   Shift aktif: {activeShift.shiftName}
                 </CardTitle>
-                <StatusBadge status="info" className="text-xs">
-                  Sedang berjalan
-                </StatusBadge>
+                <StatusBadge status="info">Sedang berjalan</StatusBadge>
               </div>
 
               <Button
@@ -96,196 +94,173 @@ export function EmployeesShiftsTab({
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-3 pt-2 text-xs sm:grid-cols-4">
+          <CardContent className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
             <div>
-              <span className="block text-xs text-muted-foreground">Kasir</span>
+              <span className="block text-muted-foreground">Kasir</span>
               <span className="font-medium text-foreground">
                 {activeShift.assignedCashierName}
               </span>
             </div>
             <div>
-              <span className="block text-xs text-muted-foreground">Dibuka</span>
-              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+              <span className="block text-muted-foreground">Dibuka</span>
+              <span className="font-mono tabular-nums text-muted-foreground">
                 {activeShift.startTime}
               </span>
             </div>
             <div>
-              <span className="block text-xs text-muted-foreground">Modal awal</span>
-              <span className="font-mono text-xs font-medium tabular-nums text-foreground">
+              <span className="block text-muted-foreground">Modal awal</span>
+              <span className="font-mono font-medium tabular-nums text-foreground">
                 {formatCurrencyIDR(activeShift.openingCash)}
               </span>
             </div>
             <div>
-              <span className="block text-xs text-muted-foreground">Penjualan berjalan</span>
-              <span className="font-mono text-xs font-medium tabular-nums text-foreground">
+              <span className="block text-muted-foreground">Penjualan berjalan</span>
+              <span className="font-mono font-medium tabular-nums text-foreground">
                 {formatCurrencyIDR((activeShift.cashSales || 0) + (activeShift.nonCashSales || 0))}
               </span>
             </div>
           </CardContent>
         </Card>
       ) : (
-        <Card className="border-dashed bg-muted/20">
-          <CardContent className="flex items-center justify-between p-4">
+        <Card size="sm" className="border-dashed bg-muted/20">
+          <CardContent className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Clock className="size-4" />
+              <Clock className="size-4" aria-hidden />
               <span>Belum ada shift kasir yang dibuka di outlet ini.</span>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onOpenStartShiftModal}
-            >
+            <Button size="sm" variant="outline" onClick={onOpenStartShiftModal}>
               Buka shift kasir
             </Button>
           </CardContent>
         </Card>
       )}
 
-      {/* Controls Bar */}
-      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          <InputGroup className="max-w-xs flex-1">
-            <InputGroupAddon>
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Cari shift atau kasir"
-              aria-label="Cari shift"
-            />
-          </InputGroup>
+      <DataTableToolbar
+        searchValue={searchQuery}
+        onSearchChange={(val) => {
+          setSearchQuery(val);
+          setCurrentPage(1);
+        }}
+        searchPlaceholder="Cari shift atau kasir"
+        searchAriaLabel="Cari shift"
+        hasActiveFilters={isFiltered}
+        onResetFilters={handleResetFilters}
+      >
+        <NativeSelect
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          aria-label="Filter status shift"
+        >
+          <NativeSelectOption value="ALL">Semua status</NativeSelectOption>
+          <NativeSelectOption value="ACTIVE">Sedang berjalan</NativeSelectOption>
+          <NativeSelectOption value="CLOSED">Ditutup</NativeSelectOption>
+          <NativeSelectOption value="NEEDS_RECONCILIATION">Selisih kas</NativeSelectOption>
+        </NativeSelect>
+      </DataTableToolbar>
 
-          <NativeSelect
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            aria-label="Filter status shift"
-          >
-            <option value="ALL">Semua status</option>
-            <option value="ACTIVE">Sedang berjalan</option>
-            <option value="CLOSED">Ditutup</option>
-            <option value="NEEDS_RECONCILIATION">Selisih kas</option>
-          </NativeSelect>
-
-          {isFiltered && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleResetFilters}
-            >
-              Reset filter
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Shifts History Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[200px]">Shift & Kasir</TableHead>
-                <TableHead>Jam operasional</TableHead>
-                <TableHead className="text-right">Modal awal</TableHead>
-                <TableHead className="text-right">Penjualan</TableHead>
-                <TableHead className="text-right">Kas fisik & Selisih</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">
-                  <span className="sr-only">Aksi</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedShifts.length === 0 ? (
+      {paginatedShifts.length === 0 ? (
+        <EmptyState
+          className="border"
+          icon={<Clock />}
+          title={emptyCopy.title}
+          description={emptyCopy.description}
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="overflow-hidden rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="h-48 text-center">
-                    <EmptyState
-                      icon={<Clock className="size-8 text-muted-foreground" />}
-                      title={emptyCopy.title}
-                      description={emptyCopy.description}
-                    />
-                  </TableCell>
+                  <TableHead>Shift</TableHead>
+                  <TableHead className="hidden lg:table-cell">Jam operasional</TableHead>
+                  <TableHead className="hidden md:table-cell text-right">Modal awal</TableHead>
+                  <TableHead className="hidden sm:table-cell text-right">Penjualan</TableHead>
+                  <TableHead className="text-right">Kas fisik</TableHead>
+                  <TableHead className="hidden sm:table-cell">Status</TableHead>
+                  <TableHead className="w-0">
+                    <span className="sr-only">Aksi</span>
+                  </TableHead>
                 </TableRow>
-              ) : (
-                paginatedShifts.map((s) => {
+              </TableHeader>
+              <TableBody>
+                {paginatedShifts.map((s) => {
                   const tone = getShiftStatusTone(s.status);
                   const totalSales = (s.cashSales || 0) + (s.nonCashSales || 0);
                   const hasVariance = s.cashVariance !== undefined && s.cashVariance !== 0;
 
                   return (
                     <TableRow key={s.id}>
-                      <TableCell className="font-medium">
-                        <div className="space-y-0.5">
-                          <p className="leading-snug text-foreground">{s.shiftName}</p>
-                          <p className="text-xs text-muted-foreground">{s.assignedCashierName}</p>
+                      <TableCell className="whitespace-normal">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-foreground">{s.shiftName}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {s.assignedCashierName}
+                          </span>
+                          <span className="text-xs text-muted-foreground sm:hidden">
+                            {getShiftStatusLabel(s.status)} · {s.startTime}
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="font-mono text-xs font-medium tabular-nums text-foreground">
+                      <TableCell className="hidden lg:table-cell">
+                        <div className="flex flex-col">
+                          <span className="font-mono text-xs font-medium tabular-nums text-foreground">
                             {s.startTime}
-                          </p>
-                          <p className="font-mono text-xs tabular-nums text-muted-foreground">
+                          </span>
+                          <span className="font-mono text-xs tabular-nums text-muted-foreground">
                             {s.closedAt || s.endTime || "Belum ditutup"}
-                          </p>
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell className="text-right font-mono text-xs font-medium tabular-nums text-foreground">
+                      <TableCell className="hidden md:table-cell text-right font-mono text-xs font-medium tabular-nums text-foreground">
                         {formatCurrencyIDR(s.openingCash || 0)}
                       </TableCell>
 
-                      <TableCell className="text-right">
-                        <div className="space-y-0.5">
-                          <p className="font-mono text-xs font-medium tabular-nums text-foreground">
+                      <TableCell className="hidden sm:table-cell text-right">
+                        <div className="flex flex-col items-end">
+                          <span className="font-mono text-xs font-medium tabular-nums text-foreground">
                             {formatCurrencyIDR(totalSales)}
-                          </p>
-                          <p className="font-mono text-xs tabular-nums text-muted-foreground">
-                            Tunai: {formatCurrencyIDR(s.cashSales || 0)}
-                          </p>
+                          </span>
+                          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                            Tunai {formatCurrencyIDR(s.cashSales || 0)}
+                          </span>
                         </div>
                       </TableCell>
 
                       <TableCell className="text-right">
-                        <div className="space-y-0.5">
-                          <p className="font-mono text-xs font-medium tabular-nums text-foreground">
+                        <div className="flex flex-col items-end">
+                          <span className="font-mono text-xs font-medium tabular-nums text-foreground">
                             {s.actualCash !== undefined ? formatCurrencyIDR(s.actualCash) : "—"}
-                          </p>
+                          </span>
                           {hasVariance ? (
-                            <p className="font-mono text-xs font-medium tabular-nums text-destructive">
-                              Selisih: {formatCurrencyIDR(s.cashVariance || 0)}
-                            </p>
+                            <span className="font-mono text-xs font-medium tabular-nums text-destructive">
+                              Selisih {formatCurrencyIDR(s.cashVariance || 0)}
+                            </span>
                           ) : (
-                            <p className="text-xs text-muted-foreground">Sesuai</p>
+                            <span className="text-xs text-muted-foreground">Sesuai</span>
                           )}
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        <StatusBadge status={tone}>
-                          {getShiftStatusLabel(s.status)}
-                        </StatusBadge>
+                      <TableCell className="hidden sm:table-cell">
+                        <StatusBadge status={tone}>{getShiftStatusLabel(s.status)}</StatusBadge>
                       </TableCell>
 
-                      <TableCell className="text-right">
+                      <TableCell>
                         <div className="flex items-center justify-end gap-1.5">
                           {s.status === "CLOSED" ? (
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => onOpenClosingPDF(s)}
+                              aria-label={`Cetak struk ${s.shiftName}`}
                             >
                               <Printer />
-                              <span>Struk</span>
+                              <span className="hidden sm:inline">Struk</span>
                             </Button>
                           ) : (
                             <Button
@@ -293,33 +268,30 @@ export function EmployeesShiftsTab({
                               variant="outline"
                               onClick={onOpenCloseShiftModal}
                             >
-                              Tutup shift
+                              Tutup
                             </Button>
                           )}
                         </div>
                       </TableCell>
                     </TableRow>
                   );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                })}
+              </TableBody>
+            </Table>
+          </div>
 
-      {/* Pagination Bar */}
-      {filteredShifts.length > 0 && (
-        <DataPagination
-          currentPage={safeCurrentPage}
-          totalItems={filteredShifts.length}
-          pageSize={pageSize}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setCurrentPage(1);
-          }}
-          itemLabel="shift"
-        />
+          <DataPagination
+            currentPage={safeCurrentPage}
+            totalItems={filteredShifts.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+            itemLabel="shift"
+          />
+        </div>
       )}
     </div>
   );

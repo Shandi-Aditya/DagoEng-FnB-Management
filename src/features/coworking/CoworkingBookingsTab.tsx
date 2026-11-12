@@ -1,15 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Calendar, LogOut, Printer, Search, UserCheck } from "lucide-react";
+import { Calendar, LogOut, Printer, UserCheck } from "lucide-react";
 
 import { DataPagination } from "@/components/app/data-pagination";
+import { DataTableToolbar } from "@/components/app/data-table-toolbar";
 import { EmptyState } from "@/components/app/empty-state";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { NativeSelect } from "@/components/ui/native-select";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -18,13 +17,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { CoworkingBooking } from "@/types/coworking";
 import { formatCurrencyIDR } from "@/lib/utils";
+import type { CoworkingBooking } from "@/types/coworking";
 
 import {
   bookingCheckInStatusLabel,
   bookingPaymentStatusLabel,
   emptyCoworkingMessage,
+  filterCoworkingBookings,
   getBookingCheckInTone,
   spaceTypeLabel,
 } from "./coworking-domain";
@@ -49,22 +49,10 @@ export function CoworkingBookingsTab({
 
   const isFiltered = searchQuery.trim() !== "" || statusFilter !== "ALL";
 
-  const filteredBookings = useMemo(() => {
-    return bookings.filter((b) => {
-      const q = searchQuery.toLowerCase().trim();
-      const matchQuery =
-        !q ||
-        b.guestName.toLowerCase().includes(q) ||
-        (b.bookingCode && b.bookingCode.toLowerCase().includes(q)) ||
-        (b.guestPhone && b.guestPhone.includes(q)) ||
-        (b.spaceName && b.spaceName.toLowerCase().includes(q));
-
-      const matchStatus =
-        statusFilter === "ALL" || b.checkInStatus === statusFilter;
-
-      return matchQuery && matchStatus;
-    });
-  }, [bookings, searchQuery, statusFilter]);
+  const filteredBookings = useMemo(
+    () => filterCoworkingBookings(bookings, statusFilter, searchQuery),
+    [bookings, statusFilter, searchQuery]
+  );
 
   const totalPages = Math.max(1, Math.ceil(filteredBookings.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -76,132 +64,121 @@ export function CoworkingBookingsTab({
   const emptyCopy = emptyCoworkingMessage("BOOKINGS", isFiltered);
 
   return (
-    <div className="space-y-4">
-      {/* Controls Bar */}
-      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          <InputGroup className="max-w-xs flex-1">
-            <InputGroupAddon>
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Cari kode booking, tamu, atau ruang"
-              aria-label="Cari booking"
-            />
-          </InputGroup>
+    <div className="flex flex-col gap-4">
+      <DataTableToolbar
+        searchValue={searchQuery}
+        onSearchChange={(val) => {
+          setSearchQuery(val);
+          setCurrentPage(1);
+        }}
+        searchPlaceholder="Cari kode booking, tamu, atau ruang"
+        searchAriaLabel="Cari booking"
+        hasActiveFilters={isFiltered}
+        onResetFilters={() => {
+          setSearchQuery("");
+          setStatusFilter("ALL");
+          setCurrentPage(1);
+        }}
+      >
+        <NativeSelect
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          aria-label="Filter status sesi"
+        >
+          <NativeSelectOption value="ALL">Semua status sesi</NativeSelectOption>
+          <NativeSelectOption value="CHECKED_IN">Sedang aktif</NativeSelectOption>
+          <NativeSelectOption value="RESERVED">Menunggu</NativeSelectOption>
+          <NativeSelectOption value="COMPLETED">Selesai</NativeSelectOption>
+          <NativeSelectOption value="CANCELLED">Dibatalkan</NativeSelectOption>
+        </NativeSelect>
+      </DataTableToolbar>
 
-          <NativeSelect
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            aria-label="Filter status sesi"
-          >
-            <option value="ALL">Semua status sesi</option>
-            <option value="CHECKED_IN">Sedang aktif</option>
-            <option value="RESERVED">Menunggu</option>
-            <option value="COMPLETED">Selesai</option>
-            <option value="CANCELLED">Dibatalkan</option>
-          </NativeSelect>
-
-          {isFiltered ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSearchQuery("");
-                setStatusFilter("ALL");
-                setCurrentPage(1);
-              }}
-            >
-              Reset filter
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {/* Bookings Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[180px]">Booking & Tamu</TableHead>
-                <TableHead>Ruang</TableHead>
-                <TableHead>Jadwal</TableHead>
-                <TableHead>Total & Bayar</TableHead>
-                <TableHead>Status sesi</TableHead>
-                <TableHead className="text-right">
-                  <span className="sr-only">Aksi</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedBookings.length === 0 ? (
+      {filteredBookings.length === 0 ? (
+        <EmptyState
+          className="border"
+          icon={<Calendar />}
+          title={emptyCopy.title}
+          description={emptyCopy.description}
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="overflow-hidden rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="h-48 text-center">
-                    <EmptyState
-                      icon={<Calendar className="size-6 text-muted-foreground" />}
-                      title={emptyCopy.title}
-                      description={emptyCopy.description}
-                    />
-                  </TableCell>
+                  <TableHead>Booking</TableHead>
+                  <TableHead className="hidden md:table-cell">Ruang</TableHead>
+                  <TableHead className="hidden sm:table-cell">Jadwal</TableHead>
+                  <TableHead className="hidden md:table-cell text-right">Total</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-0">
+                    <span className="sr-only">Aksi</span>
+                  </TableHead>
                 </TableRow>
-              ) : (
-                paginatedBookings.map((b) => {
+              </TableHeader>
+              <TableBody>
+                {paginatedBookings.map((b) => {
                   const checkInTone = getBookingCheckInTone(b.checkInStatus);
 
                   return (
                     <TableRow key={b.id}>
-                      <TableCell className="font-medium">
-                        <div className="space-y-0.5">
-                          <p className="font-mono text-xs font-semibold text-primary">
+                      <TableCell className="whitespace-normal">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-mono text-xs font-medium text-primary">
                             {b.bookingCode || b.id}
-                          </p>
-                          <p className="text-foreground">
-                            {b.guestName} {b.company ? `(${b.company})` : ""}
-                          </p>
-                          <p className="font-mono text-xs text-muted-foreground">
+                          </span>
+                          <span className="font-medium text-foreground">
+                            {b.guestName}
+                            {b.company ? ` (${b.company})` : ""}
+                          </span>
+                          <span className="font-mono text-xs text-muted-foreground tabular-nums">
                             {b.guestPhone}
-                          </p>
+                          </span>
+                          <span className="text-xs text-muted-foreground md:hidden">
+                            {b.spaceName}
+                            <span className="sm:hidden"> · {b.date}</span>
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="font-medium text-foreground">{b.spaceName}</p>
-                          <p className="text-xs text-muted-foreground">{spaceTypeLabel(b.spaceType)}</p>
+                      <TableCell className="hidden md:table-cell whitespace-normal">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-foreground">{b.spaceName}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {spaceTypeLabel(b.spaceType)}
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="font-mono text-xs font-medium text-foreground">
-                            {b.endDate && b.endDate !== b.date ? `${b.date} s/d ${b.endDate}` : b.date}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
+                      <TableCell className="hidden sm:table-cell">
+                        <div className="flex flex-col">
+                          <span className="font-mono text-xs font-medium text-foreground tabular-nums">
+                            {b.endDate && b.endDate !== b.date
+                              ? `${b.date} s/d ${b.endDate}`
+                              : b.date}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
                             {b.bookingType === "HOURLY"
                               ? `${b.startTime} (${b.duration} jam)`
                               : `${b.duration} hari`}
-                          </p>
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="font-mono font-medium tabular-nums text-foreground">
+                      <TableCell className="hidden md:table-cell text-right">
+                        <div className="flex flex-col items-end">
+                          <span className="font-mono font-medium tabular-nums text-foreground">
                             {formatCurrencyIDR(b.totalAmount)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {b.paymentMethod || "Tunai"} · <span className="font-medium text-success">{bookingPaymentStatusLabel(b.paymentStatus || "PAID")}</span>
-                          </p>
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {b.paymentMethod || "Tunai"} ·{" "}
+                            <span className="text-success">
+                              {bookingPaymentStatusLabel(b.paymentStatus || "PAID")}
+                            </span>
+                          </span>
                         </div>
                       </TableCell>
 
@@ -211,15 +188,16 @@ export function CoworkingBookingsTab({
                         </StatusBadge>
                       </TableCell>
 
-                      <TableCell className="text-right">
+                      <TableCell>
                         <div className="flex items-center justify-end gap-1.5">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => onOpenReceipt(b)}
+                            aria-label={`Cetak struk ${b.bookingCode || b.guestName}`}
                           >
                             <Printer />
-                            <span>Struk</span>
+                            <span className="hidden sm:inline">Struk</span>
                           </Button>
 
                           {b.checkInStatus === "CHECKED_IN" ? (
@@ -227,45 +205,44 @@ export function CoworkingBookingsTab({
                               size="sm"
                               variant="outline"
                               onClick={() => onCheckout(b.spaceId)}
+                              aria-label={`Check-out ${b.guestName}`}
                               className="text-destructive hover:text-destructive"
                             >
                               <LogOut />
-                              <span>Check-out</span>
+                              <span className="hidden sm:inline">Check-out</span>
                             </Button>
                           ) : b.checkInStatus !== "COMPLETED" ? (
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => onCheckIn(b.id)}
+                              aria-label={`Check-in ${b.guestName}`}
                             >
                               <UserCheck />
-                              <span>Check-in</span>
+                              <span className="hidden sm:inline">Check-in</span>
                             </Button>
                           ) : null}
                         </div>
                       </TableCell>
                     </TableRow>
                   );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                })}
+              </TableBody>
+            </Table>
+          </div>
 
-      {/* Pagination Bar */}
-      {filteredBookings.length > 0 && (
-        <DataPagination
-          currentPage={safeCurrentPage}
-          totalItems={filteredBookings.length}
-          pageSize={pageSize}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setCurrentPage(1);
-          }}
-          itemLabel="booking"
-        />
+          <DataPagination
+            currentPage={safeCurrentPage}
+            totalItems={filteredBookings.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+            itemLabel="booking"
+          />
+        </div>
       )}
     </div>
   );

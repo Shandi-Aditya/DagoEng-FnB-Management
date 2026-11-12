@@ -127,12 +127,16 @@ export const TIER_OPTIONS: readonly { id: string; label: string }[] = [
 ];
 
 export function emptyCustomerMessage(
-  hasFilter: boolean
+  hasFilter: boolean,
+  searchQuery?: string
 ): { title: string; description: string } {
   if (hasFilter) {
+    const trimmed = searchQuery?.trim();
     return {
       title: "Tidak ada member yang cocok",
-      description: "Ubah kata kunci pencarian atau pilih filter tier lain.",
+      description: trimmed
+        ? `Tidak ada member yang cocok dengan "${trimmed}". Ubah kata kunci atau pilih filter tier lain.`
+        : "Ubah kata kunci pencarian atau pilih filter tier lain.",
     };
   }
 

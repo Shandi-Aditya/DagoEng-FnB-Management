@@ -1,7 +1,9 @@
 "use client";
 
-import { CalendarCheck, CheckCircle2, Phone, Search, Utensils } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarCheck, CheckCircle2, Phone, Search, Utensils, X } from "lucide-react";
 
+import { DataPagination } from "@/components/app/data-pagination";
 import { EmptyState } from "@/components/app/empty-state";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
@@ -50,14 +52,26 @@ export function ReservationsView({
   onCancel,
   onOpenPOS,
 }: ReservationsViewProps) {
-  const hasReservations = reservations.length > 0;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [reservations.length, statusFilter, searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(reservations.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedReservations = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return reservations.slice(start, start + pageSize);
+  }, [reservations, safeCurrentPage, pageSize]);
+
   const emptyCopy = emptyReservationsMessage(statusFilter, Boolean(searchQuery));
 
   return (
-    <div className="space-y-4">
-      {/* Search and Tabs Filter Bar */}
+    <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <InputGroup className="max-w-sm">
+        <InputGroup className="sm:max-w-xs">
           <InputGroupAddon>
             <Search />
           </InputGroupAddon>
@@ -86,114 +100,133 @@ export function ReservationsView({
         </div>
       </div>
 
-      {/* Reservation Table */}
-      <div className="rounded-lg border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Tamu</TableHead>
-              <TableHead>Meja</TableHead>
-              <TableHead>Jadwal</TableHead>
-              <TableHead>Kapasitas dan DP</TableHead>
-              <TableHead className="hidden md:table-cell">Catatan</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">
-                <span className="sr-only">Aksi</span>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {!hasReservations ? (
-              <TableRow>
-                <TableCell colSpan={7} className="py-12">
-                  <EmptyState
-                    icon={<CalendarCheck className="size-6 text-muted-foreground" />}
-                    title={emptyCopy.title}
-                    description={emptyCopy.description}
-                  />
-                </TableCell>
-              </TableRow>
-            ) : (
-              reservations.map((res) => (
-                <TableRow key={res.id}>
-                  <TableCell>
-                    <div className="font-medium text-foreground">{res.customerName}</div>
-                    <div className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
-                      <Phone className="size-3 text-muted-foreground" />
-                      <span>{res.phone}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="font-mono text-xs">
-                      Meja {res.tableId}
-                    </Badge>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">
-                      {res.areaName}
-                    </span>
-                  </TableCell>
-                  <TableCell className="font-medium font-mono text-xs tabular-nums text-foreground">
-                    {res.dateTime}
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-foreground">
-                      <span className="font-mono tabular-nums">{res.pax}</span> orang
-                    </div>
-                    {res.downPayment > 0 ? (
-                      <div className="font-mono text-xs tabular-nums text-success">
-                        DP {formatCurrencyIDR(res.downPayment)}
+      {reservations.length === 0 ? (
+        <EmptyState
+          className="border"
+          icon={<CalendarCheck />}
+          title={emptyCopy.title}
+          description={emptyCopy.description}
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="overflow-hidden rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Tamu</TableHead>
+                  <TableHead className="hidden sm:table-cell">Meja</TableHead>
+                  <TableHead className="hidden sm:table-cell">Jadwal</TableHead>
+                  <TableHead className="hidden md:table-cell text-right">Tamu dan DP</TableHead>
+                  <TableHead className="hidden lg:table-cell">Catatan</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-0">
+                    <span className="sr-only">Aksi</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedReservations.map((res) => (
+                  <TableRow key={res.id}>
+                    <TableCell className="whitespace-normal">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-foreground">{res.customerName}</span>
+                        <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground tabular-nums">
+                          <Phone className="size-3" aria-hidden />
+                          {res.phone}
+                        </span>
+                        <span className="text-xs text-muted-foreground sm:hidden">
+                          Meja <span className="font-mono">{res.tableId}</span> · {res.dateTime}
+                        </span>
                       </div>
-                    ) : (
-                      <div className="text-xs text-muted-foreground">Tanpa DP</div>
-                    )}
-                  </TableCell>
-                  <TableCell className="hidden max-w-[200px] truncate text-xs text-muted-foreground md:table-cell">
-                    {res.notes || "—"}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={reservationStatusTone(res.status)}>
-                      {reservationStatusLabel(res.status)}
-                    </StatusBadge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      {res.status === "CONFIRMED" ? (
-                        <>
-                          <Button
-                            size="sm"
-                            onClick={() => onSeat(res)}
-                          >
-                            <CheckCircle2 />
-                            <span>Dudukkan</span>
-                          </Button>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <div className="flex flex-col">
+                        <span className="font-mono text-foreground">{res.tableId}</span>
+                        <span className="text-xs text-muted-foreground">{res.areaName}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell font-mono text-xs tabular-nums text-foreground">
+                      {res.dateTime}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-right">
+                      <div className="flex flex-col items-end">
+                        <span className="text-foreground">
+                          <span className="font-mono tabular-nums">{res.pax}</span> orang
+                        </span>
+                        {res.downPayment > 0 ? (
+                          <span className="font-mono text-xs tabular-nums text-success">
+                            DP {formatCurrencyIDR(res.downPayment)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Tanpa DP</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="hidden max-w-48 whitespace-normal text-xs text-muted-foreground lg:table-cell">
+                      {res.notes || "—"}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={reservationStatusTone(res.status)}>
+                        {reservationStatusLabel(res.status)}
+                      </StatusBadge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {res.status === "CONFIRMED" ? (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() => onSeat(res)}
+                              aria-label={`Dudukkan ${res.customerName}`}
+                            >
+                              <CheckCircle2 />
+                              <span className="hidden sm:inline">Dudukkan</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onCancel(res.id, res.tableId)}
+                              aria-label={`Batalkan reservasi ${res.customerName}`}
+                              className="text-destructive hover:text-destructive"
+                            >
+                              <X className="sm:hidden" />
+                              <span className="hidden sm:inline">Batal</span>
+                            </Button>
+                          </>
+                        ) : null}
+
+                        {res.status === "SEATED" ? (
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => onCancel(res.id, res.tableId)}
-                            className="text-destructive hover:text-destructive"
+                            onClick={onOpenPOS}
+                            aria-label={`Buka meja ${res.tableId} di POS`}
                           >
-                            Batal
+                            <Utensils />
+                            <span className="hidden sm:inline">Buka di POS</span>
                           </Button>
-                        </>
-                      ) : null}
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
 
-                      {res.status === "SEATED" ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={onOpenPOS}
-                        >
-                          <Utensils />
-                          <span>Buka di POS</span>
-                        </Button>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+          <DataPagination
+            currentPage={safeCurrentPage}
+            totalItems={reservations.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+            itemLabel="reservasi"
+          />
+        </div>
+      )}
     </div>
   );
 }

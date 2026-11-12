@@ -1,15 +1,20 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Search, Users } from "lucide-react";
+import { Eye, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 
 import { DataPagination } from "@/components/app/data-pagination";
+import { DataTableToolbar } from "@/components/app/data-table-toolbar";
 import { EmptyState } from "@/components/app/empty-state";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { NativeSelect } from "@/components/ui/native-select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -94,129 +99,109 @@ export function EmployeesDirectoryTab({
   const emptyCopy = emptyEmployeeMessage(isFiltered);
 
   return (
-    <div className="space-y-4">
-      {/* Controls Bar */}
-      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          <InputGroup className="max-w-xs flex-1">
-            <InputGroupAddon>
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              value={searchQuery}
-              onChange={(e) => {
-                onSearchChange(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Cari nama, WhatsApp, email, atau peran"
-              aria-label="Cari staf"
-            />
-          </InputGroup>
+    <div className="flex flex-col gap-4">
+      <DataTableToolbar
+        searchValue={searchQuery}
+        onSearchChange={(val) => {
+          onSearchChange(val);
+          setCurrentPage(1);
+        }}
+        searchPlaceholder="Cari nama, WhatsApp, email, atau peran"
+        searchAriaLabel="Cari staf"
+        hasActiveFilters={isFiltered}
+        onResetFilters={handleResetFilters}
+      >
+        <NativeSelect
+          value={deptFilter}
+          onChange={(e) => {
+            onDeptFilterChange(e.target.value);
+            setCurrentPage(1);
+          }}
+          aria-label="Filter divisi"
+        >
+          {DEPARTMENTS.map((d) => (
+            <NativeSelectOption key={d.id} value={d.id}>
+              {d.label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
 
-          <NativeSelect
-            value={deptFilter}
-            onChange={(e) => {
-              onDeptFilterChange(e.target.value);
-              setCurrentPage(1);
-            }}
-            aria-label="Filter divisi"
-          >
-            {DEPARTMENTS.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.label}
-              </option>
-            ))}
-          </NativeSelect>
+        <NativeSelect
+          value={statusFilter}
+          onChange={(e) => {
+            onStatusFilterChange(e.target.value);
+            setCurrentPage(1);
+          }}
+          aria-label="Filter status kepegawaian"
+        >
+          {STATUSES.map((s) => (
+            <NativeSelectOption key={s.id} value={s.id}>
+              {s.label}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </DataTableToolbar>
 
-          <NativeSelect
-            value={statusFilter}
-            onChange={(e) => {
-              onStatusFilterChange(e.target.value);
-              setCurrentPage(1);
-            }}
-            aria-label="Filter status kepegawaian"
-          >
-            {STATUSES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </NativeSelect>
-
-          {isFiltered && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleResetFilters}
-            >
-              Reset filter
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Directory Table */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[220px]">Karyawan & Kontak</TableHead>
-                <TableHead>Peran & Divisi</TableHead>
-                <TableHead>Shift tugas</TableHead>
-                <TableHead className="hidden md:table-cell">Bergabung</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">
-                  <span className="sr-only">Aksi</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedEmployees.length === 0 ? (
+      {paginatedEmployees.length === 0 ? (
+        <EmptyState
+          className="border"
+          icon={<Users />}
+          title={emptyCopy.title}
+          description={emptyCopy.description}
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="overflow-hidden rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={6} className="h-48 text-center">
-                    <EmptyState
-                      icon={<Users className="size-8 text-muted-foreground" />}
-                      title={emptyCopy.title}
-                      description={emptyCopy.description}
-                    />
-                  </TableCell>
+                  <TableHead>Karyawan</TableHead>
+                  <TableHead className="hidden sm:table-cell">Peran</TableHead>
+                  <TableHead className="hidden md:table-cell">Shift tugas</TableHead>
+                  <TableHead className="hidden lg:table-cell">Bergabung</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-0">
+                    <span className="sr-only">Aksi</span>
+                  </TableHead>
                 </TableRow>
-              ) : (
-                paginatedEmployees.map((emp) => {
+              </TableHeader>
+              <TableBody>
+                {paginatedEmployees.map((emp) => {
                   const deptTone = getDepartmentBadgeTone(emp.department);
                   const statusTone = getEmployeeStatusTone(emp.status);
 
                   return (
                     <TableRow key={emp.id}>
-                      <TableCell className="font-medium">
-                        <div className="space-y-0.5">
-                          <p className="font-mono text-xs font-semibold text-primary">
+                      <TableCell className="whitespace-normal">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-mono text-xs font-medium text-primary">
                             {emp.employeeNumber}
-                          </p>
-                          <p className="leading-snug text-foreground">{emp.name}</p>
-                          <p className="font-mono text-xs text-muted-foreground">{emp.contact}</p>
-                          {emp.email && (
-                            <p className="text-xs text-muted-foreground">{emp.email}</p>
-                          )}
+                          </span>
+                          <span className="font-medium text-foreground">{emp.name}</span>
+                          <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                            {emp.contact}
+                          </span>
+                          {emp.email && emp.email !== "-" ? (
+                            <span className="text-xs text-muted-foreground">{emp.email}</span>
+                          ) : null}
+                          <span className="text-xs text-muted-foreground sm:hidden">
+                            {emp.role} · {emp.department}
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell>
-                        <div className="space-y-1">
-                          <p className="font-medium text-foreground">{emp.role}</p>
-                          <StatusBadge status={deptTone}>
-                            {emp.department}
-                          </StatusBadge>
+                      <TableCell className="hidden sm:table-cell">
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="font-medium text-foreground">{emp.role}</span>
+                          <StatusBadge status={deptTone}>{emp.department}</StatusBadge>
                         </div>
                       </TableCell>
 
-                      <TableCell className="text-xs text-foreground">
+                      <TableCell className="hidden md:table-cell whitespace-normal text-xs text-foreground">
                         {emp.assignedShift}
                       </TableCell>
 
-                      <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground md:table-cell">
+                      <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground lg:table-cell">
                         {emp.joinedDate || "—"}
                       </TableCell>
 
@@ -226,54 +211,65 @@ export function EmployeesDirectoryTab({
                         </StatusBadge>
                       </TableCell>
 
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => onSelectDetail(emp)}
+                            aria-label={`Detail ${emp.name}`}
                           >
-                            Detail
+                            <Eye />
+                            <span className="hidden sm:inline">Detail</span>
                           </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => onSelectEdit(emp)}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => onSelectDelete(emp)}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            Hapus
-                          </Button>
+
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  size="icon-sm"
+                                  variant="ghost"
+                                  aria-label={`Aksi lain untuk ${emp.name}`}
+                                />
+                              }
+                            >
+                              <MoreHorizontal />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => onSelectEdit(emp)}>
+                                <Pencil />
+                                Edit staf
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => onSelectDelete(emp)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 />
+                                Hapus
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
                   );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                })}
+              </TableBody>
+            </Table>
+          </div>
 
-      {/* Pagination Bar */}
-      {employees.length > 0 && (
-        <DataPagination
-          currentPage={safeCurrentPage}
-          totalItems={employees.length}
-          pageSize={pageSize}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setCurrentPage(1);
-          }}
-          itemLabel="staf"
-        />
+          <DataPagination
+            currentPage={safeCurrentPage}
+            totalItems={employees.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+            itemLabel="staf"
+          />
+        </div>
       )}
     </div>
   );

@@ -1,15 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Crown, History, Search, UserCheck } from "lucide-react";
+import { Crown, History, MoreHorizontal, ShieldAlert, Star, UserCheck } from "lucide-react";
 
 import { DataPagination } from "@/components/app/data-pagination";
+import { DataTableToolbar } from "@/components/app/data-table-toolbar";
 import { EmptyState } from "@/components/app/empty-state";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { NativeSelect } from "@/components/ui/native-select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import {
   Table,
   TableBody,
@@ -18,8 +23,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { LoyaltyMember } from "@/types/loyalty";
 import { formatCurrencyIDR } from "@/lib/utils";
+import type { LoyaltyMember } from "@/types/loyalty";
 
 import {
   emptyCustomerMessage,
@@ -75,181 +80,165 @@ export function CustomersTable({
     return members.slice(start, start + pageSize);
   }, [members, safeCurrentPage, pageSize]);
 
-  const emptyCopy = emptyCustomerMessage(isFiltered);
+  const emptyCopy = emptyCustomerMessage(isFiltered, searchQuery);
 
   return (
-    <div className="space-y-4">
-      {/* Controls Bar */}
-      <div className="flex flex-col gap-3 rounded-lg border bg-card p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-2">
-          <InputGroup className="max-w-xs flex-1">
-            <InputGroupAddon>
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Cari nama, WhatsApp, email, atau tier"
-              aria-label="Cari member"
-            />
-          </InputGroup>
+    <div className="flex flex-col gap-4">
+      <DataTableToolbar
+        searchValue={searchQuery}
+        onSearchChange={onSearchChange}
+        searchPlaceholder="Cari nama, WhatsApp, email, atau tier"
+        searchAriaLabel="Cari member"
+        hasActiveFilters={isFiltered}
+        onResetFilters={handleResetFilters}
+      >
+        {onTierFilterChange ? (
+          <NativeSelect
+            value={tierFilter}
+            onChange={(e) => onTierFilterChange(e.target.value)}
+            aria-label="Filter tier loyalty"
+          >
+            {TIER_OPTIONS.map((opt) => (
+              <NativeSelectOption key={opt.id} value={opt.id}>
+                {opt.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        ) : null}
+      </DataTableToolbar>
 
-          {onTierFilterChange && (
-            <NativeSelect
-              value={tierFilter}
-              onChange={(e) => onTierFilterChange(e.target.value)}
-              aria-label="Filter tier loyalty"
-            >
-              {TIER_OPTIONS.map((opt) => (
-                <option key={opt.id} value={opt.id}>
-                  {opt.label}
-                </option>
-              ))}
-            </NativeSelect>
-          )}
-
-          {isFiltered && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleResetFilters}
-            >
-              Reset filter
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Table Card */}
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[260px]">Member</TableHead>
-                <TableHead>Tier</TableHead>
-                <TableHead className="text-right">Poin</TableHead>
-                <TableHead>Belanja dan kunjungan</TableHead>
-                <TableHead className="hidden md:table-cell">Bergabung</TableHead>
-                <TableHead className="text-center">Riwayat</TableHead>
-                <TableHead className="text-right">
-                  <span className="sr-only">Aksi</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedMembers.length === 0 ? (
+      {paginatedMembers.length === 0 ? (
+        <EmptyState
+          className="border"
+          icon={<UserCheck />}
+          title={emptyCopy.title}
+          description={emptyCopy.description}
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="overflow-hidden rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="h-48 text-center">
-                    <EmptyState
-                      icon={<UserCheck className="size-8 text-muted-foreground" />}
-                      title={emptyCopy.title}
-                      description={
-                        searchQuery
-                          ? `Tidak ada member yang cocok dengan "${searchQuery}".`
-                          : emptyCopy.description
-                      }
-                    />
-                  </TableCell>
+                  <TableHead>Member</TableHead>
+                  <TableHead className="hidden sm:table-cell">Tier</TableHead>
+                  <TableHead className="text-right">Poin</TableHead>
+                  <TableHead className="hidden md:table-cell text-right">Belanja</TableHead>
+                  <TableHead className="hidden lg:table-cell">Bergabung</TableHead>
+                  <TableHead className="w-0">
+                    <span className="sr-only">Aksi</span>
+                  </TableHead>
                 </TableRow>
-              ) : (
-                paginatedMembers.map((c) => {
+              </TableHeader>
+              <TableBody>
+                {paginatedMembers.map((c) => {
                   const historyCount = c.pointHistory.length + c.tierHistory.length;
                   const tone = getTierTone(c.tier);
 
                   return (
                     <TableRow key={c.id}>
-                      <TableCell className="font-medium">
-                        <div className="space-y-0.5">
-                          <p className="leading-snug text-foreground">{c.name}</p>
-                          <p className="font-mono text-xs text-muted-foreground">{c.phone}</p>
-                          {c.email && (
-                            <p className="text-xs text-muted-foreground">{c.email}</p>
-                          )}
+                      <TableCell className="whitespace-normal">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium text-foreground">{c.name}</span>
+                          <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                            {c.phone}
+                          </span>
+                          {c.email ? (
+                            <span className="text-xs text-muted-foreground">{c.email}</span>
+                          ) : null}
+                          <span className="text-xs text-muted-foreground sm:hidden">
+                            {c.tier} · {c.totalVisits} kunjungan
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         <StatusBadge status={tone} className="inline-flex items-center gap-1">
                           <Crown className="size-3" />
                           <span>{c.tier}</span>
                         </StatusBadge>
                       </TableCell>
 
-                      <TableCell className="text-right font-mono font-medium tabular-nums text-foreground">
-                        {c.points.toLocaleString("id-ID")} Pts
+                      <TableCell className="text-right whitespace-nowrap">
+                        <span className="font-mono font-medium tabular-nums text-foreground">
+                          {c.points.toLocaleString("id-ID")}
+                        </span>{" "}
+                        <span className="text-xs text-muted-foreground">poin</span>
                       </TableCell>
 
-                      <TableCell>
-                        <div className="space-y-0.5">
-                          <p className="font-mono text-xs font-medium tabular-nums text-foreground">
+                      <TableCell className="hidden md:table-cell text-right">
+                        <div className="flex flex-col items-end">
+                          <span className="font-mono text-xs font-medium tabular-nums text-foreground">
                             {formatCurrencyIDR(c.totalSpend)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
+                          </span>
+                          <span className="text-xs text-muted-foreground">
                             {c.totalVisits} kunjungan
-                          </p>
+                          </span>
                         </div>
                       </TableCell>
 
-                      <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground md:table-cell">
+                      <TableCell className="hidden whitespace-nowrap text-xs text-muted-foreground lg:table-cell">
                         {c.joinedDate || "—"}
                       </TableCell>
 
-                      <TableCell className="text-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onSelectMemberHistory(c)}
-                        >
-                          <History />
-                          <span>Riwayat ({historyCount})</span>
-                        </Button>
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => onAddPointsQuick(c.id, c.name)}
+                            onClick={() => onSelectMemberHistory(c)}
+                            aria-label={`Riwayat ${c.name}`}
                           >
-                            + 20 Pts
+                            <History />
+                            <span className="hidden sm:inline">Riwayat ({historyCount})</span>
                           </Button>
 
-                          {isOwnerOrAdmin && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => onSelectMemberOverride(c)}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label={`Aksi lain untuk ${c.name}`}
+                                />
+                              }
                             >
-                              Ubah tier
-                            </Button>
-                          )}
+                              <MoreHorizontal />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => onAddPointsQuick(c.id, c.name)}>
+                                <Star />
+                                Tambah 20 poin
+                              </DropdownMenuItem>
+                              {isOwnerOrAdmin ? (
+                                <DropdownMenuItem onClick={() => onSelectMemberOverride(c)}>
+                                  <ShieldAlert />
+                                  Ubah tier
+                                </DropdownMenuItem>
+                              ) : null}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
                   );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                })}
+              </TableBody>
+            </Table>
+          </div>
 
-      {/* Pagination Bar */}
-      {members.length > 0 && (
-        <DataPagination
-          currentPage={safeCurrentPage}
-          totalItems={members.length}
-          pageSize={pageSize}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={(newSize) => {
-            setPageSize(newSize);
-            setCurrentPage(1);
-          }}
-          itemLabel="member"
-        />
+          <DataPagination
+            currentPage={safeCurrentPage}
+            totalItems={members.length}
+            pageSize={pageSize}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setCurrentPage(1);
+            }}
+            itemLabel="member"
+          />
+        </div>
       )}
     </div>
   );

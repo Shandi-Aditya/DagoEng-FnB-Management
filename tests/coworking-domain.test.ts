@@ -5,6 +5,7 @@ import {
   calculateHourlyEndTime,
   computeBookingPricing,
   filterCoworkingMembers,
+  filterCoworkingBookings,
   getSpaceStatusTone,
   getBookingCheckInTone,
   getMemberStatusTone,
@@ -196,6 +197,63 @@ describe("coworking-domain", () => {
     const bookingsFiltered = emptyCoworkingMessage("BOOKINGS", true);
     expect(bookingsFiltered.title).toBe("Tidak ada booking yang cocok");
     expect(bookingsFiltered.description).toContain("Ubah kata kunci");
+  });
+
+  it("filters coworking bookings by status and search query without mutating source", () => {
+    const mockBookings: CoworkingBooking[] = [
+      {
+        id: "bk-1",
+        bookingCode: "CWK-101",
+        guestName: "Budi Santoso",
+        guestPhone: "081111111",
+        guestEmail: "budi@example.com",
+        spaceId: "sp-1",
+        spaceName: "Meja Hot Desk A1",
+        spaceType: "HOT_DESK",
+        bookingType: "HOURLY",
+        date: "2026-11-12",
+        startTime: "09:00 WITA",
+        duration: 2,
+        price: 50000,
+        discount: 0,
+        totalAmount: 50000,
+        paidAmount: 50000,
+        remainingAmount: 0,
+        paymentStatus: "PAID",
+        paymentMethod: "QRIS",
+        checkInStatus: "CHECKED_IN",
+      },
+      {
+        id: "bk-2",
+        bookingCode: "CWK-102",
+        guestName: "Siti Rahma",
+        guestPhone: "082222222",
+        guestEmail: "siti@example.com",
+        spaceId: "sp-2",
+        spaceName: "Private Pod 01",
+        spaceType: "PRIVATE_POD",
+        bookingType: "DAILY",
+        date: "2026-11-12",
+        startTime: "10:00 WITA",
+        duration: 1,
+        price: 200000,
+        discount: 0,
+        totalAmount: 200000,
+        paidAmount: 200000,
+        remainingAmount: 0,
+        paymentStatus: "PAID",
+        paymentMethod: "CASH",
+        checkInStatus: "RESERVED",
+      },
+    ];
+
+    expect(filterCoworkingBookings(mockBookings, "ALL", "")).toHaveLength(2);
+    expect(filterCoworkingBookings(mockBookings, "CHECKED_IN", "")).toHaveLength(1);
+    expect(filterCoworkingBookings(mockBookings, "ALL", "cwk-102")).toHaveLength(1);
+    expect(filterCoworkingBookings(mockBookings, "ALL", "081111111")).toHaveLength(1);
+    expect(filterCoworkingBookings(mockBookings, "ALL", "private pod")).toHaveLength(1);
+    expect(filterCoworkingBookings(mockBookings, "RESERVED", "budi")).toHaveLength(0);
+    expect(mockBookings).toHaveLength(2);
   });
 });
 

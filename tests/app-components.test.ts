@@ -8,6 +8,7 @@ import { UnitDot, UNIT_LABELS } from "@/components/app/unit-dot";
 import { StatusBadge } from "@/components/app/status-badge";
 import { PageHeader } from "@/components/app/page-header";
 import { EmptyState } from "@/components/app/empty-state";
+import { DataTableToolbar } from "@/components/app/data-table-toolbar";
 import { notify } from "@/components/app/notify";
 import { toast } from "@/components/ui/toast";
 
@@ -154,5 +155,43 @@ describe("notify", () => {
       type,
     });
     add.mockRestore();
+  });
+});
+
+describe("DataTableToolbar", () => {
+  it("renders search input with aria-label, filter children, and conditional reset button without uppercase", () => {
+    const htmlWithFilters = renderToStaticMarkup(
+      createElement(
+        DataTableToolbar,
+        {
+          searchValue: "budi",
+          onSearchChange: () => {},
+          searchPlaceholder: "Cari member",
+          searchAriaLabel: "Cari member",
+          hasActiveFilters: true,
+          onResetFilters: () => {},
+        },
+        createElement("select", { "aria-label": "Filter status" }),
+      ),
+    );
+
+    expect(htmlWithFilters).toContain('aria-label="Cari member"');
+    expect(htmlWithFilters).toContain('placeholder="Cari member"');
+    expect(htmlWithFilters).toContain('aria-label="Filter status"');
+    expect(htmlWithFilters).toContain("Hapus filter");
+    expect(htmlWithFilters).not.toContain("uppercase");
+
+    const htmlIdle = renderToStaticMarkup(
+      createElement(DataTableToolbar, {
+        searchValue: "",
+        onSearchChange: () => {},
+        searchPlaceholder: "Cari",
+        searchAriaLabel: "Cari",
+        hasActiveFilters: false,
+        onResetFilters: () => {},
+      }),
+    );
+
+    expect(htmlIdle).not.toContain("Hapus filter");
   });
 });

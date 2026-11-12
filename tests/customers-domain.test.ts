@@ -149,6 +149,10 @@ describe("customers-domain", () => {
     const filtered = emptyCustomerMessage(true);
     expect(filtered.title).toBe("Tidak ada member yang cocok");
     expect(filtered.description).toContain("Ubah kata kunci");
+
+    const searched = emptyCustomerMessage(true, "budi");
+    expect(searched.title).toBe("Tidak ada member yang cocok");
+    expect(searched.description).toContain("budi");
   });
 });
 
