@@ -17,6 +17,13 @@ import {
   MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 interface KitchenOrderReceiptModalProps {
   isOpen: boolean;
@@ -103,33 +110,24 @@ export function KitchenOrderReceiptModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-150">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md gap-0 p-0 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Modal Header */}
-        <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-850">
-          <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-              <UtensilsCrossed className="w-4 h-4" />
+        <DialogHeader className="px-5 py-3.5 border-b border-border flex flex-row items-center justify-between bg-muted/40">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <UtensilsCrossed className="size-4" />
             </div>
             <div>
-              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100">
-                Nota Pesanan Dapur
-              </h3>
-              <p className="text-[10px] text-slate-400">
+              <DialogTitle className="text-sm font-medium text-foreground">
+                Nota pesanan dapur
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
                 Pratinjau fisik tiket dapur (Thermal {activeKitchenPrinter?.paperWidth || "80mm"})
-              </p>
+              </DialogDescription>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            className="h-8 w-8 p-0 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-          >
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
+        </DialogHeader>
 
         {/* Feedback Banner if any */}
         {printFeedback && (
@@ -270,10 +268,10 @@ export function KitchenOrderReceiptModal({
                 type="button"
                 disabled={isPrinting}
                 onClick={() => handlePrint(false)}
-                className="flex-1 sm:flex-none text-xs font-bold space-x-1.5 bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs"
+                className="flex-1 sm:flex-none text-xs font-medium"
               >
-                <Printer className="w-3.5 h-3.5 mr-1" />
-                <span>{isPrinting ? "Mengirim..." : "Cetak Tiket Dapur"}</span>
+                <Printer className="size-3.5 mr-1" />
+                <span>{isPrinting ? "Mengirim..." : "Cetak tiket dapur"}</span>
               </Button>
             ) : null}
 
@@ -282,25 +280,25 @@ export function KitchenOrderReceiptModal({
               variant="outline"
               disabled={isPrinting}
               onClick={() => handlePrint(true)}
-              className="flex-1 sm:flex-none text-xs font-bold space-x-1.5 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-              title="Cetak Salinan dengan penanda REPRINT"
+              className="flex-1 sm:flex-none text-xs font-medium"
+              title="Cetak salinan dengan penanda REPRINT"
             >
-              <RotateCcw className="w-3.5 h-3.5 mr-1" />
-              <span>Cetak Salinan (Reprint)</span>
+              <RotateCcw className="size-3.5 mr-1" />
+              <span>Cetak salinan (reprint)</span>
             </Button>
 
             <Button
               type="button"
               variant="ghost"
               onClick={onClose}
-              className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+              className="text-xs text-muted-foreground"
             >
               Tutup
             </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

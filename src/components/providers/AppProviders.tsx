@@ -17,9 +17,13 @@ import { LoyaltyProvider } from "@/contexts/LoyaltyContext";
 import { CoworkingProvider } from "@/contexts/CoworkingContext";
 import { CommercialProvider } from "@/contexts/CommercialContext";
 import { EmployeeShiftProvider } from "@/contexts/EmployeeShiftContext";
+import { Toaster } from "@/components/ui/toast";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
+    <TooltipProvider>
+    <Toaster>
     <ThemeProvider>
       <AuthProvider>
       <OutletProvider>
@@ -53,5 +57,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
       </OutletProvider>
     </AuthProvider>
     </ThemeProvider>
+    </Toaster>
+    </TooltipProvider>
   );
 }

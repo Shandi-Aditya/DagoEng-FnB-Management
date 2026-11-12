@@ -1,0 +1,379 @@
+/**
+ * Domain murni pelacakan aktivitas dan audit trail.
+ * Mengelola pemfilteran, kalkulasi KPI, aggregasi aktor/role, label terjemahan, dan pembuat data ekspor.
+ *
+ * Importer:
+ * - src/app/(dashboard)/activity-log/page.tsx
+ * - src/features/activity-log/ActivityLogTableView.tsx
+ * - src/features/activity-log/ActivityLogTimelineView.tsx
+ * - src/features/activity-log/ActivityLogFilterBar.tsx
+ * - src/features/activity-log/ActivityLogDetailModal.tsx
+ * - tests/activity-log-domain.test.ts
+ */
+
+import type { StatusTone } from "@/components/app/status-badge";
+import type {
+  ActivityLogEntry,
+  ActivitySeverity,
+  AuditStatus,
+} from "@/types/audit";
+
+export type ViewMode = "TABLE" | "TIMELINE";
+export type DateFilterType = "ALL" | "TODAY" | "LAST_7_DAYS" | "LAST_30_DAYS";
+
+export interface ActivityLogFilterOptions {
+  activeOutletId?: string;
+  isTenantOwner?: boolean;
+  tenantId?: string;
+  selectedModule?: string;
+  selectedStatus?: string;
+  selectedSeverity?: string;
+  selectedRole?: string;
+  selectedActor?: string;
+  dateFilter?: DateFilterType;
+  searchTerm?: string;
+}
+
+export interface ActivityLogStats {
+  totalCount: number;
+  successCount: number;
+  warningCount: number;
+  failedCount: number;
+  highSeverityCount: number;
+  integrityPercent: number;
+}
+
+export interface ModuleOption {
+  key: string;
+  label: string;
+}
+
+export const MODULE_OPTIONS: ModuleOption[] = [
+  { key: "ALL", label: "Semua modul" },
+  { key: "POS", label: "POS dan kasir" },
+  { key: "TABLES", label: "Meja" },
+  { key: "INVENTORY", label: "Inventori" },
+  { key: "MENU", label: "Menu" },
+  { key: "LOYALTY", label: "Pelanggan" },
+  { key: "COWORKING", label: "Co-working" },
+  { key: "COMMERCIAL", label: "Komersial" },
+  { key: "EMPLOYEES_SHIFT", label: "Karyawan dan shift" },
+  { key: "FINANCE", label: "Keuangan" },
+  { key: "SETTINGS", label: "Pengaturan" },
+  { key: "AUTH", label: "Keamanan" },
+  { key: "AI_INSIGHT", label: "Asisten analisis" },
+];
+
+const AUDIT_STATUS_LABEL: Record<AuditStatus, string> = {
+  SUCCESS: "Berhasil",
+  WARNING: "Peringatan",
+  FAILED: "Gagal",
+};
+
+export function auditStatusLabel(status?: AuditStatus): string {
+  return status ? (AUDIT_STATUS_LABEL[status] ?? status) : "Berhasil";
+}
+
+const AUDIT_SEVERITY_LABEL: Record<ActivitySeverity, string> = {
+  INFO: "Info",
+  LOW: "Rendah",
+  MEDIUM: "Sedang",
+  HIGH: "Tinggi",
+  CRITICAL: "Kritis",
+};
+
+export function auditSeverityLabel(severity?: ActivitySeverity): string {
+  return severity ? (AUDIT_SEVERITY_LABEL[severity] ?? severity) : "Info";
+}
+
+const AUDIT_MODULE_LABEL: Record<string, string> = {
+  POS: "POS",
+  TABLES: "Meja",
+  INVENTORY: "Inventori",
+  MENU: "Menu",
+  LOYALTY: "Pelanggan",
+  COWORKING: "Co-working",
+  COMMERCIAL: "Komersial",
+  EMPLOYEES_SHIFT: "Karyawan & shift",
+  FINANCE: "Keuangan",
+  USER_RBAC: "Hak akses",
+  SETTINGS: "Pengaturan",
+  AI_INSIGHT: "Asisten analisis",
+  AUTH: "Keamanan",
+  SECURITY: "Keamanan",
+  SYSTEM: "Sistem",
+};
+
+export function auditModuleLabel(module: string): string {
+  if (!module) return "—";
+  return AUDIT_MODULE_LABEL[module] ?? module;
+}
+
+const AUDIT_ACTION_LABEL: Record<string, string> = {
+  VOID_ITEM: "Void item",
+  ORDER_VOIDED: "Pembatalan pesanan",
+  ORDER_CREATED: "Pesanan dibuat",
+  ORDER_CANCELLED: "Pesanan dibatalkan",
+  ORDER_PAYMENT_AND_COMPLETED: "Pembayaran pesanan",
+  PAYMENT_CONFIRMED: "Pembayaran dikonfirmasi",
+  STOCK_ADJUSTMENT: "Penyesuaian stok",
+  STOCK_OPNAME: "Opname stok",
+  OPEN_SHIFT: "Buka shift",
+  CLOSE_SHIFT: "Tutup shift",
+  UPDATE_CONFIG: "Ubah konfigurasi",
+  UPDATE_TAX_CONFIGURATION: "Ubah pengaturan pajak",
+  OCCUPY_TABLE: "Meja ditempati",
+  RELEASE_TABLE: "Meja dibersihkan",
+  LEASE_CREATED: "Kontrak dibuat",
+  LEASE_PAYMENT: "Pembayaran sewa",
+  LEASE_STATUS_CHANGED: "Ubah status kontrak",
+};
+
+export function auditActionLabel(action: string): string {
+  if (!action) return "—";
+  if (AUDIT_ACTION_LABEL[action]) return AUDIT_ACTION_LABEL[action];
+  const normalized = action.toLowerCase().replace(/_/g, " ");
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+export function emptyActivityLogMessage(hasFilter: boolean): { title: string; description: string } {
+  if (hasFilter) {
+    return {
+      title: "Aktivitas tidak ditemukan",
+      description: "Ubah kata kunci pencarian, waktu, atau filter modul.",
+    };
+  }
+  return {
+    title: "Belum ada aktivitas",
+    description: "Perubahan transaksi, stok, dan pengaturan akan tercatat di sini.",
+  };
+}
+
+/**
+ * Mendapatkan tone visual semantik untuk status audit.
+ */
+export function getStatusTone(status?: AuditStatus): StatusTone {
+  if (status === "SUCCESS") return "success";
+  if (status === "WARNING") return "warning";
+  if (status === "FAILED") return "destructive";
+  return "neutral";
+}
+
+/**
+ * Mendapatkan tone visual semantik untuk severity audit.
+ */
+export function getSeverityTone(severity?: ActivitySeverity): StatusTone {
+  if (severity === "CRITICAL") return "destructive";
+  if (severity === "HIGH") return "warning";
+  if (severity === "MEDIUM") return "info";
+  return "neutral";
+}
+
+/**
+ * Membangun label periode berdasarkan filter tanggal.
+ */
+export function getPeriodLabel(dateFilter: DateFilterType): string {
+  if (dateFilter === "TODAY") {
+    return `Hari Ini (${new Date().toLocaleDateString("id-ID", { timeZone: "Asia/Makassar" })})`;
+  }
+  if (dateFilter === "LAST_7_DAYS") return "7 Hari Terakhir";
+  if (dateFilter === "LAST_30_DAYS") return "30 Hari Terakhir";
+  return "Semua Rekam Audit";
+}
+
+/**
+ * Mengekstrak daftar unik role aktor yang tercatat dalam log.
+ */
+export function getUniqueRoles(logs: ActivityLogEntry[]): string[] {
+  const rolesSet = new Set<string>();
+  for (const log of logs) {
+    if (log.actorRole) rolesSet.add(log.actorRole);
+    if (log.role) rolesSet.add(log.role);
+  }
+  return Array.from(rolesSet).filter(Boolean).sort();
+}
+
+/**
+ * Mengekstrak daftar unik nama aktor yang tercatat dalam log.
+ */
+export function getUniqueActors(logs: ActivityLogEntry[]): string[] {
+  const actorsSet = new Set<string>();
+  for (const log of logs) {
+    if (log.actorName) actorsSet.add(log.actorName);
+  }
+  return Array.from(actorsSet).filter(Boolean).sort();
+}
+
+/**
+ * Melakukan pemfilteran log aktivitas sesuai kriteria scoping dan pencarian.
+ */
+export function filterActivityLogs(
+  logs: ActivityLogEntry[],
+  options: ActivityLogFilterOptions
+): ActivityLogEntry[] {
+  const {
+    activeOutletId = "ALL",
+    isTenantOwner = false,
+    tenantId,
+    selectedModule = "ALL",
+    selectedStatus = "ALL",
+    selectedSeverity = "ALL",
+    selectedRole = "ALL",
+    selectedActor = "ALL",
+    dateFilter = "ALL",
+    searchTerm = "",
+  } = options;
+
+  const now = Date.now();
+  const search = searchTerm.trim().toLowerCase();
+
+  return logs.filter((log) => {
+    // Tenant isolation
+    if (isTenantOwner && tenantId) {
+      if (log.tenantId && log.tenantId !== tenantId) {
+        return false;
+      }
+    }
+
+    // Outlet filter
+    if (activeOutletId !== "ALL" && log.outletId && log.outletId !== activeOutletId) {
+      return false;
+    }
+
+    // Module filter
+    if (selectedModule !== "ALL" && log.module !== selectedModule) {
+      return false;
+    }
+
+    // Status filter
+    if (selectedStatus !== "ALL" && log.status !== selectedStatus) {
+      return false;
+    }
+
+    // Severity filter
+    if (selectedSeverity !== "ALL" && log.severity !== selectedSeverity) {
+      return false;
+    }
+
+    // Role filter
+    if (
+      selectedRole !== "ALL" &&
+      log.actorRole !== selectedRole &&
+      log.role !== selectedRole
+    ) {
+      return false;
+    }
+
+    // Actor filter
+    if (selectedActor !== "ALL" && log.actorName !== selectedActor) {
+      return false;
+    }
+
+    // Date range filter
+    const logTime = new Date(log.timestamp).getTime();
+    if (dateFilter === "TODAY") {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      if (logTime < startOfDay.getTime()) return false;
+    } else if (dateFilter === "LAST_7_DAYS") {
+      const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+      if (logTime < sevenDaysAgo) return false;
+    } else if (dateFilter === "LAST_30_DAYS") {
+      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+      if (logTime < thirtyDaysAgo) return false;
+    }
+
+    // Search query matching
+    if (search) {
+      const matchActor = log.actorName?.toLowerCase().includes(search);
+      const matchRole = log.actorRole?.toLowerCase().includes(search);
+      const matchAction = log.action?.toLowerCase().includes(search);
+      const matchDesc = log.description?.toLowerCase().includes(search);
+      const matchReason = log.reason?.toLowerCase().includes(search);
+      const matchRecord = log.recordId?.toLowerCase().includes(search);
+      const matchPrev = log.previousValue?.toLowerCase().includes(search);
+      const matchNext = log.newValue?.toLowerCase().includes(search);
+
+      if (
+        !matchActor &&
+        !matchRole &&
+        !matchAction &&
+        !matchDesc &&
+        !matchReason &&
+        !matchRecord &&
+        !matchPrev &&
+        !matchNext
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+/**
+ * Menghitung KPI overview jejak audit.
+ */
+export function computeActivityLogStats(logs: ActivityLogEntry[]): ActivityLogStats {
+  const totalCount = logs.length;
+  const successCount = logs.filter((l) => l.status === "SUCCESS").length;
+  const warningCount = logs.filter((l) => l.status === "WARNING").length;
+  const failedCount = logs.filter((l) => l.status === "FAILED").length;
+  const highSeverityCount = logs.filter(
+    (l) => l.severity === "HIGH" || l.severity === "CRITICAL"
+  ).length;
+
+  const integrityPercent = totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 100;
+
+  return {
+    totalCount,
+    successCount,
+    warningCount,
+    failedCount,
+    highSeverityCount,
+    integrityPercent,
+  };
+}
+
+/**
+ * Membangun data tabel untuk ekspor CSV dan Excel.
+ */
+export function buildActivityLogExportRows(logs: ActivityLogEntry[]): {
+  headers: string[];
+  rows: (string | number)[][];
+} {
+  const headers = [
+    "Timestamp",
+    "Aktor",
+    "Role",
+    "Gerai",
+    "Modul",
+    "Aksi",
+    "Record ID",
+    "Status",
+    "Severity",
+    "Nilai Sebelumnya",
+    "Nilai Baru",
+    "Deskripsi",
+    "Alasan Bisnis",
+  ];
+
+  const rows = logs.map((l) => [
+    new Date(l.timestamp).toLocaleString("id-ID", { timeZone: "Asia/Makassar" }),
+    l.actorName || "-",
+    l.actorRole || "-",
+    l.outletName || "-",
+    l.module,
+    l.action,
+    l.recordId || "-",
+    l.status || "SUCCESS",
+    l.severity || "INFO",
+    l.previousValue || "-",
+    l.newValue || "-",
+    l.description,
+    l.reason || "-",
+  ]);
+
+  return { headers, rows };
+}

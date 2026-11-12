@@ -73,8 +73,13 @@ describe("POS Bagian C — Perbaikan Menengah", () => {
       // Verify no auto-assignment of availableTables[0]
       expect(posPageContent).not.toMatch(/setSelectedTable\s*\(\s*availableTables\[0\]/);
 
-      // Verify placeholder option exists
-      expect(posPageContent).toContain('<option value="">-- Pilih Meja --</option>');
+      // Verify placeholder option exists (table picker moved to features/pos/CartOrderSetup)
+      const orderSetupContent = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/pos/CartOrderSetup.tsx"),
+        "utf-8"
+      );
+      expect(orderSetupContent).toContain('<NativeSelectOption value="">Pilih meja</NativeSelectOption>');
+      expect(orderSetupContent).not.toMatch(/onTableChange\s*\(\s*areas/);
 
       // Verify dine in table validation before opening payment modal
       expect(posPageContent).toContain('orderType === "DINE_IN" && !selectedTable');
@@ -159,12 +164,17 @@ describe("POS Bagian C — Perbaikan Menengah", () => {
         path.resolve(process.cwd(), "src/app/(dashboard)/orders/page.tsx"),
         "utf-8"
       );
+      // Order detail moved from orders/page.tsx to a side panel in features/orders/OrderDetailSheet.tsx
+      const orderDetailContent = fs.readFileSync(
+        path.resolve(process.cwd(), "src/features/orders/OrderDetailSheet.tsx"),
+        "utf-8"
+      );
 
       expect(ordersPageContent).toContain('const isKitchenStaff = roleSlug === "KITCHEN_STAFF"');
       expect(ordersPageContent).toContain("canExportNominalReports");
       expect(ordersPageContent).toContain("canViewNominals");
-      expect(ordersPageContent).toContain('{canViewNominals ? formatCurrencyIDR(selectedOrder.total) : "—"}');
-      expect(ordersPageContent).toContain('canViewNominals && (() => {');
+      expect(orderDetailContent).toContain('{canViewNominals ? formatCurrencyIDR(selectedOrder.total) : "—"}');
+      expect(orderDetailContent).toContain('canViewNominals && (() => {');
     });
   });
 });

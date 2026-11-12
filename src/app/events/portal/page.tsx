@@ -63,11 +63,11 @@ import {
   Landmark,
 } from "lucide-react";
 import { formatCurrencyIDR } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pagination";
+import { Card } from "@/components/legacy/ui/card";
+import { Badge } from "@/components/legacy/ui/badge";
+import { Button } from "@/components/legacy/ui/button";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
+import { TablePagination, TablePageSizeSelector } from "@/components/legacy/ui/table-pagination";
 import { CommunityEvent, EventTicketOrder, OrganizerPortalData, AttendeeCheckInStatus, PayoutRecord, EventCategory } from "@/types/event";
 import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1161,7 +1161,7 @@ export default function CommunityOrganizerPortalPage() {
       <aside
         className={`hidden lg:flex ${
           isSidebarCollapsed ? "w-20" : "w-64"
-        } bg-white dark:bg-[#0F172A] border-r border-slate-200 dark:border-slate-800 flex-col justify-between select-none transition-all duration-300 ease-in-out flex-shrink-0 min-h-screen sticky top-0 h-screen z-40`}
+        } bg-white dark:bg-[#0F172A] border-r border-slate-200 dark:border-slate-800 flex-col justify-between select-none transition-all duration-300 ease-in-out shrink-0 min-h-screen sticky top-0 h-screen z-40`}
       >
         {/* Scrollable Nav Area */}
         <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
@@ -1174,7 +1174,7 @@ export default function CommunityOrganizerPortalPage() {
             {!isSidebarCollapsed ? (
               <>
                 <Link href="/events/portal" className="flex items-center space-x-3 overflow-hidden min-w-0 group">
-                  <div className="w-8 h-10 relative flex-shrink-0">
+                  <div className="w-8 h-10 relative shrink-0">
                     <NextImage
                       src="/logo-dago.png"
                       alt="Dago Creative Hub"
@@ -1186,7 +1186,7 @@ export default function CommunityOrganizerPortalPage() {
                   </div>
                   <div className="truncate">
                     <h1 className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100 leading-tight truncate">
-                      dago<span className="text-[#3B7A57] dark:text-[#52B788]">eng</span>
+                      dago<span className="text-brand-sage dark:text-brand-sageBright">eng</span>
                     </h1>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">
                       ORGANIZER
@@ -1268,7 +1268,7 @@ export default function CommunityOrganizerPortalPage() {
                         onClick={() => setActiveNav(item.id)}
                         className={`w-11 h-11 flex items-center justify-center rounded-xl transition-all cursor-pointer ${
                           isActive
-                            ? "bg-[#3B7A57] text-white shadow-md shadow-[#3B7A57]/20"
+                            ? "bg-brand-sage text-white shadow-md shadow-[#3B7A57]/20"
                             : "text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80"
                         }`}
                         title={item.label}
@@ -1296,7 +1296,7 @@ export default function CommunityOrganizerPortalPage() {
                     onClick={() => setActiveNav(item.id as OrganizerNavView)}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       isActive
-                        ? "bg-[#3B7A57] text-white shadow-sm"
+                        ? "bg-brand-sage text-white shadow-sm"
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-100"
                     }`}
                   >
@@ -1362,7 +1362,7 @@ export default function CommunityOrganizerPortalPage() {
                   <Link
                     href="/events"
                     target="_blank"
-                    className="w-11 h-11 flex items-center justify-center rounded-xl text-slate-400 hover:text-[#3B7A57] hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+                    className="w-11 h-11 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-sage hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
                   >
                     <ExternalLink className="w-4 h-4" />
                   </Link>
@@ -1392,7 +1392,7 @@ export default function CommunityOrganizerPortalPage() {
             {!isSidebarCollapsed ? (
               <div className="space-y-2">
                 <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 flex items-center space-x-2.5">
-                  <div className="w-7 h-7 rounded-full bg-[#3B7A57] text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-xs">
+                  <div className="w-7 h-7 rounded-full bg-brand-sage text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-xs">
                     {userInitial || "OR"}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1463,7 +1463,7 @@ export default function CommunityOrganizerPortalPage() {
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="flex items-center space-x-3 overflow-hidden min-w-0"
                 >
-                  <div className="w-8 h-10 relative flex-shrink-0">
+                  <div className="w-8 h-10 relative shrink-0">
                     <NextImage
                       src="/logo-dago.png"
                       alt="Dago Creative Hub"
@@ -1475,7 +1475,7 @@ export default function CommunityOrganizerPortalPage() {
                   </div>
                   <div className="truncate">
                     <h1 className="font-bold text-sm tracking-tight text-slate-900 dark:text-slate-100 leading-tight truncate">
-                      dago<span className="text-[#3B7A57] dark:text-[#52B788]">eng</span>
+                      dago<span className="text-brand-sage dark:text-brand-sageBright">eng</span>
                     </h1>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">
                       ORGANIZER
@@ -1512,7 +1512,7 @@ export default function CommunityOrganizerPortalPage() {
                         }}
                         className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                           isActive
-                            ? "bg-[#3B7A57] text-white shadow-sm"
+                            ? "bg-brand-sage text-white shadow-sm"
                             : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-slate-100"
                         }`}
                       >
@@ -1570,7 +1570,7 @@ export default function CommunityOrganizerPortalPage() {
               {/* Footer */}
               <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 space-y-3">
                 <div className="p-2.5 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 flex items-center space-x-2.5">
-                  <div className="w-8 h-8 rounded-full bg-[#3B7A57] text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs">
+                  <div className="w-8 h-8 rounded-full bg-brand-sage text-white flex items-center justify-center text-xs font-black shrink-0 shadow-xs">
                     {userInitial || "OR"}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1643,7 +1643,7 @@ export default function CommunityOrganizerPortalPage() {
               <Link href="/events/submit">
                 <Button
                   size="sm"
-                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-8 sm:h-9 px-2.5 sm:px-4 rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+                  className="bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs h-8 sm:h-9 px-2.5 sm:px-4 rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
                 >
                   <Plus className="w-4 h-4 shrink-0" />
                   <span className="hidden sm:inline">Buat Event</span>
@@ -1679,7 +1679,7 @@ export default function CommunityOrganizerPortalPage() {
           {errorMessage && (
             <div className="p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-center justify-between animate-in fade-in">
               <div className="flex items-center space-x-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{errorMessage}</span>
               </div>
               <button onClick={() => setErrorMessage(null)} className="p-1 hover:text-rose-900 cursor-pointer">
@@ -1691,7 +1691,7 @@ export default function CommunityOrganizerPortalPage() {
           {successMessage && (
             <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs flex items-center justify-between animate-in fade-in">
               <div className="flex items-center space-x-2">
-                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>{successMessage}</span>
               </div>
               <button onClick={() => setSuccessMessage(null)} className="p-1 hover:text-emerald-900 cursor-pointer">
@@ -1736,7 +1736,7 @@ export default function CommunityOrganizerPortalPage() {
                     <Button
                       size="sm"
                       onClick={() => openRevisionModal(rev)}
-                      className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs h-8 px-3.5 rounded-lg shrink-0 cursor-pointer font-bold"
+                      className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs h-8 px-3.5 rounded-lg shrink-0 cursor-pointer font-bold"
                     >
                       <FileEdit className="w-3.5 h-3.5 mr-1" />
                       <span>Perbaiki Event</span>
@@ -1766,7 +1766,7 @@ export default function CommunityOrganizerPortalPage() {
                     <Button
                       size="sm"
                       onClick={() => openRevisionModal(rej)}
-                      className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs h-8 px-3.5 rounded-lg shrink-0 cursor-pointer font-bold flex items-center space-x-1"
+                      className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs h-8 px-3.5 rounded-lg shrink-0 cursor-pointer font-bold flex items-center space-x-1"
                     >
                       <RotateCcw className="w-3.5 h-3.5 mr-1" />
                       <span>Ajukan Ulang / Perbaiki</span>
@@ -1781,7 +1781,7 @@ export default function CommunityOrganizerPortalPage() {
           {portalData && pendingRevenueSplitEvents.length > 0 && (
             <div className="p-4 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs space-y-2.5">
               <div className="flex items-center space-x-2 font-bold">
-                <Sparkles className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                <Sparkles className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                 <span>Usulan Skema Bagi Hasil dari Dago Menunggu Keputusan Anda ({pendingRevenueSplitEvents.length})</span>
               </div>
               <div className="space-y-2">
@@ -1796,7 +1796,7 @@ export default function CommunityOrganizerPortalPage() {
                     <Button
                       size="sm"
                       onClick={() => setNegotiatingEvent(evt)}
-                      className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs h-8 px-3.5 rounded-lg shrink-0 cursor-pointer font-bold flex items-center space-x-1"
+                      className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs h-8 px-3.5 rounded-lg shrink-0 cursor-pointer font-bold flex items-center space-x-1"
                     >
                       <span>Tinjau &amp; Tanggapi Usulan</span>
                       <ArrowRight className="w-3 h-3" />
@@ -1808,7 +1808,7 @@ export default function CommunityOrganizerPortalPage() {
           )}
           {!portalData && !isLoading && (
             <Card className="p-8 sm:p-12 text-center rounded-3xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-xl space-y-6 max-w-2xl mx-auto my-8 animate-in fade-in">
-              <div className="w-16 h-16 rounded-2xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] mx-auto flex items-center justify-center">
+              <div className="w-16 h-16 rounded-2xl bg-brand-sage/10 dark:bg-brand-sageBright/20 text-brand-sage dark:text-brand-sageBright mx-auto flex items-center justify-center">
                 <Lock className="w-8 h-8" />
               </div>
 
@@ -1829,7 +1829,7 @@ export default function CommunityOrganizerPortalPage() {
                 <Link href="/login?returnTo=/events/portal" className="w-full sm:w-auto">
                   <Button
                     size="lg"
-                    className="w-full sm:w-auto bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-sm h-11 px-6 rounded-2xl shadow-md transition-all flex items-center justify-center space-x-2 cursor-pointer"
+                    className="w-full sm:w-auto bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-sm h-11 px-6 rounded-2xl shadow-md transition-all flex items-center justify-center space-x-2 cursor-pointer"
                   >
                     <LogIn className="w-4 h-4" />
                     <span>Masuk ke Akun Penyelenggara</span>
@@ -1849,7 +1849,7 @@ export default function CommunityOrganizerPortalPage() {
 
               <div className="pt-4 border-t border-slate-100 dark:border-slate-800/80 text-xs text-slate-400">
                 <span>Ingin melihat jadwal event publik? </span>
-                <Link href="/events" className="text-[#3B7A57] dark:text-[#52B788] font-bold hover:underline">
+                <Link href="/events" className="text-brand-sage dark:text-brand-sageBright font-bold hover:underline">
                   Buka Marketplace DagoEng
                 </Link>
               </div>
@@ -1872,7 +1872,7 @@ export default function CommunityOrganizerPortalPage() {
                 <Card className="p-4 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center space-x-2">
-                  <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                  <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                   <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
                     Mode Pengawasan Administrator Hub Dago
                   </span>
@@ -1883,7 +1883,7 @@ export default function CommunityOrganizerPortalPage() {
                     value={organizerEmail}
                     onChange={(e) => setOrganizerEmail(e.target.value)}
                     placeholder="Email Komunitas..."
-                    className="px-3 py-1.5 text-xs rounded-xl border bg-white dark:bg-slate-900 border-amber-200 dark:border-amber-800 text-slate-800 dark:text-slate-100 focus:outline-none"
+                    className="px-3 py-1.5 text-xs rounded-xl border bg-white dark:bg-slate-900 border-amber-200 dark:border-amber-800 text-slate-800 dark:text-slate-100 focus:outline-hidden"
                   />
                   <Button type="submit" size="sm" className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-8">
                     Supervisi
@@ -1943,7 +1943,7 @@ export default function CommunityOrganizerPortalPage() {
                   <Link href="/events/submit">
                     <Button
                       size="sm"
-                      className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-9 px-4 rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
+                      className="bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs h-9 px-4 rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Buat Event Baru</span>
@@ -1966,7 +1966,7 @@ export default function CommunityOrganizerPortalPage() {
                     <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
                       <div className="flex items-start justify-between gap-2 pb-1">
                         <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight min-w-0">Total Event Terdaftar</span>
-                        <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center shrink-0">
+                        <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage dark:text-brand-sageBright flex items-center justify-center shrink-0">
                           <CalendarIcon className="w-3.5 h-3.5" />
                         </div>
                       </div>
@@ -2048,7 +2048,7 @@ export default function CommunityOrganizerPortalPage() {
                         }}
                         className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center space-x-1.5 cursor-pointer ${
                           active
-                            ? "bg-[#3B7A57] text-white shadow-xs"
+                            ? "bg-brand-sage text-white shadow-xs"
                             : isRevisionAlert
                             ? "bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-200"
                             : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
@@ -2102,7 +2102,7 @@ export default function CommunityOrganizerPortalPage() {
                         setEventPage(1);
                       }}
                       placeholder="Cari nama event..."
-                      className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                      className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                     />
                   </div>
 
@@ -2113,7 +2113,7 @@ export default function CommunityOrganizerPortalPage() {
                       onClick={() => setEventViewMode("LIST")}
                       className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                         eventViewMode === "LIST"
-                          ? "bg-white dark:bg-[#0F172A] text-[#3B7A57] dark:text-[#52B788] shadow-xs"
+                          ? "bg-white dark:bg-[#0F172A] text-brand-sage dark:text-brand-sageBright shadow-xs"
                           : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                       }`}
                       title="Tampilan Tabel"
@@ -2125,7 +2125,7 @@ export default function CommunityOrganizerPortalPage() {
                       onClick={() => setEventViewMode("CALENDAR")}
                       className={`p-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                         eventViewMode === "CALENDAR"
-                          ? "bg-white dark:bg-[#0F172A] text-[#3B7A57] dark:text-[#52B788] shadow-xs"
+                          ? "bg-white dark:bg-[#0F172A] text-brand-sage dark:text-brand-sageBright shadow-xs"
                           : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                       }`}
                       title="Tampilan Kalender"
@@ -2196,7 +2196,7 @@ export default function CommunityOrganizerPortalPage() {
                                   {/* Event Title & Poster */}
                                   <td className="py-3.5 px-4 max-w-xs">
                                     <div className="flex items-center space-x-3">
-                                      <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden flex-shrink-0 relative border border-slate-200 dark:border-slate-800 group-hover:border-[#3B7A57] transition-colors">
+                                      <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0 relative border border-slate-200 dark:border-slate-800 group-hover:border-brand-sage transition-colors">
                                         {/* eslint-disable-next-line @next/next/no-img-element */}
                                         <img
                                           src={evt.posterUrl || "https://images.unsplash.com/photo-1511578314322-379afb476865?auto=format&fit=crop&w=600&q=80"}
@@ -2205,7 +2205,7 @@ export default function CommunityOrganizerPortalPage() {
                                         />
                                       </div>
                                       <div className="min-w-0">
-                                        <span className="font-bold text-slate-900 dark:text-white block truncate group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                                        <span className="font-bold text-slate-900 dark:text-white block truncate group-hover:text-brand-sage dark:group-hover:text-brand-sageBright transition-colors">
                                           {evt.title}
                                         </span>
                                         <span className="text-[10px] font-mono text-slate-400 block truncate">
@@ -2232,7 +2232,7 @@ export default function CommunityOrganizerPortalPage() {
                                   <td className="py-3.5 px-4 whitespace-nowrap">
                                     <div className="space-y-0.5">
                                       <div className="flex items-center space-x-1.5 text-slate-700 dark:text-slate-300 font-medium">
-                                        <CalendarIcon className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                                        <CalendarIcon className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
                                         <span>
                                           {eventDate.toLocaleDateString("id-ID", {
                                             day: "numeric",
@@ -2266,7 +2266,7 @@ export default function CommunityOrganizerPortalPage() {
                                       </div>
                                       <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
                                         <div
-                                          className="h-full rounded-full bg-[#3B7A57]"
+                                          className="h-full rounded-full bg-brand-sage"
                                           style={{ width: `${occupancyRate}%` }}
                                         />
                                       </div>
@@ -2353,7 +2353,7 @@ export default function CommunityOrganizerPortalPage() {
                                           <Button
                                             variant="outline"
                                             size="sm"
-                                            className="text-xs h-7 px-2 rounded-lg border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-[#3B7A57] cursor-pointer"
+                                            className="text-xs h-7 px-2 rounded-lg border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-brand-sage cursor-pointer"
                                             title="Lihat halaman detail event publik"
                                           >
                                             <ExternalLink className="w-3.5 h-3.5" />
@@ -2368,7 +2368,7 @@ export default function CommunityOrganizerPortalPage() {
                                             e.stopPropagation();
                                             openRevisionModal(evt);
                                           }}
-                                          className="text-xs h-7 px-2.5 rounded-lg bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold cursor-pointer shadow-xs flex items-center space-x-1"
+                                          className="text-xs h-7 px-2.5 rounded-lg bg-brand-sage hover:bg-[#2E6044] text-white font-bold cursor-pointer shadow-xs flex items-center space-x-1"
                                           title="Perbaiki proposal event"
                                         >
                                           <FileEdit className="w-3.5 h-3.5 mr-0.5" />
@@ -2383,7 +2383,7 @@ export default function CommunityOrganizerPortalPage() {
                                             e.stopPropagation();
                                             openRevisionModal(evt);
                                           }}
-                                          className="text-xs h-7 px-2.5 rounded-lg bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold cursor-pointer shadow-xs flex items-center space-x-1"
+                                          className="text-xs h-7 px-2.5 rounded-lg bg-brand-sage hover:bg-[#2E6044] text-white font-bold cursor-pointer shadow-xs flex items-center space-x-1"
                                           title="Perbaiki dan ajukan kembali ke kurator"
                                         >
                                           <RotateCcw className="w-3.5 h-3.5 mr-0.5" />
@@ -2421,7 +2421,7 @@ export default function CommunityOrganizerPortalPage() {
                       {/* Calendar Navigation Header */}
                       <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
                         <div className="flex items-center space-x-2">
-                          <CalendarIcon className="w-5 h-5 text-[#3B7A57]" />
+                          <CalendarIcon className="w-5 h-5 text-brand-sage" />
                           <h2 className="text-base font-extrabold text-slate-900 dark:text-white">
                             {calendarDate.toLocaleDateString("id-ID", { month: "long", year: "numeric" })}
                           </h2>
@@ -2493,7 +2493,7 @@ export default function CommunityOrganizerPortalPage() {
                               key={`day-${item.day}`}
                               className={`min-h-24 p-2 rounded-xl border flex flex-col justify-between transition-all ${
                                 isToday
-                                  ? "bg-[#3B7A57]/5 border-[#3B7A57]/40 dark:bg-[#3B7A57]/10"
+                                  ? "bg-brand-sage/5 border-brand-sage/40 dark:bg-brand-sage/10"
                                   : "bg-white dark:bg-[#1E293B] border-slate-100 dark:border-slate-800"
                               }`}
                             >
@@ -2501,14 +2501,14 @@ export default function CommunityOrganizerPortalPage() {
                                 <span
                                   className={`text-xs font-black ${
                                     isToday
-                                      ? "text-[#3B7A57]"
+                                      ? "text-brand-sage"
                                       : "text-slate-700 dark:text-slate-300"
                                   }`}
                                 >
                                   {item.day}
                                 </span>
                                 {item.events.length > 0 && (
-                                  <span className="w-2 h-2 rounded-full bg-[#3B7A57]" />
+                                  <span className="w-2 h-2 rounded-full bg-brand-sage" />
                                 )}
                               </div>
 
@@ -2521,7 +2521,7 @@ export default function CommunityOrganizerPortalPage() {
                                       setSelectedEventId(e.id);
                                       setActiveNav("ATTENDEES");
                                     }}
-                                    className="p-1 rounded-md bg-[#3B7A57]/10 dark:bg-[#3B7A57]/20 text-[#3B7A57] dark:text-[#52B788] text-[10px] font-bold truncate cursor-pointer hover:underline"
+                                    className="p-1 rounded-md bg-brand-sage/10 dark:bg-brand-sage/20 text-brand-sage dark:text-brand-sageBright text-[10px] font-bold truncate cursor-pointer hover:underline"
                                     title={`${e.title} (${e.location})`}
                                   >
                                     {e.title}
@@ -2597,7 +2597,7 @@ export default function CommunityOrganizerPortalPage() {
                       value={attendeeSearch}
                       onChange={(e) => setAttendeeSearch(e.target.value)}
                       placeholder="Cari kode tiket, nama, instansi..."
-                      className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                      className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                     />
                   </div>
                 </div>
@@ -2644,7 +2644,7 @@ export default function CommunityOrganizerPortalPage() {
                                 <div className="font-mono font-bold text-slate-900 dark:text-white flex items-center space-x-1.5">
                                   <span>{b.ticketCode}</span>
                                 </div>
-                                <div className="inline-flex items-center space-x-1 mt-1 text-[10.5px] font-bold text-[#3B7A57] dark:text-[#52B788]">
+                                <div className="inline-flex items-center space-x-1 mt-1 text-[10.5px] font-bold text-brand-sage dark:text-brand-sageBright">
                                   <span>{isExpanded ? "Tutup Rincian" : (b.ticketCount > 1 ? `Lihat ${b.ticketCount} Tiket` : "Lihat Rincian")}</span>
                                   {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                                 </div>
@@ -2752,14 +2752,14 @@ export default function CommunityOrganizerPortalPage() {
                                   <div className="bg-white dark:bg-[#0F172A] rounded-2xl border border-slate-200 dark:border-slate-800 p-4 space-y-3 shadow-xs">
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 gap-2">
                                       <div className="flex items-center space-x-2">
-                                        <Ticket className="w-4 h-4 text-[#3B7A57]" />
+                                        <Ticket className="w-4 h-4 text-brand-sage" />
                                         <span className="text-xs font-bold text-slate-900 dark:text-white">
                                           Rincian Transaksi Pembelian ({b.ticketCount} Tiket Terdaftar)
                                         </span>
                                       </div>
                                       <div className="flex items-center space-x-3 text-[11px]">
                                         <span className="text-slate-500">
-                                          Total: <strong className="text-[#3B7A57] dark:text-[#52B788]">{b.totalPrice > 0 ? formatCurrencyIDR(b.totalPrice) : "GRATIS"}</strong>
+                                          Total: <strong className="text-brand-sage dark:text-brand-sageBright">{b.totalPrice > 0 ? formatCurrencyIDR(b.totalPrice) : "GRATIS"}</strong>
                                         </span>
                                         <span className="text-slate-300">•</span>
                                         <span className="text-slate-500">
@@ -2898,7 +2898,7 @@ export default function CommunityOrganizerPortalPage() {
                     />
                     <Button
                       onClick={handleOpenPayout}
-                      className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs flex items-center space-x-1.5 cursor-pointer transition-all hover:scale-[1.02]"
+                      className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs flex items-center space-x-1.5 cursor-pointer transition-all hover:scale-[1.02]"
                     >
                       <DollarSign className="w-4 h-4" />
                       <span>Ajukan Pencairan Saldo</span>
@@ -2909,7 +2909,7 @@ export default function CommunityOrganizerPortalPage() {
                 {/* Section 1: Hero Wallet Card & 80:20 Revenue Split Visualizer (Grid 3:2) */}
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-5">
                   {/* Hero Wallet Card (3 cols) */}
-                  <div className="lg:col-span-3 rounded-3xl bg-gradient-to-br from-[#1B3B2B] via-[#24523B] to-[#122A1E] text-white p-6 sm:p-7 relative overflow-hidden shadow-lg border border-emerald-800/40 flex flex-col justify-between">
+                  <div className="lg:col-span-3 rounded-3xl bg-linear-to-br from-[#1B3B2B] via-[#24523B] to-[#122A1E] text-white p-6 sm:p-7 relative overflow-hidden shadow-lg border border-emerald-800/40 flex flex-col justify-between">
                     {/* Background glow & watermark */}
                     <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
                     <div className="absolute bottom-0 right-0 p-6 opacity-5 pointer-events-none">
@@ -2991,7 +2991,7 @@ export default function CommunityOrganizerPortalPage() {
                     <div>
                       <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                         <div className="flex items-center space-x-2">
-                          <TrendingUp className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                          <TrendingUp className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                           <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                             Proporsi Bagi Hasil Resmi
                           </h3>
@@ -3004,11 +3004,11 @@ export default function CommunityOrganizerPortalPage() {
                       {/* Visual Dual Progress Bar */}
                       <div className="pt-3 space-y-2">
                         <div className="flex items-center justify-between text-xs font-bold">
-                          <span className="text-[#3B7A57] dark:text-[#52B788]">Hak Komunitas (80%)</span>
+                          <span className="text-brand-sage dark:text-brand-sageBright">Hak Komunitas (80%)</span>
                           <span className="text-slate-500 dark:text-slate-400">Dago Hub (20%)</span>
                         </div>
                         <div className="w-full h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
-                          <div className="h-full bg-gradient-to-r from-emerald-600 to-[#3B7A57]" style={{ width: "80%" }} />
+                          <div className="h-full bg-linear-to-r from-emerald-600 to-[#3B7A57]" style={{ width: "80%" }} />
                           <div className="h-full bg-slate-400 dark:bg-slate-600" style={{ width: "20%" }} />
                         </div>
                       </div>
@@ -3023,7 +3023,7 @@ export default function CommunityOrganizerPortalPage() {
                         </div>
                         <div className="p-2.5 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800 text-center">
                           <span className="text-[9.5px] text-emerald-700 dark:text-emerald-400 font-bold block uppercase">Komunitas (80%)</span>
-                          <span className="text-xs font-black text-[#3B7A57] dark:text-[#52B788] mt-0.5 block truncate">
+                          <span className="text-xs font-black text-brand-sage dark:text-brand-sageBright mt-0.5 block truncate">
                             Rp {organizerEarnings.toLocaleString("id-ID")}
                           </span>
                         </div>
@@ -3060,11 +3060,11 @@ export default function CommunityOrganizerPortalPage() {
                   <Card className="p-4 bg-white dark:bg-[#0F172A] border border-emerald-200/80 dark:border-emerald-800/80 rounded-2xl shadow-2xs space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">2. Saldo Siap Ditarik</span>
-                      <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-[#3B7A57] dark:text-[#52B788]">
+                      <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-brand-sage dark:text-brand-sageBright">
                         <Wallet className="w-3 h-3" />
                       </div>
                     </div>
-                    <div className="text-lg sm:text-xl font-black text-[#3B7A57] dark:text-[#52B788]">
+                    <div className="text-lg sm:text-xl font-black text-brand-sage dark:text-brand-sageBright">
                       Rp {availablePayout.toLocaleString("id-ID")}
                     </div>
                     <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium block truncate">Hak bersih siap diajukan transfer</span>
@@ -3101,7 +3101,7 @@ export default function CommunityOrganizerPortalPage() {
                 <div className="p-4 sm:p-5 rounded-3xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center space-x-2">
-                      <Activity className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                      <Activity className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                       <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
                         Alur &amp; Kebijakan Transfer Dana Manual (SOP Dago Finance)
                       </span>
@@ -3112,7 +3112,7 @@ export default function CommunityOrganizerPortalPage() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
                     <div className="p-3.5 rounded-2xl bg-white dark:bg-[#0F172A] border border-slate-200/70 dark:border-slate-800 space-y-1">
                       <div className="flex items-center space-x-2">
-                        <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] text-[10px] font-black flex items-center justify-center">
+                        <span className="w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright text-[10px] font-black flex items-center justify-center">
                           1
                         </span>
                         <span className="text-xs font-bold text-slate-800 dark:text-slate-100">Ajukan Penarikan Saldo</span>
@@ -3166,7 +3166,7 @@ export default function CommunityOrganizerPortalPage() {
 
                   {allPayouts.length === 0 ? (
                     <div className="py-12 px-4 text-center space-y-3">
-                      <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center mx-auto shadow-xs">
+                      <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage dark:text-brand-sageBright flex items-center justify-center mx-auto shadow-xs">
                         <Wallet className="w-7 h-7" />
                       </div>
                       <div className="space-y-1 max-w-sm mx-auto">
@@ -3181,7 +3181,7 @@ export default function CommunityOrganizerPortalPage() {
                         <div className="pt-2">
                           <Button
                             onClick={handleOpenPayout}
-                            className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer"
+                            className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer"
                           >
                             <DollarSign className="w-4 h-4 mr-1" />
                             <span>Tarik Saldo Rp {availablePayout.toLocaleString("id-ID")} Sekarang</span>
@@ -3211,7 +3211,7 @@ export default function CommunityOrganizerPortalPage() {
                               <td className="py-3 px-3 font-semibold text-slate-900 dark:text-white max-w-[180px] truncate">
                                 {p.eventTitle}
                               </td>
-                              <td className="py-3 px-3 font-bold text-[#3B7A57] dark:text-[#52B788] whitespace-nowrap">
+                              <td className="py-3 px-3 font-bold text-brand-sage dark:text-brand-sageBright whitespace-nowrap">
                                 Rp {p.amount.toLocaleString("id-ID")}
                               </td>
                               <td className="py-3 px-3">
@@ -3283,7 +3283,7 @@ export default function CommunityOrganizerPortalPage() {
                   <button
                     type="button"
                     onClick={() => setActiveNav("EVENTS")}
-                    className="text-xs font-semibold text-[#3B7A57] dark:text-[#52B788] hover:underline flex items-center space-x-1 cursor-pointer"
+                    className="text-xs font-semibold text-brand-sage dark:text-brand-sageBright hover:underline flex items-center space-x-1 cursor-pointer"
                   >
                     <span>Lihat Semua Event</span>
                     <ChevronRight className="w-3.5 h-3.5" />
@@ -3399,7 +3399,7 @@ export default function CommunityOrganizerPortalPage() {
                             <div className="text-xs font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition-colors truncate">
                               Saldo Siap Tarik
                             </div>
-                            <div className="text-[10.5px] font-bold text-[#3B7A57] dark:text-[#52B788] truncate">
+                            <div className="text-[10.5px] font-bold text-brand-sage dark:text-brand-sageBright truncate">
                               Rp {(summary?.availablePayoutAmount ?? summary?.organizerPayoutAmount ?? 0).toLocaleString("id-ID")}
                             </div>
                           </div>
@@ -3435,7 +3435,7 @@ export default function CommunityOrganizerPortalPage() {
 
                 <Card className="p-5 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Hak Payout (80%)</span>
-                  <div className="text-xl sm:text-2xl font-black text-[#3B7A57] dark:text-[#52B788]">
+                  <div className="text-xl sm:text-2xl font-black text-brand-sage dark:text-brand-sageBright">
                     Rp {(summary?.organizerPayoutAmount || 0).toLocaleString("id-ID")}
                   </div>
                   <span className="text-[11px] text-emerald-600 mt-1 block font-medium">Estimasi Dana Komunitas</span>
@@ -3447,7 +3447,7 @@ export default function CommunityOrganizerPortalPage() {
                     <Button
                       size="sm"
                       onClick={() => setActiveNav("EVENTS")}
-                      className="w-full text-xs h-8 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer shadow-xs"
+                      className="w-full text-xs h-8 bg-brand-sage hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer shadow-xs"
                     >
                       Buka Kelola Events
                     </Button>
@@ -3459,7 +3459,7 @@ export default function CommunityOrganizerPortalPage() {
               <div className="p-4 rounded-2xl bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 shadow-xs">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
                   <div className="flex items-center space-x-2">
-                    <Sparkles className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                    <Sparkles className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                     <span className="text-xs font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider">
                       Pusat Tindakan Cepat Penyelenggara
                     </span>
@@ -3471,7 +3471,7 @@ export default function CommunityOrganizerPortalPage() {
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                   <Link
                     href="/events/submit"
-                    className="flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-[#3B7A57]/40 hover:border-[#3B7A57] bg-emerald-50/50 dark:bg-emerald-950/20 text-[#3B7A57] dark:text-[#52B788] hover:bg-emerald-100/60 transition-all text-center group cursor-pointer"
+                    className="flex flex-col items-center justify-center p-3 rounded-xl border border-dashed border-brand-sage/40 hover:border-brand-sage bg-emerald-50/50 dark:bg-emerald-950/20 text-brand-sage dark:text-brand-sageBright hover:bg-emerald-100/60 transition-all text-center group cursor-pointer"
                   >
                     <Plus className="w-4 h-4 mb-1 group-hover:scale-110 transition-transform" />
                     <span className="text-xs font-bold leading-tight">Buat Event</span>
@@ -3527,7 +3527,7 @@ export default function CommunityOrganizerPortalPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <BarChart3 className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                        <BarChart3 className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                         <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                           Tren Penjualan & Hak Bagi Hasil ({salesTrend.periodTitle})
                         </h3>
@@ -3539,7 +3539,7 @@ export default function CommunityOrganizerPortalPage() {
 
                     <div className="flex items-center space-x-3 text-[11px]">
                       <div className="flex items-center space-x-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#3B7A57]" />
+                        <span className="w-2.5 h-2.5 rounded-full bg-brand-sage" />
                         <span className="text-slate-600 dark:text-slate-300 font-medium">Hak Bagi Hasil</span>
                       </div>
                       <div className="flex items-center space-x-1.5">
@@ -3576,7 +3576,7 @@ export default function CommunityOrganizerPortalPage() {
                                 style={{ height: `${payoutPct}%` }}
                                 className={`w-3 sm:w-5 rounded-t-md transition-all duration-300 ${
                                   m.payout > 0
-                                    ? "bg-gradient-to-t from-[#2E6044] to-[#52B788] group-hover:brightness-110 shadow-xs"
+                                    ? "bg-linear-to-t from-[#2E6044] to-[#52B788] group-hover:brightness-110 shadow-xs"
                                     : "bg-slate-100 dark:bg-slate-800"
                                 }`}
                               />
@@ -3585,7 +3585,7 @@ export default function CommunityOrganizerPortalPage() {
                                 style={{ height: `${ticketPct}%` }}
                                 className={`w-3 sm:w-5 rounded-t-md transition-all duration-300 ${
                                   m.ticketCount > 0
-                                    ? "bg-gradient-to-t from-sky-600 to-sky-400 group-hover:brightness-110 shadow-xs"
+                                    ? "bg-linear-to-t from-sky-600 to-sky-400 group-hover:brightness-110 shadow-xs"
                                     : "bg-slate-100 dark:bg-slate-800"
                                 }`}
                               />
@@ -3643,7 +3643,7 @@ export default function CommunityOrganizerPortalPage() {
                       {/* Progress Bar */}
                       <div className="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mt-2">
                         <div
-                          className="h-full bg-gradient-to-r from-emerald-500 to-[#3B7A57] rounded-full transition-all duration-500"
+                          className="h-full bg-linear-to-r from-emerald-500 to-[#3B7A57] rounded-full transition-all duration-500"
                           style={{ width: `${occupancyPercentage}%` }}
                         />
                       </div>
@@ -3659,7 +3659,7 @@ export default function CommunityOrganizerPortalPage() {
                   </Card>
 
                   {/* Payout Bank Info Card */}
-                  <Card className="p-5 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-3xl shadow-xs space-y-3 border border-slate-700/60">
+                  <Card className="p-5 bg-linear-to-br from-slate-900 to-slate-800 text-white rounded-3xl shadow-xs space-y-3 border border-slate-700/60">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
                         <CreditCard className="w-4 h-4 text-emerald-400" />
@@ -3710,7 +3710,7 @@ export default function CommunityOrganizerPortalPage() {
                 <Card className="p-5 sm:p-6 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs space-y-4">
                   <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
                     <div className="flex items-center space-x-2">
-                      <CalendarIcon className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                      <CalendarIcon className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                       <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                         Agenda Event Terdekat ({upcomingEvents.length})
                       </h3>
@@ -3718,7 +3718,7 @@ export default function CommunityOrganizerPortalPage() {
                     <button
                       type="button"
                       onClick={() => setActiveNav("EVENTS")}
-                      className="text-xs text-[#3B7A57] dark:text-[#52B788] hover:underline font-bold cursor-pointer"
+                      className="text-xs text-brand-sage dark:text-brand-sageBright hover:underline font-bold cursor-pointer"
                     >
                       Kelola Semua
                     </button>
@@ -3755,13 +3755,13 @@ export default function CommunityOrganizerPortalPage() {
                           <div
                             key={evt.id}
                             onClick={() => setViewingDetailEvent(evt)}
-                            className="p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800/80 hover:border-[#3B7A57]/60 dark:hover:border-[#3B7A57]/60 hover:bg-emerald-50/20 dark:hover:bg-slate-900/60 transition-all space-y-2 cursor-pointer group"
+                            className="p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800/80 hover:border-brand-sage/60 dark:hover:border-brand-sage/60 hover:bg-emerald-50/20 dark:hover:bg-slate-900/60 transition-all space-y-2 cursor-pointer group"
                             title="Klik untuk melihat rincian event"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex items-start space-x-3">
                                 {/* Date Block */}
-                                <div className="w-11 h-11 rounded-xl bg-[#3B7A57]/10 text-[#3B7A57] dark:bg-[#3B7A57]/20 dark:text-[#52B788] flex flex-col items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                                <div className="w-11 h-11 rounded-xl bg-brand-sage/10 text-brand-sage dark:bg-brand-sage/20 dark:text-brand-sageBright flex flex-col items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                                   <span className="text-[9px] font-bold uppercase leading-none">
                                     {evtDate.toLocaleDateString("id-ID", { month: "short" })}
                                   </span>
@@ -3770,7 +3770,7 @@ export default function CommunityOrganizerPortalPage() {
                                   </span>
                                 </div>
                                 <div className="min-w-0">
-                                  <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                                  <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-brand-sage dark:group-hover:text-brand-sageBright transition-colors">
                                     {evt.title}
                                   </h4>
                                   <div className="flex items-center space-x-2 text-[10.5px] text-slate-400 mt-0.5">
@@ -3821,7 +3821,7 @@ export default function CommunityOrganizerPortalPage() {
                     <button
                       type="button"
                       onClick={() => setActiveNav("ATTENDEES")}
-                      className="text-xs text-[#3B7A57] dark:text-[#52B788] hover:underline font-bold cursor-pointer"
+                      className="text-xs text-brand-sage dark:text-brand-sageBright hover:underline font-bold cursor-pointer"
                     >
                       Buka Meja Pesanan
                     </button>
@@ -3905,7 +3905,7 @@ export default function CommunityOrganizerPortalPage() {
                 <button
                   type="button"
                   onClick={() => setActiveNav("HOME")}
-                  className="text-xs font-semibold text-[#3B7A57] dark:text-[#52B788] hover:underline flex items-center space-x-1 cursor-pointer self-start sm:self-auto"
+                  className="text-xs font-semibold text-brand-sage dark:text-brand-sageBright hover:underline flex items-center space-x-1 cursor-pointer self-start sm:self-auto"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                   <span>Kembali ke Overview</span>
@@ -3924,7 +3924,7 @@ export default function CommunityOrganizerPortalPage() {
                 {/* Form 1: Payout Bank Account Settings */}
                 <Card id="rekening-section" className="p-5 sm:p-6 bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs space-y-4 scroll-mt-24">
                   <div className="flex items-center space-x-2.5 pb-2 border-b border-slate-100 dark:border-slate-800">
-                    <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center font-bold text-sm">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage dark:text-brand-sageBright flex items-center justify-center font-bold text-sm">
                       <CreditCard className="w-4 h-4" />
                     </div>
                     <div>
@@ -4015,7 +4015,7 @@ export default function CommunityOrganizerPortalPage() {
                     <Button
                       type="submit"
                       size="sm"
-                      className="w-full h-9 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
+                      className="w-full h-9 bg-brand-sage hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
                     >
                       <Save className="w-3.5 h-3.5" />
                       <span>Simpan Rekening Payout</span>
@@ -4162,7 +4162,7 @@ export default function CommunityOrganizerPortalPage() {
                         type="checkbox"
                         checked={notifSettings.emailOnTicket}
                         onChange={(e) => setNotifSettings({ ...notifSettings, emailOnTicket: e.target.checked })}
-                        className="w-4 h-4 text-[#3B7A57] rounded border-slate-300 focus:ring-[#3B7A57] cursor-pointer"
+                        className="w-4 h-4 text-brand-sage rounded border-slate-300 focus:ring-[#3B7A57] cursor-pointer"
                       />
                     </label>
 
@@ -4179,7 +4179,7 @@ export default function CommunityOrganizerPortalPage() {
                         type="checkbox"
                         checked={notifSettings.waOnTicket}
                         onChange={(e) => setNotifSettings({ ...notifSettings, waOnTicket: e.target.checked })}
-                        className="w-4 h-4 text-[#3B7A57] rounded border-slate-300 focus:ring-[#3B7A57] cursor-pointer"
+                        className="w-4 h-4 text-brand-sage rounded border-slate-300 focus:ring-[#3B7A57] cursor-pointer"
                       />
                     </label>
 
@@ -4196,14 +4196,14 @@ export default function CommunityOrganizerPortalPage() {
                         type="checkbox"
                         checked={notifSettings.instantCheckInAlert}
                         onChange={(e) => setNotifSettings({ ...notifSettings, instantCheckInAlert: e.target.checked })}
-                        className="w-4 h-4 text-[#3B7A57] rounded border-slate-300 focus:ring-[#3B7A57] cursor-pointer"
+                        className="w-4 h-4 text-brand-sage rounded border-slate-300 focus:ring-[#3B7A57] cursor-pointer"
                       />
                     </label>
 
                     <Button
                       type="submit"
                       size="sm"
-                      className="w-full h-9 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
+                      className="w-full h-9 bg-brand-sage hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer shadow-xs flex items-center justify-center space-x-1.5"
                     >
                       <Save className="w-3.5 h-3.5" />
                       <span>Simpan Preferensi Notifikasi</span>
@@ -4212,9 +4212,9 @@ export default function CommunityOrganizerPortalPage() {
                 </Card>
 
                 {/* Card 4: Partnership & Bagi Hasil Rules Info */}
-                <Card className="p-5 sm:p-6 bg-gradient-to-br from-emerald-50/70 via-white to-emerald-50/30 dark:from-emerald-950/20 dark:via-[#0F172A] dark:to-emerald-950/10 border border-emerald-200/80 dark:border-emerald-800/60 rounded-3xl shadow-xs space-y-4">
+                <Card className="p-5 sm:p-6 bg-linear-to-br from-emerald-50/70 via-white to-emerald-50/30 dark:from-emerald-950/20 dark:via-[#0F172A] dark:to-emerald-950/10 border border-emerald-200/80 dark:border-emerald-800/60 rounded-3xl shadow-xs space-y-4">
                   <div className="flex items-center space-x-2.5 pb-2 border-b border-emerald-100 dark:border-emerald-800/80">
-                    <div className="w-8 h-8 rounded-xl bg-[#3B7A57] text-white flex items-center justify-center font-bold text-sm">
+                    <div className="w-8 h-8 rounded-xl bg-brand-sage text-white flex items-center justify-center font-bold text-sm">
                       <DollarSign className="w-4 h-4" />
                     </div>
                     <div>
@@ -4233,7 +4233,7 @@ export default function CommunityOrganizerPortalPage() {
                       <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                         Hak Komunitas
                       </span>
-                      <div className="text-2xl font-black text-[#3B7A57] dark:text-[#52B788]">
+                      <div className="text-2xl font-black text-brand-sage dark:text-brand-sageBright">
                         80%
                       </div>
                       <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block">
@@ -4332,7 +4332,7 @@ export default function CommunityOrganizerPortalPage() {
                         }}
                         className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
                       >
-                        <ShieldCheck className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57]" />
+                        <ShieldCheck className="w-3.5 h-3.5 mr-1.5 text-brand-sage" />
                         <span>Verifikasi Keamanan Sesi Akun</span>
                       </Button>
                     </div>
@@ -4358,7 +4358,7 @@ export default function CommunityOrganizerPortalPage() {
           onClick={() => setActiveNav("HOME")}
           className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
             activeNav === "HOME"
-              ? "text-[#3B7A57] dark:text-[#52B788] font-bold"
+              ? "text-brand-sage dark:text-brand-sageBright font-bold"
               : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           }`}
         >
@@ -4371,14 +4371,14 @@ export default function CommunityOrganizerPortalPage() {
           onClick={() => setActiveNav("EVENTS")}
           className={`relative flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
             activeNav === "EVENTS"
-              ? "text-[#3B7A57] dark:text-[#52B788] font-bold"
+              ? "text-brand-sage dark:text-brand-sageBright font-bold"
               : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           }`}
         >
           <div className="relative">
             <CalendarIcon className="w-5 h-5 mb-0.5" />
             {portalData?.events.length ? (
-              <span className="absolute -top-1 -right-2.5 bg-[#3B7A57] text-white text-[9px] font-bold px-1 rounded-full leading-tight">
+              <span className="absolute -top-1 -right-2.5 bg-brand-sage text-white text-[9px] font-bold px-1 rounded-full leading-tight">
                 {portalData.events.length}
               </span>
             ) : null}
@@ -4391,14 +4391,14 @@ export default function CommunityOrganizerPortalPage() {
           onClick={() => setActiveNav("ATTENDEES")}
           className={`relative flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
             activeNav === "ATTENDEES"
-              ? "text-[#3B7A57] dark:text-[#52B788] font-bold"
+              ? "text-brand-sage dark:text-brand-sageBright font-bold"
               : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           }`}
         >
           <div className="relative">
             <Users className="w-5 h-5 mb-0.5" />
             {portalData?.bookings.length ? (
-              <span className="absolute -top-1 -right-2.5 bg-[#3B7A57] text-white text-[9px] font-bold px-1 rounded-full leading-tight">
+              <span className="absolute -top-1 -right-2.5 bg-brand-sage text-white text-[9px] font-bold px-1 rounded-full leading-tight">
                 {portalData.bookings.length}
               </span>
             ) : null}
@@ -4411,7 +4411,7 @@ export default function CommunityOrganizerPortalPage() {
           onClick={() => setActiveNav("FINANCE")}
           className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
             activeNav === "FINANCE"
-              ? "text-[#3B7A57] dark:text-[#52B788] font-bold"
+              ? "text-brand-sage dark:text-brand-sageBright font-bold"
               : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           }`}
         >
@@ -4424,7 +4424,7 @@ export default function CommunityOrganizerPortalPage() {
           onClick={() => setIsMobileMenuOpen(true)}
           className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all cursor-pointer ${
             activeNav === "SETTINGS" || isMobileMenuOpen
-              ? "text-[#3B7A57] dark:text-[#52B788] font-bold"
+              ? "text-brand-sage dark:text-brand-sageBright font-bold"
               : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
           }`}
         >
@@ -4561,7 +4561,7 @@ export default function CommunityOrganizerPortalPage() {
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800">
                   <span className="text-[10px] text-slate-400 uppercase font-bold block">Hak Komunitas (80%)</span>
-                  <span className="text-sm font-black text-[#3B7A57] dark:text-[#52B788] mt-0.5 block">
+                  <span className="text-sm font-black text-brand-sage dark:text-brand-sageBright mt-0.5 block">
                     Rp {organizerShare.toLocaleString("id-ID")}
                   </span>
                 </div>
@@ -4574,7 +4574,7 @@ export default function CommunityOrganizerPortalPage() {
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   <div className="flex items-center space-x-2 text-slate-700 dark:text-slate-300">
-                    <CalendarIcon className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                    <CalendarIcon className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0" />
                     <span>
                       {eventDate.toLocaleDateString("id-ID", {
                         weekday: "long",
@@ -4586,7 +4586,7 @@ export default function CommunityOrganizerPortalPage() {
                     </span>
                   </div>
                   <div className="flex items-center space-x-2 text-slate-700 dark:text-slate-300">
-                    <MapPin className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                    <MapPin className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0" />
                     <span className="truncate">{evt.location}</span>
                   </div>
                 </div>
@@ -4646,7 +4646,7 @@ export default function CommunityOrganizerPortalPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="text-xs h-8 px-3 rounded-xl border-slate-200 dark:border-slate-700 text-[#3B7A57] dark:text-[#52B788] hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-bold cursor-pointer"
+                        className="text-xs h-8 px-3 rounded-xl border-slate-200 dark:border-slate-700 text-brand-sage dark:text-brand-sageBright hover:bg-emerald-50 dark:hover:bg-emerald-950/30 font-bold cursor-pointer"
                       >
                         <ExternalLink className="w-3.5 h-3.5 mr-1" />
                         <span>Halaman Publik</span>
@@ -4661,7 +4661,7 @@ export default function CommunityOrganizerPortalPage() {
                         openRevisionModal(evt);
                         setViewingDetailEvent(null);
                       }}
-                      className="text-xs h-8 px-3.5 rounded-xl bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold cursor-pointer shadow-xs flex items-center space-x-1"
+                      className="text-xs h-8 px-3.5 rounded-xl bg-brand-sage hover:bg-[#2E6044] text-white font-bold cursor-pointer shadow-xs flex items-center space-x-1"
                     >
                       <FileEdit className="w-3.5 h-3.5 mr-1" />
                       <span>{evt.status === "REJECTED" ? "Ajukan Ulang Proposal" : "Perbaiki Proposal"}</span>
@@ -4766,7 +4766,7 @@ export default function CommunityOrganizerPortalPage() {
                   {/* Actions */}
                   <div className="flex-1 w-full space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <label className="cursor-pointer inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs shadow-xs transition-all">
+                      <label className="cursor-pointer inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs shadow-xs transition-all">
                         <Upload className="w-3.5 h-3.5" />
                         <span>{isUploadingRevisionPoster ? "Mengunggah..." : "Pilih File Gambar Baru"}</span>
                         <input
@@ -4790,7 +4790,7 @@ export default function CommunityOrganizerPortalPage() {
                       value={revisionPosterUrl}
                       onChange={(e) => setRevisionPosterUrl(e.target.value)}
                       placeholder="URL poster (terisi otomatis saat unggah gambar)..."
-                      className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-1 focus:ring-[#3B7A57] text-[11px] font-mono"
+                      className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57] text-[11px] font-mono"
                     />
 
                     {revisionUploadError && (
@@ -4813,7 +4813,7 @@ export default function CommunityOrganizerPortalPage() {
                     required
                     value={revisionTitle}
                     onChange={(e) => setRevisionTitle(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
                 <div>
@@ -4823,7 +4823,7 @@ export default function CommunityOrganizerPortalPage() {
                   <select
                     value={revisionCategory}
                     onChange={(e) => setRevisionCategory(e.target.value as EventCategory)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   >
                     <option value="CREATIVE">CREATIVE</option>
                     <option value="WORKSHOP">WORKSHOP</option>
@@ -4846,7 +4846,7 @@ export default function CommunityOrganizerPortalPage() {
                     type="datetime-local"
                     value={revisionStartDate}
                     onChange={(e) => setRevisionStartDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
                 <div>
@@ -4857,7 +4857,7 @@ export default function CommunityOrganizerPortalPage() {
                     type="datetime-local"
                     value={revisionEndDate}
                     onChange={(e) => setRevisionEndDate(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
               </div>
@@ -4873,7 +4873,7 @@ export default function CommunityOrganizerPortalPage() {
                     required
                     value={revisionLocation}
                     onChange={(e) => setRevisionLocation(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
                 <div>
@@ -4886,7 +4886,7 @@ export default function CommunityOrganizerPortalPage() {
                     required
                     value={revisionCapacity}
                     onChange={(e) => setRevisionCapacity(Number(e.target.value))}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
               </div>
@@ -4901,7 +4901,7 @@ export default function CommunityOrganizerPortalPage() {
                   rows={3}
                   value={revisionDesc}
                   onChange={(e) => setRevisionDesc(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] resize-y"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] resize-y"
                 />
               </div>
 
@@ -4915,7 +4915,7 @@ export default function CommunityOrganizerPortalPage() {
                   value={revisionGuidelines}
                   onChange={(e) => setRevisionGuidelines(e.target.value)}
                   placeholder="Aturan pakaian, hal yang perlu dibawa peserta, dsb..."
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] resize-y"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] resize-y"
                 />
               </div>
 
@@ -4932,7 +4932,7 @@ export default function CommunityOrganizerPortalPage() {
                 <Button
                   type="submit"
                   disabled={isSubmittingRevision || isUploadingRevisionPoster}
-                  className="text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-xs cursor-pointer flex items-center space-x-1.5 h-10 px-5"
+                  className="text-xs font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-xl shadow-xs cursor-pointer flex items-center space-x-1.5 h-10 px-5"
                 >
                   {isSubmittingRevision ? (
                     <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" />
@@ -4994,7 +4994,7 @@ export default function CommunityOrganizerPortalPage() {
                   Berlaku untuk seluruh transaksi tiket event ini hingga ada kesepakatan baru.
                 </p>
               </div>
-              <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center text-[#3B7A57] dark:text-[#52B788] flex-shrink-0">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center text-brand-sage dark:text-brand-sageBright shrink-0">
                 <DollarSign className="w-5 h-5" />
               </div>
             </div>
@@ -5044,7 +5044,7 @@ export default function CommunityOrganizerPortalPage() {
                       size="sm"
                       disabled={isSubmittingSplit}
                       onClick={() => handleRespondSplitOrganizer(negotiatingEvent, "ACCEPT")}
-                      className="text-xs bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer"
+                      className="text-xs bg-brand-sage hover:bg-[#2E6044] text-white font-bold rounded-xl cursor-pointer"
                     >
                       {isSubmittingSplit ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : <Check className="w-3.5 h-3.5 mr-1" />}
                       <span>Setujui Kesepakatan Ini</span>
@@ -5090,7 +5090,7 @@ export default function CommunityOrganizerPortalPage() {
                       setSplitOrgPercent(val);
                       setSplitPlatPercent(100 - val);
                     }}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-bold focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
 
@@ -5109,7 +5109,7 @@ export default function CommunityOrganizerPortalPage() {
                       setSplitPlatPercent(val);
                       setSplitOrgPercent(100 - val);
                     }}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 font-bold focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
               </div>
@@ -5124,7 +5124,7 @@ export default function CommunityOrganizerPortalPage() {
                   value={splitReason}
                   onChange={(e) => setSplitReason(e.target.value)}
                   placeholder="Contoh: Pemakaian panggung utama & audio gear khusus, kolaborasi perdana, dsb."
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] resize-y"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] resize-y"
                 />
               </div>
 
@@ -5132,7 +5132,7 @@ export default function CommunityOrganizerPortalPage() {
                 <Button
                   type="submit"
                   disabled={isSubmittingSplit}
-                  className="text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl cursor-pointer"
+                  className="text-xs font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-xl cursor-pointer"
                 >
                   {isSubmittingSplit ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
                   <span>Kirim Usulan Bagi Hasil</span>
@@ -5163,7 +5163,7 @@ export default function CommunityOrganizerPortalPage() {
                           <td className="py-2 px-2.5 text-slate-500">
                             {new Date(h.effectiveDate).toLocaleDateString("id-ID")}
                           </td>
-                          <td className="py-2 px-2.5 font-bold text-[#3B7A57] dark:text-[#52B788]">
+                          <td className="py-2 px-2.5 font-bold text-brand-sage dark:text-brand-sageBright">
                             {h.agreedOrganizerPercent ?? h.newOrganizerPercent}% / {h.agreedPlatformPercent ?? h.newPlatformPercent}%
                           </td>
                           <td className="py-2 px-2.5 text-slate-600 dark:text-slate-400">
@@ -5297,7 +5297,7 @@ export default function CommunityOrganizerPortalPage() {
                       <button
                         type="button"
                         onClick={() => setPayoutAmount(targetAvailable)}
-                        className="text-[11px] text-[#3B7A57] dark:text-[#52B788] hover:underline font-bold cursor-pointer"
+                        className="text-[11px] text-brand-sage dark:text-brand-sageBright hover:underline font-bold cursor-pointer"
                       >
                         Tarik Semua (Rp {targetAvailable.toLocaleString("id-ID")})
                       </button>
@@ -5311,7 +5311,7 @@ export default function CommunityOrganizerPortalPage() {
                     value={payoutAmount || ""}
                     onChange={(e) => setPayoutAmount(Number(e.target.value))}
                     placeholder={`Maksimal Rp ${targetAvailable.toLocaleString("id-ID")}`}
-                    className={`w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:ring-2 ${
+                    className={`w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border text-slate-800 dark:text-slate-100 font-bold focus:outline-hidden focus:ring-2 ${
                       isOverLimit
                         ? "border-rose-500 focus:ring-rose-500 text-rose-600"
                         : "border-slate-200 dark:border-slate-700 focus:ring-[#3B7A57]"
@@ -5341,7 +5341,7 @@ export default function CommunityOrganizerPortalPage() {
                       value={payoutBankName}
                       onChange={(e) => setPayoutBankName(e.target.value)}
                       placeholder="BCA, Mandiri, BRI..."
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                     />
                   </div>
                   <div>
@@ -5354,7 +5354,7 @@ export default function CommunityOrganizerPortalPage() {
                       value={payoutAccountNumber}
                       onChange={(e) => setPayoutAccountNumber(e.target.value)}
                       placeholder="1234567890"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                     />
                   </div>
                   <div>
@@ -5367,7 +5367,7 @@ export default function CommunityOrganizerPortalPage() {
                       value={payoutAccountHolder}
                       onChange={(e) => setPayoutAccountHolder(e.target.value)}
                       placeholder="Sesuai buku tabungan"
-                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                     />
                   </div>
                 </div>
@@ -5382,7 +5382,7 @@ export default function CommunityOrganizerPortalPage() {
                     value={payoutNotes}
                     onChange={(e) => setPayoutNotes(e.target.value)}
                     placeholder="Catatan transfer atau konfirmasi khusus..."
-                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] resize-y"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] resize-y"
                   />
                 </div>
 
@@ -5398,7 +5398,7 @@ export default function CommunityOrganizerPortalPage() {
                   <Button
                     type="submit"
                     disabled={isSubmittingPayout || isOverLimit || payoutAmount <= 0 || targetAvailable <= 0}
-                    className="text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl cursor-pointer disabled:opacity-50"
+                    className="text-xs font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-xl cursor-pointer disabled:opacity-50"
                   >
                     {isSubmittingPayout ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
                     <span>Ajukan Pencairan Dana</span>
@@ -5476,7 +5476,7 @@ export default function CommunityOrganizerPortalPage() {
               <Button
                 type="button"
                 onClick={handleGoToBankSettings}
-                className="text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl cursor-pointer flex items-center space-x-1.5 shadow-sm"
+                className="text-xs font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-xl cursor-pointer flex items-center space-x-1.5 shadow-sm"
               >
                 <span>Ke Pengaturan Rekening</span>
                 <ArrowRight className="w-3.5 h-3.5" />

@@ -61,22 +61,24 @@ describe("Theme Management & Design System Logic", () => {
       // Verify no render-blocking @import at top of css
       expect(content).not.toMatch(/@import\s+url\(.+fonts\.googleapis\.com/);
 
-      // Verify CSS variables and tabular-nums are declared
-      expect(content).toContain("--font-dm-sans");
+      // Font variables come from next/font (layout.tsx) and are mapped into the Tailwind theme
+      expect(content).toContain("--font-sans");
       expect(content).toContain("--font-dm-mono");
       expect(content).toContain("tabular-nums");
     });
 
-    it("ensures layout.tsx implements preconnect and display=swap for font performance", async () => {
+    it("ensures layout.tsx loads DM Sans and DM Mono through next/font instead of render-blocking stylesheets", async () => {
       const fs = await import("fs");
       const path = await import("path");
       const layoutPath = path.resolve(process.cwd(), "src/app/layout.tsx");
       const content = fs.readFileSync(layoutPath, "utf-8");
 
-      expect(content).toContain('rel="preconnect"');
-      expect(content).toContain('href="https://fonts.googleapis.com"');
-      expect(content).toContain('href="https://fonts.gstatic.com"');
-      expect(content).toContain("display=swap");
+      // next/font self-hosts, preloads and uses font-display: swap by default
+      expect(content).toMatch(/import\s*\{[^}]*DM_Sans[^}]*\}\s*from\s*"next\/font\/google"/);
+      expect(content).toMatch(/import\s*\{[^}]*DM_Mono[^}]*\}\s*from\s*"next\/font\/google"/);
+      expect(content).toContain('variable: "--font-sans"');
+      expect(content).toContain('variable: "--font-dm-mono"');
+      expect(content).not.toContain("fonts.googleapis.com/css2");
     });
   });
 });

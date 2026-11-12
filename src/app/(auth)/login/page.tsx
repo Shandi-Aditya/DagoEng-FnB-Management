@@ -4,24 +4,52 @@ import React, { useState, useEffect, Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AlertCircle, ArrowLeft, Eye, EyeOff, Search, Ticket } from "lucide-react";
+
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
+import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLoyalty } from "@/contexts/LoyaltyContext";
-import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import {
-  Lock,
-  Mail,
-  ArrowRight,
-  Phone,
-  User,
-  ArrowLeft,
-  Sparkles,
-  AlertCircle,
-  Ticket,
-  Search,
-  Eye,
-  EyeOff,
-} from "lucide-react";
+import { HERO } from "@/features/landing/landing-content";
+import { ModeToggle } from "@/features/layout/ModeToggle";
+
+interface PasswordInputProps {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  visible: boolean;
+  onToggle: () => void;
+  autoComplete: "current-password" | "new-password";
+}
+
+/** Password field with a show/hide toggle inside the input group. */
+function PasswordInput({ id, value, onChange, visible, onToggle, autoComplete }: PasswordInputProps) {
+  return (
+    <InputGroup>
+      <InputGroupInput
+        id={id}
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        autoComplete={autoComplete}
+        required
+      />
+      <InputGroupAddon align="inline-end">
+        <InputGroupButton
+          size="icon-xs"
+          onClick={onToggle}
+          aria-label={visible ? "Sembunyikan password" : "Tampilkan password"}
+        >
+          {visible ? <EyeOff /> : <Eye />}
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
+  );
+}
 
 /**
  * Strictly sanitizes returnTo parameter to prevent open-redirect vulnerabilities.
@@ -215,297 +243,163 @@ function LoginContent() {
     }
   };
 
+
+  const switchMode = (register: boolean) => {
+    setErrorMessage(null);
+    setIsRegisterMode(register);
+  };
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden selection:bg-[#3B7A57] selection:text-white transition-colors duration-300">
-
-      {/* Dynamic Ambient Background Glows matching Sage Green Design System */}
-      <div className="absolute top-1/4 -right-20 w-96 h-96 bg-[#52B788]/15 dark:bg-[#52B788]/10 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute bottom-10 -left-20 w-96 h-96 bg-[#3B7A57]/15 dark:bg-[#3B7A57]/10 rounded-full blur-[120px] pointer-events-none" />
-
-      {/* Decorative Subtle Grid Pattern */}
-      <div className="absolute inset-0 bg-[radial-gradient(#0000000a_1px,transparent_1px)] dark:bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
-
-      <div className="w-full max-w-md space-y-5 relative z-10">
-
-        {/* Top Back Navigation Bar & Theme Toggle */}
-        <div className="flex items-center justify-between px-1">
-          <Link
-            href={backHref}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white backdrop-blur-md shadow-xs transition-all duration-200 hover:scale-105 active:scale-95"
-          >
-            <ArrowLeft className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
-            <span>Kembali</span>
+    <div className="grid min-h-svh lg:grid-cols-2">
+      <div className="flex flex-col gap-4 p-6 md:p-10">
+        <div className="flex items-center justify-between gap-2">
+          <Link href="/" className="flex items-center gap-2 font-medium">
+            <Image src="/logo-dago.png" alt="" width={24} height={28} priority className="object-contain" />
+            DagoEng
           </Link>
-
-          <div className="flex items-center">
-            <ThemeToggle variant="pill" />
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" render={<Link href={backHref} />} nativeButton={false}>
+              <ArrowLeft />
+              Kembali
+            </Button>
+            <ModeToggle />
           </div>
         </div>
 
-        {/* Brand Header */}
-        <div className="text-center space-y-2.5 pt-2">
-          <Link href="/" className="inline-block group">
-            <div className="w-16 h-18 relative mx-auto transition-transform duration-300 group-hover:scale-110 drop-shadow-[0_8px_20px_rgba(59,122,87,0.25)]">
-              <Image
-                src="/logo-dago.png"
-                alt="DagoEng Creative Hub Logo"
-                width={64}
-                height={72}
-                priority
-                className="object-contain"
-              />
-            </div>
-          </Link>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-              DagoEng <span className="text-[#3B7A57] dark:text-[#52B788]">Platform</span>
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1">
-              Sistem Terpadu F&B, Co-working, Event Marketplace & CRM
-            </p>
-          </div>
-        </div>
-
-        {/* Event Ticket Assistance Card - Context-Aware Alternative for Guest Visitors */}
-        {isFromEvents && (
-          <div className="p-4 bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/30 rounded-3xl space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
-            <div className="flex items-start space-x-3">
-              <div className="p-2 rounded-xl bg-[#3B7A57] dark:bg-[#52B788] text-white dark:text-slate-900 shrink-0 mt-0.5 shadow-xs">
-                <Ticket className="w-4 h-4" />
-              </div>
-              <div className="space-y-1 flex-1">
-                <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                  Akses Tiket Event Marketplace
-                </h4>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                  Login diperlukan untuk tiket yang terhubung resmi dengan akun Anda. Jika Anda memesan tiket sebagai <strong>Guest</strong> tanpa akun, silakan gunakan pencarian tiket tamu.
-                </p>
-              </div>
+        <div className="flex flex-1 items-center justify-center py-6">
+          <div className="flex w-full max-w-xs flex-col gap-6">
+            <div className="flex flex-col items-center gap-1 text-center">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {isRegisterMode ? "Daftar member" : "Masuk ke akun"}
+              </h1>
+              <p className="text-sm text-balance text-muted-foreground">
+                {isRegisterMode
+                  ? "Daftar gratis dan dapatkan 50 poin pertama."
+                  : "Masukkan email dan password akun DagoEng."}
+              </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-emerald-500/20">
-              <Link
-                href="/events/tickets/recovery"
-                className="inline-flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-[11px] font-bold text-slate-800 dark:text-slate-200 transition-colors shadow-2xs"
-              >
-                <Search className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
-                <span>Cari Tiket Pesanan Guest</span>
-              </Link>
-              <Link
-                href="/events"
-                className="inline-flex items-center justify-center space-x-1.5 py-2 px-3 rounded-xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 hover:bg-[#3B7A57]/20 text-[11px] font-bold text-[#3B7A57] dark:text-[#52B788] transition-colors"
-              >
-                <span>Jelajahi Event</span>
-                <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
-              </Link>
-            </div>
-          </div>
-        )}
+            {isFromEvents && !isRegisterMode ? (
+              <Alert>
+                <Ticket />
+                <AlertTitle>Pesan tiket sebagai tamu?</AlertTitle>
+                <AlertDescription>
+                  <p>Tiket tanpa akun bisa dicari lewat kode pesanan.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" render={<Link href="/events/tickets/recovery" />} nativeButton={false}>
+                      <Search />
+                      Cari tiket tamu
+                    </Button>
+                    <Button size="sm" variant="ghost" render={<Link href="/events" />} nativeButton={false}>
+                      Lihat event
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            ) : null}
 
-        {/* Main Glassmorphic Universal Login Card */}
-        <div className="bg-white dark:bg-[#131B2B] backdrop-blur-2xl border border-slate-200 dark:border-white/10 rounded-3xl shadow-xl dark:shadow-2xl overflow-hidden transition-colors">
-
-          <div className="px-6 pt-6 pb-4 border-b border-slate-100 dark:border-white/5 space-y-1">
-            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-              <span>
-                {isRegisterMode ? "Daftar Member Baru DagoEng" : "Masuk ke Akun DagoEng"}
-              </span>
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              {isRegisterMode
-                ? "Dapatkan langsung 50 Poin Selamat Datang dan promo eksklusif member DagoEng."
-                : "Satu form login universal untuk seluruh akun (Owner, Manajer, Kasir, Mitra Tenant, Organizer & Member)."}
-            </p>
-          </div>
-
-          <div className="p-6 space-y-5">
-            {errorMessage && (
-              <div className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-start justify-between space-x-2 animate-in fade-in duration-200">
-                <div className="flex items-start space-x-2">
-                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                  <span className="leading-relaxed">{errorMessage}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setErrorMessage(null)}
-                  className="text-rose-400 hover:text-rose-600 dark:hover:text-rose-200 p-0.5 cursor-pointer shrink-0"
-                  title="Tutup pesan"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
+            {errorMessage ? (
+              <Alert variant="destructive">
+                <AlertCircle />
+                <AlertDescription>{errorMessage}</AlertDescription>
+              </Alert>
+            ) : null}
 
             {!isRegisterMode ? (
-              /* Universal Login Form */
-              <form onSubmit={handleUniversalLogin} className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Alamat Email Akun
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                    <input
+              <form onSubmit={handleUniversalLogin}>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="email">Email</FieldLabel>
+                    <Input
+                      id="email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
                       placeholder="nama@bisnis.com atau nama@gmail.com"
+                      autoComplete="email"
                       required
                     />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                    <input
-                      type={showPassword ? "text" : "password"}
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="password">Password</FieldLabel>
+                    <PasswordInput
+                      id="password"
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-11 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
-                      placeholder="••••••••"
-                      required
+                      onChange={setPassword}
+                      visible={showPassword}
+                      onToggle={() => setShowPassword((v) => !v)}
+                      autoComplete="current-password"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
-                      aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full h-11 text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-md shadow-[#3B7A57]/20 border border-[#52B788]/30 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-                >
-                  <span>{isLoading ? "Memverifikasi Kredensial..." : "Masuk ke Sistem"}</span>
-                  <ArrowRight className="w-4 h-4 ml-1.5" />
-                </Button>
-
-                <div className="pt-2 text-center text-xs text-slate-500 dark:text-slate-400">
-                  <span>Belum memiliki akun member? </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setErrorMessage(null);
-                      setIsRegisterMode(true);
-                    }}
-                    className="font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline cursor-pointer"
-                  >
-                    Daftar Member Baru (+50 Poin)
-                  </button>
-                </div>
+                  </Field>
+                  <Button type="submit" size="lg" disabled={isLoading} className="w-full">
+                    {isLoading ? <Spinner /> : null}
+                    {isLoading ? "Memproses..." : "Masuk ke Sistem"}
+                  </Button>
+                </FieldGroup>
               </form>
             ) : (
-              /* New Member Registration Form */
-              <form onSubmit={handleRegisterSubmit} className="space-y-3.5">
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Nama Lengkap</label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                    <input
-                      type="text"
-                      value={regName}
-                      onChange={(e) => setRegName(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
-                      placeholder="Contoh: Ketut Dian"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Nomor WhatsApp / HP</label>
-                  <div className="relative">
-                    <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                    <input
+              <form onSubmit={handleRegisterSubmit}>
+                <FieldGroup>
+                  <Field>
+                    <FieldLabel htmlFor="reg-name">Nama lengkap</FieldLabel>
+                    <Input id="reg-name" value={regName} onChange={(e) => setRegName(e.target.value)} autoComplete="name" required />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="reg-phone">Nomor WhatsApp</FieldLabel>
+                    <Input
+                      id="reg-phone"
                       type="tel"
+                      inputMode="tel"
                       value={regPhone}
                       onChange={(e) => setRegPhone(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
-                      placeholder="+62 819-xxxx-xxxx"
+                      placeholder="08123456789"
+                      autoComplete="tel"
                       required
                     />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Email</label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                    <input
-                      type="email"
-                      value={regEmail}
-                      onChange={(e) => setRegEmail(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
-                      placeholder="email@anda.com"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Password</label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                    <input
-                      type={showRegPassword ? "text" : "password"}
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="reg-email">Email</FieldLabel>
+                    <Input id="reg-email" type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} autoComplete="email" />
+                    <FieldDescription>Opsional.</FieldDescription>
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="reg-password">Password</FieldLabel>
+                    <PasswordInput
+                      id="reg-password"
                       value={regPassword}
-                      onChange={(e) => setRegPassword(e.target.value)}
-                      className="w-full pl-10 pr-11 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-[#52B788] focus:ring-2 focus:ring-[#52B788]/20 transition-all"
-                      placeholder="••••••••"
-                      required
+                      onChange={setRegPassword}
+                      visible={showRegPassword}
+                      onToggle={() => setShowRegPassword((v) => !v)}
+                      autoComplete="new-password"
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowRegPassword(!showRegPassword)}
-                      className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-0.5 cursor-pointer"
-                      aria-label={showRegPassword ? "Sembunyikan password" : "Tampilkan password"}
-                    >
-                      {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full h-11 text-xs font-bold space-x-1.5 mt-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-md shadow-[#3B7A57]/20 border border-[#52B788]/30 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-                >
-                  <Sparkles className="w-4 h-4 text-amber-300" />
-                  <span>{isLoading ? "Mendaftarkan..." : "Daftar & Klaim 50 Poin"}</span>
-                  <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-
-                <div className="pt-2 text-center text-xs text-slate-500 dark:text-slate-400">
-                  <span>Sudah memiliki akun? </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setErrorMessage(null);
-                      setIsRegisterMode(false);
-                    }}
-                    className="font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline cursor-pointer"
-                  >
-                    Masuk di sini
-                  </button>
-                </div>
+                  </Field>
+                  <Button type="submit" size="lg" disabled={isLoading} className="w-full">
+                    {isLoading ? <Spinner /> : null}
+                    {isLoading ? "Mendaftarkan..." : "Daftar dan klaim 50 poin"}
+                  </Button>
+                </FieldGroup>
               </form>
             )}
 
+            <p className="text-center text-sm text-muted-foreground">
+              {isRegisterMode ? "Sudah punya akun?" : "Belum punya akun member?"}
+              <Button variant="link" size="sm" className="px-1" onClick={() => switchMode(!isRegisterMode)}>
+                {isRegisterMode ? "Masuk" : "Daftar"}
+              </Button>
+            </p>
           </div>
         </div>
+      </div>
 
-        <p className="text-center text-[11px] text-slate-400 dark:text-slate-500 font-medium">
-          © {new Date().getFullYear()} DagoEng Creative Hub. All rights reserved.
-        </p>
+      <div className="relative hidden bg-muted lg:block">
+        <Image
+          src={HERO.image}
+          alt={HERO.imageAlt}
+          fill
+          priority
+          sizes="50vw"
+          className="object-cover dark:brightness-[0.35] dark:grayscale"
+        />
       </div>
     </div>
   );
@@ -515,11 +409,9 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B0F17] flex items-center justify-center p-6 text-xs text-slate-500 font-bold">
-          <div className="flex flex-col items-center space-y-3">
-            <div className="w-8 h-8 border-3 border-[#3B7A57] border-t-transparent rounded-full animate-spin" />
-            <span>Memuat Halaman Login...</span>
-          </div>
+        <div className="flex min-h-svh items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Spinner />
+          Memuat
         </div>
       }
     >

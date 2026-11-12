@@ -1,19 +1,18 @@
 "use client";
 
-import React, { useRef } from "react";
+import { useRef } from "react";
 import Image from "next/image";
-import { formatCurrencyIDR } from "@/lib/utils";
-import { StockOpnameRecord } from "@/types/inventory";
-import {
-  X,
-  Printer,
-  ShieldCheck,
-  ClipboardCheck,
-  Scale,
-  TrendingDown,
-  CheckCircle2,
-} from "lucide-react";
+import { ClipboardCheck, Printer } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { formatCurrencyIDR } from "@/lib/utils";
+import type { StockOpnameRecord } from "@/types/inventory";
 
 interface StockOpnameReportPDFModalProps {
   isOpen: boolean;
@@ -34,15 +33,14 @@ export function StockOpnameReportPDFModal({
 
   const surplusCount = opnames.filter((o) => o.varianceType === "SURPLUS").length;
   const deficitCount = opnames.filter((o) => o.varianceType === "DEFICIT").length;
-  const matchCount = opnames.filter((o) => o.varianceType === "MATCH").length;
 
   const totalVarianceValue = opnames.reduce((sum, o) => {
     return sum + (o.varianceValue ? Math.abs(o.varianceValue) : 0);
   }, 0);
 
-  const reportDocNo = `BA-OPNAME-${new Date().getFullYear()}${(new Date().getMonth() + 1)
-    .toString()
-    .padStart(2, "0")}${new Date().getDate().toString().padStart(2, "0")}-${Math.floor(
+  const reportDocNo = `BA-OPNAME-${new Date().getFullYear()}${String(
+    new Date().getMonth() + 1
+  ).padStart(2, "0")}${String(new Date().getDate()).padStart(2, "0")}-${Math.floor(
     100 + Math.random() * 900
   )}`;
 
@@ -70,242 +68,211 @@ export function StockOpnameReportPDFModal({
   };
 
   return (
-    <>
-      <style jsx global>{`
-        @media print {
-          body * {
-            visibility: hidden !important;
-          }
-          #printable-stock-opname-report,
-          #printable-stock-opname-report * {
-            visibility: visible !important;
-          }
-          #printable-stock-opname-report {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            padding: 24px !important;
-            background: white !important;
-          }
-          .no-print {
-            display: none !important;
-          }
-        }
-      `}</style>
-
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col border border-slate-200 overflow-hidden">
-          {/* Header Action Bar */}
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-            <div className="flex items-center space-x-2">
-              <ClipboardCheck className="w-5 h-5 text-indigo-600" />
+    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="max-h-[92vh] max-w-4xl overflow-hidden p-0">
+        <DialogHeader className="border-b bg-muted/40 px-6 py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3 pr-6">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <ClipboardCheck className="size-4" />
+              </div>
               <div>
-                <h3 className="font-bold text-slate-900 text-sm">
-                  Pratinjau Berita Acara Resmi Stock Opname
-                </h3>
-                <p className="text-[10px] text-slate-500">
-                  Dokumen fisik siap cetak & ekspor PDF resmi operasional gudang.
+                <DialogTitle className="text-sm font-medium">
+                  Berita Acara Resmi Stock Opname
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground">
+                  Dokumen fisik siap cetak dan ekspor PDF resmi operasional gudang
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
-              <Button
-                size="sm"
-                onClick={handlePrint}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-xs"
-              >
-                <Printer className="w-3.5 h-3.5 mr-1.5" />
-                <span>Cetak / Simpan PDF</span>
-              </Button>
-              <button
-                onClick={onClose}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+            <Button size="sm" onClick={handlePrint} className="gap-1.5 text-xs">
+              <Printer className="size-3.5" />
+              <span>Cetak / Simpan PDF</span>
+            </Button>
           </div>
+        </DialogHeader>
 
-          {/* Printable Report Sheet */}
-          <div className="p-8 overflow-y-auto flex-1 bg-slate-100/50 flex justify-center">
-            <div
-              id="printable-stock-opname-report"
-              ref={printContentRef}
-              className="w-full max-w-3xl bg-white p-8 rounded-xl shadow-xs border border-slate-200 font-sans text-slate-900 text-xs space-y-6"
-            >
-              {/* Official Letterhead */}
-              <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
-                <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 relative flex-shrink-0">
-                    <Image
-                      src="/logo-dago.png"
-                      alt="Dago Creative Hub"
-                      width={48}
-                      height={48}
-                      className="object-contain"
-                    />
-                  </div>
-                  <div>
-                    <h1 className="font-black text-lg tracking-tight text-slate-900">
-                      DAGO CREATIVE HUB
-                    </h1>
-                    <p className="text-[11px] text-slate-600 font-medium">
-                      Divisi Logistik, Pergudangan & Manajemen Inventori
-                    </p>
-                    <p className="text-[10px] text-slate-400 leading-tight">
-                      Jl. Ngurah Rai No. 45, Singaraja, Bali 81116 &bull; Telp: (0362) 23456
-                    </p>
-                  </div>
+        {/* Printable Report Sheet */}
+        <div className="max-h-[calc(92vh-75px)] overflow-y-auto bg-muted/30 p-4 sm:p-6">
+          <div
+            id="printable-stock-opname-report"
+            ref={printContentRef}
+            className="mx-auto max-w-3xl rounded-xl border bg-card p-8 text-foreground shadow-sm print:m-0 print:border-none print:p-0 print:shadow-none"
+          >
+            {/* Official Letterhead */}
+            <div className="flex items-start justify-between border-b pb-4">
+              <div className="flex items-center gap-3">
+                <div className="relative size-12 shrink-0">
+                  <Image
+                    src="/logo-dago.png"
+                    alt="Dago Creative Hub"
+                    width={48}
+                    height={48}
+                    className="object-contain"
+                  />
                 </div>
-
-                <div className="text-right">
-                  <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-indigo-100 text-indigo-900 border border-indigo-200">
-                    BERITA ACARA AUDIT FISIK
-                  </span>
-                  <p className="font-mono text-[11px] font-bold text-slate-700 mt-1">
-                    No: {reportDocNo}
+                <div>
+                  <h1 className="text-base font-medium tracking-tight text-foreground">
+                    DAGOENG CREATIVE HUB
+                  </h1>
+                  <p className="text-xs text-muted-foreground">
+                    Divisi Logistik, Pergudangan & Manajemen Inventori
                   </p>
-                  <p className="text-[10px] text-slate-500">
-                    Tanggal: {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                  <p className="text-[11px] text-muted-foreground">
+                    Jl. Ngurah Rai No. 45, Singaraja, Bali
                   </p>
                 </div>
               </div>
 
-              {/* Document Metadata */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 block uppercase">Outlet / Lokasi</span>
-                  <span className="font-bold text-slate-800">{outletName}</span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Item Diaudit</span>
-                  <span className="font-mono font-bold text-slate-800">{opnames.length} Bahan Baku</span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 block uppercase">Status Selisih</span>
-                  <span className="font-bold text-slate-800">
-                    +{surplusCount} Surplus / -{deficitCount} Defisit
-                  </span>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 block uppercase">Estimasi Nilai Selisih</span>
-                  <span className="font-mono font-black text-rose-600">
-                    {formatCurrencyIDR(totalVarianceValue)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Detail Audit Table */}
-              <div className="border border-slate-200 rounded-lg overflow-hidden my-4 text-xs">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-900 text-white text-[10px] font-bold uppercase">
-                    <tr>
-                      <th className="p-2">No. Opname</th>
-                      <th className="p-2">Bahan Baku</th>
-                      <th className="p-2 text-right">Stok Sistem</th>
-                      <th className="p-2 text-right">Stok Fisik</th>
-                      <th className="p-2 text-center">Selisih (Variance)</th>
-                      <th className="p-2">Kategori Alasan</th>
-                      <th className="p-2">Catatan</th>
-                      <th className="p-2 text-center">Auditor</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 text-slate-700">
-                    {opnames.length === 0 ? (
-                      <tr>
-                        <td colSpan={8} className="p-6 text-center text-slate-400 text-xs">
-                          Belum ada data audit stock opname untuk dicetak.
-                        </td>
-                      </tr>
-                    ) : (
-                      opnames.map((o) => (
-                        <tr key={o.id} className="hover:bg-slate-50">
-                          <td className="p-2 font-mono font-bold text-slate-900">{o.opnameNumber}</td>
-                          <td className="p-2 font-semibold">
-                            <span>{o.ingredientName}</span>
-                            <span className="block text-[10px] text-slate-400 font-normal">
-                              {o.category}
-                            </span>
-                          </td>
-                          <td className="p-2 text-right font-mono font-medium">
-                            {o.systemStock} {o.unit}
-                          </td>
-                          <td className="p-2 text-right font-mono font-bold text-slate-900">
-                            {o.physicalStock} {o.unit}
-                          </td>
-                          <td className="p-2 text-center">
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold ${
-                                o.variance > 0
-                                  ? "bg-emerald-100 text-emerald-800"
-                                  : o.variance < 0
-                                  ? "bg-rose-100 text-rose-800"
-                                  : "bg-blue-100 text-blue-800"
-                              }`}
-                            >
-                              {o.variance > 0 ? `+${o.variance}` : o.variance} {o.unit}
-                            </span>
-                          </td>
-                          <td className="p-2 font-medium text-slate-800 text-[11px]">
-                            {getReasonBadgeLabel(o.reason)}
-                          </td>
-                          <td className="p-2 text-[10px] text-slate-500 italic">
-                            {o.reasonNotes || "-"}
-                          </td>
-                          <td className="p-2 text-center font-medium text-[11px] text-slate-700">
-                            {o.performedBy}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Statement of Integrity */}
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-[10px] text-slate-600 leading-relaxed">
-                <p>
-                  <strong>Pernyataan Berita Acara:</strong> Seluruh data stok fisik di atas telah dihitung, diperiksa, dan diverifikasi langsung di gudang penyimpanan. Penyesuaian stok sistem telah disinkronkan sesuai hasil audit aktual.
+              <div className="text-right">
+                <span className="inline-block rounded border bg-muted/50 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider">
+                  BERITA ACARA AUDIT FISIK
+                </span>
+                <p className="mt-1 font-mono text-[11px] font-medium text-foreground">
+                  No: {reportDocNo}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  Tanggal:{" "}
+                  {new Date().toLocaleDateString("id-ID", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
                 </p>
               </div>
+            </div>
 
-              {/* Three-Column Official Signature Section */}
-              <div className="pt-6 grid grid-cols-3 gap-6 text-center text-xs">
-                <div className="space-y-12">
-                  <p className="font-bold text-slate-700">Petugas Opname / Auditor,</p>
-                  <div>
-                    <div className="border-b border-slate-400 w-36 mx-auto mb-1"></div>
-                    <p className="font-bold text-slate-800">
-                      {opnames[0]?.performedBy || "Staff Logistik"}
-                    </p>
-                    <p className="text-[10px] text-slate-400">Inventory Specialist</p>
-                  </div>
+            {/* Document Metadata */}
+            <div className="my-4 grid grid-cols-2 gap-3 rounded-lg border bg-muted/30 p-3 text-xs sm:grid-cols-4">
+              <div>
+                <span className="block text-[10px] font-medium uppercase text-muted-foreground">
+                  Outlet / Lokasi
+                </span>
+                <span className="font-medium text-foreground">{outletName}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] font-medium uppercase text-muted-foreground">
+                  Total Item Diaudit
+                </span>
+                <span className="font-mono font-medium text-foreground">
+                  {opnames.length} Bahan Baku
+                </span>
+              </div>
+              <div>
+                <span className="block text-[10px] font-medium uppercase text-muted-foreground">
+                  Status Selisih
+                </span>
+                <span className="font-medium text-foreground">
+                  +{surplusCount} Surplus / -{deficitCount} Defisit
+                </span>
+              </div>
+              <div>
+                <span className="block text-[10px] font-medium uppercase text-muted-foreground">
+                  Nilai Selisih
+                </span>
+                <span className="font-mono font-medium tabular-nums text-destructive">
+                  {formatCurrencyIDR(totalVarianceValue)}
+                </span>
+              </div>
+            </div>
+
+            {/* Detail Audit Table */}
+            <div className="my-4 overflow-hidden rounded-lg border text-xs">
+              <table className="w-full text-left">
+                <thead className="border-b bg-muted/50 text-[10px] font-medium uppercase text-muted-foreground">
+                  <tr>
+                    <th className="p-2">No. Opname</th>
+                    <th className="p-2">Bahan Baku</th>
+                    <th className="p-2 text-right">Stok Sistem</th>
+                    <th className="p-2 text-right">Stok Fisik</th>
+                    <th className="p-2 text-center">Selisih</th>
+                    <th className="p-2">Kategori Alasan</th>
+                    <th className="p-2">Catatan</th>
+                    <th className="p-2 text-center">Auditor</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y text-foreground">
+                  {opnames.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="p-6 text-center text-xs text-muted-foreground">
+                        Belum ada data audit stock opname untuk dicetak.
+                      </td>
+                    </tr>
+                  ) : (
+                    opnames.map((o) => (
+                      <tr key={o.id}>
+                        <td className="p-2 font-mono text-xs font-medium">{o.opnameNumber}</td>
+                        <td className="p-2 font-medium">
+                          <span>{o.ingredientName}</span>
+                          <span className="block text-[10px] text-muted-foreground">
+                            {o.category}
+                          </span>
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums">
+                          {o.systemStock} {o.unit}
+                        </td>
+                        <td className="p-2 text-right font-mono font-medium tabular-nums">
+                          {o.physicalStock} {o.unit}
+                        </td>
+                        <td className="p-2 text-center font-mono text-[11px] tabular-nums font-medium">
+                          {o.variance > 0 ? `+${o.variance}` : o.variance} {o.unit}
+                        </td>
+                        <td className="p-2 text-[11px]">{getReasonBadgeLabel(o.reason)}</td>
+                        <td className="p-2 text-[10px] text-muted-foreground">
+                          {o.reasonNotes || "-"}
+                        </td>
+                        <td className="p-2 text-center text-[11px]">{o.performedBy}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Statement of Integrity */}
+            <div className="rounded-lg border bg-muted/20 p-3 text-[11px] leading-relaxed text-muted-foreground">
+              <p>
+                <strong className="text-foreground">Pernyataan Berita Acara:</strong> Seluruh data
+                stok fisik di atas telah dihitung, diperiksa, dan diverifikasi langsung di gudang
+                penyimpanan. Penyesuaian stok sistem telah disinkronkan sesuai hasil audit aktual.
+              </p>
+            </div>
+
+            {/* Three-Column Official Signature Section */}
+            <div className="grid grid-cols-3 gap-6 pt-6 text-center text-xs">
+              <div className="space-y-12">
+                <p className="font-medium text-foreground">Petugas Opname / Auditor</p>
+                <div>
+                  <div className="mx-auto mb-1 w-36 border-b" />
+                  <p className="font-medium text-foreground">
+                    {opnames[0]?.performedBy || "Staff Logistik"}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Inventory Specialist</p>
                 </div>
+              </div>
 
-                <div className="space-y-12">
-                  <p className="font-bold text-slate-700">Supervisor / Head Kitchen,</p>
-                  <div>
-                    <div className="border-b border-slate-400 w-36 mx-auto mb-1"></div>
-                    <p className="font-bold text-slate-800">( ........................................ )</p>
-                    <p className="text-[10px] text-slate-400">Operational Supervisor</p>
-                  </div>
+              <div className="space-y-12">
+                <p className="font-medium text-foreground">Supervisor Operasional</p>
+                <div>
+                  <div className="mx-auto mb-1 w-36 border-b" />
+                  <p className="font-medium text-foreground">( ........................................ )</p>
+                  <p className="text-[10px] text-muted-foreground">Operational Supervisor</p>
                 </div>
+              </div>
 
-                <div className="space-y-12">
-                  <p className="font-bold text-slate-700">Store Manager / Owner,</p>
-                  <div>
-                    <div className="border-b border-slate-400 w-36 mx-auto mb-1"></div>
-                    <p className="font-bold text-slate-800">( ........................................ )</p>
-                    <p className="text-[10px] text-slate-400">Pimpinan Mitra / Hub</p>
-                  </div>
+              <div className="space-y-12">
+                <p className="font-medium text-foreground">Pimpinan Outlet / Owner</p>
+                <div>
+                  <div className="mx-auto mb-1 w-36 border-b" />
+                  <p className="font-medium text-foreground">( ........................................ )</p>
+                  <p className="text-[10px] text-muted-foreground">Store Manager</p>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </>
+      </DialogContent>
+    </Dialog>
   );
 }

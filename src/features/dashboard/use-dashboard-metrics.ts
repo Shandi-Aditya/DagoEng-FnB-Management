@@ -1,0 +1,172 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+
+import { useAuth } from "@/contexts/AuthContext";
+import { useCoworking } from "@/contexts/CoworkingContext";
+import { useDateFilter } from "@/contexts/DateFilterContext";
+import { useOrders } from "@/contexts/OrderContext";
+
+import { averageOrderValue, buildUnitBreakdown } from "./dashboard-metrics";
+
+export interface PendingActions {
+  moderation: number;
+  payouts: number;
+  revenueSplits: number;
+  manualPayments: number;
+}
+
+interface EventStats {
+  totalRevenue: number;
+  ticketsSold: number;
+  platformRevenue: number;
+}
+
+const EMPTY_EVENT_STATS: EventStats = { totalRevenue: 0, ticketsSold: 0, platformRevenue: 0 };
+const EMPTY_ACTIONS: PendingActions = { moderation: 0, payouts: 0, revenueSplits: 0, manualPayments: 0 };
+
+/* eslint-disable @typescript-eslint/no-explicit-any -- event API payloads are untyped JSON */
+function useEventAdminData(enabled: boolean) {
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [fallbackStats, setFallbackStats] = useState<EventStats>(EMPTY_EVENT_STATS);
+  const [actions, setActions] = useState<PendingActions>(EMPTY_ACTIONS);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    fetch("/api/events/bookings?includeStats=true&unmasked=true")
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json.success) return;
+        if (json.stats) {
+          setFallbackStats({
+            totalRevenue: json.stats.totalTicketRevenue || 0,
+            ticketsSold: json.stats.totalTicketsSold || 0,
+            platformRevenue: json.stats.platformCommissionRevenue || 0,
+          });
+        }
+        if (Array.isArray(json.data)) {
+          setBookings(json.data);
+          const manualPayments = json.data.filter(
+            (b: any) =>
+              b.totalPrice > 0 &&
+              b.paymentStatus === "PENDING" &&
+              (b.paymentMethod === "MANUAL_TRANSFER" || Boolean(b.paymentProofUrl)),
+          ).length;
+          setActions((prev) => ({ ...prev, manualPayments }));
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/events/admin")
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json.success || !Array.isArray(json.data)) return;
+        const events = json.data;
+        const payouts = events.reduce(
+          (sum: number, e: any) =>
+            sum + (Array.isArray(e.payoutHistory) ? e.payoutHistory.filter((p: any) => p.status === "REQUESTED").length : 0),
+          0,
+        );
+        setActions((prev) => ({
+          ...prev,
+          moderation: events.filter((e: any) => e.status === "PENDING").length,
+          revenueSplits: events.filter((e: any) => e.proposedRevenueSplit?.status === "PENDING").length,
+          payouts,
+        }));
+      })
+      .catch(() => {});
+  }, [enabled]);
+
+  return { bookings, fallbackStats, actions };
+}
+
+/** All numbers shown on the executive dashboard, scoped to the signed-in user. */
+export function useDashboardMetrics() {
+  const { user, activeOrgModules } = useAuth();
+  const { isDateInRange } = useDateFilter();
+  const { filteredOrders } = useOrders();
+  const { bookings: coworkingBookings } = useCoworking();
+
+  const isDagoOwner =
+    (user?.role?.slug === "OWNER" || user?.role?.slug === "SUPER_ADMIN") &&
+    (user?.scopeLevel === "ORGANIZATION" || user?.scopeLevel === "PLATFORM");
+  const isTenantOwner = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
+  const tenantId = user?.tenant?.id;
+
+  const { bookings: eventBookings, fallbackStats, actions } = useEventAdminData(isDagoOwner);
+
+  const eventStats = useMemo<EventStats>(() => {
+    if (!eventBookings.length) return fallbackStats;
+    const paid = eventBookings.filter((b: any) => b.paymentStatus === "PAID" && isDateInRange(b.createdAt));
+    return {
+      totalRevenue: paid.reduce((sum: number, b: any) => sum + (b.totalPrice || 0), 0),
+      ticketsSold: paid.reduce((sum: number, b: any) => sum + (b.ticketCount || 1), 0),
+      platformRevenue: paid.reduce((sum: number, b: any) => sum + (b.platformFeeAmount || 0), 0),
+    };
+  }, [eventBookings, fallbackStats, isDateInRange]);
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  const scopedOrders = useMemo(
+    () =>
+      isTenantOwner && tenantId
+        ? filteredOrders.filter((order) => order.items.some((item) => item.tenantId === tenantId))
+        : filteredOrders,
+    [filteredOrders, isTenantOwner, tenantId],
+  );
+
+  const fnbRevenue = useMemo(() => {
+    if (!isTenantOwner || !tenantId) return filteredOrders.reduce((sum, order) => sum + order.total, 0);
+    return scopedOrders.reduce(
+      (sum, order) =>
+        sum +
+        order.items
+          .filter((item) => item.tenantId === tenantId)
+          .reduce((itemSum, item) => itemSum + (item.unitPrice || 0) * (item.quantity || 1), 0),
+      0,
+    );
+  }, [filteredOrders, scopedOrders, isTenantOwner, tenantId]);
+
+  const paidCoworkingBookings = useMemo(
+    () =>
+      coworkingBookings.filter(
+        (booking) => booking.paymentStatus === "PAID" && booking.checkInStatus !== "CANCELLED" && isDateInRange(booking.date),
+      ),
+    [coworkingBookings, isDateInRange],
+  );
+
+  const coworkingRevenue = isTenantOwner
+    ? 0
+    : paidCoworkingBookings.reduce((sum, booking) => sum + (booking.paidAmount || booking.totalAmount || 0), 0);
+
+  // Dago earns the platform fee from events, not the full ticket turnover
+  const eventRevenue = isDagoOwner ? eventStats.platformRevenue : 0;
+  const consolidatedRevenue = fnbRevenue + coworkingRevenue + eventRevenue;
+  const revenue = isDagoOwner ? consolidatedRevenue : fnbRevenue;
+
+  const transactions =
+    scopedOrders.length + (isDagoOwner ? paidCoworkingBookings.length + eventStats.ticketsSold : 0);
+  const completedOrders = scopedOrders.filter((order) => order.status === "COMPLETED" || order.status === "SERVED").length;
+  const preparingOrders = scopedOrders.filter((order) => order.status === "COOKING" || order.status === "KITCHEN_RECEIVED").length;
+
+  return {
+    isDagoOwner,
+    isTenantOwner,
+    revenue,
+    transactions,
+    averageOrderValue: averageOrderValue(revenue, transactions),
+    activeUnits: activeOrgModules.filter((module) => module !== "CORE").length + 1,
+    completedOrders,
+    totalOrders: scopedOrders.length,
+    preparingOrders,
+    pendingActions: actions,
+    unitBreakdown: buildUnitBreakdown({
+      fnbRevenue,
+      coworkingRevenue,
+      eventRevenue,
+      coworkingBookings: paidCoworkingBookings.length,
+      ticketsSold: eventStats.ticketsSold,
+      isCoworkingActive: activeOrgModules.includes("CO_WORKING"),
+    }),
+  };
+}

@@ -28,10 +28,10 @@ import {
   Filter,
   ScanLine,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/legacy/ui/button";
+import { Card } from "@/components/legacy/ui/card";
+import { Badge } from "@/components/legacy/ui/badge";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { CommunityEvent, EventTicketOrder, AttendeeCheckInStatus } from "@/types/event";
 import { EventSearchInput } from "@/components/events/EventSearchInput";
@@ -487,7 +487,7 @@ export default function EventCheckInDashboardPage() {
             <Button asChild variant="outline" size="sm" className="rounded-xl text-xs font-semibold">
               <Link href="/">Kembali ke Beranda</Link>
             </Button>
-            <Button asChild size="sm" className="rounded-xl text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white">
+            <Button asChild size="sm" className="rounded-xl text-xs font-bold bg-brand-sage hover:bg-[#2E6044] text-white">
               <Link href={roleSlug === "CUSTOMER" ? "/customer" : "/dashboard"}>
                 Ke Workspace Saya
               </Link>
@@ -506,7 +506,7 @@ export default function EventCheckInDashboardPage() {
           {/* Top Line on Mobile: Brand on Left, Actions on Right */}
           <div className="flex items-center justify-between sm:justify-start space-x-3 w-full sm:w-auto">
             <div className="flex items-center space-x-2.5 min-w-0">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center font-black text-sm shrink-0 shadow-2xs">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-brand-sage/10 dark:bg-brand-sageBright/20 text-brand-sage dark:text-brand-sageBright flex items-center justify-center font-black text-sm shrink-0 shadow-2xs">
                 <QrCode className="w-5 h-5" />
               </div>
               <div className="min-w-0">
@@ -514,7 +514,7 @@ export default function EventCheckInDashboardPage() {
                   <span className="text-sm font-black text-slate-900 dark:text-white tracking-tight truncate">
                     DagoEng Event Desk
                   </span>
-                  <span className="text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] border border-emerald-200 dark:border-emerald-800 shrink-0">
+                  <span className="text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage dark:text-brand-sageBright border border-emerald-200 dark:border-emerald-800 shrink-0">
                     Check-In
                   </span>
                 </div>
@@ -574,7 +574,7 @@ export default function EventCheckInDashboardPage() {
                 {user?.name || "Petugas Lapangan"}
               </strong>
             </div>
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] border border-emerald-200 dark:border-emerald-800 shrink-0">
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage dark:text-brand-sageBright border border-emerald-200 dark:border-emerald-800 shrink-0">
               {user?.email === "eventstaff@dagoeng.com"
                 ? "Petugas Lapangan"
                 : isHubAdmin
@@ -677,7 +677,7 @@ export default function EventCheckInDashboardPage() {
               <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4 w-full min-w-0">
                 <div className="space-y-1 min-w-0">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                    <Sparkles className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
                     <span>Pilih Event Operasional:</span>
                   </label>
                   <p className="text-[11px] text-slate-400">
@@ -702,23 +702,23 @@ export default function EventCheckInDashboardPage() {
             {selectedEvent && (
               <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 w-full max-w-full min-w-0">
                 {/* 2. DEDICATED QR SCANNER ACTION HERO BANNER */}
-                <Card className="p-4 sm:p-6 border border-emerald-500/30 bg-gradient-to-br from-slate-900 via-[#0F2317] to-slate-900 text-white rounded-2xl sm:rounded-3xl shadow-lg relative overflow-hidden w-full max-w-full min-w-0">
+                <Card className="p-4 sm:p-6 border border-emerald-500/30 bg-linear-to-br from-slate-900 via-[#0F2317] to-slate-900 text-white rounded-2xl sm:rounded-3xl shadow-lg relative overflow-hidden w-full max-w-full min-w-0">
                   <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 sm:gap-6 w-full min-w-0">
                     <div className="space-y-2 max-w-xl w-full min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge className="bg-[#3B7A57] text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full border-none shrink-0">
+                        <Badge className="bg-brand-sage text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full border-none shrink-0">
                           {selectedEvent.category}
                         </Badge>
                         <span className="text-xs text-slate-300 font-medium truncate">
                           Penyelenggara: <strong className="text-white">{selectedEvent.organizerName}</strong>
                         </span>
                       </div>
-                      <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-snug break-words">
+                      <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-snug wrap-break-word">
                         {selectedEvent.title}
                       </h2>
                       <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 text-xs text-slate-300">
                         <span className="flex items-center space-x-1.5 shrink-0">
-                          <Calendar className="w-3.5 h-3.5 text-[#52B788] shrink-0" />
+                          <Calendar className="w-3.5 h-3.5 text-brand-sageBright shrink-0" />
                           <span>
                             {new Date(selectedEvent.startDate).toLocaleDateString("id-ID", {
                               weekday: "short",
@@ -729,7 +729,7 @@ export default function EventCheckInDashboardPage() {
                           </span>
                         </span>
                         <span className="flex items-center space-x-1.5 shrink-0">
-                          <Clock className="w-3.5 h-3.5 text-[#52B788] shrink-0" />
+                          <Clock className="w-3.5 h-3.5 text-brand-sageBright shrink-0" />
                           <span>
                             {new Date(selectedEvent.startDate).toLocaleTimeString("id-ID", {
                               hour: "2-digit",
@@ -739,7 +739,7 @@ export default function EventCheckInDashboardPage() {
                           </span>
                         </span>
                         <span className="flex items-center space-x-1.5 truncate max-w-full">
-                          <MapPin className="w-3.5 h-3.5 text-[#52B788] shrink-0" />
+                          <MapPin className="w-3.5 h-3.5 text-brand-sageBright shrink-0" />
                           <span className="truncate">{selectedEvent.location}</span>
                         </span>
                       </div>
@@ -750,7 +750,7 @@ export default function EventCheckInDashboardPage() {
                       <Button
                         type="button"
                         onClick={() => setIsScannerOpen(true)}
-                        className="w-full sm:w-auto bg-[#3B7A57] hover:bg-[#2E6044] text-white font-black text-xs sm:text-sm px-5 sm:px-6 py-4 sm:py-5 rounded-2xl shadow-lg shadow-[#3B7A57]/30 flex items-center justify-center space-x-2.5 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
+                        className="w-full sm:w-auto bg-brand-sage hover:bg-[#2E6044] text-white font-black text-xs sm:text-sm px-5 sm:px-6 py-4 sm:py-5 rounded-2xl shadow-lg shadow-[#3B7A57]/30 flex items-center justify-center space-x-2.5 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
                       >
                         <Camera className="w-5 h-5 text-white shrink-0" />
                         <span>Buka Kamera Scanner QR</span>
@@ -772,13 +772,13 @@ export default function EventCheckInDashboardPage() {
                           }}
                           placeholder={isQuickScanning ? "Memvalidasi tiket..." : "Ketik / Scan Barcode..."}
                           disabled={isQuickScanning}
-                          className="flex-1 sm:w-56 min-w-0 px-1 py-1 text-xs font-mono font-bold bg-transparent border-none text-white placeholder:text-slate-400 focus:outline-none focus:ring-0 shadow-none disabled:opacity-60"
+                          className="flex-1 sm:w-56 min-w-0 px-1 py-1 text-xs font-mono font-bold bg-transparent border-none text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-0 shadow-none disabled:opacity-60"
                         />
                         <Button
                           type="submit"
                           size="sm"
                           disabled={!quickBarcodeInput.trim() || isQuickScanning}
-                          className="shrink-0 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl px-3 h-8 cursor-pointer shadow-xs disabled:opacity-40"
+                          className="shrink-0 bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl px-3 h-8 cursor-pointer shadow-xs disabled:opacity-40"
                         >
                           {isQuickScanning ? (
                             <span className="flex items-center space-x-1">
@@ -798,7 +798,7 @@ export default function EventCheckInDashboardPage() {
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full max-w-full min-w-0">
                   <Card className="p-3.5 sm:p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-2xl sm:rounded-3xl shadow-xs min-w-0">
                     <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center space-x-1 truncate">
-                      <Ticket className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                      <Ticket className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
                       <span className="truncate">Total Tiket</span>
                     </p>
                     <p className="text-xl sm:text-3xl font-black text-slate-900 dark:text-white mt-1">
@@ -831,18 +831,18 @@ export default function EventCheckInDashboardPage() {
 
                   <Card className="p-3.5 sm:p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-2xl sm:rounded-3xl shadow-xs min-w-0">
                     <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center space-x-1 truncate">
-                      <TrendingUp className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                      <TrendingUp className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
                       <span className="truncate">Kehadiran</span>
                     </p>
                     <div className="flex items-baseline space-x-1.5 mt-1">
-                      <p className="text-xl sm:text-3xl font-black text-[#3B7A57] dark:text-[#52B788]">
+                      <p className="text-xl sm:text-3xl font-black text-brand-sage dark:text-brand-sageBright">
                         {stats.percentage}%
                       </p>
                       <span className="text-[10px] text-slate-400">attendance</span>
                     </div>
                     <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full mt-2.5 overflow-hidden">
                       <div
-                        className="bg-[#3B7A57] dark:bg-[#52B788] h-full transition-all duration-300"
+                        className="bg-brand-sage dark:bg-brand-sageBright h-full transition-all duration-300"
                         style={{ width: `${Math.min(100, stats.percentage)}%` }}
                       />
                     </div>
@@ -881,7 +881,7 @@ export default function EventCheckInDashboardPage() {
                         onClick={() => setActiveTab("ALL")}
                         className={`flex-1 sm:flex-none whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
                           activeTab === "ALL"
-                            ? "bg-white dark:bg-slate-700 text-[#3B7A57] dark:text-[#52B788] shadow-xs border border-[#3B7A57]/30 dark:border-[#52B788]/50"
+                            ? "bg-white dark:bg-slate-700 text-brand-sage dark:text-brand-sageBright shadow-xs border border-brand-sage/30 dark:border-brand-sageBright/50"
                             : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                         }`}
                       >
@@ -897,7 +897,7 @@ export default function EventCheckInDashboardPage() {
                         value={ticketSearch}
                         onChange={(e) => setTicketSearch(e.target.value)}
                         placeholder="Cari kode tiket, nama, HP..."
-                        className="w-full text-xs font-medium pl-9 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/90 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]/30 focus:border-[#3B7A57] transition-all"
+                        className="w-full text-xs font-medium pl-9 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/90 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]/30 focus:border-brand-sage transition-all"
                       />
                       {ticketSearch && (
                         <button
@@ -946,7 +946,7 @@ export default function EventCheckInDashboardPage() {
                                 <button
                                   type="button"
                                   onClick={() => setViewQRBooking(b)}
-                                  className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors"
+                                  className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors"
                                   title="Lihat QR Code"
                                 >
                                   <QrCode className="w-3.5 h-3.5" />
@@ -1030,7 +1030,7 @@ export default function EventCheckInDashboardPage() {
                                       className={`h-8 px-3.5 text-xs font-bold rounded-xl shadow-xs cursor-pointer ${
                                         !isPaid
                                           ? "opacity-50 cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-800"
-                                          : "bg-[#3B7A57] hover:bg-[#2E6044] text-white"
+                                          : "bg-brand-sage hover:bg-[#2E6044] text-white"
                                       }`}
                                     >
                                       <Check className="w-3.5 h-3.5 mr-1" />
@@ -1094,7 +1094,7 @@ export default function EventCheckInDashboardPage() {
                                 type="button"
                                 size="sm"
                                 onClick={() => setActiveTab("CHECKED")}
-                                className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl cursor-pointer"
+                                className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl cursor-pointer"
                               >
                                 Lihat {stats.checkedInCount} Peserta yang Sudah Hadir
                               </Button>
@@ -1168,7 +1168,7 @@ export default function EventCheckInDashboardPage() {
                                     <button
                                       type="button"
                                       onClick={() => setViewQRBooking(b)}
-                                      className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-500 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors cursor-pointer"
+                                      className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-500 hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors cursor-pointer"
                                       title="Tampilkan QR Code E-Tiket"
                                     >
                                       <QrCode className="w-3.5 h-3.5" />
@@ -1245,7 +1245,7 @@ export default function EventCheckInDashboardPage() {
                                           className={`h-7 px-3 text-xs font-bold rounded-xl shadow-xs cursor-pointer ${
                                             !isPaid
                                               ? "opacity-50 cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-800"
-                                              : "bg-[#3B7A57] hover:bg-[#2E6044] text-white"
+                                              : "bg-brand-sage hover:bg-[#2E6044] text-white"
                                           }`}
                                         >
                                           <Check className="w-3.5 h-3.5 mr-1" />
@@ -1310,7 +1310,7 @@ export default function EventCheckInDashboardPage() {
                                       type="button"
                                       size="sm"
                                       onClick={() => setActiveTab("CHECKED")}
-                                      className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl cursor-pointer"
+                                      className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl cursor-pointer"
                                     >
                                       Lihat {stats.checkedInCount} Peserta yang Sudah Hadir
                                     </Button>
@@ -1359,7 +1359,7 @@ export default function EventCheckInDashboardPage() {
           <Card className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-3xl overflow-hidden p-6 space-y-5 text-center">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-brand-sage/10 dark:bg-brand-sageBright/20 text-brand-sage dark:text-brand-sageBright flex items-center justify-center">
                   <QrCode className="w-4 h-4" />
                 </div>
                 <div className="text-left">
@@ -1396,7 +1396,7 @@ export default function EventCheckInDashboardPage() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-slate-400 font-medium">Kode Tiket:</span>
-                <span className="font-mono text-xs font-bold text-[#3B7A57] dark:text-[#52B788]">{viewQRBooking.ticketCode}</span>
+                <span className="font-mono text-xs font-bold text-brand-sage dark:text-brand-sageBright">{viewQRBooking.ticketCode}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[11px] text-slate-400 font-medium">Jumlah Tiket:</span>
@@ -1436,7 +1436,7 @@ export default function EventCheckInDashboardPage() {
                   }
                 }}
                 disabled={viewQRBooking.checkInStatus === "CHECKED_IN"}
-                className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-10 rounded-xl shadow-md shadow-[#3B7A57]/20 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                className="w-full bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs h-10 rounded-xl shadow-md shadow-[#3B7A57]/20 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 <span>
@@ -1466,7 +1466,7 @@ export default function EventCheckInDashboardPage() {
           <Card className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-3xl overflow-hidden p-6 space-y-5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-[#3B7A57]/10 dark:bg-[#52B788]/20 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
+                <div className="w-9 h-9 rounded-2xl bg-brand-sage/10 dark:bg-brand-sageBright/20 text-brand-sage dark:text-brand-sageBright flex items-center justify-center">
                   <Ticket className="w-5 h-5" />
                 </div>
                 <div>
@@ -1512,13 +1512,13 @@ export default function EventCheckInDashboardPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-slate-500 font-medium">Status Hadir:</span>
-                      <span className="text-xs font-bold text-[#3B7A57] dark:text-[#52B788]">
+                      <span className="text-xs font-bold text-brand-sage dark:text-brand-sageBright">
                         {checked} Hadir &bull; {remaining} Belum Hadir
                       </span>
                     </div>
                     <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
                       <div
-                        className="bg-[#3B7A57] dark:bg-[#52B788] h-full transition-all"
+                        className="bg-brand-sage dark:bg-brand-sageBright h-full transition-all"
                         style={{ width: `${(checked / count) * 100}%` }}
                       />
                     </div>
@@ -1564,7 +1564,7 @@ export default function EventCheckInDashboardPage() {
                         });
                         setGroupCheckInBooking(null);
                       }}
-                      className="w-full h-auto py-2.5 px-4 bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-2xl flex flex-col items-center justify-center cursor-pointer shadow-md shadow-[#3B7A57]/20 transition-all"
+                      className="w-full h-auto py-2.5 px-4 bg-brand-sage hover:bg-[#2E6044] text-white rounded-2xl flex flex-col items-center justify-center cursor-pointer shadow-md shadow-[#3B7A57]/20 transition-all"
                     >
                       <span className="font-bold text-xs flex items-center space-x-1.5">
                         <CheckCircle2 className="w-3.5 h-3.5" />

@@ -1,22 +1,20 @@
 "use client";
 
-import React, { useRef } from "react";
+import { useRef } from "react";
 import Image from "next/image";
-import { formatCurrencyIDR } from "@/lib/utils";
-import { OrderRecord } from "@/types/order";
-import {
-  X,
-  Printer,
-  ShieldCheck,
-  FileText,
-  Building,
-  Store,
-  Calendar,
-  CheckCircle2,
-  Clock,
-  CreditCard,
-} from "lucide-react";
+import { FileText, Printer, ShieldCheck } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { formatCurrencyIDR } from "@/lib/utils";
+import type { OrderRecord } from "@/types/order";
+
+import { orderStatusLabel, paymentStatusLabel } from "./orders-domain";
 
 interface OrdersReportPDFModalProps {
   isOpen: boolean;
@@ -45,9 +43,9 @@ export function OrdersReportPDFModal({
     0
   );
 
-  const reportNumber = `ORD-REP-${new Date().getFullYear()}${(new Date().getMonth() + 1)
-    .toString()
-    .padStart(2, "0")}${new Date().getDate().toString().padStart(2, "0")}-${Math.floor(
+  const reportNumber = `ORD-REP-${new Date().getFullYear()}${String(
+    new Date().getMonth() + 1
+  ).padStart(2, "0")}${String(new Date().getDate()).padStart(2, "0")}-${Math.floor(
     100 + Math.random() * 900
   )}`;
 
@@ -56,137 +54,121 @@ export function OrdersReportPDFModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/80 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800">
-        {/* Top Control Bar */}
-        <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 flex-shrink-0">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
-              <FileText className="w-4 h-4" />
+    <Dialog open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="max-h-[92vh] max-w-4xl overflow-hidden p-0">
+        <DialogHeader className="border-b bg-muted/40 px-6 py-3.5">
+          <div className="flex flex-wrap items-center justify-between gap-3 pr-6">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <FileText className="size-4" />
+              </div>
+              <div>
+                <DialogTitle className="text-sm font-medium">
+                  Laporan Transaksi Pesanan
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground">
+                  Format cetak standar operasional dan audit
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                <span>Dokumen PDF Laporan Transaksi Pesanan</span>
-                <span className="text-[10px] bg-[#3B7A57] text-white px-2 py-0.2 rounded-full font-mono">
-                  RESMI
-                </span>
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Format Cetak Standar Akuntansi & Audit Operasional
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center space-x-2">
-            <Button
-              size="sm"
-              onClick={handlePrint}
-              className="text-xs bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold space-x-1.5 shadow-sm"
-            >
-              <Printer className="w-3.5 h-3.5" />
+            <Button size="sm" onClick={handlePrint} className="gap-1.5 text-xs">
+              <Printer className="size-3.5" />
               <span>Cetak / Simpan PDF</span>
             </Button>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
-        </div>
+        </DialogHeader>
 
         {/* Printable Paper Canvas */}
-        <div className="p-6 sm:p-8 overflow-y-auto flex-1 bg-slate-100/70 dark:bg-[#0F172A]">
+        <div className="max-h-[calc(92vh-75px)] overflow-y-auto bg-muted/30 p-4 sm:p-6">
           <div
             ref={printContentRef}
-            className="max-w-3xl mx-auto bg-white p-8 rounded-xl shadow-md border border-slate-200 text-slate-800 print:m-0 print:p-0 print:shadow-none print:border-none"
+            className="mx-auto max-w-3xl rounded-xl border bg-card p-8 text-foreground shadow-sm print:m-0 print:border-none print:p-0 print:shadow-none"
           >
             {/* Document Header */}
-            <div className="flex items-start justify-between pb-6 border-b-2 border-slate-900">
-              <div className="flex items-center space-x-3.5">
-                <div className="w-12 h-14 relative flex-shrink-0">
+            <div className="flex items-start justify-between border-b pb-6">
+              <div className="flex items-center gap-3.5">
+                <div className="relative size-12 shrink-0">
                   <Image
                     src="/logo-dago.png"
                     alt="Logo"
                     width={48}
-                    height={56}
+                    height={48}
                     className="object-contain"
                   />
                 </div>
                 <div>
-                  <h1 className="text-lg font-black text-slate-950 tracking-tight">
-                    DAGOENG CREATIVE HUB
-                  </h1>
-                  <p className="text-xs font-semibold text-[#3B7A57] dark:text-[#52B788]">
+                  <h1 className="text-base font-medium tracking-tight">DAGOENG CREATIVE HUB</h1>
+                  <p className="text-xs text-muted-foreground">
                     F&B Management & Unified Commercial Platform
                   </p>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Outlet: {outletName} • Jl. Ngurah Rai No. 45, Singaraja, Bali
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Outlet: {outletName} • Singaraja, Bali
                   </p>
                 </div>
               </div>
 
               <div className="text-right">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
+                <span className="block text-[10px] font-medium uppercase text-muted-foreground">
                   Nomor Laporan
                 </span>
-                <span className="text-xs font-mono font-bold text-slate-900">{reportNumber}</span>
-                <span className="text-[11px] text-slate-500 block mt-1">
+                <span className="font-mono text-xs font-medium">{reportNumber}</span>
+                <span className="mt-1 block text-[11px] text-muted-foreground">
                   Tanggal: {new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}
                 </span>
               </div>
             </div>
 
             {/* Title */}
-            <div className="text-center py-4 border-b border-slate-100">
-              <h2 className="text-base font-black text-slate-900 tracking-wide uppercase">
+            <div className="border-b py-4 text-center">
+              <h2 className="text-sm font-medium uppercase tracking-wide">
                 Rekapitulasi Penjualan & Lifecycle Pesanan
               </h2>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Konsolidasi data transaksi kasir POS & pemesanan meja self-order
               </p>
             </div>
 
             {/* KPI Summary Cards */}
-            <div className="grid grid-cols-4 gap-3 my-5">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-center">
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">
+            <div className="my-5 grid grid-cols-4 gap-3">
+              <div className="rounded-lg border bg-muted/30 p-3 text-center">
+                <span className="block text-[10px] font-medium uppercase text-muted-foreground">
                   Total Omzet
                 </span>
-                <span className="text-sm font-black text-slate-900 font-mono">
+                <span className="font-mono text-sm font-medium tabular-nums text-foreground">
                   {formatCurrencyIDR(totalRevenue)}
                 </span>
               </div>
-              <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200 text-center">
-                <span className="text-[10px] text-emerald-700 font-bold uppercase block">
+              <div className="rounded-lg border bg-success/10 p-3 text-center">
+                <span className="block text-[10px] font-medium uppercase text-success">
                   Selesai / Lunas
                 </span>
-                <span className="text-sm font-black text-emerald-800 font-mono">
+                <span className="font-mono text-sm font-medium tabular-nums text-success">
                   {completedOrders.length} Pesanan
                 </span>
               </div>
-              <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200 text-center">
-                <span className="text-[10px] text-amber-700 font-bold uppercase block">
+              <div className="rounded-lg border bg-warning/10 p-3 text-center">
+                <span className="block text-[10px] font-medium uppercase text-warning">
                   Aktif / Diproses
                 </span>
-                <span className="text-sm font-black text-amber-800 font-mono">
+                <span className="font-mono text-sm font-medium tabular-nums text-warning">
                   {inProgressOrders.length} Pesanan
                 </span>
               </div>
-              <div className="p-3 bg-purple-50/60 rounded-xl border border-purple-200 text-center">
-                <span className="text-[10px] text-purple-700 font-bold uppercase block">
+              <div className="rounded-lg border bg-info/10 p-3 text-center">
+                <span className="block text-[10px] font-medium uppercase text-info">
                   Total Item Terjual
                 </span>
-                <span className="text-sm font-black text-purple-800 font-mono">
+                <span className="font-mono text-sm font-medium tabular-nums text-info">
                   {totalItemsSold} Porsi
                 </span>
               </div>
             </div>
 
             {/* Orders Table */}
-            <div className="border border-slate-200 rounded-lg overflow-hidden my-4 text-xs">
+            <div className="my-4 overflow-hidden rounded-lg border text-xs">
               <table className="w-full text-left">
-                <thead className="bg-slate-900 text-white text-[10px] font-bold uppercase">
+                <thead className="border-b bg-muted/50 text-[10px] font-medium uppercase text-muted-foreground">
                   <tr>
                     <th className="p-2">No. Pesanan</th>
                     <th className="p-2">Meja</th>
@@ -198,63 +180,27 @@ export function OrdersReportPDFModal({
                     <th className="p-2 text-center">Metode Bayar</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-slate-700">
+                <tbody className="divide-y text-foreground">
                   {orders.map((o) => (
-                    <tr key={o.id} className="hover:bg-slate-50">
-                      <td className="p-2 font-bold font-mono text-slate-900">{o.orderNumber}</td>
+                    <tr key={o.id}>
+                      <td className="p-2 font-mono text-xs font-medium tabular-nums">
+                        {o.orderNumber}
+                      </td>
                       <td className="p-2 font-medium">{o.tableNumber}</td>
-                      <td className="p-2 font-medium">{o.customerName}</td>
-                      <td className="p-2 text-[11px] text-slate-600">
+                      <td className="p-2">{o.customerName}</td>
+                      <td className="p-2 text-[11px] text-muted-foreground">
                         {o.items.map((i) => `${i.quantity}x ${i.productName}`).join(", ")}
                       </td>
-                      <td className="p-2 text-right font-mono font-bold text-slate-900">
+                      <td className="p-2 text-right font-mono text-xs font-medium tabular-nums">
                         {formatCurrencyIDR(o.total)}
                       </td>
-                      <td className="p-2 text-center">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                            o.status === "COMPLETED"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : o.status === "SERVED"
-                              ? "bg-teal-100 text-teal-800"
-                              : o.status === "COOKING"
-                              ? "bg-amber-100 text-amber-800"
-                              : "bg-blue-100 text-blue-800"
-                          }`}
-                        >
-                          {o.status === "COMPLETED"
-                            ? "Selesai"
-                            : o.status === "SERVED"
-                            ? "Siap Disajikan"
-                            : o.status === "COOKING"
-                            ? "Sedang Dimasak"
-                            : o.status === "KITCHEN_RECEIVED"
-                            ? "Diterima Dapur"
-                            : o.status === "CONFIRMED"
-                            ? "Dikonfirmasi"
-                            : o.status === "NEW"
-                            ? "Baru"
-                            : o.status}
-                        </span>
+                      <td className="p-2 text-center font-medium">
+                        {orderStatusLabel(o.status)}
                       </td>
-                      <td className="p-2 text-center">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                            o.paymentStatus === "PAID"
-                              ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                              : o.paymentStatus === "REFUNDED"
-                              ? "bg-purple-100 text-purple-800 border border-purple-300"
-                              : "bg-rose-100 text-rose-800 border border-rose-300"
-                          }`}
-                        >
-                          {o.paymentStatus === "PAID"
-                            ? "LUNAS"
-                            : o.paymentStatus === "REFUNDED"
-                            ? "REFUND"
-                            : "BELUM DIBAYAR"}
-                        </span>
+                      <td className="p-2 text-center font-medium">
+                        {paymentStatusLabel(o.paymentStatus)}
                       </td>
-                      <td className="p-2 text-center font-mono text-[10px] font-bold text-slate-600">
+                      <td className="p-2 text-center font-mono text-[10px]">
                         {o.paymentMethod || "-"}
                       </td>
                     </tr>
@@ -264,26 +210,22 @@ export function OrdersReportPDFModal({
             </div>
 
             {/* Certification Footer */}
-            <div className="mt-8 pt-4 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-              <div className="flex items-center space-x-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-600" />
+            <div className="mt-8 flex items-center justify-between border-t pt-4 text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="size-4 text-success" />
                 <div>
-                  <p className="font-bold text-slate-800">Tervalidasi Digital</p>
-                  <p className="text-[10px] text-slate-400">
-                    Dokumen sah platform DagoEng F&B Management System.
-                  </p>
+                  <p className="font-medium text-foreground">Tervalidasi Digital</p>
+                  <p className="text-[10px]">Dokumen sah platform DagoEng F&B Management System.</p>
                 </div>
               </div>
               <div className="text-right text-[11px]">
-                <p className="font-bold text-slate-800">Dago Creative Hub Operations</p>
-                <p className="text-slate-400 font-mono">
-                  SHA256: {Date.now()}-OFFICIAL-VALIDATED
-                </p>
+                <p className="font-medium text-foreground">Dago Creative Hub Operations</p>
+                <p className="font-mono">SHA256: {Date.now()}-OFFICIAL-VALIDATED</p>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

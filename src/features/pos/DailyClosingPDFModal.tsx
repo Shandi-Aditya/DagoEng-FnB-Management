@@ -15,6 +15,13 @@ import {
   FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export interface ClosingReportData {
   reportNumber: string;
@@ -154,61 +161,55 @@ _DagoEng Creative Hub - Financial Automated System_`);
         }
       `}</style>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
-        <div className="bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[92vh]">
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="max-w-4xl gap-0 p-0 overflow-hidden flex flex-col max-h-[92vh]">
           {/* Top Control Bar (Hidden when printing) */}
-          <div className="px-6 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-900 text-white print:hidden">
-            <div className="flex items-center space-x-2.5">
-              <FileText className="w-5 h-5 text-[#3B7A57] dark:text-[#52B788]" />
+          <DialogHeader className="px-6 py-3.5 border-b border-border flex flex-row items-center justify-between bg-muted/40 print:hidden pr-10">
+            <div className="flex items-center gap-2.5">
+              <FileText className="size-5 text-primary" />
               <div>
-                <h3 className="font-bold text-sm text-white">
-                  Dokumen Resmi Laporan Closing Harian
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  No. Dokumen: <span className="font-mono text-[#3B7A57] dark:text-[#52B788]">{reportData.reportNumber}</span>
-                </p>
+                <DialogTitle className="text-sm font-medium text-foreground">
+                  Dokumen resmi laporan closing harian
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground">
+                  No. dokumen: <span className="font-mono">{reportData.reportNumber}</span>
+                </DialogDescription>
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <Button
                 size="sm"
                 onClick={handlePrintPDF}
-                className="text-xs bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold space-x-1.5 shadow-xs"
+                className="text-xs font-medium"
               >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Cetak / Save as PDF</span>
+                <Printer className="size-3.5 mr-1" />
+                <span>Cetak / simpan PDF</span>
               </Button>
 
               <Button
                 size="sm"
+                variant="outline"
                 onClick={handleDispatchWAGateway}
                 disabled={isGatewaySending}
-                className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold space-x-1.5"
+                className="text-xs font-medium"
               >
-                <Send className="w-3.5 h-3.5" />
+                <Send className="size-3.5 mr-1" />
                 <span>
                   {isGatewaySending
                     ? "Mengirim ke WA..."
                     : gatewayStatus === "SENT"
-                    ? "Kirim Ulang ke WA"
-                    : "Kirim ke WA Gateway"}
+                    ? "Kirim ulang ke WA"
+                    : "Kirim ke WA gateway"}
                 </span>
               </Button>
-
-              <button
-                onClick={onClose}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
             </div>
-          </div>
+          </DialogHeader>
 
           {/* Notification Toast */}
           {toastMessage && (
             <div className="p-3 bg-emerald-50 border-b border-emerald-200 text-xs font-bold text-emerald-900 flex items-center space-x-2 px-6 print:hidden">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{toastMessage}</span>
             </div>
           )}
@@ -223,7 +224,7 @@ _DagoEng Creative Hub - Financial Automated System_`);
               <div className="flex items-start justify-between border-b-2 border-slate-900 pb-2.5">
                 <div className="space-y-0.5">
                   <div className="flex items-center space-x-2">
-                    <div className="w-8 h-10 relative flex-shrink-0">
+                    <div className="w-8 h-10 relative shrink-0">
                       <Image
                         src="/logo-dago.png"
                         alt="DagoEng"
@@ -234,7 +235,7 @@ _DagoEng Creative Hub - Financial Automated System_`);
                     </div>
                     <div>
                       <h1 className="font-extrabold text-base tracking-tight text-slate-900 leading-none">
-                        DAGOENG <span className="text-[#3B7A57] dark:text-[#52B788]">CREATIVE HUB</span>
+                        DAGOENG <span className="text-brand-sage dark:text-brand-sageBright">CREATIVE HUB</span>
                       </h1>
                       <p className="text-[9px] text-slate-400 font-medium">
                         Multi-Business F&B Management & Platform Ecosystem
@@ -252,7 +253,7 @@ _DagoEng Creative Hub - Financial Automated System_`);
                     REKAPITULASI RESMI
                   </span>
                   <h2 className="font-bold text-xs text-slate-900 pt-0.5">LAPORAN CLOSING HARIAN</h2>
-                  <p className="font-mono text-[11px] font-bold text-[#3B7A57] dark:text-[#52B788]">{reportData.reportNumber}</p>
+                  <p className="font-mono text-[11px] font-bold text-brand-sage dark:text-brand-sageBright">{reportData.reportNumber}</p>
                   <p className="text-[10px] text-slate-500">{reportData.closingDateTime}</p>
                 </div>
               </div>
@@ -310,7 +311,7 @@ _DagoEng Creative Hub - Financial Automated System_`);
                     </tr>
                     <tr className="bg-slate-50 font-bold text-slate-900 border-t border-slate-300">
                       <td className="py-1.5">TOTAL OMSET BERSIH (NET REVENUE)</td>
-                      <td className="py-1.5 text-right font-mono text-xs text-[#3B7A57] dark:text-[#52B788]">
+                      <td className="py-1.5 text-right font-mono text-xs text-brand-sage dark:text-brand-sageBright">
                         {formatCurrencyIDR(reportData.totalNetSales)}
                       </td>
                     </tr>
@@ -442,8 +443,8 @@ _DagoEng Creative Hub - Financial Automated System_`);
               </div>
             </div>
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

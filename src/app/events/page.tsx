@@ -24,10 +24,10 @@ import {
   Users,
   Compass,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/legacy/ui/button";
+import { Card } from "@/components/legacy/ui/card";
+import { Badge } from "@/components/legacy/ui/badge";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
 import { PublicCommunityEvent, EventCategory } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -180,7 +180,7 @@ export default function EventsListingPage() {
                 <span className="font-black text-sm tracking-tight text-slate-900 dark:text-white leading-tight">
                   Dago Creative Hub
                 </span>
-                <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788] uppercase tracking-wider">
+                <span className="text-[10px] font-bold text-brand-sage dark:text-brand-sageBright uppercase tracking-wider">
                   Event Marketplace
                 </span>
               </div>
@@ -194,9 +194,9 @@ export default function EventsListingPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="text-xs h-9 px-3 sm:px-3.5 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57] hover:text-[#3B7A57] rounded-xl transition-all cursor-pointer"
+                  className="text-xs h-9 px-3 sm:px-3.5 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-sage hover:text-brand-sage rounded-xl transition-all cursor-pointer"
                 >
-                  <Ticket className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788]" />
+                  <Ticket className="w-3.5 h-3.5 mr-1.5 text-brand-sage dark:text-brand-sageBright" />
                   <span className="hidden sm:inline">Tiket Saya</span>
                   <span className="sm:hidden">Tiket</span>
                 </Button>
@@ -207,9 +207,9 @@ export default function EventsListingPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setIsMyTicketsDropdownOpen(!isMyTicketsDropdownOpen)}
-                  className="text-xs h-9 px-3 sm:px-3.5 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57] hover:text-[#3B7A57] rounded-xl transition-all cursor-pointer"
+                  className="text-xs h-9 px-3 sm:px-3.5 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-sage hover:text-brand-sage rounded-xl transition-all cursor-pointer"
                 >
-                  <Ticket className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788]" />
+                  <Ticket className="w-3.5 h-3.5 mr-1.5 text-brand-sage dark:text-brand-sageBright" />
                   <span className="hidden sm:inline">Tiket Saya</span>
                   <span className="sm:hidden">Tiket</span>
                   <ChevronDown className="w-3 h-3 ml-1 text-slate-400" />
@@ -222,7 +222,7 @@ export default function EventsListingPage() {
                       onClick={() => setIsMyTicketsDropdownOpen(false)}
                       className="flex items-center space-x-2.5 p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors"
                     >
-                      <LogIn className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                      <LogIn className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0" />
                       <div>
                         <div className="font-bold">Masuk dengan Akun</div>
                         <div className="text-[10px] text-slate-400 font-normal">Akses tiket & riwayat akun</div>
@@ -233,7 +233,7 @@ export default function EventsListingPage() {
                       onClick={() => setIsMyTicketsDropdownOpen(false)}
                       className="flex items-center space-x-2.5 p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors mt-1 border-t border-slate-100 dark:border-slate-800/80"
                     >
-                      <Search className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                      <Search className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0" />
                       <div>
                         <div className="font-bold">Cari E-Tiket Tamu</div>
                         <div className="text-[10px] text-slate-400 font-normal">Pemesanan tanpa akun Dago</div>
@@ -247,7 +247,7 @@ export default function EventsListingPage() {
             <Link href="/events/submit">
               <Button
                 size="sm"
-                className="text-xs h-9 px-3.5 sm:px-4 font-bold bg-[#3B7A57] hover:bg-[#2E6044] dark:bg-[#3B7A57] dark:hover:bg-[#488e68] text-white rounded-xl shadow-sm transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                className="text-xs h-9 px-3.5 sm:px-4 font-bold bg-brand-sage hover:bg-[#2E6044] dark:bg-brand-sage dark:hover:bg-[#488e68] text-white rounded-xl shadow-sm transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
                 <span>Buat Event</span>
@@ -260,10 +260,10 @@ export default function EventsListingPage() {
       </header>
 
       {/* 2. Hero Section - Eventbrite Style */}
-      <section className="relative overflow-hidden bg-gradient-to-b from-emerald-50/70 via-slate-50 to-[#F8FAFC] dark:from-emerald-950/20 dark:via-[#0B1120] dark:to-[#0B1120] border-b border-slate-200/60 dark:border-slate-800/80 pt-10 pb-12 sm:pt-14 sm:pb-16 transition-colors">
+      <section className="relative overflow-hidden bg-linear-to-b from-emerald-50/70 via-slate-50 to-[#F8FAFC] dark:from-emerald-950/20 dark:via-[#0B1120] dark:to-[#0B1120] border-b border-slate-200/60 dark:border-slate-800/80 pt-10 pb-12 sm:pt-14 sm:pb-16 transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="max-w-3xl mx-auto text-center space-y-4">
-            <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-emerald-100/70 dark:bg-emerald-900/40 border border-emerald-300/50 dark:border-emerald-700/50 text-[#3B7A57] dark:text-[#52B788] text-xs font-bold shadow-xs">
+            <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-emerald-100/70 dark:bg-emerald-900/40 border border-emerald-300/50 dark:border-emerald-700/50 text-brand-sage dark:text-brand-sageBright text-xs font-bold shadow-xs">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Pusat Kegiatan Kreatif, Workshop & Komunitas Singaraja</span>
             </div>
@@ -286,7 +286,7 @@ export default function EventsListingPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Cari acara, topik, workshop, atau komunitas..."
-                    className="w-full pl-10 pr-3 py-2 text-xs sm:text-sm bg-transparent border-0 focus:outline-none text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
+                    className="w-full pl-10 pr-3 py-2 text-xs sm:text-sm bg-transparent border-0 focus:outline-hidden text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
                   />
                 </div>
 
@@ -295,7 +295,7 @@ export default function EventsListingPage() {
                     onClick={() => setPriceFilter("ALL")}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       priceFilter === "ALL"
-                        ? "bg-[#3B7A57] text-white shadow-xs"
+                        ? "bg-brand-sage text-white shadow-xs"
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                     }`}
                   >
@@ -305,7 +305,7 @@ export default function EventsListingPage() {
                     onClick={() => setPriceFilter("FREE")}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       priceFilter === "FREE"
-                        ? "bg-[#3B7A57] text-white shadow-xs"
+                        ? "bg-brand-sage text-white shadow-xs"
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                     }`}
                   >
@@ -315,7 +315,7 @@ export default function EventsListingPage() {
                     onClick={() => setPriceFilter("PAID")}
                     className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       priceFilter === "PAID"
-                        ? "bg-[#3B7A57] text-white shadow-xs"
+                        ? "bg-brand-sage text-white shadow-xs"
                         : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                     }`}
                   >
@@ -340,7 +340,7 @@ export default function EventsListingPage() {
                 onClick={() => setViewTab("UPCOMING")}
                 className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewTab === "UPCOMING"
-                    ? "bg-white dark:bg-[#1E293B] text-[#3B7A57] dark:text-[#52B788] shadow-xs"
+                    ? "bg-white dark:bg-[#1E293B] text-brand-sage dark:text-brand-sageBright shadow-xs"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
@@ -351,7 +351,7 @@ export default function EventsListingPage() {
                 onClick={() => setViewTab("PAST")}
                 className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
                   viewTab === "PAST"
-                    ? "bg-white dark:bg-[#1E293B] text-[#3B7A57] dark:text-[#52B788] shadow-xs"
+                    ? "bg-white dark:bg-[#1E293B] text-brand-sage dark:text-brand-sageBright shadow-xs"
                     : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
                 }`}
               >
@@ -374,7 +374,7 @@ export default function EventsListingPage() {
                     onClick={() => setSelectedCategory(tab.key)}
                     className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                       active
-                        ? "bg-[#3B7A57] text-white shadow-xs"
+                        ? "bg-brand-sage text-white shadow-xs"
                         : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-white"
                     }`}
                   >
@@ -405,7 +405,7 @@ export default function EventsListingPage() {
                     setItemsPerPage(Number(e.target.value));
                     setCurrentPage(1);
                   }}
-                  className="text-xs font-semibold py-1 px-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#3B7A57] cursor-pointer"
+                  className="text-xs font-semibold py-1 px-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57] cursor-pointer"
                   aria-label="Pilih jumlah event per halaman"
                 >
                   <option value={8}>8</option>
@@ -432,7 +432,7 @@ export default function EventsListingPage() {
           /* EMPTY STATE */
           <div className="py-16 text-center max-w-md mx-auto">
             <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
-              <Calendar className="w-8 h-8 text-[#3B7A57] dark:text-[#52B788]" />
+              <Calendar className="w-8 h-8 text-brand-sage dark:text-brand-sageBright" />
             </div>
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
               {viewTab === "UPCOMING"
@@ -458,7 +458,7 @@ export default function EventsListingPage() {
                 </Button>
               )}
               <Link href="/events/submit">
-                <Button className="bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs px-4 py-2 rounded-xl">
+                <Button className="bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs px-4 py-2 rounded-xl">
                   <PlusCircle className="w-4 h-4 mr-1.5" />
                   Buat Event Baru
                 </Button>
@@ -482,7 +482,7 @@ export default function EventsListingPage() {
                     className={`group overflow-hidden rounded-2xl border transition-all duration-300 hover:shadow-xl flex flex-col justify-between ${
                       isPast
                         ? "opacity-75 bg-slate-50/60 dark:bg-[#161F31]/60 border-slate-200 dark:border-slate-800"
-                        : "bg-white dark:bg-[#1E293B] border-slate-200/90 dark:border-slate-800 hover:-translate-y-1 hover:border-[#3B7A57]/40 shadow-xs"
+                        : "bg-white dark:bg-[#1E293B] border-slate-200/90 dark:border-slate-800 hover:-translate-y-1 hover:border-brand-sage/40 shadow-xs"
                     }`}
                   >
                     <Link href={`/events/${evt.id}`} className="block flex-1">
@@ -494,7 +494,7 @@ export default function EventsListingPage() {
                           alt={evt.title}
                           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                        <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/20 to-transparent" />
 
                         {/* Top Badges */}
                         <div className="absolute top-3 left-3 flex items-center space-x-1.5 flex-wrap gap-1">
@@ -519,7 +519,7 @@ export default function EventsListingPage() {
                             className={`text-[11px] font-black px-2.5 py-1 rounded-full shadow-xs backdrop-blur-md ${
                               evt.isPaid
                                 ? "bg-amber-500/95 text-white"
-                                : "bg-[#3B7A57]/95 text-white"
+                                : "bg-brand-sage/95 text-white"
                             }`}
                           >
                             {evt.isPaid ? formatCurrencyIDR(evt.price) : "GRATIS"}
@@ -537,7 +537,7 @@ export default function EventsListingPage() {
                       <div className="p-4 sm:p-5 flex items-start space-x-3.5">
                         {/* Date Block */}
                         <div className="shrink-0 w-11 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60 flex flex-col items-center justify-center text-center shadow-xs">
-                          <span className="text-[9px] font-black tracking-wider text-[#3B7A57] dark:text-[#52B788] leading-none uppercase">
+                          <span className="text-[9px] font-black tracking-wider text-brand-sage dark:text-brand-sageBright leading-none uppercase">
                             {dateParts.month}
                           </span>
                           <span className="text-base font-black text-slate-900 dark:text-white leading-none mt-1">
@@ -547,13 +547,13 @@ export default function EventsListingPage() {
 
                         {/* Info Column */}
                         <div className="flex-1 min-w-0 space-y-2">
-                          <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white line-clamp-2 leading-snug group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                          <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white line-clamp-2 leading-snug group-hover:text-brand-sage dark:group-hover:text-brand-sageBright transition-colors">
                             {evt.title}
                           </h3>
 
                           <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
                             <div className="flex items-center space-x-1.5">
-                              <Clock className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                              <Clock className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
                               <span className="truncate">
                                 {isOngoing
                                   ? `Berlangsung s/d ${new Date(evt.endDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}`
@@ -574,7 +574,7 @@ export default function EventsListingPage() {
                       <Link href={`/events/${evt.id}`}>
                         <Button
                           variant="outline"
-                          className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 hover:bg-[#3B7A57] hover:text-white hover:border-[#3B7A57] dark:hover:bg-[#3B7A57] dark:hover:text-white transition-all rounded-xl justify-between group/btn"
+                          className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 hover:bg-brand-sage hover:text-white hover:border-brand-sage dark:hover:bg-brand-sage dark:hover:text-white transition-all rounded-xl justify-between group/btn"
                         >
                           <span>{evt.isPaid ? "Pesan Tiket" : "Daftar Tiket"}</span>
                           <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />
@@ -615,8 +615,8 @@ export default function EventsListingPage() {
                         onClick={() => setCurrentPage(pageNum)}
                         className={`w-8 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                           isCurrent
-                            ? "bg-[#3B7A57] text-white shadow-xs"
-                            : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57]/50"
+                            ? "bg-brand-sage text-white shadow-xs"
+                            : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-sage/50"
                         }`}
                       >
                         {pageNum}
@@ -649,13 +649,13 @@ export default function EventsListingPage() {
             <Link href="/" className="hover:text-slate-800 dark:hover:text-white transition-colors">
               Beranda
             </Link>
-            <Link href="/events/tickets/recovery" className="hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors">
+            <Link href="/events/tickets/recovery" className="hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors">
               Cari / Pemulihan Tiket
             </Link>
-            <Link href="/events/submit" className="hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors">
+            <Link href="/events/submit" className="hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors">
               Pasang Event
             </Link>
-            <Link href="/events/portal" className="hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors">
+            <Link href="/events/portal" className="hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors">
               Portal Penyelenggara
             </Link>
           </div>

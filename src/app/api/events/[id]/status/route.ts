@@ -17,10 +17,8 @@ const VALID_STATUSES: EventStatus[] = [
  * Admin endpoint to update the moderation status of an event.
  * Validates role on server: only SUPER_ADMIN, OWNER, and MANAGER may moderate.
  */
-export async function PATCH(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PATCH(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await assertEventAdmin(req);
     if (!auth.authorized) {

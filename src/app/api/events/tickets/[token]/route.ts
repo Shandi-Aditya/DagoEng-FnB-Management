@@ -27,10 +27,8 @@ export const dynamic = "force-dynamic";
  * Dedicated secure endpoint for guest and attendee ticket access via high-entropy token.
  * Does not require login, allowing seamless Eventbrite-style private link ticket access.
  */
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { token: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   try {
     const rawToken = params?.token;
     if (!rawToken || typeof rawToken !== "string" || rawToken.trim().length < 16) {
@@ -152,10 +150,8 @@ export async function GET(
  * Endpoint to upload proof of manual transfer payment for this ticket.
  * Accepts either JSON { paymentProofUrl, paymentProofNote } or FormData with 'file'.
  */
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { token: string } }
-) {
+export async function POST(req: NextRequest, props: { params: Promise<{ token: string }> }) {
+  const params = await props.params;
   try {
     const rawToken = params?.token;
     if (!rawToken || typeof rawToken !== "string" || rawToken.trim().length < 16) {
