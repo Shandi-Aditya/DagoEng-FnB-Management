@@ -4,6 +4,13 @@ import {
   getReportCategories,
   getReportTypeBadgeTone,
   emptyReportMessage,
+  eventPaymentMethodLabel,
+  eventPaymentStatusLabel,
+  eventCheckInLabel,
+  auditModuleLabel,
+  auditActionLabel,
+  filterReportRows,
+  isNumericReportCell,
 } from "@/features/reports/reports-domain";
 import { OrderRecord } from "@/types/order";
 import { MasterProduct } from "@/types/product";
@@ -326,11 +333,126 @@ describe("reports-domain", () => {
     expect(getReportTypeBadgeTone("CLOSING")).toBe("neutral");
   });
 
-  it("generates honest empty-state copy for reports without data", () => {
+  it("generates honest empty-state copy for reports without data and search", () => {
     const emptyMsg = emptyReportMessage("Singaraja", "01 Nov - 12 Nov 2026");
     expect(emptyMsg.title).toBe("Tidak ada data pada periode ini");
     expect(emptyMsg.description).toContain("Singaraja");
     expect(emptyMsg.description).toContain("01 Nov - 12 Nov 2026");
+
+    const searchEmptyMsg = emptyReportMessage("Singaraja", "01 Nov - 12 Nov 2026", true);
+    expect(searchEmptyMsg.title).toBe("Tidak ada data yang cocok");
+    expect(searchEmptyMsg.description).toContain("Ubah kata kunci");
+  });
+
+  it("exposes numeric rawCount in report categories alongside count label", () => {
+    const categories = getReportCategories({
+      ordersCount: 12,
+      tenantsCount: 4,
+      shiftsCount: 3,
+      productsCount: 15,
+      materialsCount: 9,
+      logsCount: 7,
+      paidEventsCount: 6,
+      canAccessEvents: true,
+    });
+
+    expect(categories.find((c) => c.id === "SALES")?.rawCount).toBe(12);
+    expect(categories.find((c) => c.id === "SETTLEMENT")?.rawCount).toBe(4);
+    expect(categories.find((c) => c.id === "EVENTS")?.rawCount).toBe(6);
+    expect(categories.find((c) => c.id === "CLOSING")?.rawCount).toBe(3);
+  });
+
+  it("formats raw event payment, status, and check-in enums into Indonesian labels and rounds rupiah", () => {
+    expect(eventPaymentMethodLabel("FREE")).toBe("Gratis");
+    expect(eventPaymentMethodLabel("MANUAL_TRANSFER")).toBe("Transfer manual");
+    expect(eventPaymentMethodLabel("QRIS")).toBe("QRIS");
+
+    expect(eventPaymentStatusLabel("PAID")).toBe("Lunas");
+    expect(eventPaymentStatusLabel("EXPIRED")).toBe("Kedaluwarsa");
+    expect(eventPaymentStatusLabel("PENDING")).toBe("Menunggu");
+
+    expect(eventCheckInLabel("CHECKED_IN")).toBe("Hadir");
+    expect(eventCheckInLabel("REGISTERED")).toBe("Belum hadir");
+
+    const fractionalEvent: EventTicketOrder = {
+      ...mockEvents[0],
+      id: "evt-frac",
+      paymentMethod: "MANUAL_TRANSFER",
+      paymentStatus: "EXPIRED",
+      checkInStatus: "REGISTERED",
+      totalPrice: 0.9,
+      platformFeeAmount: 0.18,
+      organizerRevenueAmount: 0.72,
+    };
+
+    const report = buildReportData({
+      type: "EVENTS",
+      scopeName: "Outlet Singaraja",
+      orders: mockOrders,
+      products: mockProducts,
+      shifts: mockShifts,
+      ingredients: mockIngredients,
+      logs: mockLogs,
+      eventBookings: [fractionalEvent],
+    });
+
+    expect(report.tableRows[0][5]).toBe("Transfer manual");
+    expect(report.tableRows[0][6]).toBe("Kedaluwarsa");
+    expect(report.tableRows[0][7]).toBe("Belum hadir");
+    expect(report.tableRows[0][8]).toBe("Rp 1");
+  });
+
+  it("uses Indonesian category labels for INVENTORY and translated module/action labels for FINANCE_AUDIT", () => {
+    const dairyIngredient: IngredientItem = {
+      ...mockIngredients[0],
+      category: "Dairy",
+    };
+
+    const invReport = buildReportData({
+      type: "INVENTORY",
+      scopeName: "Outlet Singaraja",
+      orders: mockOrders,
+      products: mockProducts,
+      shifts: mockShifts,
+      ingredients: [dairyIngredient],
+      logs: mockLogs,
+    });
+    expect(invReport.tableRows[0][1]).toBe("Susu dan olahan");
+
+    expect(auditModuleLabel("FINANCE")).toBe("Keuangan");
+    expect(auditModuleLabel("COMMERCIAL")).toBe("Komersial");
+    expect(auditActionLabel("OPEN_SHIFT")).toBe("Buka shift");
+
+    const auditReport = buildReportData({
+      type: "FINANCE_AUDIT",
+      scopeName: "Outlet Singaraja",
+      orders: mockOrders,
+      products: mockProducts,
+      shifts: mockShifts,
+      ingredients: mockIngredients,
+      logs: [{ ...mockLogs[0], module: "FINANCE", action: "OPEN_SHIFT" }],
+    });
+    expect(auditReport.tableRows[0][2]).toBe("Keuangan");
+    expect(auditReport.tableRows[0][3]).toBe("Buka shift");
+  });
+
+  it("filters report rows case-insensitively without mutating source array and detects numeric cells", () => {
+    const rows: (string | number)[][] = [
+      ["ORD-001", "Budi Santoso", "Rp 57.500"],
+      ["ORD-002", "Siti Rahma", "Rp 28.000"],
+    ];
+
+    expect(filterReportRows(rows, "")).toHaveLength(2);
+    expect(filterReportRows(rows, "siti")).toHaveLength(1);
+    expect(filterReportRows(rows, "57.500")).toHaveLength(1);
+    expect(filterReportRows(rows, "tidak-ada")).toHaveLength(0);
+    expect(rows).toHaveLength(2);
+
+    expect(isNumericReportCell(42)).toBe(true);
+    expect(isNumericReportCell("Rp 100.000")).toBe(true);
+    expect(isNumericReportCell("-Rp 5.000")).toBe(true);
+    expect(isNumericReportCell("72.0%")).toBe(true);
+    expect(isNumericReportCell("Budi Santoso")).toBe(false);
   });
 });
 

@@ -5,21 +5,21 @@
  * Importer:
  * - src/app/(dashboard)/reports/page.tsx
  * - src/features/reports/ReportsToolbar.tsx
- * - src/features/reports/ReportsCategorySelector.tsx
  * - src/features/reports/ReportsPreviewTable.tsx
  * - tests/reports-domain.test.ts
  */
 
-import { OrderRecord, OrderItemRecord } from "@/types/order";
-import { MasterProduct } from "@/types/product";
-import { ShiftRecord } from "@/types/shift";
-import { IngredientItem } from "@/types/inventory";
-import { ActivityLogEntry } from "@/types/audit";
-import { EventTicketOrder } from "@/types/event";
-import { calculateSettlement, getTenantPayoutAccount, maskAccountNumber } from "@/lib/settlement";
-import { getOrderTaxBreakdown, aggregateOrdersTaxAndRevenue } from "@/lib/tax-breakdown";
-import { orderStatusLabel, paymentMethodLabel } from "@/features/orders/orders-domain";
 import type { StatusTone } from "@/components/app/status-badge";
+import { ingredientCategoryLabel } from "@/features/inventory/inventory-reorder";
+import { orderStatusLabel, paymentMethodLabel } from "@/features/orders/orders-domain";
+import { calculateSettlement, getTenantPayoutAccount, maskAccountNumber } from "@/lib/settlement";
+import { aggregateOrdersTaxAndRevenue, getOrderTaxBreakdown } from "@/lib/tax-breakdown";
+import type { ActivityLogEntry } from "@/types/audit";
+import type { EventTicketOrder } from "@/types/event";
+import type { IngredientItem } from "@/types/inventory";
+import type { OrderItemRecord, OrderRecord } from "@/types/order";
+import type { MasterProduct } from "@/types/product";
+import type { ShiftRecord } from "@/types/shift";
 
 export type ReportType =
   | "SALES"
@@ -49,12 +49,123 @@ export function getReportTypeBadgeTone(type: ReportType): StatusTone {
 
 export function emptyReportMessage(
   scopeName: string,
-  periodLabel: string
+  periodLabel: string,
+  hasSearch = false
 ): { title: string; description: string } {
+  if (hasSearch) {
+    return {
+      title: "Tidak ada data yang cocok",
+      description: "Ubah kata kunci pencarian atau pilih jenis laporan lain.",
+    };
+  }
   return {
     title: "Tidak ada data pada periode ini",
     description: `Belum ada catatan untuk ${scopeName} pada ${periodLabel}. Coba ubah rentang tanggal.`,
   };
+}
+
+const EVENT_PAYMENT_METHOD_LABELS: Record<string, string> = {
+  FREE: "Gratis",
+  MANUAL_TRANSFER: "Transfer manual",
+  DOKU_CHECKOUT: "Pembayaran online",
+  TRANSFER: "Transfer",
+  QRIS: "QRIS",
+  CASH: "Tunai",
+};
+
+export function eventPaymentMethodLabel(method: string): string {
+  if (!method) return "—";
+  if (EVENT_PAYMENT_METHOD_LABELS[method]) return EVENT_PAYMENT_METHOD_LABELS[method];
+  return paymentMethodLabel(method as OrderRecord["paymentMethod"]) || method;
+}
+
+const EVENT_PAYMENT_STATUS_LABELS: Record<string, string> = {
+  PAID: "Lunas",
+  PENDING: "Menunggu",
+  CANCELLED: "Dibatalkan",
+  EXPIRED: "Kedaluwarsa",
+};
+
+export function eventPaymentStatusLabel(status: string): string {
+  return EVENT_PAYMENT_STATUS_LABELS[status] ?? (status || "—");
+}
+
+export function eventCheckInLabel(status: string): string {
+  if (status === "CHECKED_IN") return "Hadir";
+  if (status === "PARTIALLY_CHECKED_IN") return "Sebagian hadir";
+  return "Belum hadir";
+}
+
+const AUDIT_MODULE_LABELS: Record<string, string> = {
+  POS: "POS",
+  FINANCE: "Keuangan",
+  COMMERCIAL: "Komersial",
+  INVENTORY: "Inventori",
+  TABLES: "Meja",
+  COWORKING: "Co-working",
+  EMPLOYEES_SHIFT: "Karyawan & shift",
+  LOYALTY: "Pelanggan",
+  MENU: "Menu",
+  SETTINGS: "Pengaturan",
+};
+
+export function auditModuleLabel(module: string): string {
+  return AUDIT_MODULE_LABELS[module] ?? (module || "—");
+}
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  OPEN_SHIFT: "Buka shift",
+  CLOSE_SHIFT: "Tutup shift",
+  ORDER_PAYMENT_AND_COMPLETED: "Pembayaran pesanan",
+  ORDER_CREATED: "Pesanan dibuat",
+  ORDER_CANCELLED: "Pesanan dibatalkan",
+  VOID_ORDER: "Pembatalan pesanan",
+  REFUND_ORDER: "Pengembalian dana",
+  LEASE_CREATED: "Kontrak dibuat",
+  LEASE_PAYMENT: "Pembayaran sewa",
+  LEASE_STATUS_CHANGED: "Ubah status kontrak",
+};
+
+export function auditActionLabel(action: string): string {
+  if (!action) return "—";
+  if (AUDIT_ACTION_LABELS[action]) return AUDIT_ACTION_LABELS[action];
+  const normalized = action.toLowerCase().replace(/_/g, " ");
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+/** Filters report rows case-insensitively across all cells without mutating input. */
+export function filterReportRows(
+  rows: readonly (readonly (string | number)[])[],
+  query: string
+): (string | number)[][] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return rows.map((row) => [...row]);
+  return rows
+    .filter((row) => row.some((cell) => String(cell).toLowerCase().includes(needle)))
+    .map((row) => [...row]);
+}
+
+/** Identifies numeric, currency, or percentage cells for right-aligned monospace formatting. */
+export function isNumericReportCell(cell: string | number): boolean {
+  if (typeof cell === "number") return true;
+  const text = String(cell).trim();
+  return (
+    text.startsWith("Rp ") ||
+    text.startsWith("+Rp ") ||
+    text.startsWith("-Rp ") ||
+    /^-?\d+(?:[.,]\d+)?%$/.test(text)
+  );
+}
+
+function formatMakassarDate(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return iso.split("T")[0] ?? iso;
+  return parsed.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Makassar",
+  });
 }
 
 export interface ReportSummaryCard {
@@ -99,6 +210,7 @@ export interface ReportCategoryMeta {
   id: ReportType;
   label: string;
   count: string;
+  rawCount: number;
 }
 
 /**
@@ -119,19 +231,23 @@ export function getReportCategories(params: {
       id: "SALES",
       label: "Penjualan POS",
       count: `${params.ordersCount} Trx`,
+      rawCount: params.ordersCount,
     },
     {
       id: "SETTLEMENT",
       label: "Settlement mitra",
       count: `${params.tenantsCount} Tenant`,
+      rawCount: params.tenantsCount,
     },
   ];
 
   if (params.canAccessEvents) {
+    const eventsCount = params.paidEventsCount || 0;
     categories.push({
       id: "EVENTS",
       label: "Tiket event",
-      count: `${params.paidEventsCount || 0} Peserta`,
+      count: `${eventsCount} Peserta`,
+      rawCount: eventsCount,
     });
   }
 
@@ -140,21 +256,25 @@ export function getReportCategories(params: {
       id: "CLOSING",
       label: "Closing kasir",
       count: `${params.shiftsCount} Shift`,
+      rawCount: params.shiftsCount,
     },
     {
       id: "PRODUCTS",
       label: "Produk dan margin",
       count: `${params.productsCount} Menu`,
+      rawCount: params.productsCount,
     },
     {
       id: "INVENTORY",
       label: "Stok bahan",
       count: `${params.materialsCount} Bahan`,
+      rawCount: params.materialsCount,
     },
     {
       id: "FINANCE_AUDIT",
       label: "Audit keuangan",
       count: `${params.logsCount} Log`,
+      rawCount: params.logsCount,
     }
   );
 
@@ -229,7 +349,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           o.orderNumber || o.id,
           o.customerName || "Tamu",
           o.tableNumber ? `Meja ${o.tableNumber}` : o.orderType === "DELIVERY" ? "Delivery" : "Takeaway",
-          o.createdAt.split("T")[0],
+          formatMakassarDate(o.createdAt),
           promoName,
           disc > 0 ? `-Rp ${disc.toLocaleString("id-ID")}` : "-",
           orderStatusLabel(o.status),
@@ -369,7 +489,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
       const tableRows = ingredients.map((m) => [
         m.name,
-        m.category,
+        ingredientCategoryLabel(m.category),
         m.stockNumber,
         m.min,
         m.unit,
@@ -403,10 +523,10 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
     case "FINANCE_AUDIT": {
       const tableRows = logs.map((l) => [
-        l.timestamp.split("T")[0],
+        formatMakassarDate(l.timestamp),
         l.actorName || l.userName || "-",
-        l.module,
-        l.action,
+        auditModuleLabel(l.module),
+        auditActionLabel(l.action),
         l.newValue || l.description,
         l.reason || "-",
       ]);
@@ -490,9 +610,11 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
     case "EVENTS": {
       const paidEvents = eventBookings.filter((b) => b.paymentStatus === "PAID");
-      const totalEventGross = paidEvents.reduce((s, b) => s + b.totalPrice, 0);
-      const totalEventPlatformFee = paidEvents.reduce((s, b) => s + b.platformFeeAmount, 0);
-      const totalEventOrganizerPayout = paidEvents.reduce((s, b) => s + b.organizerRevenueAmount, 0);
+      const totalEventGross = Math.round(paidEvents.reduce((s, b) => s + b.totalPrice, 0));
+      const totalEventPlatformFee = Math.round(paidEvents.reduce((s, b) => s + b.platformFeeAmount, 0));
+      const totalEventOrganizerPayout = Math.round(
+        paidEvents.reduce((s, b) => s + b.organizerRevenueAmount, 0)
+      );
       const totalTicketsCount = paidEvents.reduce((s, b) => s + b.ticketCount, 0);
 
       const tableRows = eventBookings.map((b) => [
@@ -501,12 +623,12 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         b.guestName,
         b.guestPhone,
         b.ticketCount,
-        b.paymentMethod,
-        b.paymentStatus,
-        b.checkInStatus === "CHECKED_IN" ? "HADIR" : "BELUM HADIR",
-        `Rp ${b.totalPrice.toLocaleString("id-ID")}`,
-        `Rp ${b.platformFeeAmount.toLocaleString("id-ID")}`,
-        `Rp ${b.organizerRevenueAmount.toLocaleString("id-ID")}`,
+        eventPaymentMethodLabel(b.paymentMethod),
+        eventPaymentStatusLabel(b.paymentStatus),
+        eventCheckInLabel(b.checkInStatus),
+        `Rp ${Math.round(b.totalPrice).toLocaleString("id-ID")}`,
+        `Rp ${Math.round(b.platformFeeAmount).toLocaleString("id-ID")}`,
+        `Rp ${Math.round(b.organizerRevenueAmount).toLocaleString("id-ID")}`,
       ]);
 
       return {

@@ -37,6 +37,7 @@ export function ReportsToolbar({
 
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="outline" />}>
+              <Download />
               Ekspor
               <ChevronDown className="text-muted-foreground" />
             </DropdownMenuTrigger>
@@ -54,7 +55,7 @@ export function ReportsToolbar({
 
           <Button onClick={onOpenPDF}>
             <Printer />
-            <span>Cetak PDF</span>
+            Cetak PDF
           </Button>
         </div>
       }

@@ -1,28 +1,29 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useDateFilter } from "@/contexts/DateFilterContext";
-import { useOutlet } from "@/contexts/OutletContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { useOrders } from "@/contexts/OrderContext";
-import { useProducts } from "@/contexts/ProductContext";
-import { useInventory } from "@/contexts/InventoryContext";
-import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
-import { useActivityLog } from "@/contexts/ActivityLogContext";
-import { useSettings } from "@/contexts/SettingsContext";
-import { downloadCSV, downloadExcel } from "@/lib/export-utils";
-import { calculateSettlement } from "@/lib/settlement";
+import { useEffect, useState } from "react";
+
 import { notify } from "@/components/app/notify";
-import type { EventTicketOrder } from "@/types/event";
+import { useActivityLog } from "@/contexts/ActivityLogContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useDateFilter } from "@/contexts/DateFilterContext";
+import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
+import { useInventory } from "@/contexts/InventoryContext";
+import { useOrders } from "@/contexts/OrderContext";
+import { useOutlet } from "@/contexts/OutletContext";
+import { useProducts } from "@/contexts/ProductContext";
+import { useSettings } from "@/contexts/SettingsContext";
+import { ReportsCategorySelector } from "@/features/reports/ReportsCategorySelector";
+import { ReportsPreviewTable } from "@/features/reports/ReportsPreviewTable";
+import { ReportsToolbar } from "@/features/reports/ReportsToolbar";
 import {
   buildReportData,
   getReportCategories,
   type ReportType,
 } from "@/features/reports/reports-domain";
-import { ReportsToolbar } from "@/features/reports/ReportsToolbar";
-import { ReportsCategorySelector } from "@/features/reports/ReportsCategorySelector";
-import { ReportsPreviewTable } from "@/features/reports/ReportsPreviewTable";
 import StructuredReportPDFModal from "@/features/reports/StructuredReportPDFModal";
+import { downloadCSV, downloadExcel } from "@/lib/export-utils";
+import { calculateSettlement } from "@/lib/settlement";
+import type { EventTicketOrder } from "@/types/event";
 
 export default function ReportsPage() {
   const { formattedRangeLabel } = useDateFilter();
@@ -36,6 +37,9 @@ export default function ReportsPage() {
   const { settings } = useSettings();
 
   const [selectedReportType, setSelectedReportType] = useState<ReportType>("SALES");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [eventBookings, setEventBookings] = useState<EventTicketOrder[]>([]);
 
@@ -72,7 +76,7 @@ export default function ReportsPage() {
       (l.module === "POS" || l.module === "FINANCE" || l.module === "COMMERCIAL")
   );
 
-  const scopeName = activeOutlet?.name || "Semua Gerai (Konsolidasi)";
+  const scopeName = activeOutlet?.name || "Semua outlet";
 
   const currentReport = buildReportData({
     type: selectedReportType,
@@ -98,6 +102,17 @@ export default function ReportsPage() {
     canAccessEvents,
   });
 
+  const handleSelectReportType = (nextType: ReportType) => {
+    setSelectedReportType(nextType);
+    setSearchQuery("");
+    setCurrentPage(1);
+  };
+
+  const handleSearchChange = (query: string) => {
+    setSearchQuery(query);
+    setCurrentPage(1);
+  };
+
   const handleExportCSV = () => {
     downloadCSV(
       `Laporan_${selectedReportType}_${activeOutlet?.name || "All"}_${Date.now()}`,
@@ -118,25 +133,36 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="w-full min-w-0 max-w-full space-y-6">
-      <ReportsToolbar
-        scopeName={activeOutlet?.name || "Singaraja"}
-        periodLabel={formattedRangeLabel}
-        onExportExcel={handleExportExcel}
-        onExportCSV={handleExportCSV}
-        onOpenPDF={() => setIsPDFModalOpen(true)}
-      />
+    <div className="flex w-full min-w-0 max-w-full flex-col gap-6">
+      <div className="flex flex-col gap-4">
+        <ReportsToolbar
+          scopeName={scopeName}
+          periodLabel={formattedRangeLabel}
+          onExportExcel={handleExportExcel}
+          onExportCSV={handleExportCSV}
+          onOpenPDF={() => setIsPDFModalOpen(true)}
+        />
 
-      <ReportsCategorySelector
-        categories={categories}
-        selectedType={selectedReportType}
-        onSelectType={setSelectedReportType}
-      />
+        <ReportsCategorySelector
+          categories={categories}
+          selectedType={selectedReportType}
+          onSelectType={handleSelectReportType}
+        />
+      </div>
 
       <ReportsPreviewTable
         report={currentReport}
         scopeName={scopeName}
         periodLabel={formattedRangeLabel}
+        searchQuery={searchQuery}
+        onSearchChange={handleSearchChange}
+        currentPage={currentPage}
+        pageSize={pageSize}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setCurrentPage(1);
+        }}
       />
 
       {isPDFModalOpen && (
@@ -144,9 +170,9 @@ export default function ReportsPage() {
           isOpen={isPDFModalOpen}
           onClose={() => setIsPDFModalOpen(false)}
           reportType={selectedReportType}
-          outletName={activeOutlet?.name || "Semua Gerai"}
+          outletName={scopeName}
           periodLabel={formattedRangeLabel}
-          generatedBy={user?.name || "Staf Operasional"}
+          generatedBy={user?.name || "Staf operasional"}
           data={currentReport}
         />
       )}
