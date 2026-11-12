@@ -12,8 +12,10 @@ import { SiteHeader } from "@/features/layout/SiteHeader";
 import { evaluateRouteAccess } from "@/lib/route-guard";
 import { cn } from "@/lib/utils";
 
-// Operational screens that benefit from maximum horizontal space
-const FULL_WIDTH_ROUTES = new Set(["/pos", "/kitchen", "/tables"]);
+// Counter screens (cashier, kitchen) drop the max width so they can use a wide
+// monitor. Padding is the same on every page, so content starts at the same
+// distance from the sidebar everywhere.
+const FULL_WIDTH_ROUTES = new Set(["/pos", "/kitchen"]);
 
 const SHELL_STYLE = {
   "--sidebar-width": "calc(var(--spacing) * 64)",
@@ -79,8 +81,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <SiteHeader />
         <div
           className={cn(
-            "flex w-full flex-1 flex-col min-w-0",
-            isFullWidthPage ? "p-2 sm:p-4" : "mx-auto w-full max-w-7xl min-w-0 p-4 lg:p-6",
+            "flex w-full min-w-0 flex-1 flex-col p-4 lg:p-6",
+            !isFullWidthPage && "mx-auto max-w-7xl",
           )}
         >
           {children}
