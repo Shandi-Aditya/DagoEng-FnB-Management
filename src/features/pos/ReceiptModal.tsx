@@ -6,6 +6,13 @@ import { POSReceiptData } from "./types";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { X, Printer, Share2, CheckCircle2, RotateCcw, Store, MessageSquare, UtensilsCrossed } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { DEFAULT_FNB_TENANTS, getAllStoredTenantSettings, getTenantName } from "@/lib/tenant";
 import { MASTER_HQ_OUTLET } from "@/lib/receipt-publisher";
 import { getOrCreateSimulatedWifiVoucher, getSimulatedWifiCalcBasis } from "@/lib/wifi";
@@ -153,23 +160,20 @@ export function ReceiptModal({
         }
       `}</style>
 
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-150">
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh]">
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="max-w-md gap-0 p-0 overflow-hidden flex flex-col max-h-[90vh]">
           {/* Modal Top Bar */}
-          <div className="px-5 py-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-850 print:hidden">
-            <div className="flex items-center space-x-2">
-              <CheckCircle2 className="w-5 h-5 text-primary" />
-              <span className="font-bold text-xs text-slate-800 dark:text-slate-200">
-                Transaksi Berhasil & Tercatat
-              </span>
+          <DialogHeader className="px-5 py-3 border-b border-border flex flex-row items-center justify-between bg-muted/40 print:hidden">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="size-4 text-primary" />
+              <DialogTitle className="text-xs font-medium text-foreground">
+                Transaksi berhasil dan tercatat
+              </DialogTitle>
+              <DialogDescription className="sr-only">
+                Struk transaksi kasir POS
+              </DialogDescription>
             </div>
-            <button
-              onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
+          </DialogHeader>
 
           {/* Scrollable Receipt Preview (Formatted as 58mm/80mm Thermal Receipt) */}
           <div className="p-6 overflow-y-auto flex-1 bg-slate-100/60 dark:bg-slate-950 flex justify-center">
@@ -401,7 +405,6 @@ export function ReceiptModal({
                 )}
 
                 <p className="font-bold text-slate-800">{footerMessage}</p>
-                <p className="text-[10px] text-slate-500">Wi-Fi: DagoCreativeHub • Pass: smarterfnb2026</p>
                 <div className="pt-2 border-t border-dashed border-slate-200 flex flex-col items-center justify-center space-y-1 text-slate-400">
                   <span className="text-[10px] font-semibold tracking-wider">Powered by</span>
                   <div className="w-6 h-8 relative opacity-85">
@@ -474,21 +477,22 @@ export function ReceiptModal({
                 onClick={onNewTransaction}
                 className="flex-1 min-w-[130px] text-xs font-bold space-x-1.5 bg-primary hover:bg-primary/90 text-white shadow-sm"
               >
-                <RotateCcw className="w-4 h-4" />
-                <span>Pesanan Baru</span>
+                <RotateCcw className="size-4" />
+                <span>Pesanan baru</span>
               </Button>
             ) : (
               <Button
                 type="button"
+                variant="outline"
                 onClick={onClose}
-                className="flex-1 min-w-[130px] text-xs font-bold bg-slate-800 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white"
+                className="flex-1 min-w-[130px] text-xs font-medium"
               >
                 <span>Tutup</span>
               </Button>
             )}
           </div>
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

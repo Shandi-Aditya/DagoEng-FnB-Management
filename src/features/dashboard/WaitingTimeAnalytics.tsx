@@ -3,8 +3,14 @@
 import React from "react";
 import { useOrders } from "@/contexts/OrderContext";
 import { analyzeOperationalBottlenecks, formatMinutesToHuman } from "@/lib/order-analytics";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
-import { Timer, AlertTriangle, CheckCircle2, Clock, Activity, Zap } from "lucide-react";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import { Timer, AlertTriangle, Clock, Activity, Zap } from "lucide-react";
 
 export function WaitingTimeAnalytics() {
   const { filteredOrders } = useOrders();
@@ -13,27 +19,27 @@ export function WaitingTimeAnalytics() {
   const isOverallDelayed = analysis.avgTotalWaitingMinutes > analysis.targetServiceMinutes;
 
   return (
-    <Card className="shadow-sm border-slate-200">
-      <CardHeader className="pb-3 border-b border-slate-100">
+    <Card className="shadow-xs">
+      <CardHeader className="pb-3 border-b">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-bold flex items-center space-x-2 text-slate-900">
-            <div className="p-1 rounded-md bg-brand-cyan/10 text-brand-cyan">
-              <Timer className="w-4 h-4" />
+          <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
+            <div className="p-1 rounded-md bg-info/10 text-info">
+              <Timer className="size-4" />
             </div>
-            <span>Customer Waiting Time & Bottleneck Analysis</span>
+            <span>Waktu tunggu pelanggan dan analisis hambatan</span>
           </CardTitle>
           <span
-            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+            className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${
               isOverallDelayed
-                ? "bg-red-50 text-red-700 border-red-200"
-                : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                ? "bg-destructive/10 text-destructive border-destructive/20"
+                : "bg-success/10 text-success border-success/20"
             }`}
           >
-            Target SLA: {analysis.targetServiceMinutes} Menit
+            Target SLA {analysis.targetServiceMinutes} menit
           </span>
         </div>
-        <CardDescription className="text-xs">
-          Pemantauan waktu tunggu pelanggan, durasi per segmen, dan deteksi keterlambatan dapur
+        <CardDescription className="text-xs text-muted-foreground mt-1">
+          Pemantauan durasi tunggu pesanan, performa per segmen, dan deteksi keterlambatan dapur
         </CardDescription>
       </CardHeader>
 
@@ -41,43 +47,43 @@ export function WaitingTimeAnalytics() {
         {/* Top 3 KPI Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {/* Average Waiting Time */}
-          <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-            <div className="flex items-center justify-between text-slate-500 text-[11px] font-semibold">
-              <span>Avg Waiting Time</span>
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
+          <div className="p-3 bg-muted/40 rounded-xl border">
+            <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium">
+              <span>Rata-rata waktu tunggu</span>
+              <Clock className="size-3.5 text-muted-foreground" />
             </div>
-            <p className="text-xl font-bold text-slate-900 mt-1" suppressHydrationWarning>
+            <p className="text-xl font-semibold text-foreground mt-1" suppressHydrationWarning>
               {formatMinutesToHuman(analysis.avgTotalWaitingMinutes)}
             </p>
-            <p className="text-[10px] text-slate-400 mt-0.5">
+            <p className="text-[10px] text-muted-foreground mt-0.5">
               Target {analysis.targetServiceMinutes}m ({isOverallDelayed ? "di atas target" : "sesuai target"})
             </p>
           </div>
 
           {/* Delayed Orders Count */}
-          <div className="p-3 bg-red-50/50 rounded-xl border border-red-100">
-            <div className="flex items-center justify-between text-red-600 text-[11px] font-semibold">
-              <span>Order Terlambat (&gt;10m)</span>
-              <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+          <div className="p-3 bg-destructive/5 rounded-xl border border-destructive/20">
+            <div className="flex items-center justify-between text-destructive text-[11px] font-medium">
+              <span>Pesanan terlambat (&gt;10m)</span>
+              <AlertTriangle className="size-3.5 text-destructive" />
             </div>
-            <p className="text-xl font-bold text-red-700 mt-1">
+            <p className="text-xl font-semibold text-destructive mt-1">
               {analysis.delayedOrdersCount} <span className="text-xs font-normal">({analysis.delayedPercentage}%)</span>
             </p>
-            <p className="text-[10px] text-red-500 mt-0.5">
+            <p className="text-[10px] text-destructive/80 mt-0.5">
               Dari total {analysis.totalOrders} pesanan
             </p>
           </div>
 
           {/* Average Cooking Time */}
-          <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-[11px] font-semibold">
-              <span>Avg Cooking Time</span>
-              <Activity className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+          <div className="p-3 bg-muted/40 rounded-xl border">
+            <div className="flex items-center justify-between text-muted-foreground text-[11px] font-medium">
+              <span>Rata-rata waktu masak</span>
+              <Activity className="size-3.5 text-primary" />
             </div>
-            <p className="text-xl font-bold text-slate-900 dark:text-slate-100 mt-1" suppressHydrationWarning>
+            <p className="text-xl font-semibold text-foreground mt-1" suppressHydrationWarning>
               {formatMinutesToHuman(analysis.avgCookingMinutes)}
             </p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+            <p className="text-[10px] text-muted-foreground mt-0.5">
               Durasi dapur memasak
             </p>
           </div>
@@ -85,83 +91,83 @@ export function WaitingTimeAnalytics() {
 
         {/* Breakdown of Segments: Kitchen Queue vs Cooking vs Serving */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-            <span>Breakdown Durasi Per Segmen Operasional:</span>
-            <span className="text-[11px] text-slate-400 font-normal" suppressHydrationWarning>
-              Total: {formatMinutesToHuman(analysis.avgTotalWaitingMinutes)}
+          <div className="flex items-center justify-between text-xs font-medium text-foreground">
+            <span>Rincian durasi per tahapan operasional</span>
+            <span className="text-[11px] text-muted-foreground font-normal font-mono" suppressHydrationWarning>
+              Total {formatMinutesToHuman(analysis.avgTotalWaitingMinutes)}
             </span>
           </div>
 
           {/* Visual Progress Multi-bar */}
-          <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex">
+          <div className="h-3 w-full bg-muted rounded-full overflow-hidden flex">
             <div
-              className="bg-brand-cyan h-full transition-all"
+              className="bg-info h-full transition-all"
               style={{
                 width: `${Math.max(5, (analysis.avgKitchenQueueMinutes / (analysis.avgTotalWaitingMinutes || 1)) * 100)}%`,
               }}
-              title="Kitchen Queue"
+              title="Antrean Dapur"
             />
             <div
-              className="bg-brand-orange h-full transition-all"
+              className="bg-warning h-full transition-all"
               style={{
                 width: `${Math.max(5, (analysis.avgCookingMinutes / (analysis.avgTotalWaitingMinutes || 1)) * 100)}%`,
               }}
-              title="Cooking Time"
+              title="Waktu Masak"
             />
             <div
-              className="bg-brand-green h-full transition-all"
+              className="bg-success h-full transition-all"
               style={{
                 width: `${Math.max(5, (analysis.avgServingMinutes / (analysis.avgTotalWaitingMinutes || 1)) * 100)}%`,
               }}
-              title="Serving Time"
+              title="Waktu Saji"
             />
           </div>
 
           {/* Segment Details */}
           <div className="grid grid-cols-3 gap-2 text-xs pt-1">
-            <div className="p-2 rounded-lg bg-cyan-50/60 border border-cyan-100">
-              <span className="text-[10px] font-bold text-cyan-800 uppercase flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-brand-cyan inline-block" />
-                <span>1. Kitchen Queue</span>
+            <div className="p-2 rounded-lg bg-info/10 border border-info/20">
+              <span className="text-[10px] font-medium text-info uppercase flex items-center gap-1">
+                <span className="size-2 rounded-full bg-info inline-block" />
+                <span>1. Antrean dapur</span>
               </span>
-              <p className="text-xs font-bold text-cyan-950 mt-0.5" suppressHydrationWarning>
+              <p className="text-xs font-semibold text-foreground mt-0.5" suppressHydrationWarning>
                 {formatMinutesToHuman(analysis.avgKitchenQueueMinutes)}
               </p>
-              <p className="text-[10px] text-cyan-700">Order → Dapur Terima</p>
+              <p className="text-[10px] text-muted-foreground">Order ke terima dapur</p>
             </div>
 
-            <div className="p-2 rounded-lg bg-orange-50/60 border border-orange-100">
-              <span className="text-[10px] font-bold text-orange-800 uppercase flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-brand-orange inline-block" />
-                <span>2. Cooking Time</span>
+            <div className="p-2 rounded-lg bg-warning/10 border border-warning/20">
+              <span className="text-[10px] font-medium text-warning uppercase flex items-center gap-1">
+                <span className="size-2 rounded-full bg-warning inline-block" />
+                <span>2. Waktu masak</span>
               </span>
-              <p className="text-xs font-bold text-orange-950 mt-0.5" suppressHydrationWarning>
+              <p className="text-xs font-semibold text-foreground mt-0.5" suppressHydrationWarning>
                 {formatMinutesToHuman(analysis.avgCookingMinutes)}
               </p>
-              <p className="text-[10px] text-orange-700">Masak → Makanan Siap</p>
+              <p className="text-[10px] text-muted-foreground">Masak ke makanan siap</p>
             </div>
 
-            <div className="p-2 rounded-lg bg-emerald-50/60 border border-emerald-100">
-              <span className="text-[10px] font-bold text-emerald-800 uppercase flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-brand-green inline-block" />
-                <span>3. Serving Time</span>
+            <div className="p-2 rounded-lg bg-success/10 border border-success/20">
+              <span className="text-[10px] font-medium text-success uppercase flex items-center gap-1">
+                <span className="size-2 rounded-full bg-success inline-block" />
+                <span>3. Waktu saji</span>
               </span>
-              <p className="text-xs font-bold text-emerald-950 mt-0.5" suppressHydrationWarning>
+              <p className="text-xs font-semibold text-foreground mt-0.5" suppressHydrationWarning>
                 {formatMinutesToHuman(analysis.avgServingMinutes)}
               </p>
-              <p className="text-[10px] text-emerald-700">Siap → Diantar Waiter</p>
+              <p className="text-[10px] text-muted-foreground">Siap ke diantar waiter</p>
             </div>
           </div>
         </div>
 
         {/* Bottleneck Diagnosis Statement */}
-        <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl flex items-start space-x-2 text-xs">
-          <Zap className="w-4 h-4 text-brand-yellow flex-shrink-0 mt-0.5" />
+        <div className="p-3 bg-warning/10 border border-warning/20 rounded-xl flex items-start gap-2 text-xs">
+          <Zap className="size-4 text-warning shrink-0 mt-0.5" />
           <div>
-            <span className="font-bold text-amber-900 uppercase text-[10px] tracking-wide">
-              Operational Bottleneck Diagnosis:
+            <span className="font-semibold text-foreground text-[10px]">
+              Diagnosa hambatan operasional
             </span>
-            <p className="text-amber-800 font-semibold mt-0.5 leading-relaxed">
+            <p className="text-muted-foreground font-medium mt-0.5 leading-relaxed">
               {analysis.diagnosisStatement}
             </p>
           </div>

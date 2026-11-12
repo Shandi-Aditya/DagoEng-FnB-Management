@@ -61,6 +61,8 @@ export interface CoworkingBooking {
   duration: number; // in hours or days
   totalAmount: number;
   paymentStatus: "PAID" | "PENDING";
+  paymentMethod?: string;
+  paymentRef?: string;
   checkInStatus: "RESERVED" | "CHECKED_IN" | "COMPLETED" | "CANCELLED";
   fnbVoucherApplied?: string;
   notes?: string;

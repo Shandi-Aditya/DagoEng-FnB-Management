@@ -16,8 +16,8 @@ import {
   User,
   Users,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/legacy/ui/button";
+import { Badge } from "@/components/legacy/ui/badge";
 import { CommunityEvent, EventTicketOrder } from "@/types/event";
 import { Html5Qrcode } from "html5-qrcode";
 
@@ -414,12 +414,12 @@ export function OrganizerQRScannerModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
       <div className="relative w-full max-w-lg bg-white dark:bg-[#0F172A] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between shrink-0 bg-slate-50/50 dark:bg-slate-900/50">
           <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright flex items-center justify-center">
               <Camera className="w-5 h-5" />
             </div>
             <div>
@@ -491,7 +491,7 @@ export function OrganizerQRScannerModal({
                   size="sm"
                   type="button"
                   onClick={startCameraStream}
-                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl px-4 py-2 cursor-pointer shadow-md"
+                  className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl px-4 py-2 cursor-pointer shadow-md"
                 >
                   <Camera className="w-3.5 h-3.5 mr-1.5" />
                   <span>Aktifkan Kamera</span>
@@ -633,13 +633,13 @@ export function OrganizerQRScannerModal({
                   }}
                   placeholder="Ketik kode (mis: DAGO-EVT-...)"
                   disabled={isProcessing}
-                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 uppercase placeholder:normal-case focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 uppercase placeholder:normal-case focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                 />
               </div>
               <Button
                 type="submit"
                 disabled={!manualCode.trim() || isProcessing}
-                className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 rounded-xl cursor-pointer shrink-0 shadow-xs"
+                className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold px-4 rounded-xl cursor-pointer shrink-0 shadow-xs"
               >
                 <span>Check-In</span>
               </Button>

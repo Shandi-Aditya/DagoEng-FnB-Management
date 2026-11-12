@@ -8,10 +8,8 @@ export const dynamic = "force-dynamic";
  * Public endpoint to view details of an APPROVED event.
  * Strips private organizer contacts. Returns 404 if event is not found or not approved.
  */
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const { id } = params;
     const event = await getPublicEventById(id);
@@ -41,10 +39,8 @@ export async function GET(
  * Admin endpoint to update event details.
  * Restricted to SUPER_ADMIN, OWNER, and MANAGER.
  */
-export async function PUT(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   try {
     const auth = await assertEventAdmin(req);
     if (!auth.authorized) {

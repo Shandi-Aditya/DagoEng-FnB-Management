@@ -46,10 +46,10 @@ import {
   TrendingUp,
   ChevronUp,
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { TablePagination, TablePageSizeSelector } from "@/components/ui/table-pagination";
+import { Card } from "@/components/legacy/ui/card";
+import { Button } from "@/components/legacy/ui/button";
+import { Badge } from "@/components/legacy/ui/badge";
+import { TablePagination, TablePageSizeSelector } from "@/components/legacy/ui/table-pagination";
 import { CommunityEvent, EventCategory, EventStatus, EventTicketOrder, EventOperationalStats, PayoutRecord } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV } from "@/lib/export-utils";
@@ -1182,7 +1182,7 @@ export default function AdminEventsPage() {
           <Link href="/events/submit" className="shrink-0">
             <Button
               size="sm"
-              className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl shadow-xs flex items-center space-x-1.5 h-8 sm:h-9 px-2.5 sm:px-3 cursor-pointer"
+              className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl shadow-xs flex items-center space-x-1.5 h-8 sm:h-9 px-2.5 sm:px-3 cursor-pointer"
             >
               <PlusCircle className="w-3.5 h-3.5" />
               <span>Tambah Event</span>
@@ -1226,7 +1226,7 @@ export default function AdminEventsPage() {
         <button
           onClick={() => setAdminSection("MODERATION")}
           className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${adminSection === "MODERATION"
-              ? "bg-[#3B7A57] text-white shadow-sm"
+              ? "bg-brand-sage text-white shadow-sm"
               : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
             }`}
         >
@@ -1242,7 +1242,7 @@ export default function AdminEventsPage() {
         <button
           onClick={() => setAdminSection("PAYMENTS")}
           className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${adminSection === "PAYMENTS"
-              ? "bg-[#3B7A57] text-white shadow-sm"
+              ? "bg-brand-sage text-white shadow-sm"
               : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
             }`}
         >
@@ -1258,7 +1258,7 @@ export default function AdminEventsPage() {
         <button
           onClick={() => setAdminSection("PAYOUTS")}
           className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${adminSection === "PAYOUTS"
-              ? "bg-[#3B7A57] text-white shadow-sm"
+              ? "bg-brand-sage text-white shadow-sm"
               : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
             }`}
         >
@@ -1277,7 +1277,7 @@ export default function AdminEventsPage() {
             loadBusinessSettings();
           }}
           className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${adminSection === "SETTINGS"
-              ? "bg-[#3B7A57] text-white shadow-sm"
+              ? "bg-brand-sage text-white shadow-sm"
               : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
             }`}
         >
@@ -1293,7 +1293,7 @@ export default function AdminEventsPage() {
             <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between min-h-[92px] sm:min-h-[104px]">
               <div className="flex items-center justify-between gap-1.5 pb-1">
                 <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">Total Event</span>
-                <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center shrink-0">
+                <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage dark:text-brand-sageBright flex items-center justify-center shrink-0">
                   <Calendar className="w-3.5 h-3.5" />
                 </div>
               </div>
@@ -1346,7 +1346,7 @@ export default function AdminEventsPage() {
                 <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white leading-tight">
                   {allBookings.filter((b) => b.paymentStatus === "PAID").length} <span className="text-xs font-normal text-slate-400">Peserta</span>
                 </div>
-                <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788] truncate block mt-0.5">
+                <span className="text-[10px] font-bold text-brand-sage dark:text-brand-sageBright truncate block mt-0.5">
                   {formatCurrencyIDR(allBookings.filter((b) => b.paymentStatus === "PAID").reduce((sum, b) => sum + b.totalPrice, 0))}
                 </span>
               </div>
@@ -1358,7 +1358,7 @@ export default function AdminEventsPage() {
             <div className="relative overflow-hidden p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
               <div className="flex items-center space-x-2.5">
                 <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  <Check className="w-3.5 h-3.5 stroke-3" />
                 </div>
                 <div>
                   <span className="font-bold block">{actionSuccessMessage}</span>
@@ -1377,13 +1377,13 @@ export default function AdminEventsPage() {
           {actionErrorMessage && (
             <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div className="flex items-center space-x-2">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                <AlertTriangle className="w-4 h-4 shrink-0" />
                 <span>{actionErrorMessage}</span>
               </div>
               <div className="flex items-center space-x-3">
                 {actionErrorMessage.includes("CUSTOMER") && (
                   <Link href="/events/portal">
-                    <Button size="sm" className="h-7 text-[11px] bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold rounded-lg px-2.5">
+                    <Button size="sm" className="h-7 text-[11px] bg-brand-sage hover:bg-[#2E6044] text-white font-bold rounded-lg px-2.5">
                       Buka Portal Penyelenggara
                     </Button>
                   </Link>
@@ -1425,7 +1425,7 @@ export default function AdminEventsPage() {
                         onClick={() => setSelectedStatusTab(tab.key)}
                         className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all flex items-center space-x-1 cursor-pointer ${
                           active
-                            ? "bg-[#3B7A57] text-white shadow-xs font-bold"
+                            ? "bg-brand-sage text-white shadow-xs font-bold"
                             : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
                         }`}
                       >
@@ -1443,7 +1443,7 @@ export default function AdminEventsPage() {
                     );
                   })}
                 </div>
-                <div className="absolute right-0 top-0 bottom-1 w-6 pointer-events-none bg-gradient-to-l from-white dark:from-[#0B1120] to-transparent sm:hidden" />
+                <div className="absolute right-0 top-0 bottom-1 w-6 pointer-events-none bg-linear-to-l from-white dark:from-[#0B1120] to-transparent sm:hidden" />
               </div>
 
               {/* Controls: Compact Date Range Dropdown, Table Page Size, Search */}
@@ -1470,7 +1470,7 @@ export default function AdminEventsPage() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Cari nama event..."
-                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>
               </div>
@@ -1481,7 +1481,7 @@ export default function AdminEventsPage() {
           <Card className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
             {isLoading ? (
               <div className="p-8 text-center text-xs text-slate-400">
-                <div className="w-6 h-6 border-2 border-[#3B7A57] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                <div className="w-6 h-6 border-2 border-brand-sage border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                 Memuat pengajuan event...
               </div>
             ) : filteredEvents.length === 0 ? (
@@ -1540,7 +1540,7 @@ export default function AdminEventsPage() {
 
                         <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
                           <div className="flex items-center gap-1.5 truncate">
-                            <Calendar className="w-3.5 h-3.5 text-[#3B7A57] shrink-0" />
+                            <Calendar className="w-3.5 h-3.5 text-brand-sage shrink-0" />
                             <span className="truncate">{new Date(evt.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span>
                           </div>
                           <div className="flex items-center gap-1.5 truncate">
@@ -1566,7 +1566,7 @@ export default function AdminEventsPage() {
                               setAttendeeSearchQuery("");
                               setIsAttendeesModalOpen(true);
                             }}
-                            className="flex-1 h-8 text-[11px] font-bold text-[#3B7A57] dark:text-[#52B788] border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg"
+                            className="flex-1 h-8 text-[11px] font-bold text-brand-sage dark:text-brand-sageBright border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg"
                           >
                             <Ticket className="w-3.5 h-3.5 mr-1" />
                             Peserta ({totalTickets})
@@ -1578,7 +1578,7 @@ export default function AdminEventsPage() {
                                 size="sm"
                                 onClick={() => handleUpdateStatus(evt.id, "APPROVED")}
                                 disabled={isProcessingAction}
-                                className="flex-1 h-8 text-[11px] font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-lg"
+                                className="flex-1 h-8 text-[11px] font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-lg"
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
                                 Setujui
@@ -1653,7 +1653,7 @@ export default function AdminEventsPage() {
                           {/* Event Title & Poster */}
                           <td className="py-3.5 px-4 max-w-xs">
                             <div className="flex items-center space-x-3">
-                              <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden flex-shrink-0 relative border border-slate-200 dark:border-slate-800 group-hover:border-[#3B7A57] transition-colors">
+                              <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0 relative border border-slate-200 dark:border-slate-800 group-hover:border-brand-sage transition-colors">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img
                                   src={evt.posterUrl}
@@ -1662,7 +1662,7 @@ export default function AdminEventsPage() {
                                 />
                               </div>
                               <div className="min-w-0">
-                                <span className="font-bold text-slate-900 dark:text-white block truncate group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                                <span className="font-bold text-slate-900 dark:text-white block truncate group-hover:text-brand-sage dark:group-hover:text-brand-sageBright transition-colors">
                                   {evt.title}
                                 </span>
                                 <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono block">
@@ -1688,7 +1688,7 @@ export default function AdminEventsPage() {
                           <td className="py-3.5 px-4 text-slate-700 dark:text-slate-200 whitespace-nowrap">
                             <div className="space-y-0.5">
                               <div className="flex items-center space-x-1.5 font-medium">
-                                <Calendar className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                                <Calendar className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
                                 <span>{new Date(evt.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
                               </div>
                               <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-300 text-[11px]">
@@ -1739,7 +1739,7 @@ export default function AdminEventsPage() {
                           <td className="py-3.5 px-4 whitespace-nowrap">
                             <div className="space-y-0.5">
                               <span className="font-bold text-slate-900 dark:text-white flex items-center space-x-1">
-                                <Users className="w-3 h-3 text-[#3B7A57]" />
+                                <Users className="w-3 h-3 text-brand-sage" />
                                 <span>{evtBookings.length} Peserta ({totalTickets} Tiket)</span>
                               </span>
                               <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono block">
@@ -1773,7 +1773,7 @@ export default function AdminEventsPage() {
                                   setAttendeeSearchQuery("");
                                   setIsAttendeesModalOpen(true);
                                 }}
-                                className="h-8 px-2.5 text-[11px] font-bold text-[#3B7A57] dark:text-[#52B788] border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg cursor-pointer"
+                                className="h-8 px-2.5 text-[11px] font-bold text-brand-sage dark:text-brand-sageBright border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg cursor-pointer"
                                 title="Kelola Data Peserta & Check-In Tiket"
                               >
                                 <Ticket className="w-3.5 h-3.5 mr-1" />
@@ -1789,7 +1789,7 @@ export default function AdminEventsPage() {
                                   setSelectedEvent(evt);
                                   setIsDetailModalOpen(true);
                                 }}
-                                className="h-8 px-2 text-slate-600 dark:text-slate-400 hover:text-[#3B7A57]"
+                                className="h-8 px-2 text-slate-600 dark:text-slate-400 hover:text-brand-sage"
                                 title="Lihat Detail & Kontak"
                               >
                                 <Eye className="w-3.5 h-3.5" />
@@ -1819,7 +1819,7 @@ export default function AdminEventsPage() {
                                       handleUpdateStatus(evt.id, "APPROVED");
                                     }}
                                     disabled={isProcessingAction}
-                                    className="h-8 px-2.5 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] font-bold rounded-lg shadow-xs"
+                                    className="h-8 px-2.5 bg-brand-sage hover:bg-[#2E6044] text-white text-[11px] font-bold rounded-lg shadow-xs"
                                   >
                                     <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
                                     Setujui
@@ -1953,7 +1953,7 @@ export default function AdminEventsPage() {
                 {allBookings.filter((b) => b.paymentStatus === "PAID" && b.totalPrice > 0).length}{" "}
                 <span className="text-xs font-normal text-slate-400">Transaksi</span>
               </div>
-              <span className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788] truncate block">
+              <span className="text-[10px] font-bold text-brand-sage dark:text-brand-sageBright truncate block">
                 {formatCurrencyIDR(allBookings.filter((b) => b.paymentStatus === "PAID" && b.totalPrice > 0).reduce((s, b) => s + b.totalPrice, 0))}
               </span>
             </Card>
@@ -1981,7 +1981,7 @@ export default function AdminEventsPage() {
                   key={tab.key}
                   onClick={() => setPaymentFilterStatus(tab.key as any)}
                   className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${paymentFilterStatus === tab.key
-                      ? "bg-[#3B7A57] text-white shadow-xs"
+                      ? "bg-brand-sage text-white shadow-xs"
                       : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
                     }`}
                 >
@@ -2080,7 +2080,7 @@ export default function AdminEventsPage() {
                             <span className="text-[10px] text-slate-400 block">{b.guestPhone}</span>
                           </td>
                           <td className="py-3 px-3.5 whitespace-nowrap">
-                            <span className="font-black text-[#3B7A57] dark:text-[#52B788] block text-sm">
+                            <span className="font-black text-brand-sage dark:text-brand-sageBright block text-sm">
                               {formatCurrencyIDR(b.totalPrice)}
                             </span>
                             <span className="text-[10px] text-slate-400 block">{b.ticketCount} Tiket</span>
@@ -2117,7 +2117,7 @@ export default function AdminEventsPage() {
                                 <div>
                                   <button
                                     onClick={() => setSelectedProofBooking(b)}
-                                    className="text-[10.5px] font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline block cursor-pointer"
+                                    className="text-[10.5px] font-bold text-brand-sage dark:text-brand-sageBright hover:underline block cursor-pointer"
                                   >
                                     Periksa Bukti
                                   </button>
@@ -2152,7 +2152,7 @@ export default function AdminEventsPage() {
                                   size="sm"
                                   disabled={isProcessingPaymentAction}
                                   onClick={() => handleApprovePayment(b)}
-                                  className="h-7 px-2.5 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[10.5px] font-bold rounded-lg cursor-pointer"
+                                  className="h-7 px-2.5 bg-brand-sage hover:bg-[#2E6044] text-white text-[10.5px] font-bold rounded-lg cursor-pointer"
                                 >
                                   <Check className="w-3 h-3 mr-1" />
                                   <span>Setujui</span>
@@ -2230,7 +2230,7 @@ export default function AdminEventsPage() {
               <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
                 <div className="flex items-start justify-between gap-2 pb-1">
                   <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight">Total Pengajuan</span>
-                  <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] flex items-center justify-center shrink-0">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage flex items-center justify-center shrink-0">
                     <Wallet className="w-3.5 h-3.5" />
                   </div>
                 </div>
@@ -2277,7 +2277,7 @@ export default function AdminEventsPage() {
               <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
                 <div className="flex items-start justify-between gap-2 pb-1">
                   <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight">Selesai Ditransfer</span>
-                  <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] flex items-center justify-center shrink-0">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage flex items-center justify-center shrink-0">
                     <CheckCircle2 className="w-3.5 h-3.5" />
                   </div>
                 </div>
@@ -2326,7 +2326,7 @@ export default function AdminEventsPage() {
                       onClick={() => setPayoutFilterStatus(tab.key as any)}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 shrink-0 cursor-pointer ${
                         payoutFilterStatus === tab.key
-                          ? "bg-[#3B7A57] text-white shadow-xs"
+                          ? "bg-brand-sage text-white shadow-xs"
                           : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
                       }`}
                     >
@@ -2353,7 +2353,7 @@ export default function AdminEventsPage() {
                       value={payoutSearchQuery}
                       onChange={(e) => setPayoutSearchQuery(e.target.value)}
                       placeholder="Cari event, penyelenggara, rek..."
-                      className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+                      className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                     />
                   </div>
                   <TablePageSizeSelector
@@ -2417,7 +2417,7 @@ export default function AdminEventsPage() {
                                     setIsDetailModalOpen(true);
                                   }
                                 }}
-                                className="font-bold text-slate-900 dark:text-white truncate block hover:text-[#3B7A57] dark:hover:text-[#52B788] text-left cursor-pointer transition-colors"
+                                className="font-bold text-slate-900 dark:text-white truncate block hover:text-brand-sage dark:hover:text-brand-sageBright text-left cursor-pointer transition-colors"
                                 title="Klik untuk melihat rincian event"
                               >
                                 {p.eventTitle}
@@ -2463,11 +2463,11 @@ export default function AdminEventsPage() {
                                         setActionSuccessMessage(`Nomor rekening ${p.accountNumber} berhasil disalin!`);
                                       }
                                     }}
-                                    className="text-[11px] font-mono font-bold text-slate-800 dark:text-slate-200 hover:text-[#3B7A57] flex items-center space-x-1 cursor-pointer"
+                                    className="text-[11px] font-mono font-bold text-slate-800 dark:text-slate-200 hover:text-brand-sage flex items-center space-x-1 cursor-pointer"
                                     title="Klik untuk menyalin nomor rekening"
                                   >
                                     <span>{p.accountNumber}</span>
-                                    <Copy className="w-2.5 h-2.5 text-slate-400 hover:text-[#3B7A57]" />
+                                    <Copy className="w-2.5 h-2.5 text-slate-400 hover:text-brand-sage" />
                                   </button>
                                 </div>
                                 <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
@@ -2609,7 +2609,7 @@ export default function AdminEventsPage() {
           <Card className="p-6 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center space-x-2">
-                <Settings className="w-5 h-5 text-[#3B7A57]" />
+                <Settings className="w-5 h-5 text-brand-sage" />
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                     Kebijakan Transaksi & Pembayaran Event
@@ -2742,7 +2742,7 @@ export default function AdminEventsPage() {
                       isSavingSettings ||
                       !Boolean(businessPolicy && baselinePolicy && JSON.stringify(businessPolicy) !== JSON.stringify(baselinePolicy))
                     }
-                    className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSavingSettings ? "Menyimpan..." : "Simpan Pengaturan Bisnis"}
                   </Button>
@@ -2755,7 +2755,7 @@ export default function AdminEventsPage() {
           <Card className="p-6 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center space-x-2">
-                <Building2 className="w-5 h-5 text-[#3B7A57]" />
+                <Building2 className="w-5 h-5 text-brand-sage" />
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                     Rekening Bank Resmi Platform
@@ -2769,7 +2769,7 @@ export default function AdminEventsPage() {
               <Button
                 size="sm"
                 onClick={() => setIsAddBankModalOpen(true)}
-                className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 cursor-pointer"
+                className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Tambah Rekening</span>
@@ -2825,7 +2825,7 @@ export default function AdminEventsPage() {
                           <button
                             onClick={() => handleSetDefaultBank(acc.id)}
                             disabled={!acc.isActive}
-                            className="text-[10px] font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline cursor-pointer disabled:opacity-40"
+                            className="text-[10px] font-bold text-brand-sage dark:text-brand-sageBright hover:underline cursor-pointer disabled:opacity-40"
                           >
                             Jadikan Default
                           </button>
@@ -2848,7 +2848,7 @@ export default function AdminEventsPage() {
                             size="sm"
                             variant="ghost"
                             onClick={() => handleOpenEditBank(acc)}
-                            className="h-7 px-2 text-[#3B7A57] dark:text-[#52B788] hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg cursor-pointer"
+                            className="h-7 px-2 text-brand-sage dark:text-brand-sageBright hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg cursor-pointer"
                             title="Edit data rekening"
                           >
                             <Edit className="w-3.5 h-3.5" />
@@ -2987,7 +2987,7 @@ export default function AdminEventsPage() {
               </div>
               <div>
                 <span className="text-[10px] text-slate-400 font-bold uppercase block">Harga Tiket:</span>
-                <span className="font-bold text-[#3B7A57] dark:text-[#52B788] block">
+                <span className="font-bold text-brand-sage dark:text-brand-sageBright block">
                   {selectedEvent.isPaid && selectedEvent.price
                     ? formatCurrencyIDR(selectedEvent.price)
                     : "GRATIS (RSVP)"}
@@ -3129,7 +3129,7 @@ export default function AdminEventsPage() {
                     Skema Bagi Hasil (Revenue Split)
                   </span>
                   <span className="text-[11px] text-slate-500">
-                    Kesepakatan Aktif: <strong className="text-[#3B7A57] dark:text-[#52B788]">{selectedEvent.organizerFeePercent ?? 80}% Komunitas</strong> : <strong className="text-slate-700 dark:text-slate-300">{selectedEvent.customPlatformFeePercent ?? 20}% Dago</strong>
+                    Kesepakatan Aktif: <strong className="text-brand-sage dark:text-brand-sageBright">{selectedEvent.organizerFeePercent ?? 80}% Komunitas</strong> : <strong className="text-slate-700 dark:text-slate-300">{selectedEvent.customPlatformFeePercent ?? 20}% Dago</strong>
                   </span>
                 </div>
                 <Button
@@ -3212,7 +3212,7 @@ export default function AdminEventsPage() {
                           setSplitOrgPercent(val);
                           setSplitPlatPercent(100 - val);
                         }}
-                        className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-900 border font-bold text-[#3B7A57]"
+                        className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-900 border font-bold text-brand-sage"
                       />
                     </div>
                     <div>
@@ -3259,7 +3259,7 @@ export default function AdminEventsPage() {
                       type="submit"
                       size="sm"
                       disabled={isSubmittingSplit}
-                      className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] h-7 font-bold"
+                      className="bg-brand-sage hover:bg-[#2E6044] text-white text-[11px] h-7 font-bold"
                     >
                       Kirim Penawaran
                     </Button>
@@ -3414,7 +3414,7 @@ export default function AdminEventsPage() {
                     setAttendeeSearchQuery("");
                     setIsAttendeesModalOpen(true);
                   }}
-                  className="text-xs font-bold text-[#3B7A57] dark:text-[#52B788] border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                  className="text-xs font-bold text-brand-sage dark:text-brand-sageBright border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
                 >
                   <Ticket className="w-3.5 h-3.5 mr-1" />
                   <span>Daftar Peserta</span>
@@ -3424,7 +3424,7 @@ export default function AdminEventsPage() {
                     size="sm"
                     onClick={() => handleUpdateStatus(selectedEvent.id, "APPROVED")}
                     disabled={isProcessingAction}
-                    className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold"
+                    className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold"
                   >
                     Setujui & Publikasikan
                   </Button>
@@ -3464,7 +3464,7 @@ export default function AdminEventsPage() {
               value={modalNotes}
               onChange={(e) => setModalNotes(e.target.value)}
               placeholder="Contoh: Mohon perbarui deskripsi agar mencantumkan target peserta dan fasilitas yang disediakan..."
-              className="w-full p-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              className="w-full p-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
             />
 
             <div className="flex items-center justify-end space-x-2 pt-2">
@@ -3517,7 +3517,7 @@ export default function AdminEventsPage() {
               value={modalNotes}
               onChange={(e) => setModalNotes(e.target.value)}
               placeholder="Contoh: Ruang amphitheater telah terbooking penuh pada tanggal yang diajukan..."
-              className="w-full p-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-rose-500"
+              className="w-full p-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
             />
 
             <div className="flex items-center justify-end space-x-2 pt-2">
@@ -3707,7 +3707,7 @@ export default function AdminEventsPage() {
                 size="sm"
                 disabled={isProcessingAction}
                 onClick={handleSaveEdit}
-                className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold"
+                className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold"
               >
                 Simpan Perubahan
               </Button>
@@ -3781,10 +3781,10 @@ export default function AdminEventsPage() {
               className="relative w-full max-w-4xl bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 overflow-hidden flex flex-col max-h-[92vh] cursor-default"
             >
               {/* Header */}
-              <div className="flex items-start justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
+              <div className="flex items-start justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800 shrink-0">
                 <div>
                   <div className="flex items-center space-x-2 mb-1">
-                    <Badge variant="outline" className="text-[10px] border-emerald-300 dark:border-emerald-800 text-[#3B7A57] dark:text-[#52B788]">
+                    <Badge variant="outline" className="text-[10px] border-emerald-300 dark:border-emerald-800 text-brand-sage dark:text-brand-sageBright">
                       {evt.category}
                     </Badge>
                     <span className="text-[10px] text-slate-400 font-mono">ID: {evt.id}</span>
@@ -3805,7 +3805,7 @@ export default function AdminEventsPage() {
               </div>
 
               {/* Financial & Attendance Metrics */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 py-3.5 flex-shrink-0">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 py-3.5 shrink-0">
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Kehadiran Peserta</span>
                   <div className="text-base font-extrabold text-slate-900 dark:text-white mt-0.5">
@@ -3818,7 +3818,7 @@ export default function AdminEventsPage() {
 
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
                   <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Total Tiket Terjual</span>
-                  <div className="text-base font-extrabold text-[#3B7A57] dark:text-[#52B788] mt-0.5">
+                  <div className="text-base font-extrabold text-brand-sage dark:text-brand-sageBright mt-0.5">
                     {totalTicketsSold} <span className="text-xs font-normal text-slate-400">Tiket</span>
                   </div>
                   <span className="text-[10px] text-slate-400">
@@ -3844,7 +3844,7 @@ export default function AdminEventsPage() {
               </div>
 
               {/* Search & Actions Bar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pb-3 flex-shrink-0">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pb-3 shrink-0">
                 <div className="relative flex-1">
                   <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
@@ -3852,7 +3852,7 @@ export default function AdminEventsPage() {
                     value={attendeeSearchQuery}
                     onChange={(e) => setAttendeeSearchQuery(e.target.value)}
                     placeholder="Cari kode tiket, nama, instansi, email, atau no WhatsApp..."
-                    className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#3B7A57]"
+                    className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
                   />
                 </div>
                 <Button
@@ -3904,10 +3904,10 @@ export default function AdminEventsPage() {
                               title="Klik baris untuk melihat rincian tiket"
                             >
                               <td className="py-2.5 px-3 whitespace-nowrap">
-                                <div className="font-mono font-bold text-[#3B7A57] dark:text-[#52B788]">
+                                <div className="font-mono font-bold text-brand-sage dark:text-brand-sageBright">
                                   {b.ticketCode}
                                 </div>
-                                <div className="inline-flex items-center space-x-1 mt-1 text-[10px] font-bold text-slate-500 hover:text-[#3B7A57] dark:hover:text-[#52B788]">
+                                <div className="inline-flex items-center space-x-1 mt-1 text-[10px] font-bold text-slate-500 hover:text-brand-sage dark:hover:text-brand-sageBright">
                                   <span>{isExpanded ? "Tutup Rincian" : (b.ticketCount > 1 ? `Lihat ${b.ticketCount} Tiket` : "Lihat Rincian")}</span>
                                   {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                                 </div>
@@ -4019,7 +4019,7 @@ export default function AdminEventsPage() {
                                       ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-800"
                                       : b.checkInStatus === "CHECKED_IN"
                                         ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
-                                        : "bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-xs cursor-pointer"
+                                        : "bg-brand-sage hover:bg-[#2E6044] text-white shadow-xs cursor-pointer"
                                     }`}
                                   title={b.paymentStatus === "CANCELLED" ? "Tiket yang dibatalkan tidak dapat check-in" : undefined}
                                 >
@@ -4050,7 +4050,7 @@ export default function AdminEventsPage() {
                                   <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2.5">
                                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5 text-xs">
                                       <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                                        <Ticket className="w-3.5 h-3.5 text-[#3B7A57]" />
+                                        <Ticket className="w-3.5 h-3.5 text-brand-sage" />
                                         <span>Rincian {b.ticketCount} Tiket dalam Transaksi {b.ticketCode}</span>
                                       </span>
                                       <span className="text-[11px] text-slate-500">
@@ -4071,7 +4071,7 @@ export default function AdminEventsPage() {
                                             className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-xs space-y-1"
                                           >
                                             <div className="flex items-center justify-between">
-                                              <span className="font-mono font-bold text-[#3B7A57] dark:text-[#52B788] text-[11px]">
+                                              <span className="font-mono font-bold text-brand-sage dark:text-brand-sageBright text-[11px]">
                                                 {subCode}
                                               </span>
                                               <span
@@ -4104,7 +4104,7 @@ export default function AdminEventsPage() {
               </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 flex-shrink-0">
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
                 <span className="text-[11px] text-slate-500 dark:text-slate-400">
                   Total {filteredAttendees.length} dari {eventBookings.length} data pendaftar
                 </span>
@@ -4161,7 +4161,7 @@ export default function AdminEventsPage() {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <span className="text-slate-400 text-[10px] block">Total Tagihan:</span>
-                  <span className="font-bold text-[#3B7A57] dark:text-[#52B788] text-sm">
+                  <span className="font-bold text-brand-sage dark:text-brand-sageBright text-sm">
                     {formatCurrencyIDR(selectedProofBooking.totalPrice)}
                   </span>
                 </div>
@@ -4198,7 +4198,7 @@ export default function AdminEventsPage() {
                       await handleVerifyPayment(selectedProofBooking);
                       setSelectedProofBooking(null);
                     }}
-                    className="text-xs h-8 px-4 font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-xs cursor-pointer flex items-center space-x-1.5"
+                    className="text-xs h-8 px-4 font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-xl shadow-xs cursor-pointer flex items-center space-x-1.5"
                   >
                     <Check className="w-3.5 h-3.5" />
                     <span>Konfirmasi & Verifikasi Lunas</span>
@@ -4296,7 +4296,7 @@ export default function AdminEventsPage() {
                   ? "Contoh: BCA-TRF-20261102-98412"
                   : "Contoh: Nomor rekening bank tidak sesuai dengan nama penyelenggara"
               }
-              className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-[#3B7A57]"
+              className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
             />
 
             <div className="flex justify-end gap-2 pt-2">
@@ -4373,7 +4373,7 @@ export default function AdminEventsPage() {
                 required
                 value={rejectPaymentReason}
                 onChange={(e) => setRejectPaymentReason(e.target.value)}
-                placeholder="Contoh: Foto bukti transfer blur / nominal tidak sesuai / nomor rekening tujuan salah..."
+                placeholder="Contoh: Foto bukti transfer blur-sm / nominal tidak sesuai / nomor rekening tujuan salah..."
                 className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs focus:ring-2 focus:ring-rose-500"
               />
               <span className="text-[10.5px] text-slate-400 block">
@@ -4540,7 +4540,7 @@ export default function AdminEventsPage() {
                     type="checkbox"
                     checked={newBankForm.isDefault}
                     onChange={(e) => setNewBankForm({ ...newBankForm, isDefault: e.target.checked })}
-                    className="rounded text-[#3B7A57] focus:ring-[#3B7A57]"
+                    className="rounded text-brand-sage focus:ring-[#3B7A57]"
                   />
                   <span className="font-semibold text-slate-800 dark:text-slate-200">
                     Jadikan rekening default utama platform
@@ -4562,7 +4562,7 @@ export default function AdminEventsPage() {
                   type="submit"
                   size="sm"
                   disabled={isSavingSettings}
-                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold cursor-pointer"
+                  className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold cursor-pointer"
                 >
                   {isSavingSettings ? "Menyimpan..." : "Simpan Rekening"}
                 </Button>
@@ -4692,7 +4692,7 @@ export default function AdminEventsPage() {
                     type="checkbox"
                     checked={editBankForm.isDefault}
                     onChange={(e) => setEditBankForm({ ...editBankForm, isDefault: e.target.checked })}
-                    className="rounded text-[#3B7A57] focus:ring-[#3B7A57]"
+                    className="rounded text-brand-sage focus:ring-[#3B7A57]"
                   />
                   <span className="font-semibold text-slate-800 dark:text-slate-200">
                     Jadikan rekening default utama platform
@@ -4714,7 +4714,7 @@ export default function AdminEventsPage() {
                   type="submit"
                   size="sm"
                   disabled={isSavingSettings}
-                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold cursor-pointer"
+                  className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold cursor-pointer"
                 >
                   {isSavingSettings ? "Menyimpan..." : "Simpan Perubahan"}
                 </Button>

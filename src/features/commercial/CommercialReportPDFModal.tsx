@@ -54,7 +54,7 @@ export function CommercialReportPDFModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/80 backdrop-blur-xs animate-in fade-in">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
         {/* Header Control */}
-        <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 flex-shrink-0">
+        <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
           <div className="flex items-center space-x-2.5">
             <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold">
               <FileText className="w-4 h-4" />
@@ -234,7 +234,7 @@ export function CommercialReportPDFModal({
             {/* Official Footer Certification & Digital Stamp */}
             <div className="pt-6 border-t border-slate-200 mt-6 grid grid-cols-2 gap-6 text-xs">
               <div className="p-3 rounded-lg bg-purple-50/60 border border-purple-200 text-[10px] text-purple-900 flex items-start space-x-2">
-                <ShieldCheck className="w-4 h-4 text-purple-600 flex-shrink-0 mt-0.5" />
+                <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-bold">Verifikasi Legalitas & Keabsahan Dokumen</p>
                   <p className="text-slate-600 mt-0.5">

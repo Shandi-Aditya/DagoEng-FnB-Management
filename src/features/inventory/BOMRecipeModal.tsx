@@ -189,7 +189,7 @@ export function BOMRecipeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/70 backdrop-blur-sm animate-in fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/70 backdrop-blur-xs animate-in fade-in">
       <div className="bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100">
         {/* Header */}
         <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
@@ -220,7 +220,7 @@ export function BOMRecipeModal({
           {/* AI Banner / Notice */}
           {aiNotice && (
             <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 font-bold flex items-center space-x-2 animate-in fade-in">
-              <Sparkles className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788] flex-shrink-0" />
+              <Sparkles className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0" />
               <span>{aiNotice}</span>
             </div>
           )}
@@ -232,7 +232,7 @@ export function BOMRecipeModal({
               <select
                 value={selectedProductId}
                 onChange={(e) => handleProductChange(e.target.value)}
-                className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold text-slate-800 dark:text-slate-200 outline-none"
+                className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold text-slate-800 dark:text-slate-200 outline-hidden"
               >
                 {products.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -248,7 +248,7 @@ export function BOMRecipeModal({
                 type="number"
                 value={sellingPrice}
                 onChange={(e) => setSellingPrice(Number(e.target.value))}
-                className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono font-bold text-slate-900 dark:text-slate-100 outline-none"
+                className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono font-bold text-slate-900 dark:text-slate-100 outline-hidden"
                 placeholder="25000"
                 required
               />
@@ -258,7 +258,7 @@ export function BOMRecipeModal({
           {/* AI Assistant Button */}
           <div className="flex items-center justify-between p-3 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl border border-emerald-200/80 dark:border-emerald-800/50">
             <div className="flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+              <Sparkles className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
               <div>
                 <span className="font-bold text-slate-900 dark:text-slate-100 block">AI Smart Recipe Assistant</span>
                 <span className="text-[10px] text-slate-500 dark:text-slate-400">
@@ -271,7 +271,7 @@ export function BOMRecipeModal({
               size="sm"
               disabled={isAIGenerating}
               onClick={handleAIGenerate}
-              className="text-xs bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold space-x-1.5 shadow-xs"
+              className="text-xs bg-brand-sage hover:bg-[#2E6044] text-white font-bold space-x-1.5 shadow-xs"
             >
               <Sparkles className="w-3.5 h-3.5" />
               <span>{isAIGenerating ? "Memproses..." : "AI Generate"}</span>
@@ -282,13 +282,13 @@ export function BOMRecipeModal({
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
-                <Layers className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788]" />
+                <Layers className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
                 <span>Komposisi Bahan Baku (BOM Ingredients):</span>
               </label>
               <button
                 type="button"
                 onClick={handleAddLine}
-                className="text-xs text-[#3B7A57] dark:text-[#52B788] hover:underline font-bold flex items-center space-x-1"
+                className="text-xs text-brand-sage dark:text-brand-sageBright hover:underline font-bold flex items-center space-x-1"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Tambah Bahan</span>
@@ -374,7 +374,7 @@ export function BOMRecipeModal({
             </Button>
             <Button
               type="submit"
-              className="flex-1 text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white shadow-sm"
+              className="flex-1 text-xs font-bold bg-brand-sage hover:bg-[#2E6044] text-white shadow-sm"
             >
               <CheckCircle2 className="w-4 h-4 mr-1.5" />
               <span>Simpan Formula Resep BOM</span>

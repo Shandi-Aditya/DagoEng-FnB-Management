@@ -34,10 +34,10 @@ import {
   ShieldCheck,
   Building,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/legacy/ui/button";
+import { Card } from "@/components/legacy/ui/card";
+import { Badge } from "@/components/legacy/ui/badge";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
 import { EventCategory, EventSubmissionPayload } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -474,7 +474,7 @@ export default function SubmitEventPage() {
           <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
             <Link
               href="/events"
-              className="inline-flex items-center justify-center h-8 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors shrink-0 group"
+              className="inline-flex items-center justify-center h-8 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors shrink-0 group"
               title="Kembali ke Daftar Event"
             >
               <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-0.5" />
@@ -489,7 +489,7 @@ export default function SubmitEventPage() {
           <div className="flex items-center space-x-1.5 sm:space-x-3 shrink-0">
             <ThemeToggle variant="pill" />
             <Link href="/events/portal">
-              <Button variant="ghost" size="sm" className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-[#3B7A57] dark:hover:text-[#52B788] rounded-xl border border-slate-200/80 dark:border-slate-800 sm:border-transparent">
+              <Button variant="ghost" size="sm" className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold text-slate-700 dark:text-slate-300 hover:text-brand-sage dark:hover:text-brand-sageBright rounded-xl border border-slate-200/80 dark:border-slate-800 sm:border-transparent">
                 <span className="hidden sm:inline">Portal Penyelenggara</span>
                 <span className="sm:hidden">Portal</span>
               </Button>
@@ -503,11 +503,11 @@ export default function SubmitEventPage() {
         {submitSuccess ? (
           /* SUCCESS STATE */
           <Card className="p-8 sm:p-10 border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 text-center shadow-lg rounded-3xl max-w-xl mx-auto">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-600/10 dark:bg-emerald-500/20 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center mb-5">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-600/10 dark:bg-emerald-500/20 text-brand-sage dark:text-brand-sageBright flex items-center justify-center mb-5">
               <CheckCircle2 className="w-9 h-9" />
             </div>
 
-            <Badge variant="outline" className="mb-3 border-emerald-600 text-[#3B7A57] dark:text-[#52B788] font-bold">
+            <Badge variant="outline" className="mb-3 border-emerald-600 text-brand-sage dark:text-brand-sageBright font-bold">
               STATUS: PENDING MODERASI
             </Badge>
 
@@ -548,7 +548,7 @@ export default function SubmitEventPage() {
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link href="/events/portal">
-                <Button className="w-full sm:w-auto bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md cursor-pointer">
+                <Button className="w-full sm:w-auto bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md cursor-pointer">
                   Buka Portal Penyelenggara
                 </Button>
               </Link>
@@ -564,7 +564,7 @@ export default function SubmitEventPage() {
           <div className="space-y-6">
             {/* Header info */}
             <div>
-              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-[#3B7A57] dark:text-[#52B788] text-xs font-bold mb-2">
+              <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 text-brand-sage dark:text-brand-sageBright text-xs font-bold mb-2">
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Formulir Pembuatan Event Bergaya Eventbrite</span>
               </div>
@@ -579,7 +579,7 @@ export default function SubmitEventPage() {
             {/* Stepper Progress Bar (Eventbrite Wizard Pattern) */}
             <div className="space-y-2 pt-2">
               <div className="flex items-center justify-between sm:hidden px-0.5">
-                <span className="text-xs font-bold text-[#3B7A57] dark:text-[#52B788]">
+                <span className="text-xs font-bold text-brand-sage dark:text-brand-sageBright">
                   Langkah {currentStep} dari 4: {WIZARD_STEPS[currentStep - 1]?.title}
                 </span>
                 <span className="text-[11px] font-semibold text-slate-400">
@@ -596,15 +596,15 @@ export default function SubmitEventPage() {
                       <div
                         className={`h-1.5 rounded-full transition-all duration-300 ${
                           isCompleted
-                            ? "bg-[#3B7A57]"
+                            ? "bg-brand-sage"
                             : isActive
-                            ? "bg-[#3B7A57]"
+                            ? "bg-brand-sage"
                             : "bg-slate-200 dark:bg-slate-800"
                         }`}
                       />
                       <div className="hidden sm:block">
                         <span className={`text-[10px] font-bold block leading-none ${
-                          isActive ? "text-[#3B7A57] dark:text-[#52B788]" : "text-slate-400"
+                          isActive ? "text-brand-sage dark:text-brand-sageBright" : "text-slate-400"
                         }`}>
                           Langkah {s.id}
                         </span>
@@ -624,7 +624,7 @@ export default function SubmitEventPage() {
             {stepErrors.length > 0 && (
               <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs space-y-1 animate-in fade-in">
                 <div className="font-bold flex items-center mb-1">
-                  <AlertCircle className="w-4 h-4 mr-1.5 flex-shrink-0" />
+                  <AlertCircle className="w-4 h-4 mr-1.5 shrink-0" />
                   <span>Mohon lengkapi bagian yang wajib diisi:</span>
                 </div>
                 <ul className="list-disc list-inside space-y-0.5 ml-1">
@@ -637,7 +637,7 @@ export default function SubmitEventPage() {
 
             {generalError && (
               <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900 text-rose-800 dark:text-rose-300 text-xs flex items-center">
-                <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
+                <AlertCircle className="w-4 h-4 mr-2 shrink-0" />
                 <span>{generalError}</span>
               </div>
             )}
@@ -662,7 +662,7 @@ export default function SubmitEventPage() {
                 <Card className="p-6 sm:p-7 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs space-y-5 animate-in fade-in">
                   <div className="pb-3 border-b border-slate-100 dark:border-slate-800">
                     <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-                      <span className="w-6 h-6 rounded-lg bg-[#3B7A57] text-white flex items-center justify-center text-xs font-bold">1</span>
+                      <span className="w-6 h-6 rounded-lg bg-brand-sage text-white flex items-center justify-center text-xs font-bold">1</span>
                       <span>Informasi Dasar Acara</span>
                     </h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -691,7 +691,7 @@ export default function SubmitEventPage() {
                           value={formData.organizerName}
                           onChange={handleInputChange}
                           placeholder="Contoh: Dago Coffee Lab"
-                          className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
+                          className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
                         />
                       </div>
                       <div>
@@ -705,7 +705,7 @@ export default function SubmitEventPage() {
                           value={formData.organizerEmail}
                           onChange={handleInputChange}
                           placeholder="komunitas@dagoeng.com"
-                          className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
+                          className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
                         />
                       </div>
                       <div>
@@ -719,7 +719,7 @@ export default function SubmitEventPage() {
                           value={formData.organizerPhone}
                           onChange={handleInputChange}
                           placeholder="08123456789"
-                          className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
+                          className="w-full px-3 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100"
                         />
                       </div>
                     </div>
@@ -738,7 +738,7 @@ export default function SubmitEventPage() {
                             value={formData.password || ""}
                             onChange={handleInputChange}
                             placeholder="Buat password akun penyelenggara..."
-                            className="w-full px-3 py-2 pr-10 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-mono"
+                            className="w-full px-3 py-2 pr-10 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-mono"
                           />
                           <button
                             type="button"
@@ -766,7 +766,7 @@ export default function SubmitEventPage() {
                         value={formData.title}
                         onChange={handleInputChange}
                         placeholder="Contoh: Latte Art Masterclass & Barista Throwdown 2026"
-                        className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-medium"
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-medium"
                       />
                     </div>
 
@@ -778,7 +778,7 @@ export default function SubmitEventPage() {
                         name="category"
                         value={formData.category}
                         onChange={handleInputChange}
-                        className="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-medium"
+                        className="w-full px-3 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-medium"
                       >
                         {CATEGORIES.map((c) => (
                           <option key={c.value} value={c.value}>
@@ -801,7 +801,7 @@ export default function SubmitEventPage() {
                       value={formData.description}
                       onChange={handleInputChange}
                       placeholder="Jelaskan tujuan acara, target peserta, pemateri, agenda yang akan dipelajari, serta benefit yang didapatkan..."
-                      className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 leading-relaxed"
+                      className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 leading-relaxed"
                     />
                   </div>
 
@@ -817,7 +817,7 @@ export default function SubmitEventPage() {
                           onClick={() => setUploadMode("file")}
                           className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
                             uploadMode === "file"
-                              ? "bg-[#3B7A57] text-white shadow-xs"
+                              ? "bg-brand-sage text-white shadow-xs"
                               : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
                           }`}
                         >
@@ -829,7 +829,7 @@ export default function SubmitEventPage() {
                           onClick={() => setUploadMode("url")}
                           className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
                             uploadMode === "url"
-                              ? "bg-[#3B7A57] text-white shadow-xs"
+                              ? "bg-brand-sage text-white shadow-xs"
                               : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
                           }`}
                         >
@@ -863,13 +863,13 @@ export default function SubmitEventPage() {
                             onClick={() => fileInputRef.current?.click()}
                             className={`relative border-2 border-dashed rounded-2xl p-6 sm:p-8 text-center cursor-pointer transition-all ${
                               isDragging
-                                ? "border-[#3B7A57] bg-emerald-50/70 dark:bg-emerald-950/30 scale-[1.01]"
-                                : "border-slate-300 dark:border-slate-700 hover:border-[#3B7A57] dark:hover:border-[#52B788] bg-slate-50/50 dark:bg-slate-900/40"
+                                ? "border-brand-sage bg-emerald-50/70 dark:bg-emerald-950/30 scale-[1.01]"
+                                : "border-slate-300 dark:border-slate-700 hover:border-brand-sage dark:hover:border-brand-sageBright bg-slate-50/50 dark:bg-slate-900/40"
                             }`}
                           >
                             {isUploadingPoster ? (
                               <div className="flex flex-col items-center justify-center space-y-2 py-4">
-                                <RefreshCw className="w-8 h-8 text-[#3B7A57] animate-spin" />
+                                <RefreshCw className="w-8 h-8 text-brand-sage animate-spin" />
                                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                                   Mengunggah file poster...
                                 </span>
@@ -877,13 +877,13 @@ export default function SubmitEventPage() {
                               </div>
                             ) : (
                               <div className="flex flex-col items-center justify-center space-y-2.5">
-                                <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center shadow-xs">
+                                <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright flex items-center justify-center shadow-xs">
                                   <UploadCloud className="w-6 h-6" />
                                 </div>
                                 <div>
                                   <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
                                     Tarik & letakkan file poster di sini, atau{" "}
-                                    <span className="text-[#3B7A57] dark:text-[#52B788] underline underline-offset-2">
+                                    <span className="text-brand-sage dark:text-brand-sageBright underline underline-offset-2">
                                       Pilih dari Komputer
                                     </span>
                                   </span>
@@ -955,7 +955,7 @@ export default function SubmitEventPage() {
                           value={formData.posterUrl}
                           onChange={handleInputChange}
                           placeholder="https://images.unsplash.com/... atau tautan gambar online"
-                          className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-mono text-[11px]"
+                          className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-mono text-[11px]"
                         />
 
                         {posterPreview && (
@@ -993,7 +993,7 @@ export default function SubmitEventPage() {
                 <Card className="p-6 sm:p-7 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs space-y-5 animate-in fade-in">
                   <div className="pb-3 border-b border-slate-100 dark:border-slate-800">
                     <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-                      <span className="w-6 h-6 rounded-lg bg-[#3B7A57] text-white flex items-center justify-center text-xs font-bold">2</span>
+                      <span className="w-6 h-6 rounded-lg bg-brand-sage text-white flex items-center justify-center text-xs font-bold">2</span>
                       <span>Jadwal & Lokasi Acara</span>
                     </h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -1013,7 +1013,7 @@ export default function SubmitEventPage() {
                         required
                         value={formData.startDate}
                         onChange={handleInputChange}
-                        className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-medium"
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-medium"
                       />
                     </div>
 
@@ -1027,7 +1027,7 @@ export default function SubmitEventPage() {
                         required
                         value={formData.endDate}
                         onChange={handleInputChange}
-                        className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-medium"
+                        className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-medium"
                       />
                     </div>
                   </div>
@@ -1044,7 +1044,7 @@ export default function SubmitEventPage() {
                       value={formData.location}
                       onChange={handleInputChange}
                       placeholder="Contoh: Amphitheater Dago Creative Hub, Singaraja"
-                      className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-medium"
+                      className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-800 dark:text-slate-100 font-medium"
                     />
 
                     {/* Quick Venue Selector */}
@@ -1058,7 +1058,7 @@ export default function SubmitEventPage() {
                             onClick={() => setFormData((prev) => ({ ...prev, location: v }))}
                             className={`text-[11px] px-2.5 py-1 rounded-lg border font-medium transition-all ${
                               formData.location === v
-                                ? "bg-[#3B7A57] text-white border-[#3B7A57]"
+                                ? "bg-brand-sage text-white border-brand-sage"
                                 : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-slate-300"
                             }`}
                           >
@@ -1095,7 +1095,7 @@ export default function SubmitEventPage() {
                 <Card className="p-6 sm:p-7 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs space-y-6 animate-in fade-in">
                   <div className="pb-3 border-b border-slate-100 dark:border-slate-800">
                     <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-                      <span className="w-6 h-6 rounded-lg bg-[#3B7A57] text-white flex items-center justify-center text-xs font-bold">3</span>
+                      <span className="w-6 h-6 rounded-lg bg-brand-sage text-white flex items-center justify-center text-xs font-bold">3</span>
                       <span>Tiket, Kolaborasi Venue & Usulan Bagi Hasil</span>
                     </h2>
                     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -1111,13 +1111,13 @@ export default function SubmitEventPage() {
                       onClick={() => handlePricingToggle(false)}
                       className={`p-4 rounded-2xl border cursor-pointer transition-all ${
                         !formData.isPaid
-                          ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-[#3B7A57] shadow-xs"
+                          ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-brand-sage shadow-xs"
                           : "bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-700 hover:border-slate-300"
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-bold text-slate-900 dark:text-white">Tiket Gratis (RSVP)</span>
-                        {!formData.isPaid && <Check className="w-4 h-4 text-[#3B7A57]" />}
+                        {!formData.isPaid && <Check className="w-4 h-4 text-brand-sage" />}
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
                         Peserta dapat mendaftar tanpa biaya. E-Tiket diterbitkan langsung saat registrasi.
@@ -1128,13 +1128,13 @@ export default function SubmitEventPage() {
                       onClick={() => handlePricingToggle(true)}
                       className={`p-4 rounded-2xl border cursor-pointer transition-all ${
                         formData.isPaid
-                          ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-[#3B7A57] shadow-xs"
+                          ? "bg-emerald-50/70 dark:bg-emerald-950/30 border-brand-sage shadow-xs"
                           : "bg-white dark:bg-slate-900/60 border-slate-200 dark:border-slate-700 hover:border-slate-300"
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="text-xs font-bold text-slate-900 dark:text-white">Tiket Berbayar</span>
-                        {formData.isPaid && <Check className="w-4 h-4 text-[#3B7A57]" />}
+                        {formData.isPaid && <Check className="w-4 h-4 text-brand-sage" />}
                       </div>
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
                         Pemesanan berbayar dengan verifikasi lunas sebelum QR check-in aktif.
@@ -1211,8 +1211,8 @@ export default function SubmitEventPage() {
                               }}
                               className={`px-2.5 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                                 isSelected
-                                  ? "bg-[#3B7A57] text-white shadow-xs font-bold"
-                                  : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-[#3B7A57]/60"
+                                  ? "bg-brand-sage text-white shadow-xs font-bold"
+                                  : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-sage/60"
                               }`}
                             >
                               {p.label}
@@ -1240,7 +1240,7 @@ export default function SubmitEventPage() {
                                 proposedPlatformPercent: 100 - val,
                               }));
                             }}
-                            className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-[#3B7A57] dark:text-[#52B788]"
+                            className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-brand-sage dark:text-brand-sageBright"
                           />
                         </div>
 
@@ -1271,7 +1271,7 @@ export default function SubmitEventPage() {
                         <div className="p-3 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 text-[11px] space-y-1">
                           <div className="flex justify-between">
                             <span className="text-slate-500">Estimasi hak per tiket untuk Anda:</span>
-                            <strong className="text-[#3B7A57] dark:text-[#52B788]">
+                            <strong className="text-brand-sage dark:text-brand-sageBright">
                               {formatCurrencyIDR(Math.round(Number(formData.price) * (Number(formData.proposedOrganizerPercent ?? 80) / 100)))}
                             </strong>
                           </div>
@@ -1315,7 +1315,7 @@ export default function SubmitEventPage() {
                           onClick={() => setIsBarter(false)}
                           className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
                             !isBarter
-                              ? "bg-white dark:bg-slate-800 border-[#3B7A57] ring-2 ring-[#3B7A57]/20 shadow-xs"
+                              ? "bg-white dark:bg-slate-800 border-brand-sage ring-2 ring-[#3B7A57]/20 shadow-xs"
                               : "bg-white/60 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300"
                           }`}
                         >
@@ -1332,13 +1332,13 @@ export default function SubmitEventPage() {
                           onClick={() => setIsBarter(true)}
                           className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer ${
                             isBarter
-                              ? "bg-white dark:bg-slate-800 border-[#3B7A57] ring-2 ring-[#3B7A57]/20 shadow-xs"
+                              ? "bg-white dark:bg-slate-800 border-brand-sage ring-2 ring-[#3B7A57]/20 shadow-xs"
                               : "bg-white/60 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300"
                           }`}
                         >
-                          <div className="font-bold text-xs text-[#3B7A57] dark:text-[#52B788] mb-0.5 flex items-center gap-1.5">
+                          <div className="font-bold text-xs text-brand-sage dark:text-brand-sageBright mb-0.5 flex items-center gap-1.5">
                             <span>Skema Barter / Non-Moneter</span>
-                            <Badge variant="outline" className="text-[9px] border-[#3B7A57]/40 text-[#3B7A57] dark:text-[#52B788]">Opsi</Badge>
+                            <Badge variant="outline" className="text-[9px] border-brand-sage/40 text-brand-sage dark:text-brand-sageBright">Opsi</Badge>
                           </div>
                           <div className="text-[11px] text-slate-500 dark:text-slate-400">
                             Pertukaran manfaat seperti publikasi silang, co-branding poster, liputan media, atau dukungan relawan.
@@ -1385,13 +1385,13 @@ export default function SubmitEventPage() {
                               onClick={() => toggleFacility(item)}
                               className={`p-2.5 rounded-xl border text-left text-xs font-medium transition-all flex items-center justify-between cursor-pointer ${
                                 isChecked
-                                  ? "bg-emerald-50 dark:bg-emerald-950/40 border-[#3B7A57] text-[#3B7A57] dark:text-[#52B788]"
+                                  ? "bg-emerald-50 dark:bg-emerald-950/40 border-brand-sage text-brand-sage dark:text-brand-sageBright"
                                   : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
                               }`}
                             >
                               <span>{item}</span>
                               {isChecked ? (
-                                <Check className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                                <Check className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
                               ) : (
                                 <div className="w-3.5 h-3.5 rounded border border-slate-300 dark:border-slate-600 shrink-0" />
                               )}
@@ -1428,13 +1428,13 @@ export default function SubmitEventPage() {
                             onClick={() => togglePromotion(item)}
                             className={`p-2.5 rounded-xl border text-left text-xs font-medium transition-all flex items-center justify-between cursor-pointer ${
                               isChecked
-                                ? "bg-emerald-50 dark:bg-emerald-950/40 border-[#3B7A57] text-[#3B7A57] dark:text-[#52B788]"
+                                ? "bg-emerald-50 dark:bg-emerald-950/40 border-brand-sage text-brand-sage dark:text-brand-sageBright"
                                 : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
                             }`}
                           >
                             <span>{item}</span>
                             {isChecked ? (
-                              <Check className="w-3.5 h-3.5 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                              <Check className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
                             ) : (
                               <div className="w-3.5 h-3.5 rounded border border-slate-300 dark:border-slate-600 shrink-0" />
                             )}
@@ -1503,7 +1503,7 @@ export default function SubmitEventPage() {
                   <Card className="p-6 sm:p-7 bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs space-y-5">
                     <div className="pb-3 border-b border-slate-100 dark:border-slate-800">
                       <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center space-x-2">
-                        <span className="w-6 h-6 rounded-lg bg-[#3B7A57] text-white flex items-center justify-center text-xs font-bold">4</span>
+                        <span className="w-6 h-6 rounded-lg bg-brand-sage text-white flex items-center justify-center text-xs font-bold">4</span>
                         <span>Pratinjau & Konfirmasi Pengajuan Event</span>
                       </h2>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -1518,13 +1518,13 @@ export default function SubmitEventPage() {
                         <img
                           src={formData.posterUrl}
                           alt="Poster Preview"
-                          className="w-full aspect-[16/10] object-cover rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs"
+                          className="w-full aspect-16/10 object-cover rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs"
                           onError={(e) => {
                             (e.target as any).src = "https://images.unsplash.com/photo-1511920170033";
                           }}
                         />
                         <div className="mt-2 text-center">
-                          <Badge className="bg-[#3B7A57] text-white text-[10px] font-bold">
+                          <Badge className="bg-brand-sage text-white text-[10px] font-bold">
                             {formData.category}
                           </Badge>
                         </div>
@@ -1561,7 +1561,7 @@ export default function SubmitEventPage() {
                           </div>
                           <div>
                             <span className="text-slate-400 font-semibold block">Harga Tiket:</span>
-                            <span className="font-bold text-[#3B7A57] dark:text-[#52B788]">
+                            <span className="font-bold text-brand-sage dark:text-brand-sageBright">
                               {formData.isPaid ? formatCurrencyIDR(formData.price || 0) : "GRATIS (RSVP)"}
                             </span>
                           </div>
@@ -1584,14 +1584,14 @@ export default function SubmitEventPage() {
                           {formData.isPaid ? (
                             <div className="flex justify-between">
                               <span className="text-slate-400">Usulan Bagi Hasil:</span>
-                              <span className="font-bold text-[#3B7A57] dark:text-[#52B788]">
+                              <span className="font-bold text-brand-sage dark:text-brand-sageBright">
                                 {formData.proposedOrganizerPercent ?? 80}% Penyelenggara : {formData.proposedPlatformPercent ?? 20}% Dago
                               </span>
                             </div>
                           ) : (
                             <div className="flex justify-between items-start">
                               <span className="text-slate-400">Skema Kerjasama:</span>
-                              <span className="font-bold text-[#3B7A57] dark:text-[#52B788] text-right">
+                              <span className="font-bold text-brand-sage dark:text-brand-sageBright text-right">
                                 {isBarter ? `Skema Barter Komunitas` : "RSVP Komunitas Bebas Biaya"}
                               </span>
                             </div>
@@ -1618,7 +1618,7 @@ export default function SubmitEventPage() {
                       </div>
                     </div>
 
-                    <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800 flex items-start space-x-2.5 text-xs text-[#3B7A57] dark:text-[#52B788]">
+                    <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800 flex items-start space-x-2.5 text-xs text-brand-sage dark:text-brand-sageBright">
                       <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
                       <span>
                         Dengan mengirimkan formulir ini, Anda menyetujui pedoman komunitas DAGO Creative Hub. Acara akan otomatis berstatus <strong>PENDING</strong> untuk peninjauan kurator.
@@ -1649,7 +1649,7 @@ export default function SubmitEventPage() {
                   <Button
                     type="button"
                     onClick={handleNextStep}
-                    className="w-full sm:w-auto h-11 sm:h-10 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl px-5 py-2.5 shadow-xs transition-all cursor-pointer flex items-center justify-center"
+                    className="w-full sm:w-auto h-11 sm:h-10 bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl px-5 py-2.5 shadow-xs transition-all cursor-pointer flex items-center justify-center"
                   >
                     <span>Lanjut ke Langkah {currentStep + 1}</span>
                     <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
@@ -1658,7 +1658,7 @@ export default function SubmitEventPage() {
                   <Button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full sm:w-auto h-11 sm:h-10 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl px-6 py-2.5 shadow-md shadow-[#3B7A57]/25 transition-all cursor-pointer flex items-center justify-center"
+                    className="w-full sm:w-auto h-11 sm:h-10 bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl px-6 py-2.5 shadow-md shadow-[#3B7A57]/25 transition-all cursor-pointer flex items-center justify-center"
                   >
                     {isSubmitting ? (
                       <span>Mengirim Pengajuan...</span>
@@ -1684,10 +1684,10 @@ export default function SubmitEventPage() {
             <Link href="/" className="hover:text-slate-800 dark:hover:text-white transition-colors">
               Beranda
             </Link>
-            <Link href="/events" className="hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors">
+            <Link href="/events" className="hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors">
               Katalog Event
             </Link>
-            <Link href="/events/portal" className="hover:text-[#3B7A57] dark:hover:text-[#52B788] transition-colors">
+            <Link href="/events/portal" className="hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors">
               Portal Penyelenggara
             </Link>
           </div>

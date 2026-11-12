@@ -88,7 +88,7 @@ export function EventSearchInput({
           disabled
             ? "bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 cursor-not-allowed opacity-60"
             : isOpen
-            ? "border-[#3B7A57] ring-2 ring-[#3B7A57]/20 bg-slate-50/90 dark:bg-slate-800/90 shadow-sm"
+            ? "border-brand-sage ring-2 ring-[#3B7A57]/20 bg-slate-50/90 dark:bg-slate-800/90 shadow-sm"
             : "border-slate-200 dark:border-slate-700/80 bg-slate-50/90 dark:bg-slate-800/80 hover:border-slate-300 dark:hover:border-slate-600"
         }`}
         onClick={() => !disabled && setIsOpen(true)}
@@ -107,7 +107,7 @@ export function EventSearchInput({
           }}
           placeholder={selectedEvent ? selectedEvent.title : placeholder}
           disabled={disabled}
-          className="w-full bg-transparent border-0 border-none text-xs font-semibold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-0 shadow-none"
+          className="w-full bg-transparent border-0 border-none text-xs font-semibold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-0 shadow-none"
         />
 
         {/* Clear Button */}

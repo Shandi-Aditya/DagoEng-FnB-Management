@@ -32,6 +32,8 @@ Database tetap memakai Neon (PostgreSQL). Tidak ada nilai rahasia di dokumen ini
 | `DOKU_CALLBACK_URL` | `https://<domain-demo>` |
 | `NIXPACKS_NODE_VERSION` | `22` |
 
+`nixpacks.toml` di root mengunci snapshot nixpkgs ke Node 22.20. Snapshot bawaan Nixpacks hanya punya Node 22.11, sedangkan Tailwind v4 butuh Node 22.12 ke atas (tanpa itu build gagal dengan `ERR_REQUIRE_ESM` di `next/font`). Jangan hapus file itu kecuali Nixpacks sudah memakai Node 22.12+ secara default.
+
 Jangan set `NODE_ENV` dan `PORT` manual. Tabel sudah ada di Neon, jadi
 `prisma db push` hanya perlu dijalankan kalau `prisma/schema.prisma` berubah.
 

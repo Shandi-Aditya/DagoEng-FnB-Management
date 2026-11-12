@@ -51,6 +51,7 @@ export interface TenantOperationConfig {
   tenantName?: string;
   isAcceptingOrders?: boolean;
   temporaryClosedReason?: string;
+  estimatedReopenTime?: string;
 }
 
 /**
@@ -391,7 +392,7 @@ export function isTenantAcceptingOrders(
   tenantId: string,
   tenantOperations?: Record<string, TenantOperationConfig>,
   currentDateObj: Date = new Date()
-): { isOpen: boolean; reason: string } {
+): { isOpen: boolean; reason: string; estimatedReopenTime?: string } {
   const config = tenantOperations?.[tenantId] || DEFAULT_TENANT_OPERATIONS[tenantId];
   if (!config) {
     // If not configured, default to open
@@ -399,9 +400,16 @@ export function isTenantAcceptingOrders(
   }
 
   if (!config.isOpenOrder) {
+    const reopenEstimate =
+      config.estimatedReopenTime ||
+      (config.openTime ? `Buka kembali pk ${config.openTime} WITA` : "Estimasi buka segera");
     return {
       isOpen: false,
-      reason: config.notes || "Mitra sedang Tutup Sementara (Open Order dimatikan oleh tenant)",
+      reason:
+        config.temporaryClosedReason ||
+        config.notes ||
+        "Mitra sedang Tutup Sementara (Open Order dimatikan oleh tenant)",
+      estimatedReopenTime: reopenEstimate,
     };
   }
 
@@ -418,6 +426,7 @@ export function isTenantAcceptingOrders(
       return {
         isOpen: false,
         reason: `Mitra di luar jam operasional (${config.openTime} - ${config.closeTime})`,
+        estimatedReopenTime: `Buka kembali pk ${config.openTime} WITA`,
       };
     }
   }

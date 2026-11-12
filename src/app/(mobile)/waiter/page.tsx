@@ -22,9 +22,9 @@ import {
   Flame,
   Check,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/legacy/ui/button";
+import { Badge } from "@/components/legacy/ui/badge";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
 
 export default function WaiterMobilePage() {
   const { activeOutlet, activeOutletId } = useOutlet();

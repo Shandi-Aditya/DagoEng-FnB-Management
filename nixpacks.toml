@@ -1,0 +1,11 @@
+# Coolify builds this app with Nixpacks.
+#
+# Nixpacks' default nixpkgs snapshot ships Node 22.11.0. Tailwind v4
+# (@tailwindcss/node) loads the ESM-only magic-string 1.x with require(),
+# which Node only supports from 22.12. On 22.11 `next build` fails with
+# ERR_REQUIRE_ESM in next/font.
+#
+# Pin a newer stable snapshot (nixos-25.05, Node 22.20.0). The Node provider's
+# default packages (nodejs_22 and its npm) are kept; only their source changes.
+[phases.setup]
+nixpkgsArchive = "ac62194c3917d5f474c1a844b6fd6da2db95077d"

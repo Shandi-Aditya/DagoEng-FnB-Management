@@ -30,7 +30,7 @@ import { OrderRecord } from "@/types/order";
 import { LoyaltyTier } from "@/types/loyalty";
 import { CoworkingSpaceItem, CoworkingMembershipPlan } from "@/types/coworking";
 import { PublicCommunityEvent, EventTicketOrder } from "@/types/event";
-import { AnimatedCounter } from "@/components/ui/animated-counter";
+import { AnimatedCounter } from "@/components/legacy/ui/animated-counter";
 import { QRCodeSVG } from "qrcode.react";
 import { downloadTicketAsImage } from "@/lib/ticket-download";
 import { isTenantActive, getTenantStatus, getAllFnbTenants, getTenantName } from "@/lib/tenant";
@@ -80,11 +80,11 @@ import {
   CreditCard,
   Upload,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/legacy/ui/button";
+import { Input } from "@/components/legacy/ui/input";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/legacy/ui/card";
+import { Badge } from "@/components/legacy/ui/badge";
+import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import { POSReceiptData } from "@/features/pos/types";
 import { CoworkingReceiptModal, CoworkingReceiptData } from "@/features/coworking/CoworkingReceiptModal";
@@ -1608,13 +1608,13 @@ function CustomerPortalContent() {
   const getTierColor = (tier: LoyaltyTier) => {
     switch (tier) {
       case "Platinum":
-        return "bg-gradient-to-r from-purple-900 via-indigo-950 to-slate-900 text-purple-200 border-purple-500/40 shadow-purple-500/10";
+        return "bg-linear-to-r from-purple-900 via-indigo-950 to-slate-900 text-purple-200 border-purple-500/40 shadow-purple-500/10";
       case "Gold":
-        return "bg-gradient-to-r from-amber-500 via-orange-500 to-yellow-500 text-white border-yellow-300 shadow-amber-500/20";
+        return "bg-linear-to-r from-amber-500 via-orange-500 to-yellow-500 text-white border-yellow-300 shadow-amber-500/20";
       case "Silver":
-        return "bg-gradient-to-r from-slate-400 via-slate-500 to-slate-600 text-white border-slate-300 shadow-slate-500/10";
+        return "bg-linear-to-r from-slate-400 via-slate-500 to-slate-600 text-white border-slate-300 shadow-slate-500/10";
       default:
-        return "bg-gradient-to-r from-amber-700 via-amber-800 to-orange-900 text-white border-amber-600";
+        return "bg-linear-to-r from-amber-700 via-amber-800 to-orange-900 text-white border-amber-600";
     }
   };
 
@@ -1692,11 +1692,11 @@ function CustomerPortalContent() {
             {user && user.role.slug !== "CUSTOMER" ? (
               <div className="flex items-center space-x-2">
                 <span className="hidden sm:inline-flex items-center space-x-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800">
-                  <User className="w-3 h-3 text-[#3B7A57]" />
+                  <User className="w-3 h-3 text-brand-sage" />
                   <span>{user.name} ({user.role.slug})</span>
                 </span>
                 <Link href={(user.role.slug as string) === "COMMUNITY_ORGANIZER" || (user.role.slug as string) === "ORGANIZER" ? "/events/portal" : "/dashboard"}>
-                  <Button size="sm" className="text-xs h-8 px-3 font-bold bg-[#3B7A57] hover:bg-[#2E6044] text-white rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
+                  <Button size="sm" className="text-xs h-8 px-3 font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
                     <span>Ke Dashboard</span>
                     <ArrowRight className="w-3.5 h-3.5 ml-1" />
                   </Button>
@@ -1810,7 +1810,7 @@ function CustomerPortalContent() {
 
                 {/* Greeting & Summary Banner (Guest vs Logged In Member) */}
                 {!isCustomerLoggedIn ? (
-                  <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 space-y-6 relative overflow-hidden">
+                  <div className="bg-linear-to-br from-slate-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 space-y-6 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-80 h-80 bg-brand-orange/15 rounded-full blur-3xl pointer-events-none" />
                     <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
 
@@ -1832,7 +1832,7 @@ function CustomerPortalContent() {
                       {/* Guest CTA Card */}
                       <div className="bg-white/10 backdrop-blur-md border border-white/15 p-4 sm:p-5 rounded-2xl flex flex-col justify-between space-y-3 min-w-[260px] shadow-lg">
                         <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center font-bold shadow-md shadow-orange-500/30">
+                          <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center font-bold shadow-md shadow-orange-500/30">
                             <Sparkles className="w-5 h-5" />
                           </div>
                           <div>
@@ -1876,15 +1876,15 @@ function CustomerPortalContent() {
                         }}
                         size="sm"
                         variant="outline"
-                        className="font-bold bg-[#3B7A57]/20 border-[#52B788]/40 text-emerald-300 hover:bg-[#3B7A57]/30 text-xs h-10 px-4 rounded-xl hover:-translate-y-0.5 transition-all"
+                        className="font-bold bg-brand-sage/20 border-brand-sageBright/40 text-emerald-300 hover:bg-brand-sage/30 text-xs h-10 px-4 rounded-xl hover:-translate-y-0.5 transition-all"
                       >
-                        <Calendar className="w-3.5 h-3.5 mr-1.5 text-[#52B788]" />
+                        <Calendar className="w-3.5 h-3.5 mr-1.5 text-brand-sageBright" />
                         <span>Event Komunitas</span>
                       </Button>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 space-y-6 relative overflow-hidden">
+                  <div className="bg-linear-to-br from-slate-950 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-8 shadow-xl border border-slate-800 space-y-6 relative overflow-hidden">
                     <div className="absolute top-0 right-0 w-80 h-80 bg-brand-orange/15 rounded-full blur-3xl pointer-events-none" />
                     <div className="absolute -bottom-10 -left-10 w-60 h-60 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
 
@@ -1908,7 +1908,7 @@ function CustomerPortalContent() {
 
                       {/* Tier Badge & Points Counter */}
                       <div className="bg-slate-800/80 backdrop-blur-md border border-slate-700/90 p-4 rounded-2xl flex items-center space-x-4 min-w-[240px] shadow-lg">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500 via-orange-500 to-yellow-400 text-slate-950 flex items-center justify-center font-extrabold shadow-md shadow-amber-500/20">
+                        <div className="w-12 h-12 rounded-xl bg-linear-to-tr from-amber-500 via-orange-500 to-yellow-400 text-slate-950 flex items-center justify-center font-extrabold shadow-md shadow-amber-500/20">
                           <Award className="w-6 h-6 text-slate-950" />
                         </div>
                         <div>
@@ -1937,7 +1937,7 @@ function CustomerPortalContent() {
                         </div>
                         <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-700/50">
                           <div
-                            className="bg-gradient-to-r from-amber-400 via-orange-500 to-brand-orange h-full rounded-full transition-all duration-700 shadow-sm"
+                            className="bg-linear-to-r from-amber-400 via-orange-500 to-brand-orange h-full rounded-full transition-all duration-700 shadow-sm"
                             style={{ width: `${nextTierInfo.progress}%` }}
                           />
                         </div>
@@ -1980,9 +1980,9 @@ function CustomerPortalContent() {
                         }}
                         size="sm"
                         variant="outline"
-                        className="font-bold bg-[#3B7A57]/20 border-[#52B788]/40 text-emerald-300 hover:bg-[#3B7A57]/30 text-xs h-10 px-4 rounded-xl hover:-translate-y-0.5 transition-all"
+                        className="font-bold bg-brand-sage/20 border-brand-sageBright/40 text-emerald-300 hover:bg-brand-sage/30 text-xs h-10 px-4 rounded-xl hover:-translate-y-0.5 transition-all"
                       >
-                        <Calendar className="w-3.5 h-3.5 mr-1.5 text-[#52B788]" />
+                        <Calendar className="w-3.5 h-3.5 mr-1.5 text-brand-sageBright" />
                         <span>Event Komunitas</span>
                       </Button>
                     </div>
@@ -2171,7 +2171,7 @@ function CustomerPortalContent() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-black text-base text-slate-900 dark:text-white flex items-center space-x-2">
-                        <Calendar className="w-4 h-4 text-[#3B7A57] dark:text-[#52B788]" />
+                        <Calendar className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
                         <span>Agenda & Event Komunitas Singaraja</span>
                       </h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -2182,7 +2182,7 @@ function CustomerPortalContent() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-xs font-bold text-[#3B7A57] dark:text-[#52B788] hover:bg-[#3B7A57]/10 dark:hover:bg-[#52B788]/10 h-8 px-2.5 rounded-xl flex items-center cursor-pointer"
+                        className="text-xs font-bold text-brand-sage dark:text-brand-sageBright hover:bg-brand-sage/10 dark:hover:bg-brand-sageBright/10 h-8 px-2.5 rounded-xl flex items-center cursor-pointer"
                       >
                         <span>Semua Event</span>
                         <ChevronRight className="w-3.5 h-3.5 ml-1" />
@@ -2234,7 +2234,7 @@ function CustomerPortalContent() {
                         <Link href="/events/submit">
                           <Button
                             size="sm"
-                            className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl h-8 px-4 cursor-pointer"
+                            className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl h-8 px-4 cursor-pointer"
                           >
                             Pasang Event Sekarang
                           </Button>
@@ -2247,7 +2247,7 @@ function CustomerPortalContent() {
                       {communityEvents.slice(0, 3).map((evt) => (
                         <Card
                           key={evt.id}
-                          className="group rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:border-[#52B788]/60 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
+                          className="group rounded-3xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:border-brand-sageBright/60 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
                         >
                           <div>
                             {/* Thumbnail & Badges */}
@@ -2258,7 +2258,7 @@ function CustomerPortalContent() {
                                 alt={evt.title}
                                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                               />
-                              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
+                              <div className="absolute inset-0 bg-linear-to-t from-slate-950/80 via-transparent to-transparent pointer-events-none" />
 
                               {/* Category Badge */}
                               <div className="absolute top-2.5 left-2.5">
@@ -2273,7 +2273,7 @@ function CustomerPortalContent() {
                                   className={`text-[9px] font-black px-2 py-0.5 rounded-full shadow-xs backdrop-blur-md ${
                                     evt.isPaid
                                       ? "bg-slate-900/90 text-emerald-400 border border-emerald-500/30"
-                                      : "bg-[#3B7A57]/90 text-white"
+                                      : "bg-brand-sage/90 text-white"
                                   }`}
                                 >
                                   {evt.isPaid ? formatCurrencyIDR(evt.price) : "GRATIS"}
@@ -2288,7 +2288,7 @@ function CustomerPortalContent() {
 
                             {/* Event Details */}
                             <div className="p-4 space-y-2">
-                              <h4 className="font-bold text-xs text-slate-900 dark:text-white line-clamp-1 group-hover:text-[#3B7A57] dark:group-hover:text-[#52B788] transition-colors">
+                              <h4 className="font-bold text-xs text-slate-900 dark:text-white line-clamp-1 group-hover:text-brand-sage dark:group-hover:text-brand-sageBright transition-colors">
                                 {evt.title}
                               </h4>
                               <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
@@ -2297,7 +2297,7 @@ function CustomerPortalContent() {
 
                               <div className="pt-2 space-y-1 text-[10px] text-slate-600 dark:text-slate-400 border-t border-slate-100 dark:border-slate-800">
                                 <div className="flex items-center space-x-1.5">
-                                  <Clock className="w-3 h-3 text-[#3B7A57] dark:text-[#52B788] shrink-0" />
+                                  <Clock className="w-3 h-3 text-brand-sage dark:text-brand-sageBright shrink-0" />
                                   <span className="truncate">{formatPortalEventDate(evt.startDate)} WITA</span>
                                 </div>
                                 <div className="flex items-center space-x-1.5">
@@ -2313,7 +2313,7 @@ function CustomerPortalContent() {
                             <Link href={`/events/${evt.id}`}>
                               <Button
                                 size="sm"
-                                className="w-full h-8 text-xs font-bold bg-[#3B7A57] hover:bg-[#2E6044] dark:bg-[#3B7A57] dark:hover:bg-[#488e68] text-white rounded-xl shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-1 cursor-pointer"
+                                className="w-full h-8 text-xs font-bold bg-brand-sage hover:bg-[#2E6044] dark:bg-brand-sage dark:hover:bg-[#488e68] text-white rounded-xl shadow-xs transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center space-x-1 cursor-pointer"
                               >
                                 <span>Lihat Detail Event</span>
                                 <ChevronRight className="w-3.5 h-3.5" />
@@ -2407,7 +2407,7 @@ function CustomerPortalContent() {
 
                 {/* Loyalty Perks & Promo Highlight */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-6 rounded-3xl bg-gradient-to-br from-orange-500 via-amber-500 to-orange-600 text-white space-y-3 shadow-lg shadow-orange-500/15 flex flex-col justify-between hover:scale-[1.01] transition-all">
+                  <div className="p-6 rounded-3xl bg-linear-to-br from-orange-500 via-amber-500 to-orange-600 text-white space-y-3 shadow-lg shadow-orange-500/15 flex flex-col justify-between hover:scale-[1.01] transition-all">
                     <div>
                       <Badge className="bg-white/20 backdrop-blur-md text-white border-0 text-[10px] uppercase font-black mb-2">
                         Reward Spesial Member
@@ -2466,7 +2466,7 @@ function CustomerPortalContent() {
                 <div className="p-5 sm:p-6 rounded-3xl bg-white border border-slate-200/90 shadow-xs space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-start space-x-3.5">
-                      <div className="w-12 h-12 rounded-2xl bg-orange-100 text-brand-orange border border-orange-200 flex items-center justify-center text-2xl flex-shrink-0 shadow-2xs">
+                      <div className="w-12 h-12 rounded-2xl bg-orange-100 text-brand-orange border border-orange-200 flex items-center justify-center text-2xl shrink-0 shadow-2xs">
                         {activePartner.icon}
                       </div>
                       <div>
@@ -2519,7 +2519,7 @@ function CustomerPortalContent() {
                       placeholder={`Cari menu di ${activePartner.name}...`}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all shadow-2xs"
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-brand-orange/20 focus:border-brand-orange transition-all shadow-2xs"
                     />
                   </div>
 
@@ -2590,7 +2590,7 @@ function CustomerPortalContent() {
                                 />
                               </div>
                             ) : (
-                              <div className="w-full h-24 rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50/50 border border-orange-100/50 flex items-center justify-center text-brand-orange/40">
+                              <div className="w-full h-24 rounded-2xl bg-linear-to-br from-orange-50 to-amber-50/50 border border-orange-100/50 flex items-center justify-center text-brand-orange/40">
                                 <UtensilsCrossed className="w-8 h-8 opacity-40" />
                               </div>
                             )}
@@ -2639,9 +2639,14 @@ function CustomerPortalContent() {
                               const tenantOp = isTenantAcceptingOrders(item.tenantId || "tenant-ks", settings?.tenantOperations);
                               if (!tenantOp.isOpen) {
                                 return (
-                                  <Button size="sm" disabled className="bg-slate-100 text-amber-700 font-bold text-[11px] h-9 px-3 rounded-xl border border-amber-200/80 cursor-not-allowed">
-                                    Tutup Sementara
-                                  </Button>
+                                  <div className="flex flex-col items-end">
+                                    <Button size="sm" disabled className="bg-slate-100 text-amber-700 font-bold text-[11px] h-8 px-2.5 rounded-xl border border-amber-200/80 cursor-not-allowed">
+                                      Tutup Sementara
+                                    </Button>
+                                    <span className="text-[9px] text-amber-600 font-semibold mt-0.5 max-w-[120px] text-right truncate" title={`${tenantOp.reason}${tenantOp.estimatedReopenTime ? ` • ${tenantOp.estimatedReopenTime}` : ""}`}>
+                                      {tenantOp.estimatedReopenTime || tenantOp.reason}
+                                    </span>
+                                  </div>
                                 );
                               }
                               if (!isAvailable) {
@@ -2694,7 +2699,7 @@ function CustomerPortalContent() {
 
                 {/* Checkout Modal */}
                 {isCheckoutOpen && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
                     <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
 
                       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -2829,7 +2834,7 @@ function CustomerPortalContent() {
                               <select
                                 value={tableNumber}
                                 onChange={(e) => setTableNumber(e.target.value)}
-                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-brand-orange/20"
+                                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-hidden focus:ring-2 focus:ring-brand-orange/20"
                               >
                                 {filteredAreas.map((area) => {
                                   const areaAvailableTables = area.tables.filter((t) => t.status === "AVAILABLE");
@@ -2856,7 +2861,7 @@ function CustomerPortalContent() {
                             placeholder="Contoh: Kurang manis, tanpa sedotan..."
                             value={orderNotes}
                             onChange={(e) => setOrderNotes(e.target.value)}
-                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-brand-orange/20"
+                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs placeholder:text-slate-400 outline-hidden focus:ring-2 focus:ring-brand-orange/20"
                           />
                         </div>
 
@@ -2915,7 +2920,7 @@ function CustomerPortalContent() {
                               placeholder="Masukkan kode: DAGO20"
                               value={voucherInputCode}
                               onChange={(e) => setVoucherInputCode(e.target.value.toUpperCase())}
-                              className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold uppercase text-slate-900 placeholder:normal-case placeholder:font-normal placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-emerald-500/20"
+                              className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold uppercase text-slate-900 placeholder:normal-case placeholder:font-normal placeholder:text-slate-400 outline-hidden focus:ring-2 focus:ring-emerald-500/20"
                             />
                             <Button
                               type="button"
@@ -2958,7 +2963,7 @@ function CustomerPortalContent() {
                                   handleApplyVoucherCode(p.code || p.name);
                                 }
                               }}
-                              className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-700 outline-none"
+                              className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-700 outline-hidden"
                             >
                               <option value="">-- Pilih dari Voucher Saya / Tersedia --</option>
                               {settings.promos
@@ -3079,7 +3084,7 @@ function CustomerPortalContent() {
                               />
                             </div>
                           ) : (
-                            <div className="w-full h-28 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50/50 border border-blue-100 flex items-center justify-center text-blue-400">
+                            <div className="w-full h-28 rounded-2xl bg-linear-to-br from-blue-50 to-indigo-50/50 border border-blue-100 flex items-center justify-center text-blue-400">
                               <Laptop className="w-8 h-8 opacity-40" />
                             </div>
                           )}
@@ -3220,7 +3225,7 @@ function CustomerPortalContent() {
 
                 {/* Booking & Checkout Modal for Coworking (Harmonized with F&B Checkout) */}
                 {isBookingModalOpen && selectedSpaceForBooking && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200">
                     <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-200 space-y-4 max-h-[92vh] overflow-y-auto animate-in zoom-in-95 duration-200">
 
                       {/* Header matching F&B */}
@@ -3329,7 +3334,7 @@ function CustomerPortalContent() {
                                     setBookingDate(newDate);
                                     setBookingStartTime(getSmartDefaultStartTime(newDate, "08:00", "22:00"));
                                   }}
-                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-hidden focus:ring-2 focus:ring-blue-500/20"
                                   required
                                 />
                               </div>
@@ -3347,7 +3352,7 @@ function CustomerPortalContent() {
                                 <select
                                   value={bookingDuration}
                                   onChange={(e) => setBookingDuration(Number(e.target.value))}
-                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-hidden focus:ring-2 focus:ring-blue-500/20"
                                 >
                                   <option value={2}>Paket 2 Jam (Minimal Booking)</option>
                                   <option value={3}>Paket 3 Jam (Fokus Kerja)</option>
@@ -3374,7 +3379,7 @@ function CustomerPortalContent() {
                                   type="time"
                                   value={bookingStartTime}
                                   onChange={(e) => setBookingStartTime(e.target.value)}
-                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 outline-hidden focus:ring-2 focus:ring-blue-500/20"
                                   required
                                 />
                               </div>
@@ -3482,7 +3487,7 @@ function CustomerPortalContent() {
                                   min={new Date().toISOString().split("T")[0]}
                                   value={bookingDate}
                                   onChange={(e) => setBookingDate(e.target.value)}
-                                  className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-amber-500/20"
+                                  className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-hidden focus:ring-2 focus:ring-amber-500/20"
                                   required
                                 />
                               </div>
@@ -3520,7 +3525,7 @@ function CustomerPortalContent() {
                                             : customerCoworkEndDate
                                   }
                                   onChange={(e) => setCustomerCoworkEndDate(e.target.value)}
-                                  className={`w-full p-2 border rounded-xl text-xs font-bold outline-none ${
+                                  className={`w-full p-2 border rounded-xl text-xs font-bold outline-hidden ${
                                     customerCoworkDailyPreset === "CUSTOM_RANGE"
                                       ? "bg-white border-amber-300 text-slate-900"
                                       : "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
@@ -3583,7 +3588,7 @@ function CustomerPortalContent() {
                                 placeholder="Contoh: PT Dago Media Creative"
                                 value={bookingCompanyName}
                                 onChange={(e) => setBookingCompanyName(e.target.value)}
-                                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                                className="w-full p-2 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900 outline-hidden focus:ring-2 focus:ring-blue-500/20"
                                 required
                               />
                             </div>
@@ -3600,7 +3605,7 @@ function CustomerPortalContent() {
                               max={selectedSpaceForBooking.capacity}
                               value={bookingGuests}
                               onChange={(e) => setBookingGuests(Number(e.target.value))}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-hidden focus:ring-2 focus:ring-blue-500/20"
                               required
                             />
                           </div>
@@ -3612,7 +3617,7 @@ function CustomerPortalContent() {
                               placeholder="Contoh: Butuh proyektor..."
                               value={bookingNotes}
                               onChange={(e) => setBookingNotes(e.target.value)}
-                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500/20"
+                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs placeholder:text-slate-400 outline-hidden focus:ring-2 focus:ring-blue-500/20"
                             />
                           </div>
                         </div>
@@ -3672,7 +3677,7 @@ function CustomerPortalContent() {
                               placeholder="Contoh: COWORK50 / DAGO20"
                               value={coworkVoucherCode}
                               onChange={(e) => setCoworkVoucherCode(e.target.value.toUpperCase())}
-                              className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold uppercase text-slate-900 placeholder:normal-case placeholder:font-normal placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-500/20"
+                              className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono font-bold uppercase text-slate-900 placeholder:normal-case placeholder:font-normal placeholder:text-slate-400 outline-hidden focus:ring-2 focus:ring-blue-500/20"
                             />
                             <Button
                               type="button"
@@ -3713,7 +3718,7 @@ function CustomerPortalContent() {
                                   handleApplyCoworkVoucher(p.code || p.name);
                                 }
                               }}
-                              className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-700 outline-none"
+                              className="w-full p-2 bg-white border border-slate-200 rounded-xl text-[11px] font-semibold text-slate-700 outline-hidden"
                             >
                               <option value="">-- Pilih Promo Co-Working Tersedia --</option>
                               {settings.promos
@@ -3833,7 +3838,7 @@ function CustomerPortalContent() {
                 <div className="flex items-center space-x-2 overflow-x-auto pb-1 scrollbar-none">
                   {[
                     { key: "ALL", label: "Semua", count: activeOrders.length + customerBookings.length + myEventTickets.length },
-                    { key: "EVENTS", label: "Tiket Event", count: myEventTickets.length, icon: <Ticket className="w-3.5 h-3.5 text-[#3B7A57]" /> },
+                    { key: "EVENTS", label: "Tiket Event", count: myEventTickets.length, icon: <Ticket className="w-3.5 h-3.5 text-brand-sage" /> },
                     { key: "COWORKING", label: "Ruang Kerja", count: customerBookings.length, icon: <Laptop className="w-3.5 h-3.5 text-blue-600" /> },
                     { key: "FNB", label: "Kuliner F&B", count: activeOrders.length, icon: <UtensilsCrossed className="w-3.5 h-3.5 text-brand-orange" /> },
                   ].map((sub) => (
@@ -3842,7 +3847,7 @@ function CustomerPortalContent() {
                       onClick={() => setOrdersSubFilter(sub.key as any)}
                       className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                         ordersSubFilter === sub.key
-                          ? "bg-[#3B7A57] text-white shadow-xs"
+                          ? "bg-brand-sage text-white shadow-xs"
                           : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-300"
                       }`}
                     >
@@ -3864,11 +3869,11 @@ function CustomerPortalContent() {
                   <div className="space-y-3.5">
                     <div className="flex items-center justify-between">
                       <h3 className="font-bold text-xs text-slate-400 uppercase tracking-wider flex items-center space-x-1.5">
-                        <Ticket className="w-3.5 h-3.5 text-[#3B7A57]" />
+                        <Ticket className="w-3.5 h-3.5 text-brand-sage" />
                         <span>Tiket Event Komunitas ({myEventTickets.length})</span>
                       </h3>
                       <Link href="/events">
-                        <Button variant="ghost" size="sm" className="h-7 text-[11px] font-bold text-[#3B7A57] dark:text-[#52B788] hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl">
+                        <Button variant="ghost" size="sm" className="h-7 text-[11px] font-bold text-brand-sage dark:text-brand-sageBright hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl">
                           Jelajahi Event &rarr;
                         </Button>
                       </Link>
@@ -3890,7 +3895,7 @@ function CustomerPortalContent() {
                               className={`p-5 rounded-3xl border transition-all flex flex-col justify-between space-y-4 ${
                                 isCancelled
                                   ? "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 opacity-70"
-                                  : "bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 shadow-xs hover:border-[#3B7A57]/60"
+                                  : "bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 shadow-xs hover:border-brand-sage/60"
                               }`}
                             >
                               <div className="space-y-3">
@@ -3961,8 +3966,8 @@ function CustomerPortalContent() {
                                       />
                                     </div>
                                   ) : (
-                                    <div className="w-14 h-14 rounded-2xl bg-[#3B7A57]/10 dark:bg-[#3B7A57]/20 border border-[#3B7A57]/30 flex flex-col items-center justify-center text-center shrink-0">
-                                      <span className="text-[9px] font-black uppercase text-[#3B7A57] dark:text-[#52B788]">
+                                    <div className="w-14 h-14 rounded-2xl bg-brand-sage/10 dark:bg-brand-sage/20 border border-brand-sage/30 flex flex-col items-center justify-center text-center shrink-0">
+                                      <span className="text-[9px] font-black uppercase text-brand-sage dark:text-brand-sageBright">
                                         {dateInfo.month}
                                       </span>
                                       <span className="text-base font-black text-slate-900 dark:text-white leading-none">
@@ -3976,7 +3981,7 @@ function CustomerPortalContent() {
                                       {ticket.eventTitle}
                                     </h4>
                                     {matchingEvent?.organizerName && (
-                                      <p className="text-[11px] text-[#3B7A57] dark:text-[#52B788] font-bold truncate">
+                                      <p className="text-[11px] text-brand-sage dark:text-brand-sageBright font-bold truncate">
                                         Oleh {matchingEvent.organizerName}
                                       </p>
                                     )}
@@ -4002,7 +4007,7 @@ function CustomerPortalContent() {
                                         href={ticket.dokuPaymentUrl}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="inline-flex items-center space-x-1 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs"
+                                        className="inline-flex items-center space-x-1 bg-brand-sage hover:bg-[#2E6044] text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs"
                                       >
                                         <CreditCard className="w-3 h-3" />
                                         <span>Bayar DOKU</span>
@@ -4011,7 +4016,7 @@ function CustomerPortalContent() {
                                     ) : (
                                       <Link
                                         href={`/events/tickets/${ticket.guestToken}`}
-                                        className="inline-flex items-center space-x-1 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs"
+                                        className="inline-flex items-center space-x-1 bg-brand-sage hover:bg-[#2E6044] text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs"
                                       >
                                         <CreditCard className="w-3 h-3" />
                                         <span>Transfer &amp; Upload Bukti</span>
@@ -4034,7 +4039,7 @@ function CustomerPortalContent() {
                                       setModalSubSeat(1);
                                       setViewingTicketModal(ticket);
                                     }}
-                                    className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-8 px-3 rounded-xl shadow-xs flex items-center space-x-1 cursor-pointer"
+                                    className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold h-8 px-3 rounded-xl shadow-xs flex items-center space-x-1 cursor-pointer"
                                   >
                                     <QrCode className="w-3.5 h-3.5" />
                                     <span>{isPending ? "Detail & Status" : "Buka E-Ticket"}</span>
@@ -4048,7 +4053,7 @@ function CustomerPortalContent() {
                     ) : (
                       <div className="p-6 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 text-xs text-slate-500">
                         Belum ada tiket event komunitas aktif. Temukan workshop, seminar, dan meetup seru di{" "}
-                        <Link href="/events" className="font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline">
+                        <Link href="/events" className="font-bold text-brand-sage dark:text-brand-sageBright hover:underline">
                           Katalog Event Dago Creative Hub
                         </Link>.
                       </div>
@@ -4559,7 +4564,7 @@ function CustomerPortalContent() {
 
                 {/* Loyalty Card Header (Guest vs Member) */}
                 {!isCustomerLoggedIn ? (
-                  <div className="rounded-3xl p-6 sm:p-8 shadow-xl border bg-gradient-to-br from-amber-600 via-orange-600 to-amber-700 text-white space-y-4 relative overflow-hidden">
+                  <div className="rounded-3xl p-6 sm:p-8 shadow-xl border bg-linear-to-br from-amber-600 via-orange-600 to-amber-700 text-white space-y-4 relative overflow-hidden">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
                       <div>
                         <span className="text-[10px] font-black uppercase tracking-wider opacity-90 block">
@@ -4924,7 +4929,7 @@ function CustomerPortalContent() {
             {activeTab === "PROFILE" && !isCustomerLoggedIn && (
               <div className="max-w-xl mx-auto py-8 px-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <Card className="p-8 border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl rounded-3xl text-center space-y-6">
-                  <div className="w-16 h-16 rounded-3xl bg-emerald-100 dark:bg-emerald-950/60 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center mx-auto shadow-xs">
+                  <div className="w-16 h-16 rounded-3xl bg-emerald-100 dark:bg-emerald-950/60 text-brand-sage dark:text-brand-sageBright flex items-center justify-center mx-auto shadow-xs">
                     <Lock className="w-8 h-8" />
                   </div>
 
@@ -4952,7 +4957,7 @@ function CustomerPortalContent() {
                         href={(user.role.slug as string) === "COMMUNITY_ORGANIZER" || (user.role.slug as string) === "ORGANIZER" ? "/events/portal" : "/dashboard"}
                         className="w-full sm:w-auto"
                       >
-                        <Button className="w-full sm:w-auto bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-10 px-5 rounded-xl shadow-xs">
+                        <Button className="w-full sm:w-auto bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs h-10 px-5 rounded-xl shadow-xs">
                           <span>Buka Dashboard ({user.role.slug}) &rarr;</span>
                         </Button>
                       </Link>
@@ -4975,7 +4980,7 @@ function CustomerPortalContent() {
                         href={`/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&mode=customer`}
                         className="w-full sm:w-auto"
                       >
-                        <Button className="w-full sm:w-auto bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-10 px-5 rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
+                        <Button className="w-full sm:w-auto bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs h-10 px-5 rounded-xl shadow-xs transition-all hover:scale-105 active:scale-95">
                           <LogIn className="w-3.5 h-3.5 mr-1.5" />
                           <span>Masuk ke Akun DagoEng</span>
                         </Button>
@@ -4986,7 +4991,7 @@ function CustomerPortalContent() {
                           variant="outline"
                           className="w-full sm:w-auto border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs h-10 px-4 rounded-xl"
                         >
-                          <Search className="w-3.5 h-3.5 mr-1.5 text-[#3B7A57] dark:text-[#52B788]" />
+                          <Search className="w-3.5 h-3.5 mr-1.5 text-brand-sage dark:text-brand-sageBright" />
                           <span>Cari Tiket Pesanan Guest</span>
                         </Button>
                       </Link>
@@ -4996,7 +5001,7 @@ function CustomerPortalContent() {
                   <div className="pt-2">
                     <Link
                       href="/events"
-                      className="text-xs font-bold text-[#3B7A57] dark:text-[#52B788] hover:underline inline-flex items-center space-x-1"
+                      className="text-xs font-bold text-brand-sage dark:text-brand-sageBright hover:underline inline-flex items-center space-x-1"
                     >
                       <span>Kembali ke Event Marketplace</span>
                     </Link>
@@ -5111,12 +5116,12 @@ function CustomerPortalContent() {
                 </div>
 
                 {/* Section: Status Penyelenggara Event Komunitas (Organizer Integration) */}
-                <Card className="border-slate-200/90 dark:border-slate-800 bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-800/90 shadow-xs p-6 rounded-3xl">
+                <Card className="border-slate-200/90 dark:border-slate-800 bg-linear-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-800/90 shadow-xs p-6 rounded-3xl">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-start space-x-3.5">
                       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-xl ${
                         isOrganizerAccount
-                          ? "bg-[#3B7A57]/15 dark:bg-[#3B7A57]/30 text-[#3B7A57] dark:text-[#52B788]"
+                          ? "bg-brand-sage/15 dark:bg-brand-sage/30 text-brand-sage dark:text-brand-sageBright"
                           : "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400"
                       }`}>
                         <Calendar className="w-6 h-6" />
@@ -5129,7 +5134,7 @@ function CustomerPortalContent() {
                               : "Ingin Mengadakan Acara Sendiri di Dago Hub?"}
                           </h4>
                           {isOrganizerAccount && (
-                            <Badge className="bg-[#3B7A57] text-white text-[10px] font-bold">
+                            <Badge className="bg-brand-sage text-white text-[10px] font-bold">
                               Organizer Aktif
                             </Badge>
                           )}
@@ -5142,10 +5147,10 @@ function CustomerPortalContent() {
                       </div>
                     </div>
 
-                    <div className="flex-shrink-0">
+                    <div className="shrink-0">
                       {isOrganizerAccount ? (
                         <Link href="/events/portal">
-                          <Button className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-10 px-5 rounded-xl shadow-md shadow-[#3B7A57]/20 transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5 cursor-pointer">
+                          <Button className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold h-10 px-5 rounded-xl shadow-md shadow-[#3B7A57]/20 transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5 cursor-pointer">
                             <span>Masuk Dashboard Organizer</span>
                             <ArrowRight className="w-4 h-4 ml-1" />
                           </Button>
@@ -5160,7 +5165,7 @@ function CustomerPortalContent() {
                             });
                             setIsOnboardingModalOpen(true);
                           }}
-                          className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-10 px-5 rounded-xl shadow-md shadow-[#3B7A57]/20 transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5 cursor-pointer"
+                          className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold h-10 px-5 rounded-xl shadow-md shadow-[#3B7A57]/20 transition-all hover:scale-105 active:scale-95 flex items-center space-x-1.5 cursor-pointer"
                         >
                           <Sparkles className="w-4 h-4" />
                           <span>Aktifkan Profil Organizer</span>
@@ -5175,7 +5180,7 @@ function CustomerPortalContent() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <h3 className="font-black text-lg text-slate-900 dark:text-white flex items-center space-x-2">
-                        <Ticket className="w-5 h-5 text-[#3B7A57]" />
+                        <Ticket className="w-5 h-5 text-brand-sage" />
                         <span>Tiket & E-Pass Event Saya</span>
                       </h3>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -5184,7 +5189,7 @@ function CustomerPortalContent() {
                     </div>
 
                     <Link href="/events">
-                      <Button variant="outline" size="sm" className="text-xs font-bold text-[#3B7A57] dark:text-[#52B788] border-[#3B7A57]/30 hover:bg-[#3B7A57]/10 rounded-xl">
+                      <Button variant="outline" size="sm" className="text-xs font-bold text-brand-sage dark:text-brand-sageBright border-brand-sage/30 hover:bg-brand-sage/10 rounded-xl">
                         Jelajahi Event Lainnya &rarr;
                       </Button>
                     </Link>
@@ -5226,7 +5231,7 @@ function CustomerPortalContent() {
                             onClick={() => setTicketFilter(f.key as any)}
                             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                               ticketFilter === f.key
-                                ? "bg-[#3B7A57] text-white shadow-xs"
+                                ? "bg-brand-sage text-white shadow-xs"
                                 : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-slate-300"
                             }`}
                           >
@@ -5244,12 +5249,12 @@ function CustomerPortalContent() {
 
                   {isLoadingMyTickets ? (
                     <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
-                      <div className="w-6 h-6 border-2 border-[#3B7A57] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                      <div className="w-6 h-6 border-2 border-brand-sage border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                       <span className="text-xs text-slate-400">Memuat tiket Anda...</span>
                     </div>
                   ) : myEventTickets.length === 0 ? (
                     <Card className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/90 dark:border-slate-800 space-y-3">
-                      <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-[#3B7A57] dark:text-[#52B788] flex items-center justify-center mx-auto">
+                      <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage dark:text-brand-sageBright flex items-center justify-center mx-auto">
                         <Ticket className="w-6 h-6" />
                       </div>
                       <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">Belum Ada Tiket Event</h4>
@@ -5257,7 +5262,7 @@ function CustomerPortalContent() {
                         Anda belum mendaftar ke event komunitas manapun. Temukan berbagai workshop kreatif, meetup, dan talkshow seru!
                       </p>
                       <Link href="/events">
-                        <Button className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl mt-1">
+                        <Button className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl mt-1">
                           Cari & Pesan Tiket Event
                         </Button>
                       </Link>
@@ -5295,7 +5300,7 @@ function CustomerPortalContent() {
                             className={`p-5 rounded-3xl border transition-all flex flex-col justify-between space-y-4 ${
                               isCancelled
                                 ? "bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 opacity-70"
-                                : "bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 shadow-xs hover:border-[#3B7A57]/60"
+                                : "bg-white dark:bg-slate-900 border-slate-200/90 dark:border-slate-800 shadow-xs hover:border-brand-sage/60"
                             }`}
                           >
                             <div className="space-y-3">
@@ -5366,8 +5371,8 @@ function CustomerPortalContent() {
                                     />
                                   </div>
                                 ) : (
-                                  <div className="w-14 h-14 rounded-2xl bg-[#3B7A57]/10 dark:bg-[#3B7A57]/20 border border-[#3B7A57]/30 flex flex-col items-center justify-center text-center shrink-0">
-                                    <span className="text-[9px] font-black uppercase text-[#3B7A57] dark:text-[#52B788]">
+                                  <div className="w-14 h-14 rounded-2xl bg-brand-sage/10 dark:bg-brand-sage/20 border border-brand-sage/30 flex flex-col items-center justify-center text-center shrink-0">
+                                    <span className="text-[9px] font-black uppercase text-brand-sage dark:text-brand-sageBright">
                                       {dateInfo.month}
                                     </span>
                                     <span className="text-base font-black text-slate-900 dark:text-white leading-none">
@@ -5381,7 +5386,7 @@ function CustomerPortalContent() {
                                     {ticket.eventTitle}
                                   </h4>
                                   {matchingEvent?.organizerName && (
-                                    <p className="text-[11px] text-[#3B7A57] dark:text-[#52B788] font-bold truncate">
+                                    <p className="text-[11px] text-brand-sage dark:text-brand-sageBright font-bold truncate">
                                       Oleh {matchingEvent.organizerName}
                                     </p>
                                   )}
@@ -5407,7 +5412,7 @@ function CustomerPortalContent() {
                                       href={ticket.dokuPaymentUrl}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="inline-flex items-center space-x-1 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs"
+                                      className="inline-flex items-center space-x-1 bg-brand-sage hover:bg-[#2E6044] text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs"
                                     >
                                       <CreditCard className="w-3 h-3" />
                                       <span>Bayar DOKU</span>
@@ -5416,7 +5421,7 @@ function CustomerPortalContent() {
                                   ) : (
                                     <Link
                                       href={`/events/tickets/${ticket.guestToken}`}
-                                      className="inline-flex items-center space-x-1 bg-[#3B7A57] hover:bg-[#2E6044] text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs"
+                                      className="inline-flex items-center space-x-1 bg-brand-sage hover:bg-[#2E6044] text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-xs"
                                     >
                                       <CreditCard className="w-3 h-3" />
                                       <span>Transfer &amp; Upload Bukti</span>
@@ -5436,7 +5441,7 @@ function CustomerPortalContent() {
                                 <Button
                                   size="sm"
                                   onClick={() => setViewingTicketModal(ticket)}
-                                  className="bg-[#3B7A57] hover:bg-[#2E6044] text-white text-xs font-bold h-8 px-3 rounded-xl shadow-xs flex items-center space-x-1 cursor-pointer"
+                                  className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold h-8 px-3 rounded-xl shadow-xs flex items-center space-x-1 cursor-pointer"
                                 >
                                   <QrCode className="w-3.5 h-3.5" />
                                   <span>{isPending ? "Detail & Status" : "Buka E-Ticket"}</span>
@@ -5456,7 +5461,7 @@ function CustomerPortalContent() {
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
                       <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                         <div className="flex items-center space-x-2">
-                          <div className="w-8 h-8 rounded-xl bg-[#3B7A57]/15 text-[#3B7A57] flex items-center justify-center">
+                          <div className="w-8 h-8 rounded-xl bg-brand-sage/15 text-brand-sage flex items-center justify-center">
                             <Sparkles className="w-4 h-4" />
                           </div>
                           <div>
@@ -5532,7 +5537,7 @@ function CustomerPortalContent() {
                         <Button
                           type="submit"
                           disabled={isOnboardingSubmitting}
-                          className="w-full bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs h-10 rounded-xl"
+                          className="w-full bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs h-10 rounded-xl"
                         >
                           {isOnboardingSubmitting ? "Mengaktifkan..." : "Aktifkan & Buka Dashboard Organizer"}
                         </Button>
@@ -5581,7 +5586,7 @@ function CustomerPortalContent() {
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-xs animate-in fade-in duration-150 overflow-y-auto">
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-md w-full shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 my-6">
                 {/* Top Tear-off Header */}
-                <div className="bg-gradient-to-r from-[#3B7A57] to-[#2E6044] p-5 text-white flex items-center justify-between">
+                <div className="bg-linear-to-r from-[#3B7A57] to-[#2E6044] p-5 text-white flex items-center justify-between">
                   <div className="flex items-center space-x-2.5">
                     <div className="w-8 h-8 rounded-xl bg-white/15 flex items-center justify-center">
                       <Ticket className="w-4 h-4 text-white" />
@@ -5665,7 +5670,7 @@ function CustomerPortalContent() {
                               onClick={() => setModalSubSeat(seatNum)}
                               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center space-x-1.5 ${
                                 modalSubSeat === seatNum
-                                  ? "bg-[#3B7A57] text-white shadow-xs"
+                                  ? "bg-brand-sage text-white shadow-xs"
                                   : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
                               }`}
                             >
@@ -5704,7 +5709,7 @@ function CustomerPortalContent() {
                                 <QrCode className="w-32 h-32 text-slate-400 opacity-30" />
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg">
-                                    <Check className="w-7 h-7 stroke-[3]" />
+                                    <Check className="w-7 h-7 stroke-3" />
                                   </div>
                                 </div>
                               </div>
@@ -5762,7 +5767,7 @@ function CustomerPortalContent() {
 
                         <Link
                           href={`/events/tickets/${viewingTicketModal.guestToken}`}
-                          className="w-full flex items-center justify-center space-x-2 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
+                          className="w-full flex items-center justify-center space-x-2 bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs py-2.5 rounded-xl shadow-md transition-all hover:scale-[1.02] active:scale-[0.98]"
                         >
                           <Upload className="w-4 h-4" />
                           <span>Transfer Bank &amp; Unggah Bukti Pembayaran</span>
@@ -5792,7 +5797,7 @@ function CustomerPortalContent() {
                         {viewingTicketModal.eventTitle}
                       </p>
                       {matchingEvent?.organizerName && (
-                        <p className="text-[11px] text-[#3B7A57] dark:text-[#52B788] font-bold">
+                        <p className="text-[11px] text-brand-sage dark:text-brand-sageBright font-bold">
                           Penyelenggara: {matchingEvent.organizerName}
                         </p>
                       )}
@@ -5820,7 +5825,7 @@ function CustomerPortalContent() {
 
                       <div className="p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl space-y-0.5">
                         <span className="text-[10px] text-slate-400 font-semibold block">Jumlah & Biaya:</span>
-                        <span className="font-bold text-[#3B7A57] dark:text-[#52B788] block">
+                        <span className="font-bold text-brand-sage dark:text-brand-sageBright block">
                           {viewingTicketModal.ticketCount} Tiket
                         </span>
                         <span className="font-black text-slate-900 dark:text-white text-xs block">
@@ -5853,7 +5858,7 @@ function CustomerPortalContent() {
                         <Button
                           type="button"
                           variant="outline"
-                          className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 text-[#3B7A57] dark:text-[#52B788] rounded-xl h-10"
+                          className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 text-brand-sage dark:text-brand-sageBright rounded-xl h-10"
                         >
                           <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
                           <span>Info Acara</span>
@@ -6040,7 +6045,7 @@ function CustomerPortalContent() {
                   <div className="pt-2 text-center">
                     <Link
                       href={`/login?returnTo=${encodeURIComponent(`/customer?tab=${activeTab}`)}&mode=customer`}
-                      className="w-full py-2.5 px-4 bg-[#3B7A57] hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-sm inline-flex items-center justify-center space-x-1.5 transition-colors"
+                      className="w-full py-2.5 px-4 bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs rounded-xl shadow-sm inline-flex items-center justify-center space-x-1.5 transition-colors"
                     >
                       <span>Masuk ke Akun Resmi</span>
                       <ArrowRight className="w-3.5 h-3.5 ml-1" />

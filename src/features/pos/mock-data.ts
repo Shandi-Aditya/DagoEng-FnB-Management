@@ -98,6 +98,17 @@ export const POS_PRODUCTS: POSProductItem[] = [
         ],
       },
       {
+        id: "mod-milk",
+        name: "Pilihan Susu",
+        isRequired: false,
+        minSelect: 0,
+        maxSelect: 1,
+        options: [
+          { name: "Fresh Milk Standard", price: 0 },
+          { name: "Oat Milk (+Rp 8.000)", price: 8000 },
+        ],
+      },
+      {
         id: "mod-addon",
         name: "Tambahan / Add-ons",
         isRequired: false,
@@ -105,7 +116,6 @@ export const POS_PRODUCTS: POSProductItem[] = [
         maxSelect: 3,
         options: [
           { name: "Extra Espresso Shot", price: 6000 },
-          { name: "Ganti Susu Oat (Oat Milk)", price: 8000 },
           { name: "Grass Jelly Topping", price: 4000 },
         ],
       },
@@ -168,6 +178,18 @@ export const POS_PRODUCTS: POSProductItem[] = [
         options: [
           { name: "Dingin (Iced)", price: 0 },
           { name: "Panas (Hot)", price: 0 },
+        ],
+      },
+      {
+        id: "mod-sugar-ame",
+        name: "Level Gula",
+        isRequired: false,
+        minSelect: 0,
+        maxSelect: 1,
+        options: [
+          { name: "Normal Sugar (100%)", price: 0 },
+          { name: "Less Sugar (50%)", price: 0 },
+          { name: "No Sugar (0%)", price: 0 },
         ],
       },
       {

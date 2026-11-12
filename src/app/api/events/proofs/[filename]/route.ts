@@ -22,10 +22,8 @@ export const dynamic = "force-dynamic";
  *    - Unauthenticated, cross-tenant, and cross-attendee requests are strictly rejected (HTTP 401 / 403).
  * 3. Safe Content Headers: Serves with `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`.
  */
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { filename: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ filename: string }> }) {
+  const params = await props.params;
   try {
     const rawFilename = params?.filename;
     const sanitizedFilename = sanitizeProofFilename(rawFilename);

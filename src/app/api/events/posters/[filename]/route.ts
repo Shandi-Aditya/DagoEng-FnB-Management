@@ -10,10 +10,8 @@ export const dynamic = "force-dynamic";
  * Public CDN/asset endpoint to serve event poster images reliably on Vercel Serverless.
  * Reads from local disk (if available) or retrieves from PostgreSQL SystemSetting (POSTER_<filename>).
  */
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { filename: string } }
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ filename: string }> }) {
+  const params = await props.params;
   try {
     const rawFilename = params?.filename;
     if (!rawFilename || typeof rawFilename !== "string") {

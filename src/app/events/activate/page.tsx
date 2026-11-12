@@ -18,7 +18,7 @@ import {
   Clock,
   LogIn,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/legacy/ui/button";
 
 function ActivationFormContent() {
   const searchParams = useSearchParams();
@@ -115,7 +115,7 @@ function ActivationFormContent() {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-16 space-y-4">
-        <div className="w-10 h-10 border-4 border-[#3B7A57] border-t-transparent rounded-full animate-spin" />
+        <div className="w-10 h-10 border-4 border-brand-sage border-t-transparent rounded-full animate-spin" />
         <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
           Memvalidasi token aktivasi akun Anda...
         </p>
@@ -127,7 +127,7 @@ function ActivationFormContent() {
   if (isSuccess) {
     return (
       <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800/60 rounded-3xl p-8 sm:p-10 shadow-xl max-w-lg mx-auto text-center animate-in fade-in zoom-in-95 duration-300">
-        <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-950/70 text-[#3B7A57] dark:text-[#52B788] rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+        <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-950/70 text-brand-sage dark:text-brand-sageBright rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
           <CheckCircle2 className="w-10 h-10" />
         </div>
 
@@ -153,7 +153,7 @@ function ActivationFormContent() {
         <Link href="/login" className="block">
           <Button
             type="button"
-            className="w-full bg-[#3B7A57] hover:bg-[#2D5F43] text-white font-bold h-12 rounded-xl text-sm shadow-md shadow-emerald-900/10 transition-all flex items-center justify-center space-x-2"
+            className="w-full bg-brand-sage hover:bg-[#2D5F43] text-white font-bold h-12 rounded-xl text-sm shadow-md shadow-emerald-900/10 transition-all flex items-center justify-center space-x-2"
           >
             <span>Masuk ke Halaman Login</span>
             <ArrowRight className="w-4 h-4 ml-1" />
@@ -195,7 +195,7 @@ function ActivationFormContent() {
           </Link>
           <Link href="/events" className="flex-1">
             <Button
-              className="w-full h-11 rounded-xl text-xs font-bold bg-[#3B7A57] hover:bg-[#2D5F43] text-white"
+              className="w-full h-11 rounded-xl text-xs font-bold bg-brand-sage hover:bg-[#2D5F43] text-white"
             >
               <Calendar className="w-4 h-4 mr-1.5" />
               <span>Jelajahi Event</span>
@@ -211,7 +211,7 @@ function ActivationFormContent() {
     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-10 shadow-xl max-w-lg mx-auto">
       {/* Header Info */}
       <div className="text-center mb-6">
-        <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-950/70 text-[#3B7A57] dark:text-[#52B788] rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
+        <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-950/70 text-brand-sage dark:text-brand-sageBright rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
           <ShieldCheck className="w-8 h-8" />
         </div>
         <span className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 mb-2">
@@ -230,7 +230,7 @@ function ActivationFormContent() {
         <div className="bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 rounded-2xl p-4 mb-6 space-y-2 text-xs">
           <div className="flex items-center justify-between">
             <span className="text-slate-500 dark:text-slate-400 flex items-center space-x-1.5">
-              <Calendar className="w-3.5 h-3.5 text-[#3B7A57]" />
+              <Calendar className="w-3.5 h-3.5 text-brand-sage" />
               <span>Komunitas:</span>
             </span>
             <span className="font-bold text-slate-900 dark:text-slate-100">
@@ -239,7 +239,7 @@ function ActivationFormContent() {
           </div>
           <div className="flex items-center justify-between">
             <span className="text-slate-500 dark:text-slate-400 flex items-center space-x-1.5">
-              <User className="w-3.5 h-3.5 text-[#3B7A57]" />
+              <User className="w-3.5 h-3.5 text-brand-sage" />
               <span>Penanggung Jawab:</span>
             </span>
             <span className="font-semibold text-slate-800 dark:text-slate-200">
@@ -248,7 +248,7 @@ function ActivationFormContent() {
           </div>
           <div className="flex items-center justify-between">
             <span className="text-slate-500 dark:text-slate-400 flex items-center space-x-1.5">
-              <Mail className="w-3.5 h-3.5 text-[#3B7A57]" />
+              <Mail className="w-3.5 h-3.5 text-brand-sage" />
               <span>Email Akun:</span>
             </span>
             <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
@@ -332,7 +332,7 @@ function ActivationFormContent() {
           <Button
             type="submit"
             disabled={isSubmitting || password.length < 8}
-            className="w-full bg-[#3B7A57] hover:bg-[#2D5F43] disabled:opacity-50 text-white font-bold h-11 rounded-xl text-sm shadow-md shadow-emerald-900/10 transition-all flex items-center justify-center space-x-2"
+            className="w-full bg-brand-sage hover:bg-[#2D5F43] disabled:opacity-50 text-white font-bold h-11 rounded-xl text-sm shadow-md shadow-emerald-900/10 transition-all flex items-center justify-center space-x-2"
           >
             {isSubmitting ? (
               <span>Mengaktifkan Akun...</span>
@@ -349,7 +349,7 @@ function ActivationFormContent() {
       <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center">
         <p className="text-[11px] text-slate-400">
           Sudah memiliki password?{" "}
-          <Link href="/login" className="font-bold text-[#3B7A57] hover:underline">
+          <Link href="/login" className="font-bold text-brand-sage hover:underline">
             Masuk di sini
           </Link>
         </p>
@@ -368,7 +368,7 @@ export default function ActivateOrganizerPage() {
             D
           </div>
           <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-            DAGO<span className="text-[#3B7A57]">.hub</span>
+            DAGO<span className="text-brand-sage">.hub</span>
           </span>
         </Link>
       </div>
@@ -376,7 +376,7 @@ export default function ActivateOrganizerPage() {
       <Suspense
         fallback={
           <div className="flex justify-center items-center py-20">
-            <div className="w-10 h-10 border-4 border-[#3B7A57] border-t-transparent rounded-full animate-spin" />
+            <div className="w-10 h-10 border-4 border-brand-sage border-t-transparent rounded-full animate-spin" />
           </div>
         }
       >
