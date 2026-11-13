@@ -117,7 +117,7 @@ const storageSyncStatusMap = new Map<string, StorageSyncStatus>();
 const lastSyncedUpdatedAtMap = new Map<string, Date>();
 const inFlightWriteTracker = new Map<string, Set<Promise<any>>>();
 const reconciliationGateSet = new Set<string>();
-const activeReconciliationPromises = new Map<string, Promise<boolean>>();
+const activeReconciliationPromises = new Map<string, Promise<StorageSyncSnapshot>>();
 
 export function isReconciliationGateActive(filename: string): boolean {
   return reconciliationGateSet.has(filename);
@@ -181,6 +181,17 @@ export function getStorageSyncStatus(filename: string): StorageSyncStatus {
   return storageSyncStatusMap.get(filename) || "UNAVAILABLE";
 }
 
+export function getLastSyncedUpdatedAt(filename: string): Date | undefined {
+  return lastSyncedUpdatedAtMap.get(filename);
+}
+
+export interface StorageSyncSnapshot {
+  success: boolean;
+  updatedAt?: Date;
+  status: StorageSyncStatus;
+  recordFound?: boolean;
+}
+
 export function setStorageSyncStatus(filename: string, status: StorageSyncStatus, updatedAt?: Date): void {
   storageSyncStatusMap.set(filename, status);
   if (updatedAt) {
@@ -213,7 +224,7 @@ export function resetStorageSyncStatus(): void {
  * 3. JSON payloads are strictly validated before writing to disk replicas.
  * 4. Reconciliation Gate per filename prevents new writes from arriving during reconciliation.
  */
-export function syncStorageFromDb(filename: string): Promise<boolean> {
+export function syncStorageFromDbInternal(filename: string): Promise<StorageSyncSnapshot> {
   // Concurrent reconciliation guard for the same filename:
   // If a reconciliation is already running for this filename, await and reuse the same promise.
   const existingReconciliation = activeReconciliationPromises.get(filename);
@@ -224,7 +235,7 @@ export function syncStorageFromDb(filename: string): Promise<boolean> {
   // 1. Synchronously activate reconciliation gate before any asynchronous operations
   reconciliationGateSet.add(filename);
 
-  const reconPromise = (async () => {
+  const reconPromise = (async (): Promise<StorageSyncSnapshot> => {
     try {
       // 2. Drain all in-flight write queries that started before gate activation
       const startReconTime = Date.now();
@@ -237,7 +248,11 @@ export function syncStorageFromDb(filename: string): Promise<boolean> {
           storageSyncStatusMap.set(filename, "UNAVAILABLE");
           lastSyncedUpdatedAtMap.delete(filename);
           console.warn(`[data-storage] syncStorageFromDb rekonsiliasi timeout (${maxBudgetMs}ms) menunggu operasi tulis [${filename}]. Status dipertahankan UNAVAILABLE.`);
-          return false;
+          return {
+            success: false,
+            status: "UNAVAILABLE",
+            recordFound: false,
+          };
         }
 
         const currentPending = Array.from(inFlightWriteTracker.get(filename) || []);
@@ -257,19 +272,38 @@ export function syncStorageFromDb(filename: string): Promise<boolean> {
       // Fast path in test environment when not explicitly simulating DB reconciliation
       if (process.env.NODE_ENV === "test" && !testDatabaseReadHandler) {
         if (storageSyncStatusMap.has(filename) && storageSyncStatusMap.get(filename) !== "SYNCED") {
-          return false;
+          return {
+            success: false,
+            status: storageSyncStatusMap.get(filename)!,
+            recordFound: false,
+          };
         }
         if (getInFlightWriteCount(filename) > 0) {
           storageSyncStatusMap.set(filename, "UNAVAILABLE");
-          return false;
+          return {
+            success: false,
+            status: "UNAVAILABLE",
+            recordFound: false,
+          };
         }
         storageSyncStatusMap.set(filename, "SYNCED");
-        return true;
+        const existingUpdatedAt = lastSyncedUpdatedAtMap.get(filename) || new Date("2026-01-01T00:00:00.000Z");
+        lastSyncedUpdatedAtMap.set(filename, existingUpdatedAt);
+        return {
+          success: true,
+          status: "SYNCED",
+          updatedAt: new Date(existingUpdatedAt.getTime()),
+          recordFound: true,
+        };
       }
 
       if (!testDatabaseReadHandler && !process.env.DATABASE_URL) {
         storageSyncStatusMap.set(filename, "UNAVAILABLE");
-        return false;
+        return {
+          success: false,
+          status: "UNAVAILABLE",
+          recordFound: false,
+        };
       }
 
       // 3. Database Reconciliation
@@ -289,7 +323,11 @@ export function syncStorageFromDb(filename: string): Promise<boolean> {
         if (result === "TIMEOUT") {
           storageSyncStatusMap.set(filename, "TIMEOUT");
           console.warn(`[data-storage] syncStorageFromDb TIMEOUT (8000ms) for ${filename}. Database state unconfirmed.`);
-          return false;
+          return {
+            success: false,
+            status: "TIMEOUT",
+            recordFound: false,
+          };
         }
         setting = result;
       }
@@ -297,7 +335,11 @@ export function syncStorageFromDb(filename: string): Promise<boolean> {
       if (!setting || !setting.value || setting.value.trim().length === 0) {
         storageSyncStatusMap.set(filename, "EMPTY");
         lastSyncedUpdatedAtMap.delete(filename);
-        return false;
+        return {
+          success: false,
+          status: "EMPTY",
+          recordFound: false,
+        };
       }
 
       // Integrity check: Validate that data in PostgreSQL is valid JSON before writing to disk
@@ -306,12 +348,20 @@ export function syncStorageFromDb(filename: string): Promise<boolean> {
         if (typeof parsed !== "object" || parsed === null) {
           storageSyncStatusMap.set(filename, "INVALID_DATA");
           console.error(`[data-storage] syncStorageFromDb INVALID_DATA for ${filename}: Root JSON must be an object or array.`);
-          return false;
+          return {
+            success: false,
+            status: "INVALID_DATA",
+            recordFound: true,
+          };
         }
       } catch (parseErr) {
         storageSyncStatusMap.set(filename, "INVALID_DATA");
         console.error(`[data-storage] syncStorageFromDb INVALID_DATA for ${filename}: Corrupted JSON payload in database.`, parseErr);
-        return false;
+        return {
+          success: false,
+          status: "INVALID_DATA",
+          recordFound: true,
+        };
       }
 
       // Write to local disk replica
@@ -327,19 +377,33 @@ export function syncStorageFromDb(filename: string): Promise<boolean> {
       // Pre-commit check: pastikan tidak ada write aktif sebelum menetapkan SYNCED
       if (getInFlightWriteCount(filename) > 0) {
         storageSyncStatusMap.set(filename, "UNAVAILABLE");
-        return false;
+        return {
+          success: false,
+          status: "UNAVAILABLE",
+          recordFound: true,
+        };
       }
 
+      const snapshotUpdatedAt = setting.updatedAt ? new Date(setting.updatedAt) : undefined;
       storageSyncStatusMap.set(filename, "SYNCED");
-      if (setting.updatedAt) {
-        lastSyncedUpdatedAtMap.set(filename, new Date(setting.updatedAt));
+      if (snapshotUpdatedAt) {
+        lastSyncedUpdatedAtMap.set(filename, snapshotUpdatedAt);
       }
-      return true;
+      return {
+        success: true,
+        status: "SYNCED",
+        updatedAt: snapshotUpdatedAt ? new Date(snapshotUpdatedAt.getTime()) : undefined,
+        recordFound: true,
+      };
     } catch (err) {
       storageSyncStatusMap.set(filename, "UNAVAILABLE");
       lastSyncedUpdatedAtMap.delete(filename);
       console.warn(`[data-storage] syncStorageFromDb UNAVAILABLE for ${filename}:`, err);
-      return false;
+      return {
+        success: false,
+        status: "UNAVAILABLE",
+        recordFound: false,
+      };
     } finally {
       // Ensure gate is unconditionally released
       reconciliationGateSet.delete(filename);
@@ -356,6 +420,19 @@ export function syncStorageFromDb(filename: string): Promise<boolean> {
   return reconPromise;
 }
 
+/**
+ * Returns an isolated per-request snapshot of the database synchronization state directly
+ * from the database query result. Does NOT re-read module-level Map after async reconciliation.
+ */
+export function syncStorageFromDbWithSnapshot(filename: string): Promise<StorageSyncSnapshot> {
+  return syncStorageFromDbInternal(filename);
+}
+
+export async function syncStorageFromDb(filename: string): Promise<boolean> {
+  const snapshot = await syncStorageFromDbInternal(filename);
+  return snapshot.success;
+}
+
 export class DatabasePersistenceError extends Error {
   public readonly filename: string;
   public readonly isTransient: boolean;
@@ -369,7 +446,11 @@ export class DatabasePersistenceError extends Error {
   }
 }
 
-export async function persistStorageToDb(filename: string, content: string): Promise<boolean> {
+export async function persistStorageToDb(
+  filename: string,
+  content: string,
+  options?: { expectedUpdatedAt?: Date; requireCas?: boolean }
+): Promise<boolean> {
   // 1. RECONCILIATION GATE GUARD:
   // Operasi tulis ditolak jika rekonsiliasi database sedang berlangsung untuk filename ini demi integritas data
   if (isReconciliationGateActive(filename)) {
@@ -389,6 +470,16 @@ export async function persistStorageToDb(filename: string, content: string): Pro
         filename,
         true
       );
+    }
+    if (options?.requireCas) {
+      if (!options.expectedUpdatedAt || !(options.expectedUpdatedAt instanceof Date) || isNaN(options.expectedUpdatedAt.getTime())) {
+        storageSyncStatusMap.set(filename, "UNAVAILABLE");
+        throw new DatabasePersistenceError(
+          `CAS_SNAPSHOT_INVALID: Operasi penyimpanan [${filename}] dengan CAS wajib ditolak karena expectedUpdatedAt tidak valid atau tidak disediakan.`,
+          filename,
+          true
+        );
+      }
     }
     return true;
   }
@@ -473,7 +564,21 @@ export async function persistStorageToDb(filename: string, content: string): Pro
     }
 
     // 2. OPTIMISTIC CONCURRENCY CHECK (Preventing Lost Updates on SYNCED state):
-    const lastUpdatedAt = lastSyncedUpdatedAtMap.get(filename);
+    if (options?.requireCas) {
+      if (!options.expectedUpdatedAt || !(options.expectedUpdatedAt instanceof Date) || isNaN(options.expectedUpdatedAt.getTime())) {
+        storageSyncStatusMap.set(filename, "UNAVAILABLE");
+        throw new DatabasePersistenceError(
+          `CAS_SNAPSHOT_INVALID: Operasi penyimpanan [${filename}] dengan CAS wajib ditolak karena snapshot expectedUpdatedAt tidak valid atau tidak disediakan.`,
+          filename,
+          true
+        );
+      }
+    }
+
+    // In strict CAS mode, ONLY options.expectedUpdatedAt is accepted. NEVER fall back to global map!
+    const lastUpdatedAt = options?.requireCas
+      ? options.expectedUpdatedAt
+      : (options?.expectedUpdatedAt ?? lastSyncedUpdatedAtMap.get(filename));
     if (lastUpdatedAt && typeof db.systemSetting.updateMany === "function") {
       const updateQuery = (async () => {
         const updateResult = await db.systemSetting.updateMany({
@@ -511,6 +616,15 @@ export async function persistStorageToDb(filename: string, content: string): Pro
       }
       storageSyncStatusMap.set(filename, "SYNCED");
       return true;
+    }
+
+    if (options?.requireCas || (currentSyncStatus === "SYNCED" && !lastUpdatedAt)) {
+      storageSyncStatusMap.set(filename, "UNAVAILABLE");
+      throw new DatabasePersistenceError(
+        `LOST_UPDATE_PREVENTED: Rekaman [${filename}] berada pada status SYNCED namun metadata updatedAt tidak ditemukan atau tidak cocok. Re-sync diperlukan sebelum menimpa data.`,
+        filename,
+        true
+      );
     }
 
     // 3. FALLBACK UPSERT:

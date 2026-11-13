@@ -81,17 +81,47 @@ function withEventLock<T>(fn: () => Promise<T> | T): Promise<T> {
 
 let cachedPolicy: EventRevenueSharingPolicy | null = null;
 
+export interface BankMutationContext<T> {
+  result: T;
+  candidatePolicy: EventRevenueSharingPolicy;
+  organizerSideEffect?: () => void;
+}
+
 export function saveEventSettingsToDisk(
   policy: EventRevenueSharingPolicy,
-  options?: { persistToDb?: boolean }
+  options?: { persistToDb?: boolean; forceDiskWrite?: boolean }
 ): void {
   if (isReconciliationGateActive("event_settings.json")) {
     console.warn("[events] saveEventSettingsToDisk dibatalkan: Reconciliation gate sedang aktif untuk event_settings.json.");
     return;
   }
   try {
-    cachedPolicy = policy;
     const settingsFile = getEventSettingsFile();
+    // Disk revision guard
+    if (!options?.forceDiskWrite && fs.existsSync(settingsFile)) {
+      try {
+        const raw = fs.readFileSync(settingsFile, "utf-8");
+        const existing = JSON.parse(raw);
+        const existingRev = typeof existing._revision === "number" ? existing._revision : 0;
+        const incomingRev = typeof policy._revision === "number" ? policy._revision : 0;
+
+        if (existingRev > incomingRev) {
+          console.warn(`[events] saveEventSettingsToDisk ditolak: disk revision (${existingRev}) lebih baru daripada incoming revision (${incomingRev}).`);
+          return;
+        }
+
+        if (existingRev === incomingRev && existingRev > 0) {
+          const existingRawNormalized = JSON.stringify(existing);
+          const incomingRawNormalized = JSON.stringify(policy);
+          if (existingRawNormalized !== incomingRawNormalized) {
+            console.warn(`[events] saveEventSettingsToDisk ditolak: revision (${incomingRev}) sama tetapi payload berbeda.`);
+            return;
+          }
+        }
+      } catch (_) {}
+    }
+
+    cachedPolicy = policy;
     const dir = path.dirname(settingsFile);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const content = JSON.stringify(policy, null, 2);
@@ -122,6 +152,7 @@ export function getEventRevenuePolicy(): EventRevenueSharingPolicy {
       const policy: EventRevenueSharingPolicy = {
         ...DEFAULT_EVENT_POLICY,
         ...parsed,
+        _revision: typeof parsed._revision === "number" ? parsed._revision : 0,
         defaultOrganizerSharePercent: 100 - parsed.defaultPlatformFeePercent,
         maxTicketsPerBooking:
           typeof parsed.maxTicketsPerBooking === "number" && parsed.maxTicketsPerBooking > 0
@@ -200,6 +231,7 @@ export function updateEventRevenuePolicy(
 
   const updated: EventRevenueSharingPolicy = {
     ...current,
+    _revision: (current._revision || 0) + 1,
     defaultPlatformFeePercent: fee,
     defaultOrganizerSharePercent: 100 - fee,
     maxTicketsPerBooking:
@@ -533,7 +565,11 @@ export function getEventBankAccounts(): EventBankAccount[] {
   return Array.isArray(policy.bankAccounts) ? policy.bankAccounts : DEFAULT_EVENT_BANK_ACCOUNTS;
 }
 
-export function createEventBankAccount(
+/**
+ * Builds bank account creation candidate context in-memory with pure per-request isolation.
+ * Does not mutate disk or shared module-level state.
+ */
+export function buildCreateEventBankAccount(
   data: {
     label: string;
     bankName: string;
@@ -547,8 +583,9 @@ export function createEventBankAccount(
     organizerEmail?: string | null;
     approvalStatus?: EventBankAccountApprovalStatus;
   },
-  actorName = "Admin Dago"
-): EventBankAccount {
+  actorName = "Admin Dago",
+  basePolicy?: EventRevenueSharingPolicy
+): BankMutationContext<EventBankAccount> {
   if (isReconciliationGateActive("event_settings.json")) {
     throw new Error("Gagal menambahkan rekening bank: Proses sinkronisasi database sedang berlangsung.");
   }
@@ -556,8 +593,13 @@ export function createEventBankAccount(
     throw new Error("Label rekening, nama bank, nomor rekening, dan nama pemilik rekening wajib diisi.");
   }
 
-  const policy = getEventRevenuePolicy();
-  const currentAccounts = Array.isArray(policy.bankAccounts) ? [...policy.bankAccounts] : [...DEFAULT_EVENT_BANK_ACCOUNTS];
+  // Deep clone to guarantee request isolation
+  const policy: EventRevenueSharingPolicy = JSON.parse(
+    JSON.stringify(basePolicy || getEventRevenuePolicy())
+  );
+  const currentAccounts = Array.isArray(policy.bankAccounts)
+    ? [...policy.bankAccounts]
+    : [...DEFAULT_EVENT_BANK_ACCOUNTS];
 
   const cleanNumber = data.accountNumber.replace(/[^0-9]/g, "");
   if (cleanNumber.length < 5) {
@@ -584,15 +626,16 @@ export function createEventBankAccount(
       };
       currentAccounts[existingIndex] = updatedAccount;
 
-      // Also persist to organizer profile on disk
-      try {
-        updateOrganizerBankDetails(data.organizerEmail, {
-          bankName: updatedAccount.bankName,
-          accountNumber: updatedAccount.accountNumber,
-          accountHolder: updatedAccount.accountHolder,
-          branch: updatedAccount.branch,
-        });
-      } catch (_) {}
+      const organizerSideEffect = () => {
+        try {
+          updateOrganizerBankDetails(data.organizerEmail!, {
+            bankName: updatedAccount.bankName,
+            accountNumber: updatedAccount.accountNumber,
+            accountHolder: updatedAccount.accountHolder,
+            branch: updatedAccount.branch,
+          });
+        } catch (_) {}
+      };
 
       const historyEntry: EventBankAccountHistoryEntry = {
         id: `bhist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -605,8 +648,14 @@ export function createEventBankAccount(
 
       policy.bankAccounts = currentAccounts;
       policy.bankHistory = [historyEntry, ...(policy.bankHistory || [])];
-      saveEventSettingsToDisk(policy);
-      return updatedAccount;
+      policy._revision = (policy._revision || 0) + 1;
+      policy.updatedAt = now;
+
+      return {
+        result: updatedAccount,
+        candidatePolicy: policy,
+        organizerSideEffect,
+      };
     }
   }
 
@@ -648,16 +697,18 @@ export function createEventBankAccount(
 
   currentAccounts.push(newAccount);
 
-  if (data.accountType === "ORGANIZER" && data.organizerEmail) {
-    try {
-      updateOrganizerBankDetails(data.organizerEmail, {
-        bankName: newAccount.bankName,
-        accountNumber: newAccount.accountNumber,
-        accountHolder: newAccount.accountHolder,
-        branch: newAccount.branch,
-      });
-    } catch (_) {}
-  }
+  const organizerSideEffect = (data.accountType === "ORGANIZER" && data.organizerEmail)
+    ? () => {
+        try {
+          updateOrganizerBankDetails(data.organizerEmail!, {
+            bankName: newAccount.bankName,
+            accountNumber: newAccount.accountNumber,
+            accountHolder: newAccount.accountHolder,
+            branch: newAccount.branch,
+          });
+        } catch (_) {}
+      }
+    : undefined;
 
   const historyEntry: EventBankAccountHistoryEntry = {
     id: `bhist-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -670,22 +721,57 @@ export function createEventBankAccount(
 
   policy.bankAccounts = currentAccounts;
   policy.bankHistory = [historyEntry, ...(policy.bankHistory || [])];
-  saveEventSettingsToDisk(policy);
+  policy._revision = (policy._revision || 0) + 1;
+  policy.updatedAt = now;
 
-  return newAccount;
+  return {
+    result: newAccount,
+    candidatePolicy: policy,
+    organizerSideEffect,
+  };
+}
+
+export function createEventBankAccount(
+  data: {
+    label: string;
+    bankName: string;
+    accountNumber: string;
+    accountHolder: string;
+    branch?: string;
+    badge?: string;
+    isDefault?: boolean;
+    accountType?: EventBankAccountType;
+    eventId?: string | null;
+    organizerEmail?: string | null;
+    approvalStatus?: EventBankAccountApprovalStatus;
+  },
+  actorName = "Admin Dago",
+  options?: { skipDiskWrite?: boolean }
+): EventBankAccount {
+  const context = buildCreateEventBankAccount(data, actorName);
+  if (!options?.skipDiskWrite) {
+    if (context.organizerSideEffect) {
+      context.organizerSideEffect();
+    }
+    saveEventSettingsToDisk(context.candidatePolicy);
+  }
+  return context.result;
 }
 
 export const addEventBankAccount = createEventBankAccount;
 
-export function updateEventBankAccount(
+export function buildUpdateEventBankAccount(
   bankId: string,
   updates: Partial<EventBankAccount>,
-  actorName = "Admin Dago"
-): EventBankAccount {
+  actorName = "Admin Dago",
+  basePolicy?: EventRevenueSharingPolicy
+): BankMutationContext<EventBankAccount> {
   if (isReconciliationGateActive("event_settings.json")) {
     throw new Error("Gagal memperbarui rekening bank: Proses sinkronisasi database sedang berlangsung.");
   }
-  const policy = getEventRevenuePolicy();
+  const policy: EventRevenueSharingPolicy = JSON.parse(
+    JSON.stringify(basePolicy || getEventRevenuePolicy())
+  );
   const currentAccounts = Array.isArray(policy.bankAccounts) ? [...policy.bankAccounts] : [...DEFAULT_EVENT_BANK_ACCOUNTS];
   const index = currentAccounts.findIndex((b) => b.id === bankId);
   if (index === -1) {
@@ -726,16 +812,39 @@ export function updateEventBankAccount(
 
   policy.bankAccounts = currentAccounts;
   policy.bankHistory = [historyEntry, ...(policy.bankHistory || [])];
-  saveEventSettingsToDisk(policy);
+  policy._revision = (policy._revision || 0) + 1;
+  policy.updatedAt = now;
 
-  return updated;
+  return {
+    result: updated,
+    candidatePolicy: policy,
+  };
 }
 
-export function setDefaultEventBankAccount(bankId: string, actorName = "Admin Dago"): EventBankAccount {
+export function updateEventBankAccount(
+  bankId: string,
+  updates: Partial<EventBankAccount>,
+  actorName = "Admin Dago",
+  options?: { skipDiskWrite?: boolean }
+): EventBankAccount {
+  const context = buildUpdateEventBankAccount(bankId, updates, actorName);
+  if (!options?.skipDiskWrite) {
+    saveEventSettingsToDisk(context.candidatePolicy);
+  }
+  return context.result;
+}
+
+export function buildSetDefaultEventBankAccount(
+  bankId: string,
+  actorName = "Admin Dago",
+  basePolicy?: EventRevenueSharingPolicy
+): BankMutationContext<EventBankAccount> {
   if (isReconciliationGateActive("event_settings.json")) {
     throw new Error("Gagal menetapkan rekening default: Proses sinkronisasi database sedang berlangsung.");
   }
-  const policy = getEventRevenuePolicy();
+  const policy: EventRevenueSharingPolicy = JSON.parse(
+    JSON.stringify(basePolicy || getEventRevenuePolicy())
+  );
   const currentAccounts = Array.isArray(policy.bankAccounts) ? [...policy.bankAccounts] : [...DEFAULT_EVENT_BANK_ACCOUNTS];
   const target = currentAccounts.find((b) => b.id === bankId);
   if (!target) {
@@ -762,16 +871,38 @@ export function setDefaultEventBankAccount(bankId: string, actorName = "Admin Da
 
   policy.bankAccounts = currentAccounts;
   policy.bankHistory = [historyEntry, ...(policy.bankHistory || [])];
-  saveEventSettingsToDisk(policy);
+  policy._revision = (policy._revision || 0) + 1;
+  policy.updatedAt = now;
 
-  return target;
+  return {
+    result: target,
+    candidatePolicy: policy,
+  };
 }
 
-export function deleteEventBankAccount(bankId: string, actorName = "Admin Dago"): boolean {
+export function setDefaultEventBankAccount(
+  bankId: string,
+  actorName = "Admin Dago",
+  options?: { skipDiskWrite?: boolean }
+): EventBankAccount {
+  const context = buildSetDefaultEventBankAccount(bankId, actorName);
+  if (!options?.skipDiskWrite) {
+    saveEventSettingsToDisk(context.candidatePolicy);
+  }
+  return context.result;
+}
+
+export function buildDeleteEventBankAccount(
+  bankId: string,
+  actorName = "Admin Dago",
+  basePolicy?: EventRevenueSharingPolicy
+): BankMutationContext<boolean> {
   if (isReconciliationGateActive("event_settings.json")) {
     throw new Error("Gagal menghapus rekening bank: Proses sinkronisasi database sedang berlangsung.");
   }
-  const policy = getEventRevenuePolicy();
+  const policy: EventRevenueSharingPolicy = JSON.parse(
+    JSON.stringify(basePolicy || getEventRevenuePolicy())
+  );
   const currentAccounts = Array.isArray(policy.bankAccounts) ? [...policy.bankAccounts] : [...DEFAULT_EVENT_BANK_ACCOUNTS];
   const target = currentAccounts.find((b) => b.id === bankId);
   if (!target) {
@@ -794,9 +925,25 @@ export function deleteEventBankAccount(bankId: string, actorName = "Admin Dago")
   };
 
   policy.bankHistory = [historyEntry, ...(policy.bankHistory || [])];
-  saveEventSettingsToDisk(policy);
+  policy._revision = (policy._revision || 0) + 1;
+  policy.updatedAt = now;
 
-  return true;
+  return {
+    result: true,
+    candidatePolicy: policy,
+  };
+}
+
+export function deleteEventBankAccount(
+  bankId: string,
+  actorName = "Admin Dago",
+  options?: { skipDiskWrite?: boolean }
+): boolean {
+  const context = buildDeleteEventBankAccount(bankId, actorName);
+  if (!options?.skipDiskWrite) {
+    saveEventSettingsToDisk(context.candidatePolicy);
+  }
+  return context.result;
 }
 
 // Default verified community events for Dago Creative Hub

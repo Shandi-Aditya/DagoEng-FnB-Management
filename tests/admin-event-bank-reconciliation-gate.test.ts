@@ -276,7 +276,7 @@ describe("Tahap 6 — Event Bank Accounts Reconciliation Gate & Persistence Hard
       expect(res.status).toBe(201);
       expect(data.success).toBe(true);
       expect(data.data.bankName).toBe("CIMB Niaga");
-      expect(persistSpy).toHaveBeenCalledWith("event_settings.json", expect.any(String));
+      expect(persistSpy).toHaveBeenCalledWith("event_settings.json", expect.any(String), expect.objectContaining({ requireCas: true }));
 
       // Verify persisted in memory
       const allBanks = eventsLib.getEventBankAccounts();
