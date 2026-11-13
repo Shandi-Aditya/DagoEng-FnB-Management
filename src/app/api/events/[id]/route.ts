@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getPublicEventById, updateEventDetails, getAdminEventById } from "@/lib/events";
+import { getPublicEventById, updateEventDetails, getAdminEventById, deleteEvent } from "@/lib/events";
 import { assertEventAdmin } from "@/lib/server-auth";
 export const dynamic = "force-dynamic";
 
@@ -115,6 +115,52 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memperbarui detail event." },
       { status: error?.message?.includes("tidak valid") ? 400 : 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/events/[id]
+ * Admin endpoint to permanently delete an event with zero bookings/transactions.
+ * Strictly restricted to SUPER_ADMIN, OWNER, and MANAGER.
+ */
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  try {
+    const auth = await assertEventAdmin(req);
+    if (!auth.authorized) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: 403 }
+      );
+    }
+
+    const { id } = params;
+    const result = await deleteEvent(id, {
+      actorName: auth.name || "Admin Dago",
+      actorRole: auth.role || "SUPER_ADMIN",
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Event '${result.event.title}' (${result.event.id}) berhasil dihapus secara permanen.`,
+      data: result.event,
+    });
+  } catch (error: any) {
+    console.error(`DELETE /api/events/${params.id} error:`, error);
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database cloud sedang mengalami gangguan. Penghapusan event belum dapat dikonfirmasi demi menjaga konsistensi data. Silakan coba kembali.",
+        },
+        { status: 503 }
+      );
+    }
+    const isForbidden = error?.message?.startsWith("FORBIDDEN_DELETE");
+    return NextResponse.json(
+      { success: false, error: error.message || "Gagal menghapus event." },
+      { status: isForbidden ? 409 : 400 }
     );
   }
 }

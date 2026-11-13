@@ -6,6 +6,7 @@ import {
   updateBookingPaymentProof,
   adminApproveBookingPayment,
   adminRejectBookingPayment,
+  deleteEventBooking,
 } from "@/lib/events";
 import { assertEventAdmin, assertCheckInAuth } from "@/lib/server-auth";
 import { AttendeeCheckInStatus, TicketPaymentStatus } from "@/types/event";
@@ -201,6 +202,52 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memperbarui tiket peserta." },
       { status: 400 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/events/bookings/[id]
+ * Admin endpoint to permanently delete an unpaid/expired/cancelled booking without transactions.
+ * Strictly restricted to SUPER_ADMIN, OWNER, and MANAGER.
+ */
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
+  try {
+    const auth = await assertEventAdmin(req);
+    if (!auth.authorized) {
+      return NextResponse.json(
+        { success: false, error: auth.error },
+        { status: 403 }
+      );
+    }
+
+    const { id } = params;
+    const result = await deleteEventBooking(id, {
+      actorName: auth.name || "Admin Dago",
+      actorRole: auth.role || "SUPER_ADMIN",
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `Pemesanan tiket '${result.booking.ticketCode || result.booking.id}' berhasil dihapus.`,
+      data: result.booking,
+    });
+  } catch (error: any) {
+    console.error(`DELETE /api/events/bookings/${params.id} error:`, error);
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Layanan database tiket sedang mengalami gangguan. Penghapusan pemesanan tiket belum dapat dikonfirmasi demi menjaga konsistensi data. Silakan coba kembali.",
+        },
+        { status: 503 }
+      );
+    }
+    const isForbidden = error?.message?.startsWith("FORBIDDEN_DELETE");
+    return NextResponse.json(
+      { success: false, error: error.message || "Gagal menghapus pemesanan tiket." },
+      { status: isForbidden ? 409 : 400 }
     );
   }
 }

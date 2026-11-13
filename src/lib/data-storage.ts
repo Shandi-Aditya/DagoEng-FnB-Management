@@ -428,9 +428,23 @@ export function syncStorageFromDbWithSnapshot(filename: string): Promise<Storage
   return syncStorageFromDbInternal(filename);
 }
 
-export async function syncStorageFromDb(filename: string): Promise<boolean> {
-  const snapshot = await syncStorageFromDbInternal(filename);
-  return snapshot.success;
+const activeBooleanReconciliationPromises = new Map<string, Promise<boolean>>();
+
+export function syncStorageFromDb(filename: string): Promise<boolean> {
+  const existing = activeBooleanReconciliationPromises.get(filename);
+  if (existing) {
+    return existing;
+  }
+  const boolPromise = (async () => {
+    try {
+      const snapshot = await syncStorageFromDbInternal(filename);
+      return snapshot.success;
+    } finally {
+      activeBooleanReconciliationPromises.delete(filename);
+    }
+  })();
+  activeBooleanReconciliationPromises.set(filename, boolPromise);
+  return boolPromise;
 }
 
 export class DatabasePersistenceError extends Error {

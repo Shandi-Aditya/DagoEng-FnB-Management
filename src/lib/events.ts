@@ -52,6 +52,7 @@ export {
 };
 
 import { getDataFilePath, syncStorageFromDb, persistStorageToDb, isReconciliationGateActive } from "@/lib/data-storage";
+import { appendAuditLog } from "@/lib/persistent-storage";
 import {
   ensureOrganizerActive,
   getOrganizerByEmail,
@@ -1999,6 +2000,61 @@ export async function setEventCommissionOverride(
   });
 }
 
+/**
+ * Permanently delete an event if and only if it has zero associated bookings or transactions.
+ * If any bookings exist, hard delete is strictly rejected (must use updateEventStatus to ARCHIVE).
+ * Handled only by authorized admin roles.
+ */
+export async function deleteEvent(
+  id: string,
+  options?: { actorName?: string; actorRole?: string }
+): Promise<{ success: boolean; event: CommunityEvent }> {
+  return withEventLock(async () => {
+    await syncStorageFromDb("events.json").catch(() => {});
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
+
+    const normalizedId = (id || "").trim().toLowerCase();
+    let all = loadEventsFromDisk();
+    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
+    if (index === -1) {
+      throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
+    }
+
+    const event = all[index];
+
+    // Check all bookings associated with this event
+    const allBookings = loadBookingsFromDisk();
+    const relatedBookings = allBookings.filter((b) => b.eventId === event.id);
+
+    if (relatedBookings.length > 0) {
+      throw new Error(
+        `FORBIDDEN_DELETE: Event [${event.title}] (${event.id}) memiliki ${relatedBookings.length} data pemesanan/tiket terkait dan tidak dapat dihapus permanen demi integritas data. Silakan gunakan opsi pengarsipan (ARCHIVE).`
+      );
+    }
+
+    const updatedEvents = all.filter((e) => e.id !== event.id);
+    await saveEventsToDisk(updatedEvents);
+
+    // Append append-only audit log
+    await appendAuditLog({
+      id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: new Date().toISOString(),
+      module: "SETTINGS",
+      action: "EVENT_DELETE",
+      category: "CONFIGURATION",
+      severity: "HIGH",
+      status: "SUCCESS",
+      actorName: options?.actorName || "Admin Dago",
+      actorRole: options?.actorRole || "SUPER_ADMIN",
+      recordId: event.id,
+      description: `Menghapus permanen event testing [${event.title}] (${event.id}) tanpa riwayat booking/transaksi.`,
+      previousValue: JSON.stringify({ id: event.id, title: event.title, status: event.status }),
+    }).catch(() => {});
+
+    return { success: true, event };
+  });
+}
+
 // =============================================================================
 // EVENT TICKET ORDERS & ATTENDEE MANAGEMENT
 // =============================================================================
@@ -2938,6 +2994,81 @@ export async function updateBookingPaymentStatus(
     await saveBookingsToDisk(allBookings);
 
     return updated;
+  });
+}
+
+/**
+ * Permanently delete an event booking if and only if:
+ * 1. Payment status is NOT PAID (PAID bookings must be CANCELLED instead of hard deleted).
+ * 2. Attendee has not checked in (checkedInQty === 0).
+ * 3. No unverified payment proof is pending.
+ * Handled only by authorized admin roles.
+ */
+export async function deleteEventBooking(
+  bookingId: string,
+  options?: { actorName?: string; actorRole?: string }
+): Promise<{ success: boolean; booking: EventTicketOrder }> {
+  return withBookingLock(async () => {
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
+    const allBookings = loadBookingsFromDisk();
+    const normalizedId = (bookingId || "").trim().toLowerCase();
+    const index = allBookings.findIndex(
+      (b) =>
+        (b.id || "").trim().toLowerCase() === normalizedId ||
+        (b.ticketCode || "").trim().toLowerCase() === normalizedId
+    );
+    if (index === -1) {
+      throw new Error(`Pemesanan tiket dengan ID ${bookingId} tidak ditemukan.`);
+    }
+
+    const booking = allBookings[index];
+
+    // Safety checks:
+    if (booking.paymentStatus === "PAID") {
+      throw new Error(
+        `FORBIDDEN_DELETE: Pemesanan tiket [${booking.ticketCode || booking.id}] berstatus PAID dan tidak dapat dihapus permanen. Gunakan mekanisme pembatalan (CANCELLED) demi menjaga rekam jejak keuangan dan audit.`
+      );
+    }
+
+    if (booking.checkInStatus === "CHECKED_IN" || (booking.checkedInQty && booking.checkedInQty > 0)) {
+      throw new Error(
+        `FORBIDDEN_DELETE: Pemesanan tiket [${booking.ticketCode || booking.id}] memiliki riwayat check-in dan tidak dapat dihapus.`
+      );
+    }
+
+    if (booking.paymentProofUrl && booking.paymentStatus === "PENDING") {
+      throw new Error(
+        `FORBIDDEN_DELETE: Pemesanan tiket [${booking.ticketCode || booking.id}] memiliki bukti pembayaran yang menunggu verifikasi.`
+      );
+    }
+
+    const updatedBookings = allBookings.filter((b) => b.id !== booking.id);
+    await saveBookingsToDisk(updatedBookings);
+
+    // Audit log
+    await appendAuditLog({
+      id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: new Date().toISOString(),
+      module: "SETTINGS",
+      action: "EVENT_BOOKING_DELETE",
+      category: "CONFIGURATION",
+      severity: "MEDIUM",
+      status: "SUCCESS",
+      actorName: options?.actorName || "Admin Dago",
+      actorRole: options?.actorRole || "SUPER_ADMIN",
+      recordId: booking.id,
+      referenceId: booking.eventId,
+      description: `Menghapus pemesanan tiket testing [${booking.ticketCode || booking.id}] (status: ${booking.paymentStatus}) pada event [${booking.eventTitle}].`,
+      previousValue: JSON.stringify({
+        id: booking.id,
+        ticketCode: booking.ticketCode,
+        eventId: booking.eventId,
+        paymentStatus: booking.paymentStatus,
+        ticketCount: booking.ticketCount,
+      }),
+    }).catch(() => {});
+
+    return { success: true, booking };
   });
 }
 
