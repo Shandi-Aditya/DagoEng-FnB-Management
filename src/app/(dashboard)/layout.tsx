@@ -8,6 +8,8 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/contexts/AuthContext";
 import { AppSidebar } from "@/features/layout/AppSidebar";
+import { UnitScope } from "@/components/app/unit-scope";
+import { unitForPath } from "@/features/layout/nav-groups";
 import { SiteHeader } from "@/features/layout/SiteHeader";
 import { evaluateRouteAccess } from "@/lib/route-guard";
 import { cn } from "@/lib/utils";
@@ -72,10 +74,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     }
   }
 
+  const unit = unitForPath(pathname);
+
   return (
     <SidebarProvider style={SHELL_STYLE}>
+      <UnitScope unit={unit} />
       <AppSidebar variant="inset" />
-      <SidebarInset className="min-w-0 max-w-full overflow-x-hidden">
+      <SidebarInset data-unit={unit} className="min-w-0 max-w-full overflow-x-hidden">
         <SiteHeader />
         <div
           className={cn(

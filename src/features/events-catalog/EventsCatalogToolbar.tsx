@@ -92,26 +92,16 @@ export function EventsCatalogToolbar({
         </div>
       </div>
 
-      {/* 2. Category Selection Chips */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-        {CATALOG_CATEGORIES.map((tab) => {
-          const isActive = selectedCategory === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => onSelectCategory(tab.key)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors cursor-pointer border ${
-                isActive
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background hover:bg-muted text-muted-foreground hover:text-foreground border-border"
-              }`}
-            >
+      {/* 2. Category filter */}
+      <Tabs value={selectedCategory} onValueChange={(value) => onSelectCategory(String(value))}>
+        <TabsList variant="line" aria-label="Kategori event" className="max-w-full justify-start overflow-x-auto no-scrollbar">
+          {CATALOG_CATEGORIES.map((tab) => (
+            <TabsTrigger key={tab.key} value={tab.key} className="flex-none px-2">
               {tab.label}
-            </button>
-          );
-        })}
-      </div>
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
     </div>
   );
 }

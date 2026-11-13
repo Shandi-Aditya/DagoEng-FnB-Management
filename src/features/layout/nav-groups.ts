@@ -68,3 +68,16 @@ export function findActiveNavItem(
     .filter((item) => matchesRoute(item.href, pathname))
     .sort((a, b) => b.href.length - a.href.length)[0];
 }
+
+/**
+ * Business unit that owns a dashboard route, or undefined for neutral routes
+ * (overview, reports, settings). Drives the `data-unit` accent scope, so the
+ * sidebar and page filters share one orange / blue / green per unit.
+ */
+export function unitForPath(pathname: string): BusinessUnit | undefined {
+  return NAV_GROUP_DEFINITIONS.flatMap((definition) =>
+    definition.hrefs.map((href) => ({ href, unit: definition.unit })),
+  )
+    .filter(({ href }) => matchesRoute(href, pathname))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.unit;
+}

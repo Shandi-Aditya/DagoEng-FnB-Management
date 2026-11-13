@@ -33,6 +33,7 @@ import { OrganizerSettingsTab } from "@/features/events-portal/OrganizerSettings
 import { OrganizerEventDetailModal } from "@/features/events-portal/OrganizerEventDetailModal";
 import { OrganizerRevisionDialog } from "@/features/events-portal/OrganizerRevisionDialog";
 import { OrganizerRevenueSplitDialog } from "@/features/events-portal/OrganizerRevenueSplitDialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OrganizerPayoutDialog } from "@/features/events-portal/OrganizerPayoutDialog";
 import { OrganizerBankGuardDialog } from "@/features/events-portal/OrganizerBankGuardDialog";
 import { OrganizerQRScannerDialog } from "@/features/events-portal/OrganizerQRScannerDialog";
@@ -40,6 +41,8 @@ import { OrganizerSignedOut } from "@/features/events-portal/OrganizerSignedOut"
 import { EventSubmissionForm } from "@/features/events-portal/EventSubmissionForm";
 import type { SectionId } from "@/features/events-portal/OrganizerEventsTab";
 import { eventBalances, groupOrganizerEvents } from "@/features/events-portal/events-portal-groups";
+
+const ALL_COMMUNITIES_VALUE = "all_admin";
 
 const SHELL_STYLE = {
   "--sidebar-width": "calc(var(--spacing) * 64)",
@@ -660,31 +663,25 @@ export default function CommunityOrganizerPortalPage() {
                 {portalData.accessibleCommunities && portalData.accessibleCommunities.length > 0 && (
                   <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-warning/20">
                     <span className="text-xs text-muted-foreground mr-1">Pilih komunitas:</span>
-                    <button
-                      type="button"
-                      onClick={() => handleSelectCommunity({ id: "all_admin", name: "Semua Komunitas", email: "ALL_ADMIN" })}
-                      className={`text-xs px-2.5 py-1 rounded-md border font-medium cursor-pointer transition-colors ${
-                        activeEmail.toLowerCase() === "all_admin"
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-card hover:bg-muted text-foreground border-border"
-                      }`}
+                    <Tabs
+                      value={activeEmail.toLowerCase() === "all_admin" ? ALL_COMMUNITIES_VALUE : activeEmail}
+                      onValueChange={(value) => {
+                        const community =
+                          value === ALL_COMMUNITIES_VALUE
+                            ? { id: "all_admin", name: "Semua Komunitas", email: "ALL_ADMIN" }
+                            : portalData.accessibleCommunities?.find((c) => c.email === value);
+                        if (community) handleSelectCommunity(community);
+                      }}
                     >
-                      Semua komunitas
-                    </button>
-                    {portalData.accessibleCommunities.map((c) => (
-                      <button
-                        key={c.email}
-                        type="button"
-                        onClick={() => handleSelectCommunity(c)}
-                        className={`text-xs px-2.5 py-1 rounded-md border font-medium cursor-pointer transition-colors ${
-                          activeEmail === c.email
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-card hover:bg-muted text-foreground border-border"
-                        }`}
-                      >
-                        {c.name}
-                      </button>
-                    ))}
+                      <TabsList aria-label="Komunitas" className="h-auto max-w-full flex-wrap justify-start">
+                        <TabsTrigger value={ALL_COMMUNITIES_VALUE}>Semua komunitas</TabsTrigger>
+                        {portalData.accessibleCommunities.map((c) => (
+                          <TabsTrigger key={c.email} value={c.email}>
+                            {c.name}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </Tabs>
                   </div>
                 )}
               </div>

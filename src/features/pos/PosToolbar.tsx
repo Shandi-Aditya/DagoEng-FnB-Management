@@ -27,7 +27,7 @@ export function PosToolbar({ mode, onModeChange, cartCount, activeShift, onOpenS
             <Utensils />
             F&B
             {cartCount > 0 ? (
-              <Badge className="ml-1 h-4 min-w-4 px-1 tabular-nums">{cartCount}</Badge>
+              <Badge variant="secondary" className="ml-1 h-4 min-w-4 px-1 tabular-nums">{cartCount}</Badge>
             ) : null}
           </TabsTrigger>
           <TabsTrigger value="COWORKING">

@@ -1,10 +1,11 @@
 "use client";
 
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  type LucideIcon,
   BarChart3,
   BookOpen,
   Building2,
@@ -23,7 +24,7 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 
-import { UnitDot } from "@/components/app/unit-dot";
+import { UNIT_ICON_CLASS } from "@/components/app/unit-dot";
 import {
   Sidebar,
   SidebarContent,
@@ -43,24 +44,24 @@ import { getTenantName } from "@/lib/tenant";
 import { NavUser } from "./NavUser";
 import { findActiveNavItem, groupNavItems } from "./nav-groups";
 
-// One icon set, no per-item colors (docs/DESIGN_SYSTEM.md section 6)
-const ICONS: Record<string, ReactNode> = {
-  LayoutDashboard: <LayoutDashboard />,
-  Calculator: <Calculator />,
-  ClipboardList: <ClipboardList />,
-  Grid: <Grid />,
-  UtensilsCrossed: <UtensilsCrossed />,
-  Package: <Package />,
-  BookOpen: <BookOpen />,
-  Users: <Users />,
-  BarChart3: <BarChart3 />,
-  UserCheck: <UserCheck />,
-  Sparkles: <Sparkles />,
-  ShieldCheck: <ShieldCheck />,
-  Settings: <Settings />,
-  Laptop: <Laptop />,
-  Building2: <Building2 />,
-  Calendar: <Calendar />,
+// One icon set. Items inside a business unit take that unit's color; the rest stay neutral.
+const ICONS: Record<string, LucideIcon> = {
+  LayoutDashboard,
+  Calculator,
+  ClipboardList,
+  Grid,
+  UtensilsCrossed,
+  Package,
+  BookOpen,
+  Users,
+  BarChart3,
+  UserCheck,
+  Sparkles,
+  ShieldCheck,
+  Settings,
+  Laptop,
+  Building2,
+  Calendar,
 };
 
 export function AppSidebar(props: ComponentProps<typeof Sidebar>) {
@@ -98,23 +99,23 @@ export function AppSidebar(props: ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         {groups.map((group) => (
           <SidebarGroup key={group.id}>
-            <SidebarGroupLabel className="gap-2">
-              {group.unit ? <UnitDot unit={group.unit} /> : null}
-              {group.label}
-            </SidebarGroupLabel>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarMenu>
-              {group.items.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    isActive={item.href === activeHref}
-                    tooltip={item.name}
-                    render={<Link href={item.href} onClick={closeOnMobile} />}
-                  >
-                    {ICONS[item.icon] ?? <LayoutDashboard />}
-                    <span>{item.name}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {group.items.map((item) => {
+                const Icon = ICONS[item.icon] ?? LayoutDashboard;
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      isActive={item.href === activeHref}
+                      tooltip={item.name}
+                      render={<Link href={item.href} onClick={closeOnMobile} />}
+                    >
+                      <Icon className={group.unit ? UNIT_ICON_CLASS[group.unit] : undefined} />
+                      <span>{item.name}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroup>
         ))}
