@@ -34,19 +34,25 @@ export function BrandLink() {
   );
 }
 
-interface HomeNavProps {
+export interface HomeNavProps {
   /** Extra items shown before the theme toggle, e.g. the table badge on the customer app. */
   extra?: React.ReactNode;
-  /** The "Pesan ruang kerja" call to action; hidden on pages that are already the booking flow. */
+  /** Action items shown after the theme toggle, e.g. "Tiket saya" on events. */
+  action?: React.ReactNode;
+  /** The call to action button; hidden on pages that are already the booking flow. */
   showCta?: boolean;
+  /** Custom call to action; defaults to "Pesan ruang kerja" -> "/customer?tab=COWORKING". */
+  cta?: { href: string; label: string };
   /** The section links; only meaningful on the landing page itself. */
   showLinks?: boolean;
 }
 
-/** The public site header, shared by the landing page, the customer app and login. */
+/** The public site header, shared by the landing page, the customer app and events. */
 export function HomeNav({
   extra,
+  action,
   showCta = true,
+  cta = { href: "/customer?tab=COWORKING", label: "Pesan ruang kerja" },
   showLinks = true,
 }: HomeNavProps) {
   const { user } = useAuth();
@@ -73,6 +79,7 @@ export function HomeNav({
         <div className="ml-auto flex items-center gap-2">
           {extra}
           <ModeToggle />
+          {action}
           <Button
             variant="ghost"
             render={<Link href={account.href} />}
@@ -83,10 +90,10 @@ export function HomeNav({
           {showCta ? (
             <Button
               className="hidden sm:inline-flex"
-              render={<Link href="/customer?tab=COWORKING" />}
+              render={<Link href={cta.href} />}
               nativeButton={false}
             >
-              Pesan ruang kerja
+              {cta.label}
             </Button>
           ) : null}
         </div>

@@ -44,6 +44,7 @@ import {
 } from "@/features/landing/home/home-content";
 import { BrandLink } from "@/features/landing/home/HomeNav";
 import { ModeToggle } from "@/features/layout/ModeToggle";
+import { resolvePostLoginDestination } from "@/features/auth/login-redirect";
 
 interface PasswordInputProps {
   id: string;
@@ -218,41 +219,11 @@ function LoginContent() {
       await login(data.personaKey, data.user);
       setIsLoading(false);
 
-      // Auto-routing destination determination
-      let targetDestination = data.redirectUrl || "/dashboard";
-
-      // If safe returnTo parameter exists, validate RBAC boundaries before redirecting:
-      if (returnTo) {
-        const userRole = data.user?.role?.slug || data.user?.role;
-        const isCustomer = userRole === "CUSTOMER";
-        const isRestrictedAdminRoute =
-          returnTo.startsWith("/dashboard") ||
-          returnTo.startsWith("/events-admin") ||
-          returnTo.startsWith("/events/checkin") ||
-          returnTo.startsWith("/events/portal") ||
-          returnTo.startsWith("/settings") ||
-          returnTo.startsWith("/reports") ||
-          returnTo.startsWith("/employees") ||
-          returnTo.startsWith("/commercial") ||
-          returnTo.startsWith("/coworking") ||
-          returnTo.startsWith("/kitchen") ||
-          returnTo.startsWith("/pos") ||
-          returnTo.startsWith("/waiter") ||
-          returnTo.startsWith("/tables") ||
-          returnTo.startsWith("/inventory") ||
-          returnTo.startsWith("/customers") ||
-          returnTo.startsWith("/activity-log");
-
-        if (isCustomer && isRestrictedAdminRoute) {
-          // Fallback to customer portal to prevent unauthorized access attempt
-          targetDestination = "/customer";
-        } else if (!isCustomer && returnTo.startsWith("/customer")) {
-          // If a staff/admin/organizer logs in from the customer portal, route to their role's natural destination
-          targetDestination = data.redirectUrl || "/dashboard";
-        } else {
-          targetDestination = returnTo;
-        }
-      }
+      const targetDestination = resolvePostLoginDestination({
+        returnTo,
+        role: data.user?.role?.slug || data.user?.role,
+        serverRedirect: data.redirectUrl,
+      });
 
       router.push(targetDestination);
     } catch (err: any) {
