@@ -27,6 +27,16 @@ export async function GET(req: NextRequest, props: { params: Promise<{ id: strin
     });
   } catch (error: any) {
     console.error(`GET /api/events/${params.id} error:`, error);
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Layanan database tiket sedang mengalami gangguan. Detail event belum dapat ditampilkan demi menjaga konsistensi data. Silakan coba kembali beberapa saat lagi.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: "Gagal mengambil detail event." },
       { status: 500 }
@@ -81,6 +91,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       startDate: body.startDate,
       endDate: body.endDate,
       location: body.location,
+      maxCapacity: body.maxCapacity,
       isPaid: body.isPaid,
       price: body.price,
       posterUrl: body.posterUrl,
@@ -111,10 +122,28 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
         { status: 400 }
       );
     }
+    if (error?.name === "DatabasePersistenceError") {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            error.message ||
+            "Layanan database cloud sedang mengalami gangguan. Sinkronisasi data pemesanan gagal sehingga perubahan kuota tidak dapat divalidasi demi menjaga konsistensi. Silakan coba kembali.",
+        },
+        { status: 503 }
+      );
+    }
     console.error(`PUT /api/events/${params.id} error:`, error);
+    const isValidationError =
+      error?.message?.includes("tidak valid") ||
+      error?.message?.includes("wajib") ||
+      error?.message?.includes("harus") ||
+      error?.message?.includes("Kuota") ||
+      error?.message?.includes("Harga") ||
+      error?.message?.includes("Kapasitas");
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memperbarui detail event." },
-      { status: error?.message?.includes("tidak valid") ? 400 : 500 }
+      { status: isValidationError ? 400 : 500 }
     );
   }
 }

@@ -460,10 +460,17 @@ export class DatabasePersistenceError extends Error {
   }
 }
 
+export function markStorageSyncSynced(filename: string, updatedAt?: Date): void {
+  storageSyncStatusMap.set(filename, "SYNCED");
+  if (updatedAt) {
+    lastSyncedUpdatedAtMap.set(filename, updatedAt);
+  }
+}
+
 export async function persistStorageToDb(
   filename: string,
   content: string,
-  options?: { expectedUpdatedAt?: Date; requireCas?: boolean }
+  options?: { expectedUpdatedAt?: Date; requireCas?: boolean; tx?: any }
 ): Promise<boolean> {
   // 1. RECONCILIATION GATE GUARD:
   // Operasi tulis ditolak jika rekonsiliasi database sedang berlangsung untuk filename ini demi integritas data
@@ -527,7 +534,7 @@ export async function persistStorageToDb(
   }
 
   try {
-    const { db } = await import("./db");
+    const client = options?.tx || (await import("./db")).db;
     const key = `STORAGE_${filename}`;
 
     const timeoutPromise = new Promise<never>((_, reject) =>
@@ -549,7 +556,7 @@ export async function persistStorageToDb(
     // If another node created the record concurrently, Prisma unique constraint (P2002) is triggered.
     if (currentSyncStatus === "EMPTY") {
       try {
-        const createQuery = db.systemSetting.create({
+        const createQuery = client.systemSetting.create({
           data: {
             key,
             value: content,
@@ -558,15 +565,19 @@ export async function persistStorageToDb(
         });
         registerInFlightWrite(filename, createQuery);
         const created = await Promise.race([createQuery, timeoutPromise]);
-        storageSyncStatusMap.set(filename, "SYNCED");
-        if (created?.updatedAt) {
-          lastSyncedUpdatedAtMap.set(filename, new Date(created.updatedAt));
+        if (!options?.tx) {
+          storageSyncStatusMap.set(filename, "SYNCED");
+          if (created?.updatedAt) {
+            lastSyncedUpdatedAtMap.set(filename, new Date(created.updatedAt));
+          }
         }
         return true;
       } catch (createErr: any) {
         if (createErr?.code === "P2002" || createErr?.message?.includes("Unique constraint")) {
-          storageSyncStatusMap.set(filename, "UNAVAILABLE");
-          lastSyncedUpdatedAtMap.delete(filename);
+          if (!options?.tx) {
+            storageSyncStatusMap.set(filename, "UNAVAILABLE");
+            lastSyncedUpdatedAtMap.delete(filename);
+          }
           throw new DatabasePersistenceError(
             `CONCURRENT_CREATE_CONFLICT: Baris [${filename}] telah dibuat secara paralel oleh node lain. Re-sync diperlukan sebelum menulis ulang.`,
             filename,
@@ -593,9 +604,9 @@ export async function persistStorageToDb(
     const lastUpdatedAt = options?.requireCas
       ? options.expectedUpdatedAt
       : (options?.expectedUpdatedAt ?? lastSyncedUpdatedAtMap.get(filename));
-    if (lastUpdatedAt && typeof db.systemSetting.updateMany === "function") {
+    if (lastUpdatedAt && typeof client.systemSetting.updateMany === "function") {
       const updateQuery = (async () => {
-        const updateResult = await db.systemSetting.updateMany({
+        const updateResult = await client.systemSetting.updateMany({
           where: {
             key,
             updatedAt: lastUpdatedAt,
@@ -606,8 +617,10 @@ export async function persistStorageToDb(
         });
 
         if (updateResult.count === 0) {
-          storageSyncStatusMap.set(filename, "UNAVAILABLE");
-          lastSyncedUpdatedAtMap.delete(filename);
+          if (!options?.tx) {
+            storageSyncStatusMap.set(filename, "UNAVAILABLE");
+            lastSyncedUpdatedAtMap.delete(filename);
+          }
           throw new DatabasePersistenceError(
             `LOST_UPDATE_PREVENTED: Rekaman [${filename}] telah diperbarui di PostgreSQL oleh instance lain. Re-sync diperlukan sebelum menimpa data.`,
             filename,
@@ -615,7 +628,7 @@ export async function persistStorageToDb(
           );
         }
 
-        const refreshed = await db.systemSetting.findUnique({
+        const refreshed = await client.systemSetting.findUnique({
           where: { key },
           select: { updatedAt: true },
         });
@@ -625,15 +638,19 @@ export async function persistStorageToDb(
       registerInFlightWrite(filename, updateQuery);
       const refreshed = await Promise.race([updateQuery, timeoutPromise]);
 
-      if (refreshed?.updatedAt) {
-        lastSyncedUpdatedAtMap.set(filename, new Date(refreshed.updatedAt));
+      if (!options?.tx) {
+        if (refreshed?.updatedAt) {
+          lastSyncedUpdatedAtMap.set(filename, new Date(refreshed.updatedAt));
+        }
+        storageSyncStatusMap.set(filename, "SYNCED");
       }
-      storageSyncStatusMap.set(filename, "SYNCED");
       return true;
     }
 
     if (options?.requireCas || (currentSyncStatus === "SYNCED" && !lastUpdatedAt)) {
-      storageSyncStatusMap.set(filename, "UNAVAILABLE");
+      if (!options?.tx) {
+        storageSyncStatusMap.set(filename, "UNAVAILABLE");
+      }
       throw new DatabasePersistenceError(
         `LOST_UPDATE_PREVENTED: Rekaman [${filename}] berada pada status SYNCED namun metadata updatedAt tidak ditemukan atau tidak cocok. Re-sync diperlukan sebelum menimpa data.`,
         filename,
@@ -642,7 +659,7 @@ export async function persistStorageToDb(
     }
 
     // 3. FALLBACK UPSERT:
-    const upsertQuery = db.systemSetting.upsert({
+    const upsertQuery = client.systemSetting.upsert({
       where: { key },
       create: {
         key,
@@ -656,15 +673,19 @@ export async function persistStorageToDb(
     registerInFlightWrite(filename, upsertQuery);
     const upserted = await Promise.race([upsertQuery, timeoutPromise]);
 
-    if (upserted?.updatedAt) {
-      lastSyncedUpdatedAtMap.set(filename, new Date(upserted.updatedAt));
+    if (!options?.tx) {
+      if (upserted?.updatedAt) {
+        lastSyncedUpdatedAtMap.set(filename, new Date(upserted.updatedAt));
+      }
+      storageSyncStatusMap.set(filename, "SYNCED");
     }
-    storageSyncStatusMap.set(filename, "SYNCED");
     return true;
   } catch (err: any) {
-    // Write failure invalidates local state to prevent cascading inconsistency
-    storageSyncStatusMap.set(filename, "UNAVAILABLE");
-    lastSyncedUpdatedAtMap.delete(filename);
+    // Write failure invalidates local state to prevent cascading inconsistency (only if not uncommitted tx)
+    if (!options?.tx) {
+      storageSyncStatusMap.set(filename, "UNAVAILABLE");
+      lastSyncedUpdatedAtMap.delete(filename);
+    }
     console.error(`[data-storage] persistStorageToDb critical failure for ${filename}:`, err?.message || err);
     if (err instanceof DatabasePersistenceError) {
       throw err;

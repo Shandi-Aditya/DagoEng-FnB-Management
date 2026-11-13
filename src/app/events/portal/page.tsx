@@ -63,6 +63,7 @@ import {
   Landmark,
 } from "lucide-react";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { validateEventCapacity, MIN_EVENT_CAPACITY, MAX_EVENT_CAPACITY } from "@/lib/event-validation";
 import { Card } from "@/components/legacy/ui/card";
 import { Badge } from "@/components/legacy/ui/badge";
 import { Button } from "@/components/legacy/ui/button";
@@ -877,6 +878,12 @@ export default function CommunityOrganizerPortalPage() {
     const targetEmail = activeEmail || organizerEmail || user?.email || "";
     if (!revisionEvent || !targetEmail) return;
 
+    const capVal = validateEventCapacity(revisionCapacity, false);
+    if (!capVal.valid) {
+      setErrorMessage(capVal.error || "Kapasitas kuota event tidak valid.");
+      return;
+    }
+
     try {
       setIsSubmittingRevision(true);
       setErrorMessage(null);
@@ -892,7 +899,7 @@ export default function CommunityOrganizerPortalPage() {
             category: revisionCategory,
             description: revisionDesc,
             location: revisionLocation,
-            maxCapacity: Number(revisionCapacity),
+            maxCapacity: capVal.value,
             posterUrl: revisionPosterUrl,
             startDate: revisionStartDate ? new Date(revisionStartDate).toISOString() : revisionEvent.startDate,
             endDate: revisionEndDate ? new Date(revisionEndDate).toISOString() : revisionEvent.endDate,
@@ -5024,10 +5031,17 @@ export default function CommunityOrganizerPortalPage() {
                   </label>
                   <input
                     type="number"
-                    min={1}
+                    min={MIN_EVENT_CAPACITY}
+                    max={MAX_EVENT_CAPACITY}
+                    step={1}
                     required
                     value={revisionCapacity}
-                    onChange={(e) => setRevisionCapacity(Number(e.target.value))}
+                    onKeyDown={(e) => {
+                      if (e.key === "." || e.key === "," || e.key === "e" || e.key === "E" || e.key === "+" || e.key === "-") {
+                        e.preventDefault();
+                      }
+                    }}
+                    onChange={(e) => setRevisionCapacity(e.target.value === "" ? 0 : Number(e.target.value))}
                     className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
                   />
                 </div>

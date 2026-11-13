@@ -13,6 +13,10 @@ import {
   verifyUnifiedUserPassword,
   syncOrganizerCredentials,
 } from "@/lib/unified-account";
+import {
+  isCheckInStaffRole,
+  CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
+} from "@/lib/event-validation";
 import { getOrganizerByEmail, createOrganizer } from "@/lib/organizers";
 import { createOrganizerSession } from "@/lib/organizer-activation";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
@@ -93,6 +97,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: true, message: "Pengajuan berhasil dikirim untuk moderasi." },
         { status: 200 }
+      );
+    }
+
+    // 3b. Role Restriction Check: CHECKIN_STAFF is strictly forbidden from creating/submitting events
+    const existingAuth = await getRequestAuthUser(req);
+    if (existingAuth.isAuthenticated && isCheckInStaffRole(existingAuth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
+        },
+        { status: 403 }
+      );
+    }
+
+    const normalizedEmail = (body.organizerEmail || "").trim().toLowerCase();
+    const existingUser = findUnifiedUserByEmail(normalizedEmail);
+    if (existingUser && isCheckInStaffRole(existingUser.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
+        },
+        { status: 403 }
       );
     }
 

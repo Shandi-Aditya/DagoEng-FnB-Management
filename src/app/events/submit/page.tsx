@@ -41,6 +41,14 @@ import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
 import { EventCategory, EventSubmissionPayload } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  validateEventPrice,
+  validateEventCapacity,
+  isCheckInStaffRole,
+  CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
+  MAX_EVENT_CAPACITY,
+  MIN_EVENT_CAPACITY,
+} from "@/lib/event-validation";
 
 const CATEGORIES: { value: EventCategory; label: string }[] = [
   { value: "WORKSHOP", label: "Workshop & Masterclass" },
@@ -87,6 +95,7 @@ const WIZARD_STEPS = [
 export default function SubmitEventPage() {
   const router = useRouter();
   const { user, login } = useAuth();
+  const isCheckInStaff = isCheckInStaffRole(user?.role);
 
   // Wizard Step State (1 to 4)
   const [currentStep, setCurrentStep] = useState<number>(1);
@@ -342,11 +351,19 @@ export default function SubmitEventPage() {
         errors.push("Lokasi atau ruangan venue wajib diisi.");
       }
     } else if (stepNumber === 3) {
-      if (formData.isPaid && (!formData.price || formData.price <= 0)) {
-        errors.push("Harga tiket wajib lebih dari Rp 0 untuk event berbayar.");
+      const priceValidation = validateEventPrice(Boolean(formData.isPaid), formData.price);
+      if (!priceValidation.valid) {
+        errors.push(priceValidation.error!);
       }
-      if (formData.maxCapacity && formData.maxCapacity <= 0) {
-        errors.push("Kapasitas maksimal harus lebih besar dari 0.");
+      if (
+        formData.maxCapacity !== undefined &&
+        formData.maxCapacity !== null &&
+        (formData.maxCapacity as unknown) !== ""
+      ) {
+        const capacityValidation = validateEventCapacity(formData.maxCapacity, false);
+        if (!capacityValidation.valid) {
+          errors.push(capacityValidation.error!);
+        }
       }
       const orgPercent = Number(formData.proposedOrganizerPercent ?? 80);
       const platPercent = Number(formData.proposedPlatformPercent ?? 20);
@@ -366,6 +383,10 @@ export default function SubmitEventPage() {
   };
 
   const handleNextStep = () => {
+    if (isCheckInStaff) {
+      setGeneralError(CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE);
+      return;
+    }
     if (validateStep(currentStep)) {
       setStepErrors([]);
       setCurrentStep((prev) => Math.min(4, prev + 1));
@@ -382,6 +403,11 @@ export default function SubmitEventPage() {
   // Final Submission Handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isCheckInStaff) {
+      setGeneralError(CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE);
+      return;
+    }
 
     // Guard: Prevent premature submission when Enter is pressed or Step < 4
     if (currentStep < 4) {
@@ -575,6 +601,29 @@ export default function SubmitEventPage() {
                 Lengkapi rincian agenda acara dalam 4 tahapan mudah. Data pengajuan akan otomatis tersinkronisasi di portal organizer Anda.
               </p>
             </div>
+
+            {/* Role restriction banner for CHECKIN_STAFF */}
+            {isCheckInStaff && (
+              <div className="p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200 flex items-start gap-3 shadow-xs">
+                <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <p className="font-bold text-sm text-amber-800 dark:text-amber-300">
+                    Akses Dibatasi: Akun Petugas Check-In
+                  </p>
+                  <p className="text-amber-700 dark:text-amber-300/90 leading-relaxed">
+                    Akun Anda saat ini terdaftar dengan role <strong>Petugas Check-In</strong>. Role ini hanya memiliki wewenang operasional untuk memvalidasi tiket peserta di pintu masuk (check-in) dan tidak diizinkan untuk membuat atau mengajukan event baru.
+                  </p>
+                  <div className="pt-2">
+                    <Link
+                      href="/events/checkin"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition-colors cursor-pointer"
+                    >
+                      Buka Halaman Check-In Tiket &rarr;
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Stepper Progress Bar (Eventbrite Wizard Pattern) */}
             <div className="space-y-2 pt-2">
@@ -1152,9 +1201,14 @@ export default function SubmitEventPage() {
                         <input
                           type="number"
                           name="price"
-                          min="1000"
-                          step="1000"
+                          min="1"
+                          step="1"
                           value={formData.price}
+                          onKeyDown={(e) => {
+                            if (e.key === "." || e.key === "," || e.key === "e" || e.key === "E" || e.key === "+" || e.key === "-") {
+                              e.preventDefault();
+                            }
+                          }}
                           onChange={handleInputChange}
                           className="w-full px-3.5 py-2 text-xs rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-white"
                         />
@@ -1467,9 +1521,15 @@ export default function SubmitEventPage() {
                       <input
                         type="number"
                         name="maxCapacity"
-                        min="1"
-                        max="500"
+                        min={MIN_EVENT_CAPACITY}
+                        max={MAX_EVENT_CAPACITY}
+                        step="1"
                         value={formData.maxCapacity || 50}
+                        onKeyDown={(e) => {
+                          if (e.key === "." || e.key === "," || e.key === "e" || e.key === "E" || e.key === "+" || e.key === "-") {
+                            e.preventDefault();
+                          }
+                        }}
                         onChange={handleInputChange}
                         className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
                       />
@@ -1645,7 +1705,15 @@ export default function SubmitEventPage() {
                   <div className="hidden sm:block" />
                 )}
 
-                {currentStep < 4 ? (
+                {isCheckInStaff ? (
+                  <Button
+                    type="button"
+                    disabled
+                    className="w-full sm:w-auto h-11 sm:h-10 bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-bold text-xs rounded-xl px-5 py-2.5 cursor-not-allowed flex items-center justify-center"
+                  >
+                    <span>Akses Ditolak: Petugas Check-In</span>
+                  </Button>
+                ) : currentStep < 4 ? (
                   <Button
                     type="button"
                     onClick={handleNextStep}
