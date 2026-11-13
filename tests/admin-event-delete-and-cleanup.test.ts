@@ -128,6 +128,139 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         await saveEventsToDisk(originalEvents);
       }
     });
+
+    it("1.4 should reject deleteEvent if expectedUpdatedAt does not match (CAS optimistic locking)", async () => {
+      const mockEvent: CommunityEvent = {
+        id: "evt-cas-test-001",
+        title: "CAS Guarded Event",
+        category: "CREATIVE",
+        description: "Test description",
+        startDate: new Date().toISOString(),
+        endDate: new Date().toISOString(),
+        location: "Dago Lab",
+        isPaid: false,
+        price: 0,
+        status: "APPROVED",
+        organizerName: "Fixing Bug",
+        organizerContact: "cas@dago.com",
+        createdAt: "2026-04-01T10:00:00.000Z",
+        updatedAt: "2026-04-01T12:00:00.000Z",
+      };
+
+      const originalEvents = loadEventsFromDisk();
+
+      try {
+        await saveEventsToDisk([mockEvent, ...originalEvents]);
+
+        // Mismatched expectedUpdatedAt
+        await expect(
+          deleteEvent("evt-cas-test-001", {
+            expectedUpdatedAt: "2026-04-01T10:00:00.000Z",
+          })
+        ).rejects.toThrow(/CONCURRENT_MODIFICATION_ERROR/);
+
+        // Matching expectedUpdatedAt succeeds
+        const res = await deleteEvent("evt-cas-test-001", {
+          expectedUpdatedAt: "2026-04-01T12:00:00.000Z",
+        });
+        expect(res.success).toBe(true);
+        expect(loadEventsFromDisk().some((e) => e.id === "evt-cas-test-001")).toBe(false);
+      } finally {
+        await saveEventsToDisk(originalEvents);
+      }
+    });
+
+    it("1.5 should prevent lost update when concurrent mutation changes updatedAt before delete", async () => {
+      const mockEvent: CommunityEvent = {
+        id: "evt-concurrent-cas-002",
+        title: "Concurrent Target Event",
+        category: "CREATIVE",
+        description: "Test description",
+        startDate: new Date().toISOString(),
+        endDate: new Date().toISOString(),
+        location: "Dago Lab",
+        isPaid: false,
+        price: 0,
+        status: "APPROVED",
+        organizerName: "Fixing Bug",
+        organizerContact: "cas@dago.com",
+        createdAt: "2026-04-01T10:00:00.000Z",
+        updatedAt: "2026-04-01T10:00:00.000Z",
+      };
+
+      const originalEvents = loadEventsFromDisk();
+
+      try {
+        await saveEventsToDisk([mockEvent, ...originalEvents]);
+
+        // Client reads event at T1
+        const initial = loadEventsFromDisk().find((e) => e.id === "evt-concurrent-cas-002")!;
+        const clientExpectedTimestamp = initial.updatedAt;
+
+        // Concurrent process mutates the event to T2
+        const currentEvents = loadEventsFromDisk();
+        const targetIndex = currentEvents.findIndex((e) => e.id === "evt-concurrent-cas-002");
+        currentEvents[targetIndex] = {
+          ...currentEvents[targetIndex],
+          title: "Concurrent Target Event (Updated by process A)",
+          updatedAt: "2026-04-01T11:00:00.000Z",
+        };
+        await saveEventsToDisk(currentEvents);
+
+        // Process B attempts delete with stale T1
+        await expect(
+          deleteEvent("evt-concurrent-cas-002", {
+            expectedUpdatedAt: clientExpectedTimestamp,
+          })
+        ).rejects.toThrow(/CONCURRENT_MODIFICATION_ERROR/);
+
+        // Event remains safely intact in persistent storage
+        expect(loadEventsFromDisk().some((e) => e.id === "evt-concurrent-cas-002")).toBe(true);
+      } finally {
+        await saveEventsToDisk(originalEvents);
+      }
+    });
+
+    it("1.6 should fail-closed and abort deleteEvent when cloud database sync fails", async () => {
+      const mockEvent: CommunityEvent = {
+        id: "evt-db-fail-closed-001",
+        title: "DB Fail-Closed Event",
+        category: "COMMUNITY",
+        description: "Test description",
+        startDate: new Date().toISOString(),
+        endDate: new Date().toISOString(),
+        location: "Dago Lab",
+        isPaid: false,
+        price: 0,
+        status: "APPROVED",
+        organizerName: "Admin Tester",
+        organizerContact: "admin@dago.com",
+        createdAt: new Date().toISOString(),
+      };
+
+      const originalEvents = loadEventsFromDisk();
+      const prevEnv = process.env.DATABASE_URL;
+      let syncSpy: any = null;
+
+      try {
+        await saveEventsToDisk([mockEvent, ...originalEvents]);
+        process.env.DATABASE_URL = "postgresql://mock_user:mock_pass@mock_host:5432/mock_db";
+
+        // Spy syncStorageFromDbWithSnapshot to simulate network failure to Neon DB
+        syncSpy = vi.spyOn(dataStorage, "syncStorageFromDbWithSnapshot").mockRejectedValue(
+          new dataStorage.DatabasePersistenceError("Koneksi database PostgreSQL terputus.", "events.json", true)
+        );
+
+        await expect(deleteEvent("evt-db-fail-closed-001")).rejects.toThrow(/Koneksi database PostgreSQL terputus/);
+
+        // Fail-closed verification: local event was NOT deleted!
+        expect(loadEventsFromDisk().some((e) => e.id === "evt-db-fail-closed-001")).toBe(true);
+      } finally {
+        if (syncSpy) syncSpy.mockRestore();
+        process.env.DATABASE_URL = prevEnv;
+        await saveEventsToDisk(originalEvents);
+      }
+    });
   });
 
   // ===========================================================================
@@ -262,6 +395,130 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
         expect(parentEvent?.title).toBe("Dago Barista Guild: Latte Art Throwdown & Sensory Workshop");
       } finally {
         await saveEventsToDisk(originalEvents);
+        await saveBookingsToDisk(originalBookings);
+      }
+    });
+
+    it("2.5 should strictly reject deleteEventBooking if checkedInSeats has records even with REGISTERED status", async () => {
+      const mockBooking: EventTicketOrder = {
+        id: "tkt-desync-seats-001",
+        ticketCode: "DAGO-EVT-DSYNC01",
+        guestToken: "tok-dsync",
+        eventId: "evt-latte-art-2026",
+        eventTitle: "Latte Art",
+        eventDate: new Date().toISOString(),
+        eventLocation: "Dago Lab",
+        guestName: "Desync Seats User",
+        guestEmail: "desync@test.com",
+        guestPhone: "08123456789",
+        ticketCount: 2,
+        unitPrice: 0,
+        totalPrice: 0,
+        platformFeePercent: 20,
+        platformFeeAmount: 0,
+        organizerRevenueAmount: 0,
+        paymentMethod: "FREE",
+        paymentStatus: "CANCELLED",
+        checkInStatus: "REGISTERED",
+        checkedInQty: 0,
+        checkedInSeats: [1], // Desynced seat check-in record
+        createdAt: new Date().toISOString(),
+      };
+
+      const originalBookings = loadBookingsFromDisk();
+
+      try {
+        await saveBookingsToDisk([mockBooking, ...originalBookings]);
+
+        await expect(deleteEventBooking("tkt-desync-seats-001")).rejects.toThrow(
+          /FORBIDDEN_DELETE: Pemesanan tiket \[DAGO-EVT-DSYNC01\] memiliki riwayat check-in/
+        );
+      } finally {
+        await saveBookingsToDisk(originalBookings);
+      }
+    });
+
+    it("2.6 should strictly reject deleteEventBooking if checkInStatus is PARTIALLY_CHECKED_IN", async () => {
+      const mockBooking: EventTicketOrder = {
+        id: "tkt-partial-checkin-001",
+        ticketCode: "DAGO-EVT-PART01",
+        guestToken: "tok-part",
+        eventId: "evt-latte-art-2026",
+        eventTitle: "Latte Art",
+        eventDate: new Date().toISOString(),
+        eventLocation: "Dago Lab",
+        guestName: "Partial Checkin User",
+        guestEmail: "partial@test.com",
+        guestPhone: "08123456789",
+        ticketCount: 3,
+        unitPrice: 0,
+        totalPrice: 0,
+        platformFeePercent: 20,
+        platformFeeAmount: 0,
+        organizerRevenueAmount: 0,
+        paymentMethod: "FREE",
+        paymentStatus: "CANCELLED",
+        checkInStatus: "PARTIALLY_CHECKED_IN",
+        checkedInQty: 1,
+        createdAt: new Date().toISOString(),
+      };
+
+      const originalBookings = loadBookingsFromDisk();
+
+      try {
+        await saveBookingsToDisk([mockBooking, ...originalBookings]);
+
+        await expect(deleteEventBooking("tkt-partial-checkin-001")).rejects.toThrow(
+          /FORBIDDEN_DELETE: Pemesanan tiket \[DAGO-EVT-PART01\] memiliki riwayat check-in/
+        );
+      } finally {
+        await saveBookingsToDisk(originalBookings);
+      }
+    });
+
+    it("2.7 should fail-closed and abort deleteEventBooking when database sync fails", async () => {
+      const mockBooking: EventTicketOrder = {
+        id: "tkt-fail-sync-001",
+        ticketCode: "DAGO-EVT-FAIL01",
+        guestToken: "tok-fail",
+        eventId: "evt-latte-art-2026",
+        eventTitle: "Latte Art",
+        eventDate: new Date().toISOString(),
+        eventLocation: "Dago Lab",
+        guestName: "Fail Sync User",
+        guestEmail: "fail@test.com",
+        guestPhone: "08123456789",
+        ticketCount: 1,
+        unitPrice: 0,
+        totalPrice: 0,
+        platformFeePercent: 20,
+        platformFeeAmount: 0,
+        organizerRevenueAmount: 0,
+        paymentMethod: "FREE",
+        paymentStatus: "CANCELLED",
+        checkInStatus: "REGISTERED",
+        checkedInQty: 0,
+        createdAt: new Date().toISOString(),
+      };
+
+      const originalBookings = loadBookingsFromDisk();
+      const prevEnv = process.env.DATABASE_URL;
+
+      try {
+        await saveBookingsToDisk([mockBooking, ...originalBookings]);
+        process.env.DATABASE_URL = "postgresql://mock_user:mock_pass@mock_host:5432/mock_db";
+
+        const syncSpy = vi.spyOn(dataStorage, "syncStorageFromDbWithSnapshot").mockRejectedValue(
+          new dataStorage.DatabasePersistenceError("Database PostgreSQL unreachable.", "event_bookings.json", true)
+        );
+
+        await expect(deleteEventBooking("tkt-fail-sync-001")).rejects.toThrow(/Database PostgreSQL unreachable/);
+
+        // Fail-closed verification: booking was NOT deleted!
+        expect(loadBookingsFromDisk().some((b) => b.id === "tkt-fail-sync-001")).toBe(true);
+        syncSpy.mockRestore();
+      } finally {
+        process.env.DATABASE_URL = prevEnv;
         await saveBookingsToDisk(originalBookings);
       }
     });
@@ -414,6 +671,220 @@ describe("TASK S-02 — Event & Booking DELETE Mechanisms and Quota Integrity Su
       } finally {
         await saveEventsToDisk(originalEvents);
       }
+    });
+
+    it("4.4 should support CAS via If-Match header and return HTTP 409 on timestamp mismatch", async () => {
+      const mockEvent: CommunityEvent = {
+        id: "evt-cas-route-001",
+        title: "Route CAS Test Event",
+        category: "CREATIVE",
+        description: "Test description",
+        startDate: new Date().toISOString(),
+        endDate: new Date().toISOString(),
+        location: "Dago Lab",
+        isPaid: false,
+        price: 0,
+        status: "APPROVED",
+        organizerName: "Admin Tester",
+        organizerContact: "admin@dago.com",
+        createdAt: "2026-04-01T10:00:00.000Z",
+        updatedAt: "2026-04-01T12:00:00.000Z",
+      };
+
+      const originalEvents = loadEventsFromDisk();
+
+      try {
+        await saveEventsToDisk([mockEvent, ...originalEvents]);
+
+        // 1. Mismatch If-Match -> 409 Conflict
+        const mismatchReq = new NextRequest("http://localhost:3000/api/events/evt-cas-route-001", {
+          method: "DELETE",
+          headers: {
+            cookie: "dagoeng_active_persona=SUPER_ADMIN",
+            "if-match": '"2026-04-01T11:00:00.000Z"',
+          },
+        });
+        const mismatchRes = await deleteEventRoute(mismatchReq, {
+          params: Promise.resolve({ id: "evt-cas-route-001" }),
+        });
+        expect(mismatchRes.status).toBe(409);
+        const mismatchJson = await mismatchRes.json();
+        expect(mismatchJson.success).toBe(false);
+        expect(mismatchJson.code).toBe("CONCURRENT_MODIFICATION_ERROR");
+        expect(loadEventsFromDisk().some((e) => e.id === "evt-cas-route-001")).toBe(true);
+
+        // 2. Matching If-Match -> 200 OK
+        const matchReq = new NextRequest("http://localhost:3000/api/events/evt-cas-route-001", {
+          method: "DELETE",
+          headers: {
+            cookie: "dagoeng_active_persona=SUPER_ADMIN",
+            "if-match": '"2026-04-01T12:00:00.000Z"',
+          },
+        });
+        const matchRes = await deleteEventRoute(matchReq, {
+          params: Promise.resolve({ id: "evt-cas-route-001" }),
+        });
+        expect(matchRes.status).toBe(200);
+        expect(loadEventsFromDisk().some((e) => e.id === "evt-cas-route-001")).toBe(false);
+      } finally {
+        await saveEventsToDisk(originalEvents);
+      }
+    });
+
+    it("4.5 should support CAS via expectedUpdatedAt query param and return HTTP 409 on mismatch", async () => {
+      const mockEvent: CommunityEvent = {
+        id: "evt-cas-query-002",
+        title: "Query CAS Test Event",
+        category: "CREATIVE",
+        description: "Test description",
+        startDate: new Date().toISOString(),
+        endDate: new Date().toISOString(),
+        location: "Dago Lab",
+        isPaid: false,
+        price: 0,
+        status: "APPROVED",
+        organizerName: "Admin Tester",
+        organizerContact: "admin@dago.com",
+        createdAt: "2026-04-01T10:00:00.000Z",
+        updatedAt: "2026-04-01T15:00:00.000Z",
+      };
+
+      const originalEvents = loadEventsFromDisk();
+
+      try {
+        await saveEventsToDisk([mockEvent, ...originalEvents]);
+
+        // Mismatched query parameter -> 409 Conflict
+        const mismatchReq = new NextRequest(
+          "http://localhost:3000/api/events/evt-cas-query-002?expectedUpdatedAt=2026-04-01T10:00:00.000Z",
+          {
+            method: "DELETE",
+            headers: {
+              cookie: "dagoeng_active_persona=SUPER_ADMIN",
+            },
+          }
+        );
+        const mismatchRes = await deleteEventRoute(mismatchReq, {
+          params: Promise.resolve({ id: "evt-cas-query-002" }),
+        });
+        expect(mismatchRes.status).toBe(409);
+        const mismatchJson = await mismatchRes.json();
+        expect(mismatchJson.code).toBe("CONCURRENT_MODIFICATION_ERROR");
+
+        // Matched query parameter -> 200 OK
+        const matchReq = new NextRequest(
+          "http://localhost:3000/api/events/evt-cas-query-002?expectedUpdatedAt=2026-04-01T15:00:00.000Z",
+          {
+            method: "DELETE",
+            headers: {
+              cookie: "dagoeng_active_persona=SUPER_ADMIN",
+            },
+          }
+        );
+        const matchRes = await deleteEventRoute(matchReq, {
+          params: Promise.resolve({ id: "evt-cas-query-002" }),
+        });
+        expect(matchRes.status).toBe(200);
+        expect(loadEventsFromDisk().some((e) => e.id === "evt-cas-query-002")).toBe(false);
+      } finally {
+        await saveEventsToDisk(originalEvents);
+      }
+    });
+
+    it("4.6 should return HTTP 400 when If-Match and query param conflict or format is invalid", async () => {
+      // Conflicting parameters
+      const conflictReq = new NextRequest(
+        "http://localhost:3000/api/events/evt-dummy?expectedUpdatedAt=2026-04-01T10:00:00.000Z",
+        {
+          method: "DELETE",
+          headers: {
+            cookie: "dagoeng_active_persona=SUPER_ADMIN",
+            "if-match": "2026-04-01T12:00:00.000Z",
+          },
+        }
+      );
+      const conflictRes = await deleteEventRoute(conflictReq, {
+        params: Promise.resolve({ id: "evt-dummy" }),
+      });
+      expect(conflictRes.status).toBe(400);
+      const conflictJson = await conflictRes.json();
+      expect(conflictJson.error).toContain("Konflik parameter");
+
+      // Invalid timestamp format
+      const invalidReq = new NextRequest(
+        "http://localhost:3000/api/events/evt-dummy?expectedUpdatedAt=not-a-valid-date",
+        {
+          method: "DELETE",
+          headers: {
+            cookie: "dagoeng_active_persona=SUPER_ADMIN",
+          },
+        }
+      );
+      const invalidRes = await deleteEventRoute(invalidReq, {
+        params: Promise.resolve({ id: "evt-dummy" }),
+      });
+      expect(invalidRes.status).toBe(400);
+      const invalidJson = await invalidRes.json();
+      expect(invalidJson.error).toContain("Format timestamp");
+    });
+
+    it("4.7 should reject with 409 Conflict when expectedUpdatedAt is supplied but target event.updatedAt is undefined", async () => {
+      const mockEventWithoutUpdated: CommunityEvent = {
+        id: "evt-no-updated-at-001",
+        title: "Legacy Event Without UpdatedAt",
+        category: "COMMUNITY",
+        description: "Test description",
+        startDate: new Date().toISOString(),
+        endDate: new Date().toISOString(),
+        location: "Dago Lab",
+        isPaid: false,
+        price: 0,
+        status: "APPROVED",
+        organizerName: "Admin Tester",
+        organizerContact: "admin@dago.com",
+        createdAt: "2026-04-01T10:00:00.000Z",
+        // updatedAt deliberately undefined
+      };
+
+      const originalEvents = loadEventsFromDisk();
+
+      try {
+        await saveEventsToDisk([mockEventWithoutUpdated, ...originalEvents]);
+
+        const req = new NextRequest(
+          "http://localhost:3000/api/events/evt-no-updated-at-001?expectedUpdatedAt=2026-04-01T10:00:00.000Z",
+          {
+            method: "DELETE",
+            headers: {
+              cookie: "dagoeng_active_persona=SUPER_ADMIN",
+            },
+          }
+        );
+        const res = await deleteEventRoute(req, {
+          params: Promise.resolve({ id: "evt-no-updated-at-001" }),
+        });
+        expect(res.status).toBe(409);
+        const json = await res.json();
+        expect(json.code).toBe("CONCURRENT_MODIFICATION_ERROR");
+        expect(loadEventsFromDisk().some((e) => e.id === "evt-no-updated-at-001")).toBe(true);
+      } finally {
+        await saveEventsToDisk(originalEvents);
+      }
+    });
+
+    it("4.8 should return HTTP 404 on DELETE /api/events/[id] if event does not exist", async () => {
+      const req = new NextRequest("http://localhost:3000/api/events/evt-non-existent-9999", {
+        method: "DELETE",
+        headers: {
+          cookie: "dagoeng_active_persona=SUPER_ADMIN",
+        },
+      });
+      const res = await deleteEventRoute(req, {
+        params: Promise.resolve({ id: "evt-non-existent-9999" }),
+      });
+      expect(res.status).toBe(404);
+      const json = await res.json();
+      expect(json.error).toContain("tidak ditemukan");
     });
   });
 });

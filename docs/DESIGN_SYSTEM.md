@@ -110,7 +110,7 @@ Ditambahkan di `globals.css` dengan pola resmi shadcn (`:root`, `.dark`, lalu `@
 
 ### Warna logo sebagai penanda unit bisnis
 
-Logo "dago" (`public/logo-dagoeng.svg`, `public/logo-dago.png`) terdiri dari empat huruf berwarna. Warna ini **bukan** `primary` dan hanya dipakai sebagai titik kecil (`UnitDot`), legenda grafik per unit, dan badge unit.
+Logo "dago" (`public/logo-dagoeng.svg`, `public/logo-dago.png`) terdiri dari empat huruf berwarna. Warna ini **bukan** `primary`. Pemakaiannya: titik kecil (`UnitDot`), legenda grafik per unit, badge unit, ikon menu sidebar, dan item aktif pada filter atau mode switch di halaman milik satu unit (aksen unit, di bawah).
 
 | Huruf | Warna | Unit (usulan, perlu konfirmasi) |
 | --- | --- | --- |
@@ -119,7 +119,14 @@ Logo "dago" (`public/logo-dagoeng.svg`, `public/logo-dago.png`) terdiri dari emp
 | g | `#00C853` hijau | Event komunitas |
 | o | `#FFB300` kuning | Loyalty |
 
-Karena warna ini terang, teks tidak boleh ditaruh di atasnya. Titik penanda cukup berukuran 8px di samping label.
+### Aksen unit pada sidebar dan filter
+
+- Ikon sidebar mengikuti grup: F&B oranye, Ruang & tenant biru, Event hijau. Grup netral (Ringkasan, Laporan & administrasi) tetap abu-abu. Kelas ikon ada di `UNIT_ICON_CLASS` (`components/app/unit-dot.tsx`).
+- Halaman milik satu unit diberi atribut `data-unit` oleh `(dashboard)/layout.tsx` (lewat `unitForPath` di `features/layout/nav-groups.ts`) atau `app/events/layout.tsx`. `UnitScope` (`components/app/unit-scope.tsx`) menyalin nilainya ke `<html>` supaya dialog, sheet, dan menu (portal) ikut. `/pos` mengganti nilainya mengikuti mode (F&B oranye, Co-working biru).
+- Di dalam scope, `primary` dan `ring` diganti warna unit (aturan di `globals.css`). Jadi Button default, Badge default, Switch, Progress, tautan, fokus, dan `Tabs` varian pill otomatis berwarna unit, tanpa kelas tambahan dan tanpa mengedit `ui/*`. Halaman netral (dashboard, laporan, pengaturan) tetap biru.
+- Mode gelap memasang kelas `dark` pada `<html>` dan `<body>`, dan `body` mendeklarasikan ulang semua token. Karena itu aturan scope di `globals.css` juga menyasar `[data-unit] body`; tanpa itu dialog dan sheet kembali ke biru di mode gelap.
+- Jangan membuat chip pilihan dari `<button>` sendiri. Pakai `Tabs` (filter satu baris), atau `Button` `variant="default"` untuk terpilih dan `"outline"` untuk lainnya (grup opsi).
+- Teks di atas isian warna unit memakai token `--unit-*-foreground` (saat ini putih, mengikuti desain acuan). Kontras putih di atas ketiga warna ini rendah (sekitar 2,0 sampai 3,0:1); kalau ingin lolos 4,5:1, ubah token itu menjadi gelap atau gelapkan warna isian. Jangan menaruh teks kecil di atas warna unit di luar item aktif filter.
 
 ---
 

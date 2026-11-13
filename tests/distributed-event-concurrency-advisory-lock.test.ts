@@ -3,9 +3,14 @@ import crypto from "crypto";
 import { NextRequest } from "next/server";
 import {
   getEventAdvisoryLockKey,
+  getEventsDocumentLockKey,
+  EVENTS_STORAGE_DOCUMENT_LOCK_NAME,
   runWithDistributedEventLock,
+  runWithDistributedEventsStorageLock,
   createEventBooking,
   updateEventDetails,
+  updateEventStatus,
+  deleteEvent,
   organizerResubmitEvent,
   loadEventsFromDisk,
   saveEventsToDisk,
@@ -26,7 +31,7 @@ import { CommunityEvent, EventTicketOrder } from "@/types/event";
 import {
   DatabasePersistenceError,
   getStorageSyncStatus,
-  getStorageLastSyncedUpdatedAt,
+  getLastSyncedUpdatedAt,
 } from "@/lib/data-storage";
 
 describe("TASK S-03 — Distributed Event Capacity & PostgreSQL Advisory Lock Concurrency Suite", () => {
@@ -125,14 +130,20 @@ describe("TASK S-03 — Distributed Event Capacity & PostgreSQL Advisory Lock Co
       // Kondisi awal: 5 tiket aktif dari kapasitas 10 (tersisa 5 tiket)
       const existingBooking: EventTicketOrder = {
         id: `bk-init-s1-${Date.now()}`,
+        ticketCode: "DAGO-EVT-INIT-1",
+        eventTitle: "Distributed Lock Testing Event A",
+        eventDate: baseEventA.startDate,
+        eventLocation: baseEventA.location,
         eventId: eventIdA,
         guestName: "Initial User",
         guestEmail: "user1@example.com",
         guestPhone: "0812345678",
         ticketCount: 5,
+        unitPrice: 50000,
         totalPrice: 250000,
         paymentStatus: "PAID",
         paymentMethod: "QRIS",
+        checkInStatus: "REGISTERED",
         platformFeePercent: 20,
         platformFeeAmount: 50000,
         organizerRevenueAmount: 200000,
@@ -189,14 +200,20 @@ describe("TASK S-03 — Distributed Event Capacity & PostgreSQL Advisory Lock Co
       // Kondisi awal: 5 tiket aktif dari kapasitas 10
       const initialBooking: EventTicketOrder = {
         id: `bk-init-s2-${Date.now()}`,
+        ticketCode: "DAGO-EVT-INIT-2",
+        eventTitle: "Distributed Lock Testing Event A",
+        eventDate: baseEventA.startDate,
+        eventLocation: baseEventA.location,
         eventId: eventIdA,
         guestName: "Initial User S2",
         guestEmail: "s2@example.com",
         guestPhone: "0812345678",
         ticketCount: 5,
+        unitPrice: 50000,
         totalPrice: 250000,
         paymentStatus: "PAID",
         paymentMethod: "QRIS",
+        checkInStatus: "REGISTERED",
         platformFeePercent: 20,
         platformFeeAmount: 50000,
         organizerRevenueAmount: 200000,
@@ -225,7 +242,7 @@ describe("TASK S-03 — Distributed Event Capacity & PostgreSQL Advisory Lock Co
       const bookedAfter = getEventActiveBookedTicketCount(eventIdA);
 
       // Invarian mutlak: bookedAfter TIDAK BOLEH lebih besar daripada currentEvent.maxCapacity
-      expect(bookedAfter).toBeLessThanOrEqual(currentEvent.maxCapacity);
+      expect(bookedAfter).toBeLessThanOrEqual(currentEvent.maxCapacity ?? 10);
 
       if (resBooking.status === "fulfilled") {
         // Jika booking berhasil (total 8), maka penurunan kapasitas ke 6 WAJIB ditolak
@@ -335,14 +352,20 @@ describe("TASK S-03 — Distributed Event Capacity & PostgreSQL Advisory Lock Co
       // Set kondisi awal tersisa 1 tiket (kapasitas 10, booked 9)
       const existingBooking: EventTicketOrder = {
         id: `bk-init-rb-${Date.now()}`,
+        ticketCode: "DAGO-EVT-INIT-3",
+        eventTitle: "Distributed Lock Testing Event A",
+        eventDate: baseEventA.startDate,
+        eventLocation: baseEventA.location,
         eventId: eventIdA,
         guestName: "Initial User",
         guestEmail: "user1@example.com",
         guestPhone: "0812345678",
         ticketCount: 9,
+        unitPrice: 50000,
         totalPrice: 450000,
         paymentStatus: "PAID",
         paymentMethod: "QRIS",
+        checkInStatus: "REGISTERED",
         platformFeePercent: 20,
         platformFeeAmount: 90000,
         organizerRevenueAmount: 360000,
@@ -1543,6 +1566,93 @@ describe("TASK S-03 — Distributed Event Capacity & PostgreSQL Advisory Lock Co
       const bookingsAfter = loadBookingsFromDisk();
       const target = bookingsAfter.find((b) => b.id === legacyBooking.id);
       expect(target?.paymentStatus).toBe("CANCELLED");
+    });
+  });
+
+  // =========================================================================
+  // 16. SKENARIO 15 — DOCUMENT-LEVEL ADVISORY LOCK & LOST-UPDATE PREVENTION
+  // =========================================================================
+  describe("16. Skenario 15 — Document-Level Advisory Lock & Lost-Update Prevention", () => {
+    it("16.1 Kunci dokumen berakar pada SHA-256 STORAGE_events.json dan deterministik", () => {
+      const docKey1 = getEventsDocumentLockKey();
+      const docKey2 = getEventsDocumentLockKey();
+      const directKey = getEventAdvisoryLockKey(EVENTS_STORAGE_DOCUMENT_LOCK_NAME);
+
+      expect(typeof docKey1).toBe("bigint");
+      expect(docKey1).toBe(docKey2);
+      expect(docKey1).toBe(directKey);
+    });
+
+    it("16.2 Dua mutasi simultan pada event berbeda dalam dokumen yang sama keduanya tersimpan tanpa lost update", async () => {
+      // Kondisi awal: baseEventA dan baseEventB ada di dalam STORAGE_events.json
+      const initial = loadEventsFromDisk();
+      expect(initial.some((e) => e.id === eventIdA)).toBe(true);
+      expect(initial.some((e) => e.id === eventIdB)).toBe(true);
+
+      // Mutasi 1: Update title event A
+      const p1 = updateEventDetails(eventIdA, {
+        title: "Title Event A Updated Concurrently",
+      });
+
+      // Mutasi 2: Update title event B
+      const p2 = updateEventDetails(eventIdB, {
+        title: "Title Event B Updated Concurrently",
+      });
+
+      const [resA, resB] = await Promise.all([p1, p2]);
+
+      expect(resA.title).toBe("Title Event A Updated Concurrently");
+      expect(resB.title).toBe("Title Event B Updated Concurrently");
+
+      // Verifikasi pembacaan ulang dari persistent storage membuktikan KEDUA mutasi tersimpan!
+      const afterMutation = loadEventsFromDisk();
+      const finalA = afterMutation.find((e) => e.id === eventIdA);
+      const finalB = afterMutation.find((e) => e.id === eventIdB);
+
+      expect(finalA?.title).toBe("Title Event A Updated Concurrently");
+      expect(finalB?.title).toBe("Title Event B Updated Concurrently");
+    });
+
+    it("16.3 Kegagalan transaksi di dalam document lock membatalkan mutasi dan tidak menyinkronkan dirty state ke disk", async () => {
+      const beforeEvents = loadEventsFromDisk();
+      const originalTitleA = beforeEvents.find((e) => e.id === eventIdA)?.title;
+
+      // Jalankan operasi yang sengaja melempar error setelah memodifikasi state dalam tx
+      await expect(
+        runWithDistributedEventsStorageLock(async (tx) => {
+          // Re-read inside tx
+          const events = loadEventsFromDisk();
+          const targetIndex = events.findIndex((e) => e.id === eventIdA);
+          events[targetIndex] = {
+            ...events[targetIndex],
+            title: "DIRTY UNCOMMITTED TITLE",
+          };
+          // Melempar error sebelum transaksi selesai
+          throw new Error("SIMULATED_TRANSACTION_ABORT_ROLLBACK");
+        })
+      ).rejects.toThrow("SIMULATED_TRANSACTION_ABORT_ROLLBACK");
+
+      // Verifikasi disk dan in-memory cache TIDAK pernah terkontaminasi dirty title!
+      const afterRollback = loadEventsFromDisk();
+      const currentA = afterRollback.find((e) => e.id === eventIdA);
+      expect(currentA?.title).toBe(originalTitleA);
+    });
+
+    it("16.4 runWithDistributedEventsStorageLock fail-closed melempar DatabasePersistenceError saat koneksi database terputus", async () => {
+      const prevEnv = process.env.DATABASE_URL;
+      (global as any).__ENABLE_DISTRIBUTED_LOCK_TEST__ = true;
+      process.env.DATABASE_URL = "postgresql://mock_user:mock_pass@mock_host:5432/mock_db";
+
+      try {
+        await expect(
+          runWithDistributedEventsStorageLock(async () => {
+            return "SHOULD_NOT_EXECUTE";
+          })
+        ).rejects.toThrow(DatabasePersistenceError);
+      } finally {
+        process.env.DATABASE_URL = prevEnv;
+        delete (global as any).__ENABLE_DISTRIBUTED_LOCK_TEST__;
+      }
     });
   });
 });

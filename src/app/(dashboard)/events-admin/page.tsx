@@ -1,109 +1,52 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
-import {
-  Calendar,
-  Clock,
-  MapPin,
-  Search,
-  Filter,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Archive,
-  Eye,
-  Edit,
-  ExternalLink,
-  Mail,
-  Phone,
-  User,
-  Sparkles,
-  RefreshCw,
-  MessageSquare,
-  ShieldAlert,
-  Ticket,
-  PlusCircle,
-  Download,
-  UserCheck,
-  DollarSign,
-  Users,
-  Check,
-  X,
-  RotateCcw,
-  Building2,
-  Settings,
-  Trash2,
-  Plus,
-  AlertCircle,
-  ArrowUpRight,
-  CreditCard,
-  Wallet,
-  Copy,
-  ChevronDown,
-  TrendingUp,
-  ChevronUp,
-} from "lucide-react";
-import { Card } from "@/components/legacy/ui/card";
-import { Button } from "@/components/legacy/ui/button";
-import { Badge } from "@/components/legacy/ui/badge";
-import { TablePagination, TablePageSizeSelector } from "@/components/legacy/ui/table-pagination";
-import { CommunityEvent, EventCategory, EventStatus, EventTicketOrder, EventOperationalStats, PayoutRecord } from "@/types/event";
-import { formatCurrencyIDR } from "@/lib/utils";
+import { AlertCircle, CheckCircle2, ShieldAlert } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import type {
+  CommunityEvent,
+  EventOperationalStats,
+  EventTicketOrder,
+  PayoutRecord,
+} from "@/types/event";
+import type { DateRange } from "@/components/events/EventDateRangeFilter";
 import { downloadCSV } from "@/lib/export-utils";
+
+// Sub-komponen modular yang sudah diredesign
 import {
-  EventDateRangeFilter,
-  DateRange,
-  isEventInWitaPeriod,
-} from "@/components/events/EventDateRangeFilter";
-
-const STATUS_TABS: { key: string; label: string; status?: EventStatus }[] = [
-  { key: "ALL", label: "Semua Pengajuan" },
-  { key: "PENDING", label: "Menunggu Review", status: "PENDING" },
-  { key: "REVENUE_SPLIT", label: "Usulan Bagi Hasil" },
-  { key: "APPROVED", label: "Disetujui", status: "APPROVED" },
-  { key: "REVISION_REQUESTED", label: "Perlu Revisi", status: "REVISION_REQUESTED" },
-  { key: "REJECTED", label: "Ditolak", status: "REJECTED" },
-  { key: "ARCHIVED", label: "Arsip", status: "ARCHIVED" },
-];
-
-const CATEGORIES: EventCategory[] = [
-  "WORKSHOP",
-  "MEETUP",
-  "CREATIVE",
-  "COMMUNITY",
-  "TECH",
-  "SEMINAR",
-  "OTHER",
-];
-
-function formatWhatsAppUrl(phone?: string | null): string {
-  if (!phone) return "#";
-  let cleaned = phone.replace(/[^0-9]/g, "");
-  if (!cleaned) return "#";
-  if (cleaned.startsWith("0")) {
-    cleaned = "62" + cleaned.slice(1);
-  } else if (!cleaned.startsWith("62")) {
-    cleaned = "62" + cleaned;
-  }
-  return `https://wa.me/${cleaned}`;
-}
-
-function isPastUnapproved(e: CommunityEvent): boolean {
-  if (e.status !== "PENDING" && e.status !== "REVISION_REQUESTED") return false;
-  const now = Date.now();
-  const endMs = e.endDate
-    ? new Date(e.endDate).getTime()
-    : new Date(e.startDate).getTime() + 24 * 60 * 60 * 1000;
-  return endMs < now;
-}
-
-function getEffectiveStatus(e: CommunityEvent): EventStatus {
-  if (isPastUnapproved(e)) return "ARCHIVED";
-  return e.status;
-}
+  calculateEventsKPI,
+  filterBookings,
+  filterEvents,
+  getEffectiveStatus,
+} from "@/features/events-admin/events-admin-domain";
+import { EventsAdminHeader } from "@/features/events-admin/EventsAdminHeader";
+import {
+  AdminSectionType,
+  EventsAdminTabs,
+} from "@/features/events-admin/EventsAdminTabs";
+import { EventsModerationKPI } from "@/features/events-admin/EventsModerationKPI";
+import { EventsModerationToolbar } from "@/features/events-admin/EventsModerationToolbar";
+import { EventsModerationTable } from "@/features/events-admin/EventsModerationTable";
+import { EventsPaymentsTable } from "@/features/events-admin/EventsPaymentsTable";
+import { EventsPayoutsTable } from "@/features/events-admin/EventsPayoutsTable";
+import { EventsSettingsView } from "@/features/events-admin/EventsSettingsView";
+import { EventDetailSheet } from "@/features/events-admin/EventDetailSheet";
+import { EventAttendeesModal } from "@/features/events-admin/EventAttendeesModal";
+import { PaymentProofDialog } from "@/features/events-admin/PaymentProofDialog";
+import { RejectPaymentDialog } from "@/features/events-admin/RejectPaymentDialog";
+import {
+  ModerationActionDialog,
+  ModerationActionType,
+} from "@/features/events-admin/ModerationActionDialog";
+import {
+  PayoutActionDialog,
+  PayoutTarget,
+} from "@/features/events-admin/PayoutActionDialog";
+import { BankFormData, BankModal } from "@/features/events-admin/BankModal";
+import { EventEditModal } from "@/features/events-admin/EventEditModal";
 
 export default function AdminEventsPage() {
   const { user } = useAuth();
@@ -115,109 +58,73 @@ export default function AdminEventsPage() {
       user?.role?.slug === "MANAGER") &&
     (user?.scopeLevel === "PLATFORM" || user?.scopeLevel === "ORGANIZATION");
 
+  // Core Data
   const [events, setEvents] = useState<CommunityEvent[]>([]);
   const [allBookings, setAllBookings] = useState<EventTicketOrder[]>([]);
   const [operationalStats, setOperationalStats] = useState<EventOperationalStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedStatusTab, setSelectedStatusTab] = useState<string>("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+
+  // Notifications
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
   const [actionErrorMessage, setActionErrorMessage] = useState<string | null>(null);
 
-  // Attendees Modal & Drawer state
-  const [selectedEventForAttendees, setSelectedEventForAttendees] = useState<CommunityEvent | null>(null);
-  const [isAttendeesModalOpen, setIsAttendeesModalOpen] = useState(false);
-  const [attendeeSearchQuery, setAttendeeSearchQuery] = useState("");
-  const [isUpdatingCheckIn, setIsUpdatingCheckIn] = useState<string | null>(null);
+  // Section & Tab State
+  const [adminSection, setAdminSection] = useState<AdminSectionType>("MODERATION");
+  const [selectedStatusTab, setSelectedStatusTab] = useState<string>("ALL");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
+  const [moderationPage, setModerationPage] = useState(1);
+  const [moderationPageSize, setModerationPageSize] = useState(10);
+
+  // Payment Verification State
+  const [paymentFilterStatus, setPaymentFilterStatus] = useState<string>("PENDING_PROOF");
+  const [paymentSearchQuery, setPaymentSearchQuery] = useState("");
+  const [paymentsPage, setPaymentsPage] = useState(1);
+  const [paymentsPageSize, setPaymentsPageSize] = useState(10);
   const [selectedProofBooking, setSelectedProofBooking] = useState<EventTicketOrder | null>(null);
-  const [expandedBookingIds, setExpandedBookingIds] = useState<Set<string>>(new Set());
-
-  const toggleBookingExpand = (bookingId: string) => {
-    setExpandedBookingIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(bookingId)) next.delete(bookingId);
-      else next.add(bookingId);
-      return next;
-    });
-  };
-
-  // Modals state
-  const [selectedEvent, setSelectedEvent] = useState<CommunityEvent | null>(null);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
-  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
-
-  // Revision / Reject form notes
-  const [modalNotes, setModalNotes] = useState("");
-  const [isProcessingAction, setIsProcessingAction] = useState(false);
-
-  // Edit form state
-  const [editFormData, setEditFormData] = useState<Partial<CommunityEvent>>({});
-  const [editGuidelinesText, setEditGuidelinesText] = useState("");
-
-  // Revenue split negotiation state in admin modal
-  const [isProposingSplit, setIsProposingSplit] = useState(false);
-  const [splitOrgPercent, setSplitOrgPercent] = useState<number>(80);
-  const [splitPlatPercent, setSplitPlatPercent] = useState<number>(20);
-  const [splitReason, setSplitReason] = useState("");
-  const [isSubmittingSplit, setIsSubmittingSplit] = useState(false);
-
-  // Payout action state in admin modal
-  const [payoutPromptModalOpen, setPayoutPromptModalOpen] = useState(false);
-  const [activePayoutTarget, setActivePayoutTarget] = useState<{
-    id: string;
-    eventId?: string;
-    status: "PROCESSING" | "PAID" | "REJECTED";
-    amount?: number;
-    bankName?: string;
-    accountNumber?: string;
-    accountHolder?: string;
-    organizerName?: string;
-    eventTitle?: string;
-  } | null>(null);
-  const [payoutInputText, setPayoutInputText] = useState("");
-  const [isProcessingPayout, setIsProcessingPayout] = useState(false);
-
-  // Section Navigation: Moderation vs Payments Verification vs Payouts vs Bank/Business Settings
-  const [adminSection, setAdminSection] = useState<"MODERATION" | "PAYMENTS" | "PAYOUTS" | "SETTINGS">("MODERATION");
-  const [payoutFilterStatus, setPayoutFilterStatus] = useState<"ALL" | "REQUESTED" | "PROCESSING" | "PAID" | "REJECTED">("ALL");
-
-  // Payment Verification state
-  const [paymentFilterStatus, setPaymentFilterStatus] = useState<"ALL" | "PENDING_PROOF" | "PAID" | "REJECTED">("PENDING_PROOF");
   const [rejectPaymentTarget, setRejectPaymentTarget] = useState<EventTicketOrder | null>(null);
-
-  const resolveSafeProofUrl = (url?: string | null): string => {
-    if (!url) return "";
-    if (url.startsWith("/images/events/proofs/")) {
-      const filename = url.split("/").pop();
-      return `/api/events/proofs/${filename}`;
-    }
-    return url;
-  };
   const [rejectPaymentReason, setRejectPaymentReason] = useState("");
   const [rejectPaymentCancelBooking, setRejectPaymentCancelBooking] = useState(false);
   const [isProcessingPaymentAction, setIsProcessingPaymentAction] = useState(false);
 
-  // Bank & Business Settings State
+  // Payout State
+  const [payoutFilterStatus, setPayoutFilterStatus] = useState<string>("ALL");
+  const [payoutSearchQuery, setPayoutSearchQuery] = useState("");
+  const [payoutsPage, setPayoutsPage] = useState(1);
+  const [payoutsPageSize, setPayoutsPageSize] = useState(10);
+  const [payoutTarget, setPayoutTarget] = useState<PayoutTarget | null>(null);
+  const [payoutInputText, setPayoutInputText] = useState("");
+  const [isProcessingPayout, setIsProcessingPayout] = useState(false);
+
+  // Detail Sheet & Moderation Dialog
+  const [selectedEvent, setSelectedEvent] = useState<CommunityEvent | null>(null);
+  const [isDetailSheetOpen, setIsDetailSheetOpen] = useState(false);
+  const [moderationTarget, setModerationTarget] = useState<{
+    event: CommunityEvent;
+    action: ModerationActionType;
+  } | null>(null);
+  const [moderationNotes, setModerationNotes] = useState("");
+  const [isProcessingModeration, setIsProcessingModeration] = useState(false);
+
+  // Attendees Modal
+  const [selectedEventForAttendees, setSelectedEventForAttendees] = useState<CommunityEvent | null>(null);
+  const [isAttendeesModalOpen, setIsAttendeesModalOpen] = useState(false);
+  const [isUpdatingCheckInId, setIsUpdatingCheckInId] = useState<string | null>(null);
+
+  // Edit Event Modal
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState<Partial<CommunityEvent>>({});
+  const [editGuidelinesText, setEditGuidelinesText] = useState("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Settings State
   const [businessPolicy, setBusinessPolicy] = useState<any>(null);
-  const [baselinePolicy, setBaselinePolicy] = useState<any>(null);
   const [bankAccountsList, setBankAccountsList] = useState<any[]>([]);
   const [bankChangeHistory, setBankChangeHistory] = useState<any[]>([]);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isAddBankModalOpen, setIsAddBankModalOpen] = useState(false);
   const [editingBank, setEditingBank] = useState<any | null>(null);
-  const [editBankForm, setEditBankForm] = useState({
-    label: "",
-    bankName: "BCA",
-    accountNumber: "",
-    accountHolder: "",
-    branch: "",
-    badge: "",
-    isDefault: false,
-  });
-  const [newBankForm, setNewBankForm] = useState({
+  const [bankForm, setBankForm] = useState<BankFormData>({
     label: "",
     bankName: "BCA",
     accountNumber: "",
@@ -227,39 +134,67 @@ export default function AdminEventsPage() {
     isDefault: false,
   });
 
-  // Lock body scroll whenever any modal is open
+  // URL Sync
   useEffect(() => {
-    const isAnyModalOpen = Boolean(
-      isDetailModalOpen ||
-      isRevisionModalOpen ||
-      isRejectModalOpen ||
-      isEditModalOpen ||
-      isAttendeesModalOpen ||
-      selectedProofBooking ||
-      payoutPromptModalOpen ||
-      rejectPaymentTarget ||
-      isAddBankModalOpen ||
-      editingBank
-    );
-    if (isAnyModalOpen) {
-      const originalStyle = window.getComputedStyle(document.body).overflow;
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = originalStyle;
-      };
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const sec = params.get("section");
+      const tab = params.get("tab");
+      if (sec === "MODERATION" || sec === "PAYMENTS" || sec === "PAYOUTS" || sec === "SETTINGS") {
+        setAdminSection(sec);
+      }
+      if (tab) {
+        setSelectedStatusTab(tab);
+      }
     }
-  }, [
-    isDetailModalOpen,
-    isRevisionModalOpen,
-    isRejectModalOpen,
-    isEditModalOpen,
-    isAttendeesModalOpen,
-    selectedProofBooking,
-    payoutPromptModalOpen,
-    rejectPaymentTarget,
-    isAddBankModalOpen,
-    editingBank,
-  ]);
+  }, []);
+
+  // Initial Load
+  useEffect(() => {
+    if (isAuthorized) {
+      loadAdminEvents();
+      loadBusinessSettings();
+    }
+  }, [isAuthorized]);
+
+  // Auto-dismiss success message
+  useEffect(() => {
+    if (actionSuccessMessage) {
+      const timer = setTimeout(() => setActionSuccessMessage(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [actionSuccessMessage]);
+
+  const loadAdminEvents = async () => {
+    try {
+      setIsLoading(true);
+      setActionErrorMessage(null);
+
+      const [eventsRes, bookingsRes] = await Promise.all([
+        fetch("/api/events/admin"),
+        fetch("/api/events/bookings?includeStats=true&unmasked=true"),
+      ]);
+
+      const eventsJson = await eventsRes.json();
+      if (!eventsRes.ok || !eventsJson.success) {
+        setActionErrorMessage(eventsJson.error || "Gagal memuat data event.");
+        return;
+      }
+      setEvents(eventsJson.data || []);
+
+      const bookingsJson = await bookingsRes.json();
+      if (bookingsRes.ok && bookingsJson.success) {
+        setAllBookings(bookingsJson.data || []);
+        if (bookingsJson.stats) {
+          setOperationalStats(bookingsJson.stats);
+        }
+      }
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Kesalahan jaringan.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const loadBusinessSettings = async () => {
     try {
@@ -270,7 +205,6 @@ export default function AdminEventsPage() {
       const settingsData = await settingsRes.json();
       if (settingsData.success) {
         setBusinessPolicy(settingsData.data);
-        setBaselinePolicy(settingsData.data);
       }
       const banksData = await banksRes.json();
       if (banksData.success) {
@@ -282,6 +216,92 @@ export default function AdminEventsPage() {
     }
   };
 
+  // KPI Calculation
+  const kpi = useMemo(() => calculateEventsKPI(events, allBookings), [events, allBookings]);
+
+  // Filtered Moderation Events
+  const filteredEvents = useMemo(
+    () => filterEvents(events, selectedStatusTab, searchQuery, dateRange),
+    [events, selectedStatusTab, searchQuery, dateRange]
+  );
+
+  // Filtered Payment Bookings
+  const filteredBookings = useMemo(
+    () => filterBookings(allBookings, paymentFilterStatus, paymentSearchQuery),
+    [allBookings, paymentFilterStatus, paymentSearchQuery]
+  );
+
+  // Payout Records
+  const allPayouts = useMemo(() => {
+    const list: any[] = [];
+    events.forEach((e) => {
+      if (e.payoutHistory && Array.isArray(e.payoutHistory)) {
+        e.payoutHistory.forEach((pr: PayoutRecord) => {
+          list.push({
+            ...pr,
+            eventTitle: e.title,
+            organizerName: e.organizerName,
+            bankName: pr.bankName || "BCA",
+            accountNumber: pr.accountNumber || "—",
+            accountHolder: pr.accountHolder || e.organizerName,
+          });
+        });
+      }
+    });
+    return list.sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
+  }, [events]);
+
+  // Moderation Action Handlers
+  const openModerationDialog = (event: CommunityEvent, action: ModerationActionType) => {
+    setModerationTarget({ event, action });
+    setModerationNotes("");
+  };
+
+  const handleConfirmModeration = async () => {
+    if (!moderationTarget) return;
+    const { event, action } = moderationTarget;
+
+    try {
+      setIsProcessingModeration(true);
+      let payloadAction = "APPROVE";
+      if (action === "REVISION") payloadAction = "REQUEST_REVISION";
+      else if (action === "REJECT") payloadAction = "REJECT";
+      else if (action === "ARCHIVE") payloadAction = "ARCHIVE";
+
+      const res = await fetch(`/api/events/${event.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: payloadAction,
+          reason: moderationNotes.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal memproses moderasi event.");
+      }
+
+      setActionSuccessMessage(
+        action === "APPROVE"
+          ? `Event "${event.title}" berhasil disetujui!`
+          : action === "REVISION"
+          ? `Permintaan revisi dikirim ke penyelenggara.`
+          : action === "REJECT"
+          ? `Pengajuan event ditolak.`
+          : `Event berhasil diarsipkan.`
+      );
+
+      setModerationTarget(null);
+      await loadAdminEvents();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal memproses tindakan.");
+    } finally {
+      setIsProcessingModeration(false);
+    }
+  };
+
+  // Payment Verification Handlers
   const handleApprovePayment = async (booking: EventTicketOrder) => {
     try {
       setIsProcessingPaymentAction(true);
@@ -294,7 +314,7 @@ export default function AdminEventsPage() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Gagal menyetujui pembayaran.");
       }
-      setActionSuccessMessage(`Pembayaran tiket ${booking.ticketCode} (${booking.guestName}) berhasil disetujui! E-Tiket & QR Code kini aktif.`);
+      setActionSuccessMessage(`Pembayaran tiket ${booking.ticketCode} (${booking.guestName}) berhasil disetujui.`);
       await loadAdminEvents();
     } catch (err: any) {
       setActionErrorMessage(err.message || "Gagal menyetujui pembayaran.");
@@ -323,271 +343,68 @@ export default function AdminEventsPage() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Gagal menolak bukti pembayaran.");
       }
-      setActionSuccessMessage(`Bukti pembayaran untuk tiket ${rejectPaymentTarget.ticketCode} berhasil ditolak.`);
+      setActionSuccessMessage(`Bukti pembayaran tiket ${rejectPaymentTarget.ticketCode} berhasil ditolak.`);
       setRejectPaymentTarget(null);
       setRejectPaymentReason("");
       setRejectPaymentCancelBooking(false);
       await loadAdminEvents();
     } catch (err: any) {
-      setActionErrorMessage(err.message || "Gagal menolak bukti pembayaran.");
+      setActionErrorMessage(err.message || "Gagal menolak pembayaran.");
     } finally {
       setIsProcessingPaymentAction(false);
     }
   };
 
-  const handleSaveBusinessSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!businessPolicy) return;
-
-    const fee = Number(businessPolicy.defaultPlatformFeePercent);
-    if (isNaN(fee) || !Number.isInteger(fee) || fee < 0 || fee > 50) {
-      setActionErrorMessage("Komisi platform default harus berupa bilangan bulat antara 0% sampai 50%.");
-      return;
-    }
-
+  // Payout Handlers
+  const handleConfirmPayoutAction = async () => {
+    if (!payoutTarget) return;
     try {
-      setIsSavingSettings(true);
-      const res = await fetch("/api/events/admin/settings", {
-        method: "PUT",
+      setIsProcessingPayout(true);
+      const res = await fetch("/api/events/payouts", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          defaultPlatformFeePercent: fee,
-          maxTicketsPerBooking: businessPolicy.maxTicketsPerBooking,
-          activePaymentMethod: businessPolicy.activePaymentMethod,
-          bookingPaymentExpiryMinutes: businessPolicy.bookingPaymentExpiryMinutes,
-          allowOrganizerBankAccounts: businessPolicy.allowOrganizerBankAccounts,
-          allowEventBankOverride: businessPolicy.allowEventBankOverride,
-          paymentInstructions: businessPolicy.paymentInstructions,
+          id: payoutTarget.id,
+          status: payoutTarget.status,
+          rejectionReason: payoutTarget.status === "REJECTED" ? payoutInputText.trim() : undefined,
+          referenceNumber: payoutTarget.status === "PAID" ? payoutInputText.trim() : undefined,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        throw new Error(data.error || "Gagal menyimpan pengaturan.");
+        throw new Error(data.error || "Gagal memperbarui status pencairan saldo.");
       }
-      setActionSuccessMessage("Pengaturan kebijakan bisnis & pembayaran event berhasil disimpan!");
-      setBusinessPolicy(data.data);
-      setBaselinePolicy(data.data);
-      // Verifikasi ulang dari server untuk memastikan persistensi nyata
-      await loadBusinessSettings();
+      setActionSuccessMessage(
+        payoutTarget.status === "PAID"
+          ? "Pencairan saldo berhasil dikonfirmasi selesai ditransfer!"
+          : "Permohonan pencairan saldo berhasil ditolak."
+      );
+      setPayoutTarget(null);
+      setPayoutInputText("");
+      await loadAdminEvents();
     } catch (err: any) {
-      setActionErrorMessage(err.message || "Gagal menyimpan pengaturan.");
+      setActionErrorMessage(err.message || "Gagal memproses payout.");
     } finally {
-      setIsSavingSettings(false);
+      setIsProcessingPayout(false);
     }
   };
 
-  const handleCreateBank = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setIsSavingSettings(true);
-      const res = await fetch("/api/events/admin/settings/banks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newBankForm),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Gagal menambahkan rekening bank.");
-      }
-      setActionSuccessMessage(`Rekening ${data.data.bankName} berhasil ditambahkan.`);
-      setIsAddBankModalOpen(false);
-      setNewBankForm({
-        label: "",
-        bankName: "BCA",
-        accountNumber: "",
-        accountHolder: "",
-        branch: "",
-        badge: "Utama",
-        isDefault: false,
-      });
-      await loadBusinessSettings();
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Gagal menambahkan rekening.");
-    } finally {
-      setIsSavingSettings(false);
-    }
-  };
-
-  const handleOpenEditBank = (acc: any) => {
-    setEditingBank(acc);
-    setEditBankForm({
-      label: acc.label || "",
-      bankName: acc.bankName || "BCA",
-      accountNumber: acc.accountNumber || "",
-      accountHolder: acc.accountHolder || "",
-      branch: acc.branch || "",
-      badge: acc.badge || "",
-      isDefault: !!acc.isDefault,
-    });
-  };
-
-  const handleUpdateBank = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingBank) return;
-    try {
-      setIsSavingSettings(true);
-      const res = await fetch("/api/events/admin/settings/banks", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editingBank.id,
-          ...editBankForm,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Gagal memperbarui rekening bank.");
-      }
-      setActionSuccessMessage(`Rekening ${editBankForm.bankName} berhasil diperbarui.`);
-      setEditingBank(null);
-      await loadBusinessSettings();
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Gagal memperbarui rekening.");
-    } finally {
-      setIsSavingSettings(false);
-    }
-  };
-
-  const handleSetDefaultBank = async (bankId: string) => {
-    try {
-      const res = await fetch("/api/events/admin/settings/banks", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: bankId, action: "SET_DEFAULT" }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Gagal menetapkan rekening default.");
-      }
-      setActionSuccessMessage("Rekening default platform berhasil diperbarui!");
-      await loadBusinessSettings();
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Gagal menetapkan rekening default.");
-    }
-  };
-
-  const handleToggleBankActive = async (bankId: string, currentActive: boolean) => {
-    try {
-      const res = await fetch("/api/events/admin/settings/banks", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: bankId, isActive: !currentActive }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Gagal memperbarui status rekening.");
-      }
-      setActionSuccessMessage(`Status rekening berhasil ${!currentActive ? "diaktifkan" : "dinonaktifkan"}.`);
-      await loadBusinessSettings();
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Gagal memperbarui status rekening.");
-    }
-  };
-
-  const handleDeleteBank = async (bankId: string) => {
-    if (!confirm("Apakah Anda yakin ingin menghapus rekening bank ini?")) return;
-    try {
-      const res = await fetch(`/api/events/admin/settings/banks?id=${bankId}`, {
-        method: "DELETE",
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Gagal menghapus rekening.");
-      }
-      setActionSuccessMessage("Rekening bank berhasil dihapus.");
-      await loadBusinessSettings();
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Gagal menghapus rekening.");
-    }
-  };
-
-  // Auto-dismiss actionSuccessMessage after 4 seconds
-  useEffect(() => {
-    if (actionSuccessMessage) {
-      const timer = setTimeout(() => {
-        setActionSuccessMessage(null);
-      }, 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [actionSuccessMessage]);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const sec = params.get("section");
-      const tab = params.get("tab");
-      if (sec === "MODERATION" || sec === "PAYMENTS" || sec === "PAYOUTS" || sec === "SETTINGS") {
-        setAdminSection(sec as any);
-      }
-      if (tab) {
-        setSelectedStatusTab(tab);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isAuthorized) {
-      loadAdminEvents();
-      loadBusinessSettings();
-    }
-  }, [isAuthorized]);
-
-  const loadAdminEvents = async () => {
-    try {
-      setIsLoading(true);
-      setActionErrorMessage(null);
-
-      const [eventsRes, bookingsRes] = await Promise.all([
-        fetch("/api/events/admin"),
-        fetch("/api/events/bookings?includeStats=true&unmasked=true"),
-      ]);
-
-      const eventsJson = await eventsRes.json();
-      if (!eventsRes.ok || !eventsJson.success) {
-        setActionErrorMessage(eventsJson.error || "Gagal memuat data event.");
-        return;
-      }
-      setEvents(eventsJson.data || []);
-      setSelectedEvent((current) => {
-        if (!current) return null;
-        return (eventsJson.data || []).find((e: CommunityEvent) => e.id === current.id) || current;
-      });
-      setSelectedEventForAttendees((current) => {
-        if (!current) return null;
-        return (eventsJson.data || []).find((e: CommunityEvent) => e.id === current.id) || current;
-      });
-
-      const bookingsJson = await bookingsRes.json();
-      if (bookingsRes.ok && bookingsJson.success) {
-        setAllBookings(bookingsJson.data || []);
-        if (bookingsJson.stats) {
-          setOperationalStats(bookingsJson.stats);
-        }
-      }
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Kesalahan jaringan.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // Check-In Toggle
   const handleCheckInToggle = async (booking: EventTicketOrder) => {
     if (booking.paymentStatus === "CANCELLED") return;
     if (booking.paymentStatus === "PENDING" && booking.checkInStatus !== "CHECKED_IN") {
       setActionErrorMessage(
-        `Tiket ${booking.ticketCode} (${booking.guestName}) belum diverifikasi lunas (status masih PENDING). Silakan verifikasi pembayaran terlebih dahulu sebelum menandai hadir.`
+        `Tiket ${booking.ticketCode} (${booking.guestName}) belum diverifikasi lunas. Silakan verifikasi pembayaran terlebih dahulu.`
       );
       return;
     }
     try {
-      setIsUpdatingCheckIn(booking.id);
+      setIsUpdatingCheckInId(booking.id);
       const nextStatus = booking.checkInStatus === "CHECKED_IN" ? "REGISTERED" : "CHECKED_IN";
 
       const res = await fetch(`/api/events/bookings/${booking.id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ checkInStatus: nextStatus }),
       });
 
@@ -609,4120 +426,516 @@ export default function AdminEventsPage() {
         module: "COMMERCIAL",
         action: nextStatus === "CHECKED_IN" ? "CHECK_IN_ATTENDEE" : "CANCEL_CHECK_IN_ATTENDEE",
         recordId: booking.id,
-        description: `Peserta ${booking.guestName} (${booking.ticketCode}) ditandai ${nextStatus === "CHECKED_IN" ? "Hadir" : "Belum Hadir"} pada ${booking.eventTitle}`,
+        description: `Check-in ${booking.guestName} (${booking.ticketCode}): ${nextStatus}`,
         status: "SUCCESS",
-        severity: "LOW",
-        category: "OPERATIONAL",
       });
-
-      setActionSuccessMessage(
-        nextStatus === "CHECKED_IN"
-          ? `Peserta ${booking.guestName} berhasil ditandai hadir!`
-          : `Kehadiran peserta ${booking.guestName} dibatalkan.`
-      );
     } catch (err: any) {
       setActionErrorMessage(err.message || "Gagal memperbarui check-in.");
     } finally {
-      setIsUpdatingCheckIn(null);
+      setIsUpdatingCheckInId(null);
     }
   };
 
-  const handleVerifyPayment = async (booking: EventTicketOrder) => {
-    try {
-      setIsUpdatingCheckIn(booking.id);
-      const res = await fetch(`/api/events/bookings/${booking.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentStatus: "PAID" }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        setActionErrorMessage(json.error || "Gagal memverifikasi status pembayaran tiket.");
-        return;
-      }
-      setAllBookings((prev) =>
-        prev.map((b) => (b.id === booking.id ? { ...b, paymentStatus: "PAID" } : b))
-      );
-      setActionSuccessMessage(
-        `Pembayaran tiket ${booking.ticketCode} (${booking.guestName}) berhasil diverifikasi Lunas!`
-      );
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Gagal memverifikasi pembayaran.");
-    } finally {
-      setIsUpdatingCheckIn(null);
-    }
-  };
-
-  const handleExportData = () => {
-    const headers = [
-      "ID Event",
-      "Nama Event",
-      "Kategori",
-      "Status",
-      "Penyelenggara",
-      "Email Penyelenggara",
-      "No WA Penyelenggara",
-      "Tanggal Mulai",
-      "Tanggal Selesai",
-      "Lokasi",
-      "Harga Tiket",
-      "Total Peserta",
-      "Total Tiket Terjual",
-      "Total Omset",
-      "Komisi Platform (20%)",
-      "Payout Komunitas (80%)",
-    ];
-
-    const rows = events.map((evt) => {
-      const eventBookings = allBookings.filter((b) => b.eventId === evt.id && b.paymentStatus === "PAID");
-      const totalTickets = eventBookings.reduce((sum, b) => sum + b.ticketCount, 0);
-      const totalRevenue = eventBookings.reduce((sum, b) => sum + b.totalPrice, 0);
-      const platformFee = eventBookings.reduce((sum, b) => sum + b.platformFeeAmount, 0);
-      const organizerPayout = eventBookings.reduce((sum, b) => sum + b.organizerRevenueAmount, 0);
-
-      return [
-        evt.id,
-        evt.title,
-        evt.category,
-        evt.status,
-        evt.organizerName,
-        evt.organizerEmail,
-        evt.organizerPhone,
-        evt.startDate,
-        evt.endDate,
-        evt.location,
-        evt.isPaid ? evt.price : 0,
-        eventBookings.length,
-        totalTickets,
-        totalRevenue,
-        platformFee,
-        organizerPayout,
-      ];
-    });
-
-    downloadCSV(`rekap-event-komunitas-dago-${new Date().toISOString().split("T")[0]}.csv`, headers, rows);
-    setActionSuccessMessage("Data rekap event dan peserta berhasil diekspor ke file CSV!");
-  };
-
-  const handleProposeSplit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedEvent) return;
-    if (splitOrgPercent + splitPlatPercent !== 100) {
-      setActionErrorMessage("Total persentase bagi hasil harus tepat 100%.");
-      return;
-    }
-    try {
-      setIsSubmittingSplit(true);
-      const res = await fetch(`/api/events/${selectedEvent.id}/revenue-share`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          proposedBy: "DAGO_ADMIN",
-          organizerPercent: splitOrgPercent,
-          platformPercent: splitPlatPercent,
-          reason: splitReason,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Gagal mengajukan usulan bagi hasil.");
-      }
-      setActionSuccessMessage("Usulan bagi hasil berhasil dikirim ke penyelenggara.");
-      setSelectedEvent(data.data);
-      setIsProposingSplit(false);
-      await loadAdminEvents();
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Terjadi kesalahan.");
-    } finally {
-      setIsSubmittingSplit(false);
-    }
-  };
-
-  const handleRespondSplit = async (decision: "ACCEPT" | "REJECT") => {
-    if (!selectedEvent) return;
-    try {
-      setIsSubmittingSplit(true);
-      const res = await fetch(`/api/events/${selectedEvent.id}/revenue-share`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          decision,
-          respondingParty: "DAGO_ADMIN",
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Gagal memproses respons bagi hasil.");
-      }
-      setActionSuccessMessage(data.message || "Respons bagi hasil berhasil diproses.");
-      setSelectedEvent(data.data);
-      await loadAdminEvents();
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Terjadi kesalahan.");
-    } finally {
-      setIsSubmittingSplit(false);
-    }
-  };
-
-  const handleUpdatePayoutStatus = async (
-    payoutId: string,
-    newStatus: "PROCESSING" | "PAID" | "REJECTED",
-    referenceNo?: string,
-    rejectionReason?: string,
-    targetEventId?: string
-  ) => {
-    const eventId = targetEventId || selectedEvent?.id;
-    if (!eventId) {
-      setActionErrorMessage("ID Event tidak ditemukan untuk memproses transaksi pencairan dana.");
-      return;
-    }
-    try {
-      setIsProcessingPayout(true);
-      const res = await fetch(`/api/events/${eventId}/payout`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          payoutId,
-          newStatus,
-          referenceNo,
-          rejectionReason,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Gagal memperbarui status payout.");
-      }
-      setActionSuccessMessage(data.message || "Status payout berhasil diperbarui.");
-      if (selectedEvent && selectedEvent.id === eventId) {
-        setSelectedEvent(data.data.event);
-      }
-      setPayoutPromptModalOpen(false);
-      setActivePayoutTarget(null);
-      setPayoutInputText("");
-      await loadAdminEvents();
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Terjadi kesalahan.");
-    } finally {
-      setIsProcessingPayout(false);
-    }
-  };
-
-  const handleUpdateStatus = async (
-    eventId: string,
-    newStatus: EventStatus,
-    extraData?: { rejectionReason?: string; revisionNotes?: string; adminNotes?: string }
-  ) => {
-    try {
-      setIsProcessingAction(true);
-      setActionErrorMessage(null);
-      setActionSuccessMessage(null);
-
-      const targetEvt = events.find((e) => e.id === eventId);
-
-      const res = await fetch(`/api/events/${eventId}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status: newStatus,
-          ...extraData,
-        }),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        setActionErrorMessage(json.error || "Gagal memperbarui status event.");
-        return;
-      }
-
-      logActivity({
-        module: "COMMERCIAL",
-        action: `MODERATE_EVENT_${newStatus}`,
-        recordId: eventId,
-        description: `Status event '${targetEvt?.title || eventId}' diubah menjadi ${newStatus}`,
-        status: "SUCCESS",
-        severity: newStatus === "APPROVED" ? "LOW" : "MEDIUM",
-        category: "OPERATIONAL",
-      });
-
-      setActionSuccessMessage(json.message);
-      setIsRevisionModalOpen(false);
-      setIsRejectModalOpen(false);
-      setIsDetailModalOpen(false);
-      setModalNotes("");
-
-      // Refresh list
-      await loadAdminEvents();
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Gagal memproses perubahan status.");
-    } finally {
-      setIsProcessingAction(false);
-    }
-  };
-
-  const handleSaveEdit = async () => {
-    if (!selectedEvent) return;
-
-    try {
-      setIsProcessingAction(true);
-      setActionErrorMessage(null);
-
-      const payload = {
-        ...editFormData,
-        guidelines: editGuidelinesText
-          .split("\n")
-          .map((line) => line.trim())
-          .filter(Boolean),
-      };
-
-      const res = await fetch(`/api/events/${selectedEvent.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const json = await res.json();
-
-      if (!res.ok || !json.success) {
-        setActionErrorMessage(json.error || "Gagal memperbarui rincian event.");
-        return;
-      }
-
-      setActionSuccessMessage("Rincian event berhasil diperbarui.");
-      setIsEditModalOpen(false);
-      await loadAdminEvents();
-    } catch (err: any) {
-      setActionErrorMessage(err.message || "Gagal menyimpan rincian event.");
-    } finally {
-      setIsProcessingAction(false);
-    }
-  };
-
-  const openEditModal = (event: CommunityEvent) => {
+  // Edit Event Handlers
+  const handleOpenEdit = (event: CommunityEvent) => {
     setSelectedEvent(event);
     setEditFormData({
       title: event.title,
       category: event.category,
-      description: event.description,
       location: event.location,
-      startDate: event.startDate ? event.startDate.substring(0, 16) : "",
-      endDate: event.endDate ? event.endDate.substring(0, 16) : "",
-      isPaid: event.isPaid,
+      startDate: event.startDate,
+      endDate: event.endDate,
+      description: event.description,
       price: event.price,
-      posterUrl: event.posterUrl,
-      externalRegistrationUrl: event.externalRegistrationUrl || "",
-      guidelines: event.guidelines || [],
+      maxCapacity: event.maxCapacity,
     });
-    setEditGuidelinesText(
-      Array.isArray(event.guidelines) ? event.guidelines.join("\n") : ""
-    );
+    setEditGuidelinesText((event.guidelines || []).join("\n"));
     setIsEditModalOpen(true);
   };
 
-  // Status counts for badges
-  const pendingCount = useMemo(
-    () => events.filter((e) => getEffectiveStatus(e) === "PENDING").length,
-    [events]
-  );
-  const pendingSplitCount = useMemo(
-    () =>
-      events.filter(
-        (e) =>
-          e.proposedRevenueSplit?.status === "PENDING" &&
-          getEffectiveStatus(e) !== "ARCHIVED"
-      ).length,
-    [events]
-  );
+  const handleSaveEdit = async () => {
+    if (!selectedEvent) return;
+    try {
+      setIsSavingEdit(true);
+      const guidelines = editGuidelinesText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
 
-  // Filtered events
-  const filteredEvents = useMemo(() => {
-    return events.filter((e) => {
-      const effectiveStatus = getEffectiveStatus(e);
-      let matchStatus = true;
-      if (selectedStatusTab === "ALL") {
-        // Tab "Semua Pengajuan" excludes ARCHIVED to avoid cluttering with past expired tests
-        matchStatus = effectiveStatus !== "ARCHIVED";
-      } else if (selectedStatusTab === "PENDING") {
-        // Strictly events pending initial moderation that are not past
-        matchStatus = effectiveStatus === "PENDING";
-      } else if (selectedStatusTab === "REVENUE_SPLIT") {
-        // Events with pending custom revenue split negotiations that are active
-        matchStatus =
-          e.proposedRevenueSplit?.status === "PENDING" &&
-          effectiveStatus !== "ARCHIVED";
-      } else {
-        matchStatus = effectiveStatus === selectedStatusTab;
+      const res = await fetch(`/api/events/${selectedEvent.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...editFormData,
+          guidelines,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menyimpan perubahan event.");
       }
 
-      const matchSearch =
-        searchQuery === "" ||
-        e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.organizerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        e.location.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchDate = isEventInWitaPeriod(e, dateRange);
-
-      return matchStatus && matchSearch && matchDate;
-    });
-  }, [events, selectedStatusTab, searchQuery, dateRange]);
-
-  // All Payouts across all events
-  const allAdminPayouts = useMemo(() => {
-    const list: Array<
-      PayoutRecord & {
-        eventId: string;
-        eventTitle: string;
-        organizerName: string;
-        organizerEmail: string;
-        organizerPhone?: string | null;
-      }
-    > = [];
-
-    events.forEach((evt) => {
-      if (evt.payoutHistory && Array.isArray(evt.payoutHistory)) {
-        evt.payoutHistory.forEach((p) => {
-          list.push({
-            ...p,
-            eventId: evt.id,
-            eventTitle: evt.title,
-            organizerName: evt.organizerName,
-            organizerEmail: evt.organizerEmail,
-            organizerPhone: evt.organizerPhone,
-            bankName: p.bankName || "-",
-            accountNumber: p.accountNumber || "-",
-            accountHolder: p.accountHolder || evt.organizerName,
-          });
-        });
-      }
-    });
-
-    return list.sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
-  }, [events]);
-
-  const pendingPayoutCount = useMemo(
-    () => allAdminPayouts.filter((p) => p.status === "REQUESTED").length,
-    [allAdminPayouts]
-  );
-
-  // Pagination states for Events Moderation, Payments & Payouts
-  const [eventPage, setEventPage] = useState<number>(1);
-  const [eventPageSize, setEventPageSize] = useState<number>(10);
-  const [paymentPage, setPaymentPage] = useState<number>(1);
-  const [paymentPageSize, setPaymentPageSize] = useState<number>(10);
-  const [payoutPage, setPayoutPage] = useState<number>(1);
-  const [payoutPageSize, setPayoutPageSize] = useState<number>(10);
-  const [payoutSearchQuery, setPayoutSearchQuery] = useState("");
-
-  useEffect(() => {
-    setEventPage(1);
-  }, [selectedStatusTab, searchQuery, dateRange]);
-
-  useEffect(() => {
-    setPaymentPage(1);
-  }, [paymentFilterStatus]);
-
-  useEffect(() => {
-    setPayoutPage(1);
-  }, [payoutFilterStatus, payoutSearchQuery]);
-
-  // Lock body scroll when any modal is open
-  useEffect(() => {
-    const isAnyModalOpen =
-      isDetailModalOpen ||
-      isEditModalOpen ||
-      isRevisionModalOpen ||
-      isRejectModalOpen ||
-      isAttendeesModalOpen ||
-      Boolean(selectedProofBooking) ||
-      Boolean(rejectPaymentTarget) ||
-      payoutPromptModalOpen ||
-      isAddBankModalOpen;
-
-    if (isAnyModalOpen) {
-      const originalStyle = window.getComputedStyle(document.body).overflow;
-      document.body.style.overflow = "hidden";
-      return () => {
-        document.body.style.overflow = originalStyle;
-      };
+      setActionSuccessMessage(`Perubahan untuk "${editFormData.title || selectedEvent.title}" berhasil disimpan!`);
+      setIsEditModalOpen(false);
+      await loadAdminEvents();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menyimpan perubahan event.");
+    } finally {
+      setIsSavingEdit(false);
     }
-  }, [
-    isDetailModalOpen,
-    isEditModalOpen,
-    isRevisionModalOpen,
-    isRejectModalOpen,
-    isAttendeesModalOpen,
-    selectedProofBooking,
-    rejectPaymentTarget,
-    payoutPromptModalOpen,
-    isAddBankModalOpen,
-  ]);
+  };
 
-  // Global Escape key listener to close modals
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setIsDetailModalOpen(false);
-        setIsEditModalOpen(false);
-        setIsRevisionModalOpen(false);
-        setIsRejectModalOpen(false);
-        setIsAttendeesModalOpen(false);
-        setSelectedProofBooking(null);
-        setRejectPaymentTarget(null);
-        setPayoutPromptModalOpen(false);
-        setIsAddBankModalOpen(false);
+  // Bank & Policy Handlers
+  const handleSavePolicy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!businessPolicy) return;
+
+    const fee = Number(businessPolicy.defaultPlatformFeePercent);
+    if (
+      businessPolicy.defaultPlatformFeePercent === "" ||
+      !Number.isSafeInteger(fee) ||
+      fee < 0 ||
+      fee > 50
+    ) {
+      setActionErrorMessage("Komisi platform harus berupa bilangan bulat antara 0% hingga 50%.");
+      return;
+    }
+
+    try {
+      setIsSavingSettings(true);
+      const res = await fetch("/api/events/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...businessPolicy,
+          defaultPlatformFeePercent: fee,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menyimpan kebijakan.");
       }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+      setActionSuccessMessage("Kebijakan bisnis event berhasil diperbarui!");
+      await loadBusinessSettings();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menyimpan kebijakan.");
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
-  const filteredAdminPayouts = useMemo(() => {
-    return allAdminPayouts.filter((p) => {
-      const matchStatus = payoutFilterStatus === "ALL" || p.status === payoutFilterStatus;
-      const q = payoutSearchQuery.toLowerCase();
-      const matchSearch =
-        !q ||
-        p.eventTitle.toLowerCase().includes(q) ||
-        p.organizerName.toLowerCase().includes(q) ||
-        (p.bankName && p.bankName.toLowerCase().includes(q)) ||
-        (p.accountNumber && p.accountNumber.includes(q)) ||
-        (p.accountHolder && p.accountHolder.toLowerCase().includes(q)) ||
-        (p.referenceNo && p.referenceNo.toLowerCase().includes(q));
-      return matchStatus && matchSearch;
+  const handleOpenAddBank = () => {
+    setEditingBank(null);
+    setBankForm({
+      label: "",
+      bankName: "BCA",
+      accountNumber: "",
+      accountHolder: "",
+      branch: "",
+      badge: "Utama",
+      isDefault: false,
     });
-  }, [allAdminPayouts, payoutFilterStatus, payoutSearchQuery]);
+    setIsAddBankModalOpen(true);
+  };
 
-  const paginatedPayouts = useMemo(() => {
-    const start = (payoutPage - 1) * payoutPageSize;
-    return filteredAdminPayouts.slice(start, start + payoutPageSize);
-  }, [filteredAdminPayouts, payoutPage, payoutPageSize]);
+  const handleOpenEditBank = (acc: any) => {
+    setEditingBank(acc);
+    setBankForm({
+      label: acc.label || "",
+      bankName: acc.bankName || "BCA",
+      accountNumber: acc.accountNumber || "",
+      accountHolder: acc.accountHolder || "",
+      branch: acc.branch || "",
+      badge: acc.badge || "",
+      isDefault: !!acc.isDefault,
+    });
+    setIsAddBankModalOpen(true);
+  };
 
-  const paginatedEvents = useMemo(() => {
-    const start = (eventPage - 1) * eventPageSize;
-    return filteredEvents.slice(start, start + eventPageSize);
-  }, [filteredEvents, eventPage, eventPageSize]);
+  const handleSubmitBankForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsSavingSettings(true);
+      const isEdit = Boolean(editingBank);
+      const url = "/api/events/admin/settings/banks";
+      const method = isEdit ? "PATCH" : "POST";
+      const body = isEdit ? { id: editingBank.id, ...bankForm } : bankForm;
 
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menyimpan rekening bank.");
+      }
+
+      setActionSuccessMessage(`Rekening ${bankForm.bankName} berhasil ${isEdit ? "diperbarui" : "ditambahkan"}!`);
+      setIsAddBankModalOpen(false);
+      setEditingBank(null);
+      await loadBusinessSettings();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menyimpan rekening.");
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
+  const handleDeleteBank = async (bankId: string) => {
+    if (!confirm("Apakah Anda yakin ingin menghapus rekening bank ini?")) return;
+    try {
+      const res = await fetch(`/api/events/admin/settings/banks?id=${bankId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menghapus rekening.");
+      }
+      setActionSuccessMessage("Rekening bank berhasil dihapus.");
+      await loadBusinessSettings();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menghapus rekening.");
+    }
+  };
+
+  const handleSetDefaultBank = async (bankId: string) => {
+    try {
+      const res = await fetch("/api/events/admin/settings/banks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: bankId, action: "SET_DEFAULT" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menetapkan rekening default.");
+      }
+      setActionSuccessMessage("Rekening utama platform berhasil diperbarui!");
+      await loadBusinessSettings();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menetapkan rekening utama.");
+    }
+  };
+
+  const handleToggleBankActive = async (bankId: string, currentActive: boolean) => {
+    try {
+      const res = await fetch("/api/events/admin/settings/banks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: bankId, isActive: !currentActive }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal memperbarui status rekening.");
+      }
+      setActionSuccessMessage(`Status rekening berhasil ${!currentActive ? "diaktifkan" : "dinonaktifkan"}.`);
+      await loadBusinessSettings();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal memperbarui status rekening.");
+    }
+  };
+
+  // Export Data
+  const handleExportData = () => {
+    const headers = [
+      "ID",
+      "Judul",
+      "Kategori",
+      "Status",
+      "Penyelenggara",
+      "Email",
+      "Telepon",
+      "Lokasi",
+      "Harga",
+      "Kuota",
+      "Terjual",
+      "Waktu Mulai",
+      "Dibuat Pada",
+    ];
+    const rows = events.map((e) => [
+      e.id,
+      e.title,
+      e.category,
+      getEffectiveStatus(e),
+      e.organizerName,
+      e.organizerEmail || "—",
+      e.organizerPhone || "—",
+      e.location,
+      e.price,
+      e.maxCapacity || 0,
+      (e as any).bookedCount || 0,
+      e.startDate,
+      e.createdAt,
+    ]);
+    downloadCSV(`Events_Admin_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+  };
+
+  // Auth Guard
   if (!isAuthorized) {
     return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <Card className="p-8 text-center bg-white dark:bg-[#1E293B] border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm">
-          <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto mb-3" />
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-            Akses Dibatasi (Unauthorized)
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            Halaman moderasi Event Komunitas hanya dapat diakses oleh peran Super Admin, Owner, dan Manager.
-            Role Anda saat ini adalah <span className="font-semibold text-rose-600 dark:text-rose-400">{user?.role?.name || "Staff"}</span>.
-          </p>
-        </Card>
+      <div className="flex min-h-[400px] flex-col items-center justify-center p-6 text-center">
+        <div className="flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive mb-3">
+          <ShieldAlert className="size-6" />
+        </div>
+        <h2 className="text-lg font-medium text-foreground">Akses dibatasi</h2>
+        <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+          Halaman ini khusus untuk peran Administrator atau Pemilik Platform Dago.
+        </p>
       </div>
     );
   }
 
-  const renderStatusBadge = (status: EventStatus, isExpiredUnapproved?: boolean) => {
-    if (isExpiredUnapproved || status === "ARCHIVED") {
-      return (
-        <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[10px] font-bold">
-          {isExpiredUnapproved ? "Diarsipkan (Kedaluwarsa)" : "Diarsipkan"}
-        </Badge>
-      );
-    }
-    switch (status) {
-      case "PENDING":
-        return (
-          <Badge className="bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-bold">
-            Menunggu Review
-          </Badge>
-        );
-      case "APPROVED":
-        return (
-          <Badge className="bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold">
-            Disetujui (Tayang)
-          </Badge>
-        );
-      case "REVISION_REQUESTED":
-        return (
-          <Badge className="bg-sky-100 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-[10px] font-bold">
-            Perlu Revisi
-          </Badge>
-        );
-      case "REJECTED":
-        return (
-          <Badge className="bg-rose-100 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[10px] font-bold">
-            Ditolak
-          </Badge>
-        );
-    }
-  };
-
   return (
-    <div className="p-3.5 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 max-w-7xl mx-auto">
-      {/* Page Title & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-        <div>
-          <div className="flex items-center space-x-2 mb-1">
-            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
-              Event Komunitas
-            </h1>
-            {pendingCount > 0 && (
-              <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[10px] sm:text-[11px] font-extrabold animate-pulse shrink-0">
-                {pendingCount} Menunggu Review
-              </span>
-            )}
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Pengelolaan operasional event komunitas, pendaftaran peserta, tiket digital, moderasi pengajuan, dan integrasi ekosistem Dago.
-          </p>
-        </div>
+    <div className="flex flex-col gap-6">
+      {/* Notifications */}
+      {actionSuccessMessage ? (
+        <Alert>
+          <CheckCircle2 className="text-success" />
+          <AlertTitle>Berhasil</AlertTitle>
+          <AlertDescription>{actionSuccessMessage}</AlertDescription>
+        </Alert>
+      ) : null}
 
-        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-none sm:flex-wrap">
-          <Link href="/events/submit" className="shrink-0">
-            <Button
-              size="sm"
-              className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl shadow-xs flex items-center space-x-1.5 h-8 sm:h-9 px-2.5 sm:px-3 cursor-pointer"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>Tambah Event</span>
-            </Button>
-          </Link>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportData}
-            className="shrink-0 text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl h-8 sm:h-9 px-2.5 sm:px-3 cursor-pointer"
-          >
-            <Download className="w-3.5 h-3.5 mr-1" />
-            <span>Ekspor</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadAdminEvents}
-            disabled={isLoading}
-            className="shrink-0 text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl h-8 sm:h-9 px-2 sm:px-3"
-            title="Segarkan data"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline ml-1">Segarkan</span>
-          </Button>
-          <a href="/events" target="_blank" rel="noopener noreferrer" className="shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl h-8 sm:h-9 px-2.5 sm:px-3"
-            >
-              <ExternalLink className="w-3.5 h-3.5 mr-1" />
-              <span>Katalog</span>
-            </Button>
-          </a>
-        </div>
-      </div>
+      {actionErrorMessage ? (
+        <Alert variant="destructive">
+          <AlertCircle />
+          <AlertTitle>Kendala</AlertTitle>
+          <AlertDescription>{actionErrorMessage}</AlertDescription>
+        </Alert>
+      ) : null}
 
-      {/* Main Admin Section Tabs (Smooth Horizontal Scroll on Mobile) */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 border-b border-slate-200 dark:border-slate-800 scrollbar-none no-scrollbar -mx-3.5 px-3.5 sm:mx-0 sm:px-0">
-        <button
-          onClick={() => setAdminSection("MODERATION")}
-          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${adminSection === "MODERATION"
-              ? "bg-brand-sage text-white shadow-sm"
-              : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
-            }`}
-        >
-          <Calendar className="w-3.5 h-3.5 shrink-0" />
-          <span>Moderasi Event</span>
-          {pendingCount > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500 text-white font-extrabold">
-              {pendingCount}
-            </span>
-          )}
-        </button>
+      {/* Header */}
+      <EventsAdminHeader
+        onExportData={handleExportData}
+        onRefresh={loadAdminEvents}
+        isLoading={isLoading}
+      />
 
-        <button
-          onClick={() => setAdminSection("PAYMENTS")}
-          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${adminSection === "PAYMENTS"
-              ? "bg-brand-sage text-white shadow-sm"
-              : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
-            }`}
-        >
-          <CreditCard className="w-3.5 h-3.5 shrink-0" />
-          <span>Verifikasi Pembayaran</span>
-          {allBookings.filter((b) => b.totalPrice > 0 && b.paymentStatus === "PENDING" && Boolean(b.paymentProofUrl)).length > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-rose-500 text-white font-extrabold animate-pulse">
-              {allBookings.filter((b) => b.totalPrice > 0 && b.paymentStatus === "PENDING" && Boolean(b.paymentProofUrl)).length}
-            </span>
-          )}
-        </button>
+      {/* Admin Section Tabs */}
+      <EventsAdminTabs
+        currentSection={adminSection}
+        onSectionChange={setAdminSection}
+        pendingReviewsCount={kpi.pendingReviewsCount}
+        pendingPaymentsCount={kpi.pendingPaymentsCount}
+      />
 
-        <button
-          onClick={() => setAdminSection("PAYOUTS")}
-          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${adminSection === "PAYOUTS"
-              ? "bg-brand-sage text-white shadow-sm"
-              : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
-            }`}
-        >
-          <Wallet className="w-3.5 h-3.5 shrink-0" />
-          <span>Pencairan Saldo (Payout)</span>
-          {pendingPayoutCount > 0 && (
-            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500 text-white font-extrabold animate-pulse">
-              {pendingPayoutCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          onClick={() => {
-            setAdminSection("SETTINGS");
-            loadBusinessSettings();
-          }}
-          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer whitespace-nowrap ${adminSection === "SETTINGS"
-              ? "bg-brand-sage text-white shadow-sm"
-              : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300"
-            }`}
-        >
-          <Settings className="w-3.5 h-3.5 shrink-0" />
-          <span>Pengaturan Bisnis</span>
-        </button>
-      </div>
-
+      {/* Section Content */}
       {adminSection === "MODERATION" && (
-        <>
-          {/* 4 Kartu Ringkasan Operasional Sederhana */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3.5">
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between min-h-[92px] sm:min-h-[104px]">
-              <div className="flex items-center justify-between gap-1.5 pb-1">
-                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">Total Event</span>
-                <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage dark:text-brand-sageBright flex items-center justify-center shrink-0">
-                  <Calendar className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <div>
-                <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white leading-tight">
-                  {events.filter((e) => getEffectiveStatus(e) !== "ARCHIVED").length} <span className="text-xs font-normal text-slate-400">Event</span>
-                </div>
-                <span className="text-[10px] text-slate-400 truncate block mt-0.5">Pengajuan & agenda aktif</span>
-              </div>
-            </Card>
-
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between min-h-[92px] sm:min-h-[104px]">
-              <div className="flex items-center justify-between gap-1.5 pb-1">
-                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">Event Aktif</span>
-                <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <div>
-                <div className="text-base sm:text-xl font-black text-emerald-600 dark:text-emerald-400 leading-tight">
-                  {events.filter((e) => e.status === "APPROVED").length} <span className="text-xs font-normal text-slate-400">Disetujui</span>
-                </div>
-                <span className="text-[10px] text-slate-400 truncate block mt-0.5">Tayang di katalog publik</span>
-              </div>
-            </Card>
-
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between min-h-[92px] sm:min-h-[104px]">
-              <div className="flex items-center justify-between gap-1.5 pb-1">
-                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">Menunggu Review</span>
-                <div className="w-6 h-6 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center shrink-0">
-                  <Clock className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <div>
-                <div className="text-base sm:text-xl font-black text-amber-600 dark:text-amber-400 leading-tight">
-                  {events.filter((e) => getEffectiveStatus(e) === "PENDING").length} <span className="text-xs font-normal text-slate-400">Antrean</span>
-                </div>
-                <span className="text-[10px] text-slate-400 truncate block mt-0.5">Perlu verifikasi admin</span>
-              </div>
-            </Card>
-
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col justify-between min-h-[92px] sm:min-h-[104px]">
-              <div className="flex items-center justify-between gap-1.5 pb-1">
-                <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 truncate">Tiket & Peserta</span>
-                <div className="w-6 h-6 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 flex items-center justify-center shrink-0">
-                  <Ticket className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <div>
-                <div className="text-base sm:text-xl font-black text-slate-900 dark:text-white leading-tight">
-                  {allBookings.filter((b) => b.paymentStatus === "PAID").length} <span className="text-xs font-normal text-slate-400">Peserta</span>
-                </div>
-                <span className="text-[10px] font-bold text-brand-sage dark:text-brand-sageBright truncate block mt-0.5">
-                  {formatCurrencyIDR(allBookings.filter((b) => b.paymentStatus === "PAID").reduce((sum, b) => sum + b.totalPrice, 0))}
-                </span>
-              </div>
-            </Card>
-          </div>
-
-          {/* Action Notices */}
-          {actionSuccessMessage && (
-            <div className="relative overflow-hidden p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between shadow-sm animate-in fade-in slide-in-from-top-2 duration-200">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <Check className="w-3.5 h-3.5 stroke-3" />
-                </div>
-                <div>
-                  <span className="font-bold block">{actionSuccessMessage}</span>
-                  <span className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80">Pemberitahuan otomatis tertutup dalam beberapa detik</span>
-                </div>
-              </div>
-              <button
-                onClick={() => setActionSuccessMessage(null)}
-                className="text-xs font-bold text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 px-2 py-1 rounded-lg ml-4 transition-colors cursor-pointer"
-              >
-                ✕ Tutup
-              </button>
-            </div>
-          )}
-
-          {actionErrorMessage && (
-            <div className="p-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-              <div className="flex items-center space-x-2">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{actionErrorMessage}</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                {actionErrorMessage.includes("CUSTOMER") && (
-                  <Link href="/events/portal">
-                    <Button size="sm" className="h-7 text-[11px] bg-brand-sage hover:bg-[#2E6044] text-white font-bold rounded-lg px-2.5">
-                      Buka Portal Penyelenggara
-                    </Button>
-                  </Link>
-                )}
-                <button
-                  onClick={() => setActionErrorMessage(null)}
-                  className="text-xs font-bold underline cursor-pointer"
-                >
-                  Tutup
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Filter Tabs & Toolbar Controls (Compact Date Range Dropdown, Page Size & Search) */}
-          <div className="space-y-2.5 pb-2">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-              {/* Status Tabs */}
-              <div className="relative overflow-hidden">
-                <div className="flex items-center space-x-1 overflow-x-auto pb-1 sm:pb-0 scrollbar-none pr-6">
-                  {STATUS_TABS.map((tab) => {
-                    const active = selectedStatusTab === tab.key;
-                    const count =
-                      tab.key === "ALL"
-                        ? events.filter((e) => getEffectiveStatus(e) !== "ARCHIVED").length
-                        : tab.key === "PENDING"
-                        ? events.filter((e) => getEffectiveStatus(e) === "PENDING").length
-                        : tab.key === "REVENUE_SPLIT"
-                        ? events.filter((e) => e.proposedRevenueSplit?.status === "PENDING" && getEffectiveStatus(e) !== "ARCHIVED").length
-                        : tab.key === "ARCHIVED"
-                        ? events.filter((e) => getEffectiveStatus(e) === "ARCHIVED").length
-                        : tab.status !== undefined
-                        ? events.filter((e) => getEffectiveStatus(e) === tab.status).length
-                        : events.filter((e) => getEffectiveStatus(e) !== "ARCHIVED").length;
-
-                    return (
-                      <button
-                        key={tab.key}
-                        onClick={() => setSelectedStatusTab(tab.key)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all flex items-center space-x-1 cursor-pointer ${
-                          active
-                            ? "bg-brand-sage text-white shadow-xs font-bold"
-                            : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700"
-                        }`}
-                      >
-                        <span>{tab.label}</span>
-                        <span
-                          className={`px-1.5 py-0.2 rounded-full text-[9.5px] ${
-                            active
-                              ? "bg-white/20 text-white font-bold"
-                              : "bg-slate-100 dark:bg-slate-800 text-slate-500 font-semibold"
-                          }`}
-                        >
-                          {count}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="absolute right-0 top-0 bottom-1 w-6 pointer-events-none bg-linear-to-l from-white dark:from-[#0B1120] to-transparent sm:hidden" />
-              </div>
-
-              {/* Controls: Compact Date Range Dropdown, Table Page Size, Search */}
-              <div className="flex flex-wrap items-center justify-start lg:justify-end gap-2">
-                <EventDateRangeFilter
-                  onApplyFilter={(range) => setDateRange(range)}
-                  initialRange={dateRange}
-                  label="Filter Rentang Tanggal (WITA)"
-                />
-
-                <TablePageSizeSelector
-                  pageSize={eventPageSize}
-                  onPageSizeChange={(sz) => {
-                    setEventPageSize(sz);
-                    setEventPage(1);
-                  }}
-                  label="records"
-                />
-
-                <div className="relative flex-1 sm:flex-none min-w-[180px] sm:min-w-[220px]">
-                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Cari nama event..."
-                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Table / List View of Events */}
-          <Card className="bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-            {isLoading ? (
-              <div className="p-8 text-center text-xs text-slate-400">
-                <div className="w-6 h-6 border-2 border-brand-sage border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                Memuat pengajuan event...
-              </div>
-            ) : filteredEvents.length === 0 ? (
-              <div className="p-10 text-center text-xs text-slate-500 dark:text-slate-400">
-                Tidak ada pengajuan event pada status ini.
-              </div>
-            ) : (
-              <div className="w-full">
-                {/* Mobile View: Clean, Modern Card List (md:hidden) */}
-                <div className="divide-y divide-slate-100 dark:divide-slate-800 md:hidden">
-                  {paginatedEvents.map((evt) => {
-                    const evtBookings = allBookings.filter((b) => b.eventId === evt.id && b.paymentStatus === "PAID");
-                    const totalTickets = evtBookings.reduce((sum, b) => sum + b.ticketCount, 0);
-
-                    return (
-                      <div
-                        key={evt.id}
-                        onClick={() => {
-                          setSelectedEvent(evt);
-                          setIsDetailModalOpen(true);
-                        }}
-                        className="p-4 space-y-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0 border border-slate-200 dark:border-slate-700">
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={evt.posterUrl}
-                              alt=""
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.target as any).src = "https://images.unsplash.com/photo-1511920170033";
-                              }}
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 flex-wrap mb-1">
-                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-slate-300 dark:border-slate-700">
-                                {evt.category}
-                              </Badge>
-                              {renderStatusBadge(getEffectiveStatus(evt), isPastUnapproved(evt))}
-                              {evt.proposedRevenueSplit?.status === "PENDING" && getEffectiveStatus(evt) !== "ARCHIVED" && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                                  Bagi Hasil {evt.proposedRevenueSplit.organizerPercent}/{evt.proposedRevenueSplit.platformPercent}
-                                </span>
-                              )}
-                            </div>
-                            <h4 className="font-bold text-slate-900 dark:text-white text-sm line-clamp-2 leading-tight">
-                              {evt.title}
-                            </h4>
-                            <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
-                              ID: {evt.id}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-                          <div className="flex items-center gap-1.5 truncate">
-                            <Calendar className="w-3.5 h-3.5 text-brand-sage shrink-0" />
-                            <span className="truncate">{new Date(evt.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 truncate">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span className="truncate">{evt.location}</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 truncate">
-                            <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                            <span>{evtBookings.length} Peserta ({totalTickets} Tiket)</span>
-                          </div>
-                          <div className="font-bold text-slate-900 dark:text-white truncate">
-                            {evt.isPaid ? formatCurrencyIDR(evt.price) : "Gratis"}
-                          </div>
-                        </div>
-
-                        {/* Action buttons on mobile card */}
-                        <div className="flex items-center gap-2 pt-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedEventForAttendees(evt);
-                              setAttendeeSearchQuery("");
-                              setIsAttendeesModalOpen(true);
-                            }}
-                            className="flex-1 h-8 text-[11px] font-bold text-brand-sage dark:text-brand-sageBright border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg"
-                          >
-                            <Ticket className="w-3.5 h-3.5 mr-1" />
-                            Peserta ({totalTickets})
-                          </Button>
-
-                          {getEffectiveStatus(evt) === "PENDING" && (
-                            <>
-                              <Button
-                                size="sm"
-                                onClick={() => handleUpdateStatus(evt.id, "APPROVED")}
-                                disabled={isProcessingAction}
-                                className="flex-1 h-8 text-[11px] font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-lg"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                                Setujui
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setSelectedEvent(evt);
-                                  setModalNotes(evt.revisionNotes || "");
-                                  setIsRevisionModalOpen(true);
-                                }}
-                                className="h-8 px-2.5 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-800 rounded-lg text-[11px]"
-                              >
-                                Revisi
-                              </Button>
-                            </>
-                          )}
-                          {isPastUnapproved(evt) && (
-                            <span className="text-[11px] text-slate-400 italic py-1">
-                              Tanggal terlewat (Arsip)
-                            </span>
-                          )}
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setSelectedEvent(evt);
-                              setIsDetailModalOpen(true);
-                            }}
-                            className="h-8 px-2.5 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-lg text-[11px]"
-                          >
-                            Detail →
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Desktop View: Full Table (hidden on mobile) */}
-                <div className="hidden md:block overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/80 dark:bg-slate-900/40 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
-                      <th className="py-3 px-4">Event & Poster</th>
-                      <th className="py-3 px-4">Kategori & Harga</th>
-                      <th className="py-3 px-4">Jadwal & Ruang</th>
-                      <th className="py-3 px-4">Penyelenggara</th>
-                      <th className="py-3 px-4">Peserta & Tiket</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">Aksi Pengelolaan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {paginatedEvents.map((evt) => {
-                      const evtBookings = allBookings.filter((b) => b.eventId === evt.id && b.paymentStatus === "PAID");
-                      const totalTickets = evtBookings.reduce((sum, b) => sum + b.ticketCount, 0);
-                      const totalRevenue = evtBookings.reduce((sum, b) => sum + b.totalPrice, 0);
-
-                      return (
-                        <tr
-                          key={evt.id}
-                          onClick={() => {
-                            setSelectedEvent(evt);
-                            setIsDetailModalOpen(true);
-                          }}
-                          className="hover:bg-emerald-50/30 dark:hover:bg-slate-800/60 transition-colors cursor-pointer group"
-                          title="Klik baris atau judul untuk melihat rincian & moderasi event"
-                        >
-                          {/* Event Title & Poster */}
-                          <td className="py-3.5 px-4 max-w-xs">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0 relative border border-slate-200 dark:border-slate-800 group-hover:border-brand-sage transition-colors">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={evt.posterUrl}
-                                  alt=""
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                />
-                              </div>
-                              <div className="min-w-0">
-                                <span className="font-bold text-slate-900 dark:text-white block truncate group-hover:text-brand-sage dark:group-hover:text-brand-sageBright transition-colors">
-                                  {evt.title}
-                                </span>
-                                <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono block">
-                                  ID: {evt.id}
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Category & Pricing */}
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="space-y-1">
-                              <Badge variant="outline" className="text-[10px] border-slate-300 dark:border-slate-700">
-                                {evt.category}
-                              </Badge>
-                              <span className="block font-bold text-slate-800 dark:text-slate-200">
-                                {evt.isPaid ? formatCurrencyIDR(evt.price) : "Gratis"}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* Schedule & Venue */}
-                          <td className="py-3.5 px-4 text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                            <div className="space-y-0.5">
-                              <div className="flex items-center space-x-1.5 font-medium">
-                                <Calendar className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
-                                <span>{new Date(evt.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
-                              </div>
-                              <div className="flex items-center space-x-1.5 text-slate-500 dark:text-slate-300 text-[11px]">
-                                <MapPin className="w-3 h-3" />
-                                <span className="truncate max-w-[150px]">{evt.location}</span>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Organizer details */}
-                          <td className="py-3.5 px-4 text-slate-700 dark:text-slate-200 whitespace-nowrap">
-                            <div className="space-y-1 max-w-[190px]">
-                              <span className="font-semibold block truncate max-w-[150px] text-slate-900 dark:text-white">
-                                {evt.organizerName}
-                              </span>
-                              <div className="flex flex-col gap-0.5 text-[11px]">
-                                {evt.organizerPhone ? (
-                                  <a
-                                    href={formatWhatsAppUrl(evt.organizerPhone)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:underline font-medium text-[11px]"
-                                    title={`Buka WhatsApp: ${evt.organizerPhone}`}
-                                  >
-                                    <Phone className="w-3 h-3 shrink-0" />
-                                    <span className="truncate">{evt.organizerPhone}</span>
-                                  </a>
-                                ) : (
-                                  <span className="text-slate-400 text-[10px] italic">Tidak ada nomor</span>
-                                )}
-                                {evt.organizerEmail ? (
-                                  <a
-                                    href={`mailto:${evt.organizerEmail}`}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:underline text-[10.5px]"
-                                    title={`Kirim Email: ${evt.organizerEmail}`}
-                                  >
-                                    <Mail className="w-3 h-3 shrink-0" />
-                                    <span className="truncate">{evt.organizerEmail}</span>
-                                  </a>
-                                ) : null}
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Peserta & Tiket */}
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="space-y-0.5">
-                              <span className="font-bold text-slate-900 dark:text-white flex items-center space-x-1">
-                                <Users className="w-3 h-3 text-brand-sage" />
-                                <span>{evtBookings.length} Peserta ({totalTickets} Tiket)</span>
-                              </span>
-                              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-mono block">
-                                {evt.isPaid ? formatCurrencyIDR(totalRevenue) : "Event Gratis"}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* Status Badge */}
-                          <td className="py-3.5 px-4 whitespace-nowrap">
-                            <div className="space-y-1">
-                              {renderStatusBadge(getEffectiveStatus(evt), isPastUnapproved(evt))}
-                              {evt.proposedRevenueSplit?.status === "PENDING" && getEffectiveStatus(evt) !== "ARCHIVED" && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 block w-fit">
-                                  Bagi Hasil: {evt.proposedRevenueSplit.organizerPercent}/{evt.proposedRevenueSplit.platformPercent}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-
-                          {/* Actions */}
-                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                            <div className="inline-flex items-center space-x-1.5">
-                              {/* Kelola Peserta & Tiket */}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedEventForAttendees(evt);
-                                  setAttendeeSearchQuery("");
-                                  setIsAttendeesModalOpen(true);
-                                }}
-                                className="h-8 px-2.5 text-[11px] font-bold text-brand-sage dark:text-brand-sageBright border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg cursor-pointer"
-                                title="Kelola Data Peserta & Check-In Tiket"
-                              >
-                                <Ticket className="w-3.5 h-3.5 mr-1" />
-                                <span>Peserta</span>
-                              </Button>
-
-                              {/* View Details */}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedEvent(evt);
-                                  setIsDetailModalOpen(true);
-                                }}
-                                className="h-8 px-2 text-slate-600 dark:text-slate-400 hover:text-brand-sage"
-                                title="Lihat Detail & Kontak"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                              </Button>
-
-                              {/* Edit details */}
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEditModal(evt);
-                                }}
-                                className="h-8 px-2 text-slate-600 dark:text-slate-400 hover:text-blue-600"
-                                title="Edit Rincian"
-                              >
-                                <Edit className="w-3.5 h-3.5" />
-                              </Button>
-
-                              {/* Moderation Actions (Approve, Revision, Reject): ONLY for active PENDING or REVISION_REQUESTED */}
-                              {(getEffectiveStatus(evt) === "PENDING" || getEffectiveStatus(evt) === "REVISION_REQUESTED") && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleUpdateStatus(evt.id, "APPROVED");
-                                    }}
-                                    disabled={isProcessingAction}
-                                    className="h-8 px-2.5 bg-brand-sage hover:bg-[#2E6044] text-white text-[11px] font-bold rounded-lg shadow-xs"
-                                  >
-                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                                    Setujui
-                                  </Button>
-
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedEvent(evt);
-                                      setModalNotes(evt.revisionNotes || "");
-                                      setIsRevisionModalOpen(true);
-                                    }}
-                                    className="h-8 px-2.5 text-sky-700 dark:text-sky-300 border-sky-300 dark:border-sky-800 hover:bg-sky-50 text-[11px] font-semibold rounded-lg"
-                                  >
-                                    Revisi
-                                  </Button>
-
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedEvent(evt);
-                                      setModalNotes(evt.rejectionReason || "");
-                                      setIsRejectModalOpen(true);
-                                    }}
-                                    className="h-8 px-2 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-50 text-[11px] rounded-lg"
-                                    title="Tolak Pengajuan"
-                                  >
-                                    <XCircle className="w-3.5 h-3.5" />
-                                  </Button>
-                                </>
-                              )}
-
-                              {isPastUnapproved(evt) && (
-                                <span className="text-[11px] text-slate-400 italic px-1">
-                                  Kedaluwarsa (Arsip)
-                                </span>
-                              )}
-
-                              {/* Revenue Split Quick Review: if there is an active proposal on an approved event */}
-                              {evt.proposedRevenueSplit?.status === "PENDING" && evt.status === "APPROVED" && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedEvent(evt);
-                                    setIsDetailModalOpen(true);
-                                  }}
-                                  className="h-8 px-2 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-800 hover:bg-purple-50 text-[11px] font-bold rounded-lg"
-                                  title="Tinjau Usulan Bagi Hasil"
-                                >
-                                  <TrendingUp className="w-3.5 h-3.5 mr-1" />
-                                  <span>Bagi Hasil</span>
-                                </Button>
-                              )}
-
-                              {/* Archive (for approved active events that are done/archived) */}
-                              {evt.status === "APPROVED" && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleUpdateStatus(evt.id, "ARCHIVED");
-                                  }}
-                                  disabled={isProcessingAction}
-                                  className="h-8 px-2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
-                                  title="Arsipkan Event"
-                                >
-                                  <Archive className="w-3.5 h-3.5" />
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-            {filteredEvents.length > 0 && (
-              <TablePagination
-                currentPage={eventPage}
-                totalItems={filteredEvents.length}
-                pageSize={eventPageSize}
-                onPageChange={setEventPage}
-                onPageSizeChange={(sz) => {
-                  setEventPageSize(sz);
-                  setEventPage(1);
-                }}
-                itemLabel="event"
-              />
-            )}
-          </Card>
-        </>
-      )}
-
-      {/* ===================================================================== */}
-      {/* SECTION B: VERIFIKASI PEMBAYARAN MANUAL */}
-      {/* ===================================================================== */}
-      {adminSection === "PAYMENTS" && (
-        <div className="space-y-5">
-          {/* Top KPI Cards for Payments */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-              <span className="text-[11px] font-semibold text-slate-500 block pb-1 truncate">Total Pesanan Berbayar</span>
-              <div className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
-                {allBookings.filter((b) => b.totalPrice > 0).length} <span className="text-xs font-normal text-slate-400">Pesanan</span>
-              </div>
-              <span className="text-[10px] text-slate-400 truncate block">Seluruh modul marketplace</span>
-            </Card>
-
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-amber-200 dark:border-amber-900/50 shadow-2xs">
-              <span className="text-[11px] font-semibold text-amber-600 block pb-1 truncate">Menunggu Verifikasi</span>
-              <div className="text-lg sm:text-xl font-black text-amber-600 dark:text-amber-400">
-                {allBookings.filter((b) => b.totalPrice > 0 && b.paymentStatus === "PENDING" && Boolean(b.paymentProofUrl)).length}{" "}
-                <span className="text-xs font-normal text-slate-400">Bukti</span>
-              </div>
-              <span className="text-[10px] text-amber-700/80 dark:text-amber-300/80 font-medium truncate block">Perlu tindakan review</span>
-            </Card>
-
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-emerald-200 dark:border-emerald-900/50 shadow-2xs">
-              <span className="text-[11px] font-semibold text-emerald-600 block pb-1 truncate">Lunas Terverifikasi</span>
-              <div className="text-lg sm:text-xl font-black text-emerald-600 dark:text-emerald-400">
-                {allBookings.filter((b) => b.paymentStatus === "PAID" && b.totalPrice > 0).length}{" "}
-                <span className="text-xs font-normal text-slate-400">Transaksi</span>
-              </div>
-              <span className="text-[10px] font-bold text-brand-sage dark:text-brand-sageBright truncate block">
-                {formatCurrencyIDR(allBookings.filter((b) => b.paymentStatus === "PAID" && b.totalPrice > 0).reduce((s, b) => s + b.totalPrice, 0))}
-              </span>
-            </Card>
-
-            <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-rose-200 dark:border-rose-900/50 shadow-2xs">
-              <span className="text-[11px] font-semibold text-rose-600 block pb-1 truncate">Bukti Ditolak / Revisi</span>
-              <div className="text-lg sm:text-xl font-black text-rose-600 dark:text-rose-400">
-                {allBookings.filter((b) => Boolean(b.paymentRejectionReason)).length}{" "}
-                <span className="text-xs font-normal text-slate-400">Pesanan</span>
-              </div>
-              <span className="text-[10px] text-slate-400 truncate block">Menunggu perbaikan transfer</span>
-            </Card>
-          </div>
-
-          {/* Filter Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 sm:pb-0">
-              {[
-                { key: "PENDING_PROOF", label: "Menunggu Verifikasi" },
-                { key: "ALL", label: "Semua Transaksi" },
-                { key: "PAID", label: "Lunas (Approved)" },
-                { key: "REJECTED", label: "Ditolak / Revisi" },
-              ].map((tab) => (
-                <button
-                  key={tab.key}
-                  onClick={() => setPaymentFilterStatus(tab.key as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${paymentFilterStatus === tab.key
-                      ? "bg-brand-sage text-white shadow-xs"
-                      : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400"
-                    }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            <TablePageSizeSelector
-              pageSize={paymentPageSize}
-              onPageSizeChange={(sz) => {
-                setPaymentPageSize(sz);
-                setPaymentPage(1);
-              }}
-              label="records"
-            />
-          </div>
-
-          {/* Table of Manual Payment Bookings */}
-          <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 overflow-hidden shadow-xs bg-white dark:bg-[#1E293B]">
-            {(() => {
-              const paymentBookings = allBookings.filter((b) => {
-                if (b.totalPrice <= 0) return false;
-                if (paymentFilterStatus === "PENDING_PROOF") {
-                  return b.paymentStatus === "PENDING" && Boolean(b.paymentProofUrl);
-                }
-                if (paymentFilterStatus === "PAID") {
-                  return b.paymentStatus === "PAID";
-                }
-                if (paymentFilterStatus === "REJECTED") {
-                  return Boolean(b.paymentRejectionReason);
-                }
-                return true;
-              });
-
-              const paginatedBookings = paymentBookings.slice(
-                (paymentPage - 1) * paymentPageSize,
-                paymentPage * paymentPageSize
-              );
-
-              if (paymentBookings.length === 0) {
-                return (
-                  <div className="p-10 text-center space-y-2">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
-                    <span className="font-bold text-sm text-slate-700 dark:text-slate-300 block">
-                      Tidak Ada Antrean Verifikasi Pembayaran
-                    </span>
-                    <span className="text-xs text-slate-400 max-w-sm block mx-auto">
-                      Semua transaksi tiket transfer manual telah terverifikasi atau tidak ada data yang cocok dengan filter aktif.
-                    </span>
-                  </div>
-                );
-              }
-
-              return (
-                <div>
-                  <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 text-slate-500 font-semibold">
-                        <th className="py-3 px-3.5">Kode & Waktu</th>
-                        <th className="py-3 px-3.5">Event</th>
-                        <th className="py-3 px-3.5">Peserta & Kontak</th>
-                        <th className="py-3 px-3.5">Total Tagihan</th>
-                        <th className="py-3 px-3.5">Rekening Tujuan</th>
-                        <th className="py-3 px-3.5">Bukti Transfer</th>
-                        <th className="py-3 px-3.5">Status</th>
-                        <th className="py-3 px-3.5 text-right">Aksi Verifikasi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {paginatedBookings.map((b) => (
-                        <tr key={b.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
-                          <td className="py-3 px-3.5 whitespace-nowrap">
-                            <span className="font-mono font-bold text-slate-900 dark:text-white block">
-                              {b.ticketCode}
-                            </span>
-                            <span className="text-[10px] text-slate-400 block">
-                              {new Date(b.createdAt).toLocaleDateString("id-ID", {
-                                day: "numeric",
-                                month: "short",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3.5 max-w-[200px]">
-                            <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate" title={b.eventTitle}>
-                              {b.eventTitle}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3.5">
-                            <span className="font-bold text-slate-900 dark:text-white block">
-                              {b.guestName}
-                            </span>
-                            <span className="text-[10px] text-slate-400 block">{b.guestPhone}</span>
-                          </td>
-                          <td className="py-3 px-3.5 whitespace-nowrap">
-                            <span className="font-black text-brand-sage dark:text-brand-sageBright block text-sm">
-                              {formatCurrencyIDR(b.totalPrice)}
-                            </span>
-                            <span className="text-[10px] text-slate-400 block">{b.ticketCount} Tiket</span>
-                          </td>
-                          <td className="py-3 px-3.5 whitespace-nowrap">
-                            {b.destinationBankSnapshot ? (
-                              <div>
-                                <span className="font-bold text-slate-800 dark:text-slate-200 block">
-                                  {b.destinationBankSnapshot.bankName}
-                                </span>
-                                <span className="font-mono text-[10px] text-slate-500 block">
-                                  {b.destinationBankSnapshot.accountNumber}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 italic">Rekening Default Platform</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3.5 whitespace-nowrap">
-                            {b.paymentProofUrl ? (
-                              <div className="flex items-center space-x-2">
-                                <div
-                                  onClick={() => setSelectedProofBooking(b)}
-                                  className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                                  title="Klik untuk melihat bukti transfer ukuran penuh"
-                                >
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img
-                                    src={resolveSafeProofUrl(b.paymentProofUrl)}
-                                    alt="Bukti Transfer"
-                                    className="w-full h-full object-cover"
-                                  />
-                                </div>
-                                <div>
-                                  <button
-                                    onClick={() => setSelectedProofBooking(b)}
-                                    className="text-[10.5px] font-bold text-brand-sage dark:text-brand-sageBright hover:underline block cursor-pointer"
-                                  >
-                                    Periksa Bukti
-                                  </button>
-                                  <span className="text-[9.5px] text-slate-400 block">
-                                    {b.paymentProofUploadedAt ? new Date(b.paymentProofUploadedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "Terkirim"}
-                                  </span>
-                                </div>
-                              </div>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 italic">Belum Diunggah</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3.5 whitespace-nowrap">
-                            {b.paymentStatus === "PAID" ? (
-                              <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold">
-                                Lunas (PAID)
-                              </Badge>
-                            ) : b.paymentRejectionReason ? (
-                              <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[10px] font-bold">
-                                Bukti Ditolak
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-[10px] font-bold">
-                                Menunggu Review
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="py-3 px-3.5 text-right whitespace-nowrap">
-                            {b.paymentStatus === "PENDING" ? (
-                              <div className="inline-flex items-center space-x-1.5">
-                                <Button
-                                  size="sm"
-                                  disabled={isProcessingPaymentAction}
-                                  onClick={() => handleApprovePayment(b)}
-                                  className="h-7 px-2.5 bg-brand-sage hover:bg-[#2E6044] text-white text-[10.5px] font-bold rounded-lg cursor-pointer"
-                                >
-                                  <Check className="w-3 h-3 mr-1" />
-                                  <span>Setujui</span>
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={isProcessingPaymentAction}
-                                  onClick={() => {
-                                    setRejectPaymentTarget(b);
-                                    setRejectPaymentReason("");
-                                    setRejectPaymentCancelBooking(false);
-                                  }}
-                                  className="h-7 px-2 text-[10.5px] font-bold text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg cursor-pointer"
-                                >
-                                  <X className="w-3 h-3 mr-1" />
-                                  <span>Tolak</span>
-                                </Button>
-                              </div>
-                            ) : (
-                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                                Selesai
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {paymentBookings.length > 0 && (
-                  <TablePagination
-                    currentPage={paymentPage}
-                    totalItems={paymentBookings.length}
-                    pageSize={paymentPageSize}
-                    onPageChange={setPaymentPage}
-                    onPageSizeChange={(sz) => {
-                      setPaymentPageSize(sz);
-                      setPaymentPage(1);
-                    }}
-                    itemLabel="transaksi"
-                  />
-                )}
-              </div>
-            );
-          })()}
-        </Card>
-        </div>
-      )}
-
-      {/* ===================================================================== */}
-      {/* SECTION: PENCAIRAN SALDO MITRA (PAYOUTS) */}
-      {/* ===================================================================== */}
-      {adminSection === "PAYOUTS" && (() => {
-        const totalPayoutNominal = allAdminPayouts.reduce((sum, p) => sum + p.amount, 0);
-        const requestedNominal = allAdminPayouts
-          .filter((p) => p.status === "REQUESTED")
-          .reduce((sum, p) => sum + p.amount, 0);
-        const processingNominal = allAdminPayouts
-          .filter((p) => p.status === "PROCESSING")
-          .reduce((sum, p) => sum + p.amount, 0);
-        const paidNominal = allAdminPayouts
-          .filter((p) => p.status === "PAID")
-          .reduce((sum, p) => sum + p.amount, 0);
-
-        const requestedCount = allAdminPayouts.filter((p) => p.status === "REQUESTED").length;
-        const processingCount = allAdminPayouts.filter((p) => p.status === "PROCESSING").length;
-        const paidCount = allAdminPayouts.filter((p) => p.status === "PAID").length;
-        const rejectedCount = allAdminPayouts.filter((p) => p.status === "REJECTED").length;
-
-        return (
-          <div className="space-y-5">
-            {/* Top KPI Cards for Payouts */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
-              <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-                <div className="flex items-start justify-between gap-2 pb-1">
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight">Total Pengajuan</span>
-                  <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage flex items-center justify-center shrink-0">
-                    <Wallet className="w-3.5 h-3.5" />
-                  </div>
-                </div>
-                <div className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
-                  {allAdminPayouts.length} <span className="text-xs font-normal text-slate-400">Pengajuan</span>
-                </div>
-                <span className="text-[10px] text-slate-400 truncate block">
-                  {formatCurrencyIDR(totalPayoutNominal)}
-                </span>
-              </Card>
-
-              <Card className={`p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border shadow-2xs ${
-                requestedCount > 0 ? "border-amber-300 dark:border-amber-800 ring-1 ring-amber-400/20" : "border-slate-200/80 dark:border-slate-800"
-              }`}>
-                <div className="flex items-start justify-between gap-2 pb-1">
-                  <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 leading-tight">Perlu Ditransfer</span>
-                  <div className="w-7 h-7 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center shrink-0">
-                    <Clock className="w-3.5 h-3.5" />
-                  </div>
-                </div>
-                <div className="text-lg sm:text-xl font-black text-amber-800 dark:text-amber-300">
-                  {requestedCount} <span className="text-xs font-normal text-slate-400">Menunggu</span>
-                </div>
-                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold truncate block">
-                  {formatCurrencyIDR(requestedNominal)}
-                </span>
-              </Card>
-
-              <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-                <div className="flex items-start justify-between gap-2 pb-1">
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight">Sedang Diproses</span>
-                  <div className="w-7 h-7 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-600 flex items-center justify-center shrink-0">
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  </div>
-                </div>
-                <div className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
-                  {processingCount} <span className="text-xs font-normal text-slate-400">Antrean</span>
-                </div>
-                <span className="text-[10px] text-slate-400 truncate block">
-                  {formatCurrencyIDR(processingNominal)}
-                </span>
-              </Card>
-
-              <Card className="p-3 sm:p-4 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-2xs">
-                <div className="flex items-start justify-between gap-2 pb-1">
-                  <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 leading-tight">Selesai Ditransfer</span>
-                  <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                  </div>
-                </div>
-                <div className="text-lg sm:text-xl font-black text-slate-900 dark:text-white">
-                  {paidCount} <span className="text-xs font-normal text-slate-400">Selesai</span>
-                </div>
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold truncate block">
-                  {formatCurrencyIDR(paidNominal)}
-                </span>
-              </Card>
-            </div>
-
-            {/* SOP Guidance Box for Finance Admin */}
-            <div className="p-4 rounded-2xl bg-linear-to-r from-emerald-50/80 via-teal-50/60 to-emerald-50/40 dark:from-emerald-950/30 dark:via-slate-900 dark:to-slate-900 border border-emerald-200/80 dark:border-emerald-800/60 shadow-xs">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                  <CreditCard className="w-4 h-4" />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="text-xs font-bold text-emerald-950 dark:text-emerald-200">
-                    SOP Pencairan Dana Penyelenggara Event (Settlement & Manual Bank Transfer)
-                  </h4>
-                  <p className="text-[11.5px] text-emerald-900/80 dark:text-emerald-300/80 leading-relaxed">
-                    <strong>1. Cek Rekening & Nominal:</strong> Salin nomor rekening mitra yang tertera pada tabel di bawah. •{" "}
-                    <strong>2. Transfer Manual via Bank DAGO:</strong> Buka m-Banking/Internet Banking resmi Dago Hub, lakukan transfer tepat sesuai nominal pengajuan. •{" "}
-                    <strong>3. Konfirmasi & Input No. Resi:</strong> Klik tombol hijau <strong>&ldquo;Konfirmasi Transfer&rdquo;</strong>, masukkan nomor referensi/resi transfer m-Banking. Saldo akan otomatis tercatat <em>Lunas (PAID)</em> di portal penyelenggara.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Filter Tabs & Search Bar */}
-            <Card className="p-3.5 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                {/* Status Tabs */}
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                  {[
-                    { key: "ALL", label: "Semua", count: allAdminPayouts.length },
-                    { key: "REQUESTED", label: "Perlu Ditransfer", count: requestedCount, isUrgent: requestedCount > 0 },
-                    { key: "PROCESSING", label: "Diproses", count: processingCount },
-                    { key: "PAID", label: "Selesai", count: paidCount },
-                    { key: "REJECTED", label: "Ditolak", count: rejectedCount },
-                  ].map((tab) => (
-                    <button
-                      key={tab.key}
-                      onClick={() => setPayoutFilterStatus(tab.key as any)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 shrink-0 cursor-pointer ${
-                        payoutFilterStatus === tab.key
-                          ? "bg-brand-sage text-white shadow-xs"
-                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200"
-                      }`}
-                    >
-                      <span>{tab.label}</span>
-                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                        payoutFilterStatus === tab.key
-                          ? "bg-white/20 text-white"
-                          : tab.isUrgent
-                          ? "bg-amber-500 text-white animate-pulse"
-                          : "bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-                      }`}>
-                        {tab.count}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Search & Page Size */}
-                <div className="flex items-center gap-2">
-                  <div className="relative min-w-[220px] sm:min-w-[260px]">
-                    <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      value={payoutSearchQuery}
-                      onChange={(e) => setPayoutSearchQuery(e.target.value)}
-                      placeholder="Cari event, penyelenggara, rek..."
-                      className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
-                    />
-                  </div>
-                  <TablePageSizeSelector
-                    pageSize={payoutPageSize}
-                    onPageSizeChange={(sz) => {
-                      setPayoutPageSize(sz);
-                      setPayoutPage(1);
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* Data Table */}
-              <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
-                      <th className="py-3 px-3.5">Tanggal & ID</th>
-                      <th className="py-3 px-3.5">Event & Penyelenggara</th>
-                      <th className="py-3 px-3.5">Nominal Payout</th>
-                      <th className="py-3 px-3.5">Rekening Bank Tujuan</th>
-                      <th className="py-3 px-3.5">Status & Referensi</th>
-                      <th className="py-3 px-3.5 text-right">Aksi Transfer</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {paginatedPayouts.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-10 text-center text-xs text-slate-400">
-                          Tidak ada pengajuan pencairan saldo pada filter ini.
-                        </td>
-                      </tr>
-                    ) : (
-                      paginatedPayouts.map((p) => {
-                        const targetEvt = events.find((e) => e.id === p.eventId);
-                        return (
-                          <tr
-                            key={p.id}
-                            className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
-                          >
-                            {/* Tanggal & ID */}
-                            <td className="py-3 px-3.5 whitespace-nowrap">
-                              <span className="font-medium text-slate-800 dark:text-slate-200 block">
-                                {new Date(p.requestedAt).toLocaleDateString("id-ID", {
-                                  day: "numeric",
-                                  month: "short",
-                                  year: "numeric",
-                                })}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono block">
-                                {p.id}
-                              </span>
-                            </td>
-
-                            {/* Event & Penyelenggara */}
-                            <td className="py-3 px-3.5 max-w-[240px]">
-                              <button
-                                onClick={() => {
-                                  if (targetEvt) {
-                                    setSelectedEvent(targetEvt);
-                                    setIsDetailModalOpen(true);
-                                  }
-                                }}
-                                className="font-bold text-slate-900 dark:text-white truncate block hover:text-brand-sage dark:hover:text-brand-sageBright text-left cursor-pointer transition-colors"
-                                title="Klik untuk melihat rincian event"
-                              >
-                                {p.eventTitle}
-                              </button>
-                              <div className="flex items-center space-x-2 mt-0.5 text-[10.5px] text-slate-500 dark:text-slate-400">
-                                <span className="font-medium truncate max-w-[130px]">{p.organizerName}</span>
-                                {p.organizerPhone && (
-                                  <a
-                                    href={formatWhatsAppUrl(p.organizerPhone)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-emerald-600 hover:text-emerald-700 font-bold flex items-center space-x-0.5 cursor-pointer"
-                                    title="Hubungi via WhatsApp"
-                                  >
-                                    <Phone className="w-2.5 h-2.5" />
-                                    <span>WA</span>
-                                  </a>
-                                )}
-                              </div>
-                            </td>
-
-                            {/* Nominal Payout */}
-                            <td className="py-3 px-3.5 whitespace-nowrap">
-                              <span className="font-extrabold text-slate-900 dark:text-white text-xs block">
-                                {formatCurrencyIDR(p.amount)}
-                              </span>
-                              <span className="text-[9.5px] text-slate-400 block">
-                                Hak Komunitas
-                              </span>
-                            </td>
-
-                            {/* Rekening Bank Tujuan */}
-                            <td className="py-3 px-3.5 min-w-[200px]">
-                              <div className="space-y-0.5">
-                                <div className="flex items-center space-x-1.5">
-                                  <Badge variant="outline" className="text-[9.5px] px-1.5 py-0 font-bold border-slate-300 dark:border-slate-700">
-                                    {p.bankName}
-                                  </Badge>
-                                  <button
-                                    onClick={() => {
-                                      if (p.accountNumber && p.accountNumber !== "-") {
-                                        navigator.clipboard.writeText(p.accountNumber);
-                                        setActionSuccessMessage(`Nomor rekening ${p.accountNumber} berhasil disalin!`);
-                                      }
-                                    }}
-                                    className="text-[11px] font-mono font-bold text-slate-800 dark:text-slate-200 hover:text-brand-sage flex items-center space-x-1 cursor-pointer"
-                                    title="Klik untuk menyalin nomor rekening"
-                                  >
-                                    <span>{p.accountNumber}</span>
-                                    <Copy className="w-2.5 h-2.5 text-slate-400 hover:text-brand-sage" />
-                                  </button>
-                                </div>
-                                <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
-                                  a.n {p.accountHolder}
-                                </span>
-                              </div>
-                            </td>
-
-                            {/* Status & Referensi */}
-                            <td className="py-3 px-3.5 whitespace-nowrap">
-                              {p.status === "REQUESTED" && (
-                                <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-700 text-[10px] font-bold">
-                                  Perlu Ditransfer
-                                </Badge>
-                              )}
-                              {p.status === "PROCESSING" && (
-                                <Badge className="bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-300 dark:border-sky-700 text-[10px] font-bold">
-                                  Sedang Diproses
-                                </Badge>
-                              )}
-                              {p.status === "PAID" && (
-                                <div className="space-y-0.5">
-                                  <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 text-[10px] font-bold">
-                                    ✓ Selesai Ditransfer
-                                  </Badge>
-                                  {p.referenceNo && (
-                                    <span className="text-[9.5px] font-mono text-slate-500 dark:text-slate-400 block">
-                                      Ref: {p.referenceNo}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                              {p.status === "REJECTED" && (
-                                <div className="space-y-0.5">
-                                  <Badge className="bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-700 text-[10px] font-bold">
-                                    Ditolak
-                                  </Badge>
-                                  {p.rejectionReason && (
-                                    <span className="text-[9.5px] text-rose-600 dark:text-rose-400 block truncate max-w-[140px]">
-                                      {p.rejectionReason}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </td>
-
-                            {/* Aksi Transfer */}
-                            <td className="py-3 px-3.5 text-right whitespace-nowrap">
-                              {(p.status === "REQUESTED" || p.status === "PROCESSING") ? (
-                                <div className="flex items-center justify-end space-x-1.5">
-                                  <Button
-                                    size="sm"
-                                    onClick={() => {
-                                      setActivePayoutTarget({
-                                        id: p.id,
-                                        eventId: p.eventId,
-                                        status: "PAID",
-                                        amount: p.amount,
-                                        bankName: p.bankName || "",
-                                        accountNumber: p.accountNumber || "",
-                                        accountHolder: p.accountHolder || "",
-                                        organizerName: p.organizerName,
-                                        eventTitle: p.eventTitle,
-                                      });
-                                      setPayoutInputText("");
-                                      setPayoutPromptModalOpen(true);
-                                    }}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] h-7 px-2.5 rounded-lg font-bold shadow-xs cursor-pointer"
-                                  >
-                                    <Check className="w-3 h-3 mr-1" />
-                                    <span>Konfirmasi Transfer</span>
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => {
-                                      setActivePayoutTarget({
-                                        id: p.id,
-                                        eventId: p.eventId,
-                                        status: "REJECTED",
-                                        amount: p.amount,
-                                        bankName: p.bankName || "",
-                                        accountNumber: p.accountNumber || "",
-                                        accountHolder: p.accountHolder || "",
-                                        organizerName: p.organizerName,
-                                        eventTitle: p.eventTitle,
-                                      });
-                                      setPayoutInputText("");
-                                      setPayoutPromptModalOpen(true);
-                                    }}
-                                    className="text-rose-600 border-rose-200 dark:border-rose-800 hover:bg-rose-50 text-[11px] h-7 px-2 rounded-lg font-bold cursor-pointer"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                              ) : p.status === "PAID" ? (
-                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                                  Ditransfer ({p.processedBy || "Finance"})
-                                </span>
-                              ) : (
-                                <span className="text-[10px] text-slate-400">
-                                  Ditolak
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              {filteredAdminPayouts.length > 0 && (
-                <TablePagination
-                  currentPage={payoutPage}
-                  totalItems={filteredAdminPayouts.length}
-                  pageSize={payoutPageSize}
-                  onPageChange={setPayoutPage}
-                  onPageSizeChange={(sz) => {
-                    setPayoutPageSize(sz);
-                    setPayoutPage(1);
-                  }}
-                  itemLabel="pengajuan"
-                />
-              )}
-            </Card>
-          </div>
-        );
-      })()}
-
-      {/* ===================================================================== */}
-      {/* SECTION C: PENGATURAN REKENING & BISNIS */}
-      {/* ===================================================================== */}
-      {adminSection === "SETTINGS" && (
-        <div className="space-y-6">
-          {/* Card 1: Pengaturan Kebijakan Bisnis Platform */}
-          <Card className="p-6 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center space-x-2">
-                <Settings className="w-5 h-5 text-brand-sage" />
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Kebijakan Transaksi & Pembayaran Event
-                  </h3>
-                  <span className="text-[11px] text-slate-400">
-                    Konfigurasi ini berlaku seketika untuk pemesanan tiket baru tanpa perlu deployment ulang kode.
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {businessPolicy && (
-              <form onSubmit={handleSaveBusinessSettings} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Metode Pembayaran Aktif
-                    </label>
-                    <select
-                      value="MANUAL_TRANSFER"
-                      disabled
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-900/60 text-slate-800 dark:text-slate-200 cursor-not-allowed"
-                    >
-                      <option value="MANUAL_TRANSFER">Transfer Bank Manual (Aktif Resmi)</option>
-                    </select>
-                    <span className="text-[10px] text-slate-400 block">
-                      Transfer Bank Manual mengarahkan checkout ke rekening resmi dan menu verifikasi bukti transfer.
-                    </span>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Batas Maksimal Pembelian Tiket per Transaksi (Platform Default)
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={50}
-                      value={businessPolicy.maxTicketsPerBooking || 5}
-                      onChange={(e) =>
-                        setBusinessPolicy({
-                          ...businessPolicy,
-                          maxTicketsPerBooking: parseInt(e.target.value, 10) || 5,
-                        })
-                      }
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                    />
-                    <span className="text-[10px] text-slate-400 block">
-                      Default platform adalah 5 tiket. Event tertentu dapat menentukan batas tersendiri jika diatur.
-                    </span>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Batas Waktu Pembayaran (Menit)
-                    </label>
-                    <input
-                      type="number"
-                      min={10}
-                      max={1440}
-                      value={businessPolicy.bookingPaymentExpiryMinutes || 60}
-                      onChange={(e) =>
-                        setBusinessPolicy({
-                          ...businessPolicy,
-                          bookingPaymentExpiryMinutes: parseInt(e.target.value, 10) || 60,
-                        })
-                      }
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                    />
-                    <span className="text-[10px] text-slate-400 block">
-                      Durasi penahanan kuota tiket sebelum booking PENDING kedaluwarsa otomatis (default: 60 menit).
-                    </span>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Komisi Platform Default (%)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={50}
-                      step={1}
-                      value={businessPolicy.defaultPlatformFeePercent ?? 20}
-                      onChange={(e) => {
-                        const parsed = parseInt(e.target.value, 10);
-                        setBusinessPolicy({
-                          ...businessPolicy,
-                          defaultPlatformFeePercent: isNaN(parsed) ? 0 : Math.max(0, Math.min(50, parsed)),
-                        });
-                      }}
-                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                    />
-                    <span className="text-[10px] text-slate-400 block">
-                      Platform ({businessPolicy.defaultPlatformFeePercent ?? 20}%), Penyelenggara ({100 - (businessPolicy.defaultPlatformFeePercent ?? 20)}%). Maksimal 50% (bilangan bulat).
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Instruksi Pembayaran Transfer Bank Resmi
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={businessPolicy.paymentInstructions || ""}
-                    onChange={(e) =>
-                      setBusinessPolicy({ ...businessPolicy, paymentInstructions: e.target.value })
-                    }
-                    placeholder="Contoh: Silakan transfer tepat sesuai nominal yang tertera..."
-                    className="w-full p-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                  />
-                </div>
-
-                <div className="pt-2 flex items-center justify-between">
-                  <div>
-                    {Boolean(businessPolicy && baselinePolicy && JSON.stringify(businessPolicy) !== JSON.stringify(baselinePolicy)) ? (
-                      <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 px-2.5 py-1 rounded-lg">
-                        • Terdapat perubahan yang belum disimpan
-                      </span>
-                    ) : (
-                      <span className="text-[11px] text-slate-400">
-                        Pengaturan tersinkronisasi dengan server
-                      </span>
-                    )}
-                  </div>
-                  <Button
-                    type="submit"
-                    disabled={
-                      isSavingSettings ||
-                      !Boolean(businessPolicy && baselinePolicy && JSON.stringify(businessPolicy) !== JSON.stringify(baselinePolicy))
-                    }
-                    className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSavingSettings ? "Menyimpan..." : "Simpan Pengaturan Bisnis"}
-                  </Button>
-                </div>
-              </form>
-            )}
-          </Card>
-
-          {/* Card 2: Manajemen Rekening Bank Resmi */}
-          <Card className="p-6 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center space-x-2">
-                <Building2 className="w-5 h-5 text-brand-sage" />
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Rekening Bank Resmi Platform
-                  </h3>
-                  <span className="text-[11px] text-slate-400">
-                    Daftar rekening tujuan pembayaran yang dapat dipilih atau digunakan untuk transaksi baru.
-                  </span>
-                </div>
-              </div>
-
-              <Button
-                size="sm"
-                onClick={() => setIsAddBankModalOpen(true)}
-                className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Tambah Rekening</span>
-              </Button>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 text-slate-500 font-semibold">
-                    <th className="py-2.5 px-3">Label</th>
-                    <th className="py-2.5 px-3">Bank & Nomor Rekening</th>
-                    <th className="py-2.5 px-3">Atas Nama</th>
-                    <th className="py-2.5 px-3">Cabang</th>
-                    <th className="py-2.5 px-3">Default Platform</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {bankAccountsList.map((acc) => (
-                    <tr key={acc.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {acc.label}
-                        </span>
-                        {acc.badge && (
-                          <span className="ml-1.5 px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 text-[9px] font-bold border border-emerald-200 dark:border-emerald-800">
-                            {acc.badge}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className="font-bold text-slate-900 dark:text-white block">
-                          {acc.bankName}
-                        </span>
-                        <span className="font-mono text-slate-600 dark:text-slate-400 block text-[11px]">
-                          {acc.accountNumber}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap text-slate-700 dark:text-slate-300">
-                        {acc.accountHolder}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-400 text-[11px]">
-                        {acc.branch || "-"}
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        {acc.isDefault ? (
-                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-200 text-[10px] font-bold">
-                            Default Platform
-                          </Badge>
-                        ) : (
-                          <button
-                            onClick={() => handleSetDefaultBank(acc.id)}
-                            disabled={!acc.isActive}
-                            className="text-[10px] font-bold text-brand-sage dark:text-brand-sageBright hover:underline cursor-pointer disabled:opacity-40"
-                          >
-                            Jadikan Default
-                          </button>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <button
-                          onClick={() => handleToggleBankActive(acc.id, acc.isActive)}
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${acc.isActive
-                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
-                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                            }`}
-                        >
-                          {acc.isActive ? "Aktif" : "Nonaktif"}
-                        </button>
-                      </td>
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end space-x-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleOpenEditBank(acc)}
-                            className="h-7 px-2 text-brand-sage dark:text-brand-sageBright hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg cursor-pointer"
-                            title="Edit data rekening"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={acc.isDefault}
-                            onClick={() => handleDeleteBank(acc.id)}
-                            className="h-7 px-2 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg cursor-pointer disabled:opacity-30"
-                            title={acc.isDefault ? "Rekening default tidak dapat dihapus" : "Hapus rekening"}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Card>
-
-          {/* Card 3: Riwayat Perubahan Rekening Bank (Audit Log) */}
-          <Card className="p-6 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-3">
-            <div className="flex items-center space-x-2 pb-2 border-b border-slate-100 dark:border-slate-800">
-              <Clock className="w-4 h-4 text-slate-400" />
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Riwayat Perubahan Rekening (Audit Trail)
-              </h3>
-            </div>
-
-            {bankChangeHistory.length === 0 ? (
-              <span className="text-xs text-slate-400 italic block py-2">
-                Belum ada riwayat modifikasi rekening yang tercatat.
-              </span>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 text-[11px]">
-                      <th className="py-2 px-3">Waktu</th>
-                      <th className="py-2 px-3">Aktor</th>
-                      <th className="py-2 px-3">Tindakan</th>
-                      <th className="py-2 px-3">Rincian Perubahan</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/40 text-[11px]">
-                    {bankChangeHistory.slice(0, 10).map((h) => (
-                      <tr key={h.id}>
-                        <td className="py-2 px-3 whitespace-nowrap text-slate-400">
-                          {new Date(h.changedAt).toLocaleString("id-ID", {
-                            day: "numeric",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </td>
-                        <td className="py-2 px-3 font-semibold text-slate-700 dark:text-slate-300">
-                          {h.changedBy}
-                        </td>
-                        <td className="py-2 px-3">
-                          <span className="px-1.5 py-0.2 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-[9px] font-bold">
-                            {h.action}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 text-slate-600 dark:text-slate-400 max-w-md truncate">
-                          {h.details}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-        </div>
-      )}
-
-      {/* DETAIL MODAL */}
-      {isDetailModalOpen && selectedEvent && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsDetailModalOpen(false);
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 animate-in fade-in cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-2xl bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 overflow-y-auto max-h-[90vh] space-y-5 cursor-default"
-          >
-            <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <span className="text-[11px] text-slate-400 font-mono">ID: {selectedEvent.id}</span>
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  {selectedEvent.title}
-                </h3>
-              </div>
-              <button
-                onClick={() => setIsDetailModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Poster Preview */}
-            <div className="h-44 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={selectedEvent.posterUrl}
-                alt=""
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute top-2 left-2 flex space-x-1.5">
-                {renderStatusBadge(getEffectiveStatus(selectedEvent), isPastUnapproved(selectedEvent))}
-                <Badge className="bg-slate-900/80 text-white text-[10px]">
-                  {selectedEvent.category}
-                </Badge>
-              </div>
-            </div>
-
-            {/* Event Key Info: Schedule, Price, Venue & Destination Bank */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Jadwal Acara:</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200 block">
-                  {selectedEvent.startDate
-                    ? new Intl.DateTimeFormat("id-ID", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                        timeZone: "Asia/Makassar",
-                      }).format(new Date(selectedEvent.startDate)) + " WITA"
-                    : "-"}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Harga Tiket:</span>
-                <span className="font-bold text-brand-sage dark:text-brand-sageBright block">
-                  {selectedEvent.isPaid && selectedEvent.price
-                    ? formatCurrencyIDR(selectedEvent.price)
-                    : "GRATIS (RSVP)"}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Ruangan / Venue:</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate">
-                  {selectedEvent.location}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Rekening Tujuan:</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200 block truncate">
-                  {selectedEvent.isPaid
-                    ? (bankAccountsList.find((b) => b.id === selectedEvent.destinationBankId)?.bankName || "Rekening Platform (BRI)")
-                    : "Tidak Perlu (Gratis)"}
-                </span>
-              </div>
-            </div>
-
-            {/* Organizer Contact Card (Private) */}
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-2">
-              <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                Kontak Penyelenggara (Privat):
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Nama:</span>
-                  <span className="font-semibold text-slate-700 dark:text-slate-200">{selectedEvent.organizerName}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">Email:</span>
-                  <a href={`mailto:${selectedEvent.organizerEmail}`} className="text-emerald-600 underline">
-                    {selectedEvent.organizerEmail}
-                  </a>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[11px]">WhatsApp / Telp:</span>
-                  <a
-                    href={formatWhatsAppUrl(selectedEvent.organizerPhone)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-emerald-600 underline font-semibold inline-flex items-center gap-1"
-                  >
-                    <Phone className="w-3 h-3" />
-                    <span>{selectedEvent.organizerPhone}</span>
-                  </a>
-                </div>
-              </div>
-              <p className="text-[10px] text-slate-400 pt-1 border-t border-slate-200 dark:border-slate-800">
-                Pemberitahuan perubahan status atau revisi disampaikan secara manual menggunakan kontak di atas.
-              </p>
-            </div>
-
-            {/* Description */}
-            <div className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line max-h-40 overflow-y-auto p-3 rounded-xl bg-slate-50/50 dark:bg-slate-900/30">
-              {selectedEvent.description}
-            </div>
-
-            {/* Guidelines if exists */}
-            {selectedEvent.guidelines && selectedEvent.guidelines.length > 0 && (
-              <div className="p-3 rounded-xl bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800">
-                <span className="font-bold text-xs text-slate-700 dark:text-slate-200 block mb-1">
-                  Panduan & Ketentuan Khusus Acara:
-                </span>
-                <ul className="list-disc pl-4 space-y-1 text-xs text-slate-600 dark:text-slate-300">
-                  {selectedEvent.guidelines.map((g, i) => (
-                    <li key={i}>{g}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Rejection / Revision Notes if exists */}
-            {selectedEvent.revisionNotes && (
-              <div className="p-3 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 text-sky-800 dark:text-sky-300 text-xs">
-                <span className="font-bold block">Catatan Revisi Terakhir:</span>
-                {selectedEvent.revisionNotes}
-              </div>
-            )}
-            {selectedEvent.rejectionReason && (
-              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs">
-                <span className="font-bold block">Alasan Penolakan:</span>
-                {selectedEvent.rejectionReason}
-              </div>
-            )}
-
-            {/* Kebutuhan Kolaborasi Venue & Promosi */}
-            {(selectedEvent.collaborationFacilities || selectedEvent.collaborationPromotion || selectedEvent.collaborationNotes) && (
-              <div className="p-3.5 rounded-2xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs space-y-2">
-                <span className="font-bold text-amber-900 dark:text-amber-200 block">
-                  Kebutuhan Kolaborasi & Dukungan Venue:
-                </span>
-                {selectedEvent.collaborationFacilities && (
-                  <div className="space-y-1">
-                    <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Fasilitas Venue Diminta:</span>
-                    <div className="flex flex-wrap gap-1">
-                      {(Array.isArray(selectedEvent.collaborationFacilities)
-                        ? selectedEvent.collaborationFacilities
-                        : [selectedEvent.collaborationFacilities]
-                      ).map((f: any, idx: number) => (
-                        <span key={idx} className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-[10px] font-medium text-amber-800 dark:text-amber-200">
-                          {f}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {selectedEvent.collaborationPromotion && (
-                  <div className="space-y-1">
-                    <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">Dukungan Promosi Diminta:</span>
-                    <div className="flex flex-wrap gap-1">
-                      {(Array.isArray(selectedEvent.collaborationPromotion)
-                        ? selectedEvent.collaborationPromotion
-                        : [selectedEvent.collaborationPromotion]
-                      ).map((p: any, idx: number) => (
-                        <span key={idx} className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-[10px] font-medium text-amber-800 dark:text-amber-200">
-                          {p}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {selectedEvent.collaborationNotes && (
-                  <div className="pt-1 text-[11px] text-amber-900 dark:text-amber-100">
-                    <span className="font-semibold">Catatan Kolaborasi: </span>
-                    <span>{selectedEvent.collaborationNotes}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Bagian Pengelolaan & Negosiasi Bagi Hasil */}
-            <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-xs text-slate-900 dark:text-white block">
-                    Skema Bagi Hasil (Revenue Split)
-                  </span>
-                  <span className="text-[11px] text-slate-500">
-                    Kesepakatan Aktif: <strong className="text-brand-sage dark:text-brand-sageBright">{selectedEvent.organizerFeePercent ?? 80}% Komunitas</strong> : <strong className="text-slate-700 dark:text-slate-300">{selectedEvent.customPlatformFeePercent ?? 20}% Dago</strong>
-                  </span>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsProposingSplit(!isProposingSplit)}
-                  className="text-[11px] h-7 px-2.5 rounded-lg border-slate-200 dark:border-slate-700 font-semibold cursor-pointer"
-                >
-                  {isProposingSplit ? "Tutup Form" : "Ajukan / Tawar"}
-                </Button>
-              </div>
-
-              {/* Usulan Bagi Hasil Pending jika ada */}
-              {selectedEvent.proposedRevenueSplit && selectedEvent.proposedRevenueSplit.status === "PENDING" && (
-                <div className="p-3 rounded-xl bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-xs space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sky-900 dark:text-sky-200">
-                      Usulan dari {selectedEvent.proposedRevenueSplit.proposedBy === "ORGANIZER" ? "Penyelenggara Komunitas" : "Admin Dago"}
-                    </span>
-                    <Badge className="bg-sky-600 text-white text-[10px]">
-                      {selectedEvent.proposedRevenueSplit.organizerPercent}% Komunitas : {selectedEvent.proposedRevenueSplit.platformPercent}% Dago
-                    </Badge>
-                  </div>
-                  {selectedEvent.proposedRevenueSplit.reason && (
-                    <p className="text-[11px] text-sky-800 dark:text-sky-300 italic">
-                      &quot;{selectedEvent.proposedRevenueSplit.reason}&quot;
-                    </p>
-                  )}
-                  {selectedEvent.proposedRevenueSplit.proposedBy === "ORGANIZER" && (
-                    <div className="flex items-center gap-2 pt-1">
-                      <Button
-                        size="sm"
-                        disabled={isSubmittingSplit}
-                        onClick={() => handleRespondSplit("ACCEPT")}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] h-7 px-2.5 rounded-lg font-bold"
-                      >
-                        Setujui Kesepakatan
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={isSubmittingSplit}
-                        onClick={() => handleRespondSplit("REJECT")}
-                        className="text-rose-600 border-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[11px] h-7 px-2.5 rounded-lg font-semibold"
-                      >
-                        Tolak Usulan
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSplitOrgPercent(selectedEvent.proposedRevenueSplit?.organizerPercent ?? 80);
-                          setSplitPlatPercent(selectedEvent.proposedRevenueSplit?.platformPercent ?? 20);
-                          setIsProposingSplit(true);
-                        }}
-                        className="text-sky-600 border-sky-300 hover:bg-sky-50 text-[11px] h-7 px-2.5 rounded-lg font-semibold"
-                      >
-                        Tawar Tandingan
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Form Input Usulan Bagi Hasil */}
-              {isProposingSplit && (
-                <form onSubmit={handleProposeSplit} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Bagian Penyelenggara (%)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={splitOrgPercent}
-                        onChange={(e) => {
-                          const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-                          setSplitOrgPercent(val);
-                          setSplitPlatPercent(100 - val);
-                        }}
-                        className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-900 border font-bold text-brand-sage"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        Bagian Dago Hub (%)
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={splitPlatPercent}
-                        onChange={(e) => {
-                          const val = Math.max(0, Math.min(100, Number(e.target.value) || 0));
-                          setSplitPlatPercent(val);
-                          setSplitOrgPercent(100 - val);
-                        }}
-                        className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-900 border font-bold text-slate-800 dark:text-slate-200"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Alasan / Keterangan Penawaran
-                    </label>
-                    <input
-                      type="text"
-                      value={splitReason}
-                      onChange={(e) => setSplitReason(e.target.value)}
-                      placeholder="Contoh: Kesepakatan kolaborasi workshop perdana"
-                      className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-white dark:bg-slate-900 border text-slate-800 dark:text-slate-200"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setIsProposingSplit(false)}
-                      className="text-[11px] h-7"
-                    >
-                      Batal
-                    </Button>
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={isSubmittingSplit}
-                      className="bg-brand-sage hover:bg-[#2E6044] text-white text-[11px] h-7 font-bold"
-                    >
-                      Kirim Penawaran
-                    </Button>
-                  </div>
-                </form>
-              )}
-
-              {/* Riwayat Kesepakatan Bagi Hasil */}
-              {selectedEvent.revenueSplitHistory && selectedEvent.revenueSplitHistory.length > 0 && (
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                    Riwayat Kesepakatan
-                  </span>
-                  <div className="space-y-1 max-h-24 overflow-y-auto">
-                    {selectedEvent.revenueSplitHistory.map((h, i) => (
-                      <div key={h.id || i} className="text-[10px] flex items-center justify-between text-slate-500 py-0.5">
-                        <span>{new Date(h.effectiveDate || h.agreedAt || "").toLocaleDateString("id-ID")}: {h.agreedOrganizerPercent ?? h.newOrganizerPercent}% Komunitas : {h.agreedPlatformPercent ?? h.newPlatformPercent}% Dago</span>
-                        <span className="text-slate-400">({h.agreedBy || h.approvedBy || "Admin"})</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Bagian Payout / Pencairan Saldo Penyelenggara */}
-            {selectedEvent.payoutHistory && selectedEvent.payoutHistory.length > 0 && (
-              <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-slate-900 dark:text-white block">
-                    Pengajuan Pencairan Saldo (Payout)
-                  </span>
-                  <Badge variant="outline" className="text-[10px] font-bold">
-                    {selectedEvent.payoutHistory.length} Pengajuan
-                  </Badge>
-                </div>
-
-                <div className="space-y-2">
-                  {selectedEvent.payoutHistory.map((p) => (
-                    <div key={p.id} className="p-2.5 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <strong className="text-slate-900 dark:text-white font-bold">{formatCurrencyIDR(p.amount)}</strong>
-                          <Badge
-                            className={`text-[9px] font-bold ${p.status === "PAID"
-                                ? "bg-emerald-600 text-white"
-                                : p.status === "PROCESSING"
-                                  ? "bg-sky-600 text-white"
-                                  : p.status === "REQUESTED"
-                                    ? "bg-amber-600 text-white"
-                                    : "bg-rose-600 text-white"
-                              }`}
-                          >
-                            {p.status}
-                          </Badge>
-                        </div>
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          {p.bankName} • {p.accountNumber} a/n {p.accountHolder}
-                        </div>
-                        {p.referenceNo && (
-                          <div className="text-[10px] text-emerald-600 font-mono">
-                            Ref: {p.referenceNo}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Admin Payout Actions */}
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        {p.status === "REQUESTED" && (
-                          <Button
-                            size="sm"
-                            disabled={isProcessingPayout}
-                            onClick={() => handleUpdatePayoutStatus(p.id, "PROCESSING")}
-                            className="bg-sky-600 hover:bg-sky-700 text-white text-[10px] h-6 px-2 rounded-lg font-bold"
-                          >
-                            Tandai Diproses
-                          </Button>
-                        )}
-                        {(p.status === "REQUESTED" || p.status === "PROCESSING") && (
-                          <>
-                            <Button
-                              size="sm"
-                              disabled={isProcessingPayout}
-                              onClick={() => {
-                                setActivePayoutTarget({
-                                  id: p.id,
-                                  eventId: selectedEvent.id,
-                                  status: "PAID",
-                                  amount: p.amount,
-                                  bankName: p.bankName || "-",
-                                  accountNumber: p.accountNumber || "-",
-                                  accountHolder: p.accountHolder || selectedEvent.organizerName,
-                                  organizerName: selectedEvent.organizerName,
-                                  eventTitle: selectedEvent.title,
-                                });
-                                setPayoutInputText("");
-                                setPayoutPromptModalOpen(true);
-                              }}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] h-6 px-2 rounded-lg font-bold cursor-pointer"
-                            >
-                              Konfirmasi Transfer
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isProcessingPayout}
-                              onClick={() => {
-                                setActivePayoutTarget({
-                                  id: p.id,
-                                  eventId: selectedEvent.id,
-                                  status: "REJECTED",
-                                  amount: p.amount,
-                                  bankName: p.bankName || "-",
-                                  accountNumber: p.accountNumber || "-",
-                                  accountHolder: p.accountHolder || selectedEvent.organizerName,
-                                  organizerName: selectedEvent.organizerName,
-                                  eventTitle: selectedEvent.title,
-                                });
-                                setPayoutInputText("");
-                                setPayoutPromptModalOpen(true);
-                              }}
-                              className="text-rose-600 border-rose-300 text-[10px] h-6 px-2 rounded-lg font-bold cursor-pointer"
-                            >
-                              Tolak
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Footer Actions */}
-            <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsDetailModalOpen(false)}
-                className="text-xs"
-              >
-                Tutup
-              </Button>
-
-              <div className="flex items-center space-x-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setSelectedEventForAttendees(selectedEvent);
-                    setAttendeeSearchQuery("");
-                    setIsAttendeesModalOpen(true);
-                  }}
-                  className="text-xs font-bold text-brand-sage dark:text-brand-sageBright border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
-                >
-                  <Ticket className="w-3.5 h-3.5 mr-1" />
-                  <span>Daftar Peserta</span>
-                </Button>
-                {selectedEvent.status !== "APPROVED" && !isPastUnapproved(selectedEvent) && (
-                  <Button
-                    size="sm"
-                    onClick={() => handleUpdateStatus(selectedEvent.id, "APPROVED")}
-                    disabled={isProcessingAction}
-                    className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold"
-                  >
-                    Setujui & Publikasikan
-                  </Button>
-                )}
-                {isPastUnapproved(selectedEvent) && (
-                  <span className="text-xs text-slate-400 italic">
-                    Acara telah terlewat (Arsip)
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* REVISION MODAL */}
-      {isRevisionModalOpen && selectedEvent && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsRevisionModalOpen(false);
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4 cursor-default"
-          >
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              Minta Revisi Pengajuan
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Tuliskan poin yang perlu disesuaikan oleh penyelenggara (misal resolusi poster, penyesuaian jam ruangan, dll).
-            </p>
-
-            <textarea
-              rows={4}
-              value={modalNotes}
-              onChange={(e) => setModalNotes(e.target.value)}
-              placeholder="Contoh: Mohon perbarui deskripsi agar mencantumkan target peserta dan fasilitas yang disediakan..."
-              className="w-full p-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-sky-500"
-            />
-
-            <div className="flex items-center justify-end space-x-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsRevisionModalOpen(false)}
-                className="text-xs"
-              >
-                Batal
-              </Button>
-              <Button
-                size="sm"
-                disabled={isProcessingAction || !modalNotes.trim()}
-                onClick={() =>
-                  handleUpdateStatus(selectedEvent.id, "REVISION_REQUESTED", {
-                    revisionNotes: modalNotes,
-                  })
-                }
-                className="bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold"
-              >
-                Kirim Permintaan Revisi
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* REJECT MODAL */}
-      {isRejectModalOpen && selectedEvent && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsRejectModalOpen(false);
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4 cursor-default"
-          >
-            <h3 className="text-base font-bold text-slate-900 dark:text-white">
-              Tolak Pengajuan Event
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Tuliskan alasan penolakan untuk catatan kurator internal dan konfirmasi ke penyelenggara.
-            </p>
-
-            <textarea
-              rows={3}
-              value={modalNotes}
-              onChange={(e) => setModalNotes(e.target.value)}
-              placeholder="Contoh: Ruang amphitheater telah terbooking penuh pada tanggal yang diajukan..."
-              className="w-full p-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
-            />
-
-            <div className="flex items-center justify-end space-x-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsRejectModalOpen(false)}
-                className="text-xs"
-              >
-                Batal
-              </Button>
-              <Button
-                size="sm"
-                disabled={isProcessingAction || !modalNotes.trim()}
-                onClick={() =>
-                  handleUpdateStatus(selectedEvent.id, "REJECTED", {
-                    rejectionReason: modalNotes,
-                  })
-                }
-                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold"
-              >
-                Tolak Pengajuan
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT MODAL */}
-      {isEditModalOpen && selectedEvent && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsEditModalOpen(false);
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 animate-in fade-in cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-2xl bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 overflow-y-auto max-h-[90vh] space-y-4 cursor-default"
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Edit Informasi Event
-              </h3>
-              <button
-                onClick={() => setIsEditModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="font-semibold block mb-1">Judul Event</label>
-                <input
-                  type="text"
-                  value={editFormData.title || ""}
-                  onChange={(e) => setEditFormData({ ...editFormData, title: e.target.value })}
-                  className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold block mb-1">Kategori</label>
-                  <select
-                    value={editFormData.category || "COMMUNITY"}
-                    onChange={(e) =>
-                      setEditFormData({ ...editFormData, category: e.target.value as EventCategory })
-                    }
-                    className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                  >
-                    {CATEGORIES.map((cat) => (
-                      <option key={cat} value={cat}>
-                        {cat}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="font-semibold block mb-1">Lokasi</label>
-                  <input
-                    type="text"
-                    value={editFormData.location || ""}
-                    onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
-                    className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold block mb-1">Waktu Mulai</label>
-                  <input
-                    type="datetime-local"
-                    value={editFormData.startDate || ""}
-                    onChange={(e) => setEditFormData({ ...editFormData, startDate: e.target.value })}
-                    className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold block mb-1">Waktu Selesai</label>
-                  <input
-                    type="datetime-local"
-                    value={editFormData.endDate || ""}
-                    onChange={(e) => setEditFormData({ ...editFormData, endDate: e.target.value })}
-                    className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold block mb-1">Deskripsi</label>
-                <textarea
-                  rows={4}
-                  value={editFormData.description || ""}
-                  onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                  className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-semibold block mb-1">Harga Tiket (Rp)</label>
-                  <input
-                    type="number"
-                    value={editFormData.price || 0}
-                    onChange={(e) =>
-                      setEditFormData({
-                        ...editFormData,
-                        price: Number(e.target.value),
-                        isPaid: Number(e.target.value) > 0,
-                      })
-                    }
-                    className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-                <div>
-                  <label className="font-semibold block mb-1">URL Poster</label>
-                  <input
-                    type="url"
-                    value={editFormData.posterUrl || ""}
-                    onChange={(e) => setEditFormData({ ...editFormData, posterUrl: e.target.value })}
-                    className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="font-semibold block mb-1">URL Pendaftaran Eksternal</label>
-                <input
-                  type="url"
-                  value={editFormData.externalRegistrationUrl || ""}
-                  onChange={(e) =>
-                    setEditFormData({ ...editFormData, externalRegistrationUrl: e.target.value })
-                  }
-                  placeholder="https://..."
-                  className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100"
-                />
-              </div>
-
-              <div>
-                <label className="font-semibold block mb-1">
-                  Panduan & Ketentuan Khusus Acara (1 baris per poin)
-                </label>
-                <textarea
-                  rows={3}
-                  value={editGuidelinesText}
-                  onChange={(e) => setEditGuidelinesText(e.target.value)}
-                  placeholder="Contoh:&#10;Bawa laptop dan charger masing-masing&#10;Dilarang membawa makanan dari luar"
-                  className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditModalOpen(false)}
-                className="text-xs"
-              >
-                Batal
-              </Button>
-              <Button
-                size="sm"
-                disabled={isProcessingAction}
-                onClick={handleSaveEdit}
-                className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold"
-              >
-                Simpan Perubahan
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* KELOLA PESERTA & CHECK-IN MODAL */}
-      {isAttendeesModalOpen && selectedEventForAttendees && (() => {
-        const evt = selectedEventForAttendees;
-        const eventBookings = allBookings.filter((b) => b.eventId === evt.id);
-        const paidBookings = eventBookings.filter((b) => b.paymentStatus === "PAID");
-        const totalTicketsSold = paidBookings.reduce((sum, b) => sum + b.ticketCount, 0);
-        const grossOmset = paidBookings.reduce((sum, b) => sum + b.totalPrice, 0);
-        const platformRevenue = paidBookings.reduce((sum, b) => sum + b.platformFeeAmount, 0);
-        const organizerPayout = paidBookings.reduce((sum, b) => sum + b.organizerRevenueAmount, 0);
-        const checkedInCount = paidBookings.filter((b) => b.checkInStatus === "CHECKED_IN").length;
-
-        const filteredAttendees = eventBookings.filter((b) => {
-          const q = attendeeSearchQuery.toLowerCase();
-          return (
-            b.guestName.toLowerCase().includes(q) ||
-            b.ticketCode.toLowerCase().includes(q) ||
-            b.guestEmail.toLowerCase().includes(q) ||
-            b.guestPhone.includes(q) ||
-            (b.institution && b.institution.toLowerCase().includes(q))
-          );
-        });
-
-        const handleExportAttendeesCSV = () => {
-          const headers = [
-            "Kode Tiket",
-            "Nama Peserta",
-            "Email",
-            "No WhatsApp",
-            "Instansi / Komunitas",
-            "Jumlah Tiket",
-            "Total Bayar (Rp)",
-            "Status Pembayaran",
-            "Status Check-In",
-            "Waktu Check-In",
-            "Waktu Registrasi",
-          ];
-          const rows = eventBookings.map((b) => [
-            b.ticketCode,
-            b.guestName,
-            b.guestEmail,
-            b.guestPhone,
-            b.institution || "-",
-            b.ticketCount,
-            b.totalPrice,
-            b.paymentStatus,
-            b.checkInStatus === "CHECKED_IN" ? "HADIR" : "BELUM HADIR",
-            b.checkInTime ? new Date(b.checkInTime).toLocaleString("id-ID") : "-",
-            new Date(b.createdAt).toLocaleString("id-ID"),
-          ]);
-          downloadCSV(`daftar-peserta-${evt.id}.csv`, headers, rows);
-          setActionSuccessMessage(`Data ${rows.length} peserta event berhasil diekspor!`);
-        };
-
-        return (
-          <div
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setIsAttendeesModalOpen(false);
+        <div className="flex flex-col gap-6">
+          <EventsModerationKPI
+            pendingCount={kpi.pendingReviewsCount}
+            approvedCount={kpi.approvedEventsCount}
+            revisionCount={kpi.revisionEventsCount}
+          />
+
+          <EventsModerationToolbar
+            statusTab={selectedStatusTab}
+            onStatusTabChange={(tab) => {
+              setSelectedStatusTab(tab);
+              setModerationPage(1);
             }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 animate-in fade-in cursor-pointer"
-          >
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="relative w-full max-w-4xl bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-5 sm:p-6 overflow-hidden flex flex-col max-h-[92vh] cursor-default"
-            >
-              {/* Header */}
-              <div className="flex items-start justify-between pb-3.5 border-b border-slate-100 dark:border-slate-800 shrink-0">
-                <div>
-                  <div className="flex items-center space-x-2 mb-1">
-                    <Badge variant="outline" className="text-[10px] border-emerald-300 dark:border-emerald-800 text-brand-sage dark:text-brand-sageBright">
-                      {evt.category}
-                    </Badge>
-                    <span className="text-[10px] text-slate-400 font-mono">ID: {evt.id}</span>
-                  </div>
-                  <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                    Kelola Peserta & Check-In: {evt.title}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    {new Date(evt.startDate).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })} • {evt.location}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setIsAttendeesModalOpen(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+            searchQuery={searchQuery}
+            onSearchChange={(q) => {
+              setSearchQuery(q);
+              setModerationPage(1);
+            }}
+            dateRange={dateRange}
+            onDateRangeChange={(r) => {
+              setDateRange(r);
+              setModerationPage(1);
+            }}
+            pendingCount={kpi.pendingReviewsCount}
+          />
 
-              {/* Financial & Attendance Metrics */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 py-3.5 shrink-0">
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Kehadiran Peserta</span>
-                  <div className="text-base font-extrabold text-slate-900 dark:text-white mt-0.5">
-                    {checkedInCount} <span className="text-xs font-normal text-slate-400">/ {paidBookings.length} Hadir</span>
-                  </div>
-                  <span className="text-[10px] text-emerald-600 font-medium">
-                    {paidBookings.length > 0 ? `${Math.round((checkedInCount / paidBookings.length) * 100)}% Rasio Kehadiran` : "Belum ada peserta"}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Total Tiket Terjual</span>
-                  <div className="text-base font-extrabold text-brand-sage dark:text-brand-sageBright mt-0.5">
-                    {totalTicketsSold} <span className="text-xs font-normal text-slate-400">Tiket</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">
-                    {evt.isPaid ? formatCurrencyIDR(grossOmset) : "Event Gratis"}
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Bagi Hasil Dago (20%)</span>
-                  <div className="text-base font-extrabold text-emerald-700 dark:text-emerald-400 mt-0.5">
-                    {formatCurrencyIDR(platformRevenue)}
-                  </div>
-                  <span className="text-[10px] text-slate-400">Fee platform & venue</span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
-                  <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">Payout Komunitas (80%)</span>
-                  <div className="text-base font-extrabold text-sky-700 dark:text-sky-400 mt-0.5">
-                    {formatCurrencyIDR(organizerPayout)}
-                  </div>
-                  <span className="text-[10px] text-slate-400">Hak penyelenggara</span>
-                </div>
-              </div>
-
-              {/* Search & Actions Bar */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pb-3 shrink-0">
-                <div className="relative flex-1">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    value={attendeeSearchQuery}
-                    onChange={(e) => setAttendeeSearchQuery(e.target.value)}
-                    placeholder="Cari kode tiket, nama, instansi, email, atau no WhatsApp..."
-                    className="w-full pl-9 pr-3 py-1.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57]"
-                  />
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleExportAttendeesCSV}
-                  disabled={eventBookings.length === 0}
-                  className="text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl whitespace-nowrap cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5 mr-1.5" />
-                  <span>Ekspor CSV</span>
-                </Button>
-              </div>
-
-              {/* Attendee Table */}
-              <div className="flex-1 overflow-y-auto rounded-xl border border-slate-100 dark:border-slate-800/80">
-                {filteredAttendees.length === 0 ? (
-                  <div className="p-10 text-center">
-                    <Users className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-400">
-                      {eventBookings.length === 0
-                        ? "Belum ada pendaftaran tiket untuk event ini."
-                        : "Tidak ada data peserta yang cocok dengan pencarian."}
-                    </p>
-                  </div>
-                ) : (
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-slate-50/70 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 text-[11px] uppercase tracking-wider font-semibold border-b border-slate-100 dark:border-slate-800">
-                        <th className="py-2.5 px-3">Kode Tiket</th>
-                        <th className="py-2.5 px-3">Data Peserta</th>
-                        <th className="py-2.5 px-3">Kontak</th>
-                        <th className="py-2.5 px-3 text-center">Qty Tiket</th>
-                        <th className="py-2.5 px-3">Status Bayar</th>
-                        <th className="py-2.5 px-3 text-center">Status Kehadiran</th>
-                        <th className="py-2.5 px-3 text-right">Aksi Check-In</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                      {filteredAttendees.map((b) => {
-                        const isExpanded = expandedBookingIds.has(b.id);
-                        return (
-                          <React.Fragment key={b.id}>
-                            <tr
-                              onClick={() => toggleBookingExpand(b.id)}
-                              className={`cursor-pointer hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors select-none ${
-                                isExpanded ? "bg-slate-50/80 dark:bg-slate-800/50" : ""
-                              }`}
-                              title="Klik baris untuk melihat rincian tiket"
-                            >
-                              <td className="py-2.5 px-3 whitespace-nowrap">
-                                <div className="font-mono font-bold text-brand-sage dark:text-brand-sageBright">
-                                  {b.ticketCode}
-                                </div>
-                                <div className="inline-flex items-center space-x-1 mt-1 text-[10px] font-bold text-slate-500 hover:text-brand-sage dark:hover:text-brand-sageBright">
-                                  <span>{isExpanded ? "Tutup Rincian" : (b.ticketCount > 1 ? `Lihat ${b.ticketCount} Tiket` : "Lihat Rincian")}</span>
-                                  {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-3">
-                                <span className="font-semibold text-slate-900 dark:text-white block">
-                                  {b.guestName}
-                                </span>
-                                {b.institution && (
-                                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate max-w-[150px]">
-                                    {b.institution}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-2.5 px-3 whitespace-nowrap text-[11px]">
-                                <a
-                                  href={formatWhatsAppUrl(b.guestPhone)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="text-emerald-600 hover:underline block"
-                                >
-                                  <Phone className="w-3 h-3 inline mr-1" />
-                                  {b.guestPhone}
-                                </a>
-                                <span className="text-slate-400 text-[10px] block truncate max-w-[140px]">
-                                  {b.guestEmail}
-                                </span>
-                              </td>
-                              <td className="py-2.5 px-3 text-center font-bold text-slate-700 dark:text-slate-300">
-                                {b.ticketCount}
-                              </td>
-                              <td className="py-2.5 px-3 whitespace-nowrap">
-                                <div className="flex items-center space-x-1.5">
-                                  {b.paymentStatus === "PAID" ? (
-                                    <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-[10px]">
-                                      LUNAS
-                                    </Badge>
-                                  ) : (
-                                    <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 text-[10px]">
-                                      {b.paymentStatus}
-                                    </Badge>
-                                  )}
-                                  {b.paymentProofUrl && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedProofBooking(b);
-                                      }}
-                                      className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-md bg-sky-50 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300 border border-sky-200 dark:border-sky-800 text-[10px] font-bold hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors cursor-pointer"
-                                      title="Lihat Bukti Transfer"
-                                    >
-                                      <Eye className="w-2.5 h-2.5" />
-                                      <span>Bukti</span>
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                                {b.checkInStatus === "CHECKED_IN" ? (
-                                  <span className="inline-flex flex-col items-center">
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                                      <Check className="w-3 h-3 mr-1" /> Hadir
-                                    </span>
-                                    {b.checkInTime && (
-                                      <span className="text-[9px] text-slate-400 mt-0.5">
-                                        {new Date(b.checkInTime).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
-                                      </span>
-                                    )}
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                                    Belum Hadir
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                                {b.paymentStatus === "PENDING" && (
-                                  <div className="inline-flex items-center space-x-1 mr-1.5">
-                                    {b.paymentProofUrl && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => setSelectedProofBooking(b)}
-                                        className="h-7 px-2 text-[10px] font-bold border-sky-300 text-sky-700 dark:text-sky-300 hover:bg-sky-50 dark:hover:bg-sky-950/40 rounded-lg cursor-pointer"
-                                        title="Periksa Foto Bukti Transfer"
-                                      >
-                                        <Eye className="w-3 h-3 mr-1" />
-                                        <span>Bukti</span>
-                                      </Button>
-                                    )}
-                                    <Button
-                                      size="sm"
-                                      disabled={isUpdatingCheckIn === b.id}
-                                      onClick={() => handleVerifyPayment(b)}
-                                      className="h-7 px-2 text-[10px] font-bold bg-amber-500 hover:bg-amber-600 text-white rounded-lg shadow-xs cursor-pointer"
-                                      title="Verifikasi Pembayaran Lunas"
-                                    >
-                                      Verifikasi Lunas
-                                    </Button>
-                                  </div>
-                                )}
-                                <Button
-                                  size="sm"
-                                  disabled={isUpdatingCheckIn === b.id || b.paymentStatus === "CANCELLED"}
-                                  onClick={() => handleCheckInToggle(b)}
-                                  className={`h-7 px-2 text-[11px] font-semibold rounded-lg ${b.paymentStatus === "CANCELLED"
-                                      ? "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed border border-slate-200 dark:border-slate-800"
-                                      : b.checkInStatus === "CHECKED_IN"
-                                        ? "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
-                                        : "bg-brand-sage hover:bg-[#2E6044] text-white shadow-xs cursor-pointer"
-                                    }`}
-                                  title={b.paymentStatus === "CANCELLED" ? "Tiket yang dibatalkan tidak dapat check-in" : undefined}
-                                >
-                                  {isUpdatingCheckIn === b.id ? (
-                                    <RefreshCw className="w-3 h-3 animate-spin mr-1" />
-                                  ) : b.paymentStatus === "CANCELLED" ? (
-                                    <X className="w-3 h-3 mr-1" />
-                                  ) : b.checkInStatus === "CHECKED_IN" ? (
-                                    <RotateCcw className="w-3 h-3 mr-1" />
-                                  ) : (
-                                    <UserCheck className="w-3 h-3 mr-1" />
-                                  )}
-                                  <span>
-                                    {b.paymentStatus === "CANCELLED"
-                                      ? "Batal"
-                                      : b.checkInStatus === "CHECKED_IN"
-                                        ? "Batal"
-                                        : "Hadir"}
-                                  </span>
-                                </Button>
-                              </td>
-                            </tr>
-
-                            {/* Sub-tickets Accordion */}
-                            {isExpanded && (
-                              <tr className="bg-slate-50/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800">
-                                <td colSpan={7} className="p-3 sm:p-4">
-                                  <div className="bg-white dark:bg-[#1E293B] rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-2.5">
-                                    <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-1.5 text-xs">
-                                      <span className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                                        <Ticket className="w-3.5 h-3.5 text-brand-sage" />
-                                        <span>Rincian {b.ticketCount} Tiket dalam Transaksi {b.ticketCode}</span>
-                                      </span>
-                                      <span className="text-[11px] text-slate-500">
-                                        Status Bayar: <strong>{b.paymentStatus}</strong>
-                                      </span>
-                                    </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
-                                      {Array.from({ length: b.ticketCount }).map((_, idx) => {
-                                        const ticketIndex = idx + 1;
-                                        const subCode = `${b.ticketCode}-${String(ticketIndex).padStart(2, "0")}`;
-                                        const isSubHadir = Array.isArray(b.checkedInSeats)
-                                          ? b.checkedInSeats.includes(ticketIndex)
-                                          : (b.checkedInQty ?? (b.checkInStatus === "CHECKED_IN" ? b.ticketCount : 0)) >= ticketIndex;
-
-                                        return (
-                                          <div
-                                            key={subCode}
-                                            className="p-2.5 rounded-lg border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-xs space-y-1"
-                                          >
-                                            <div className="flex items-center justify-between">
-                                              <span className="font-mono font-bold text-brand-sage dark:text-brand-sageBright text-[11px]">
-                                                {subCode}
-                                              </span>
-                                              <span
-                                                className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full ${
-                                                  isSubHadir
-                                                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
-                                                    : "bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
-                                                }`}
-                                              >
-                                                {isSubHadir ? "Hadir" : "Belum Hadir"}
-                                              </span>
-                                            </div>
-                                            <div className="text-[10.5px] text-slate-500 truncate">
-                                              {ticketIndex === 1 ? `${b.guestName} (Pemesan)` : `Tamu #${ticketIndex}`}
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Total {filteredAttendees.length} dari {eventBookings.length} data pendaftar
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsAttendeesModalOpen(false)}
-                  className="text-xs"
-                >
-                  Tutup
-                </Button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Modal Preview Bukti Transfer Pembayaran */}
-      {selectedProofBooking && selectedProofBooking.paymentProofUrl && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setSelectedProofBooking(null);
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-in fade-in cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 cursor-default"
-          >
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Verifikasi Bukti Transfer</span>
-                <h4 className="text-sm font-black text-slate-900 dark:text-white">
-                  {selectedProofBooking.ticketCode} • {selectedProofBooking.guestName}
-                </h4>
-              </div>
-              <button
-                onClick={() => setSelectedProofBooking(null)}
-                className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 px-2 py-1 rounded-lg cursor-pointer"
-              >
-                ✕ Tutup
-              </button>
-            </div>
-
-            <div className="p-4 bg-slate-950 flex items-center justify-center max-h-[60vh] overflow-auto">
-              <img
-                src={resolveSafeProofUrl(selectedProofBooking.paymentProofUrl)}
-                alt="Bukti Transfer"
-                className="max-h-[55vh] w-auto object-contain rounded-lg shadow-lg"
-              />
-            </div>
-
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/80 space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-slate-400 text-[10px] block">Total Tagihan:</span>
-                  <span className="font-bold text-brand-sage dark:text-brand-sageBright text-sm">
-                    {formatCurrencyIDR(selectedProofBooking.totalPrice)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[10px] block">Waktu Unggah:</span>
-                  <span className="font-medium text-slate-700 dark:text-slate-300 text-[11px]">
-                    {selectedProofBooking.paymentProofUploadedAt ? new Date(selectedProofBooking.paymentProofUploadedAt).toLocaleString("id-ID") : "Baru saja"}
-                  </span>
-                </div>
-              </div>
-
-              {selectedProofBooking.paymentProofNote && (
-                <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs">
-                  <span className="text-[10px] text-slate-400 block font-semibold">Catatan dari Pemesan:</span>
-                  <p className="text-slate-700 dark:text-slate-300 font-medium">
-                    &quot;{selectedProofBooking.paymentProofNote}&quot;
-                  </p>
-                </div>
-              )}
-
-              <div className="pt-2 flex items-center justify-end space-x-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSelectedProofBooking(null)}
-                  className="text-xs h-8 px-3 font-semibold rounded-xl cursor-pointer"
-                >
-                  Tutup
-                </Button>
-                {selectedProofBooking.paymentStatus === "PENDING" && (
-                  <Button
-                    size="sm"
-                    onClick={async () => {
-                      await handleVerifyPayment(selectedProofBooking);
-                      setSelectedProofBooking(null);
-                    }}
-                    className="text-xs h-8 px-4 font-bold bg-brand-sage hover:bg-[#2E6044] text-white rounded-xl shadow-xs cursor-pointer flex items-center space-x-1.5"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Konfirmasi & Verifikasi Lunas</span>
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
+          <EventsModerationTable
+            events={filteredEvents}
+            totalItems={filteredEvents.length}
+            currentPage={moderationPage}
+            pageSize={moderationPageSize}
+            onPageChange={setModerationPage}
+            onPageSizeChange={setModerationPageSize}
+            onViewDetail={(e) => {
+              setSelectedEvent(e);
+              setIsDetailSheetOpen(true);
+            }}
+            onEdit={handleOpenEdit}
+            onManageAttendees={(e) => {
+              setSelectedEventForAttendees(e);
+              setIsAttendeesModalOpen(true);
+            }}
+            onApprove={(e) => openModerationDialog(e, "APPROVE")}
+            onRequestRevision={(e) => openModerationDialog(e, "REVISION")}
+            onReject={(e) => openModerationDialog(e, "REJECT")}
+            onArchive={(e) => openModerationDialog(e, "ARCHIVE")}
+            searchQuery={searchQuery}
+          />
         </div>
       )}
 
-      {/* Modal Prompt Status Payout (PAID atau REJECTED) */}
-      {payoutPromptModalOpen && activePayoutTarget && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setPayoutPromptModalOpen(false);
+      {adminSection === "PAYMENTS" && (
+        <EventsPaymentsTable
+          bookings={filteredBookings}
+          filterStatus={paymentFilterStatus}
+          onFilterStatusChange={(s) => {
+            setPaymentFilterStatus(s);
+            setPaymentsPage(1);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4 cursor-default"
-          >
-            <h4 className="text-base font-bold text-slate-900 dark:text-white">
-              {activePayoutTarget.status === "PAID"
-                ? "Konfirmasi Pencairan Selesai Ditransfer"
-                : "Tolak Pengajuan Pencairan Saldo"}
-            </h4>
-
-            {/* Rekening Tujuan Penerima Transfer */}
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 space-y-2">
-              <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 dark:border-slate-800">
-                <span className="text-[11px] text-slate-400">Nominal Transfer:</span>
-                <span className="text-base font-black text-emerald-600 dark:text-emerald-400">
-                  {formatCurrencyIDR(activePayoutTarget.amount || 0)}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div>
-                  <span className="text-slate-400 text-[10px] block">Bank Tujuan:</span>
-                  <span className="font-bold text-slate-900 dark:text-white">
-                    {activePayoutTarget.bankName || "-"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 text-[10px] block">Atas Nama:</span>
-                  <span className="font-bold text-slate-900 dark:text-white truncate block">
-                    {activePayoutTarget.accountHolder || "-"}
-                  </span>
-                </div>
-                <div className="col-span-2 pt-1 border-t border-slate-200/60 dark:border-slate-800">
-                  <span className="text-slate-400 text-[10px] block">Nomor Rekening:</span>
-                  <div className="flex items-center space-x-2">
-                    <span className="font-mono font-black text-slate-900 dark:text-white text-xs select-all">
-                      {activePayoutTarget.accountNumber || "-"}
-                    </span>
-                    {activePayoutTarget.accountNumber && (
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(activePayoutTarget.accountNumber || "");
-                          setActionSuccessMessage("Nomor rekening berhasil disalin!");
-                        }}
-                        className="text-[10px] text-emerald-600 hover:text-emerald-700 font-bold flex items-center space-x-0.5 cursor-pointer"
-                        title="Salin nomor rekening"
-                      >
-                        <Copy className="w-2.5 h-2.5" />
-                        <span>Salin</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {activePayoutTarget.eventTitle && (
-                  <div className="col-span-2 pt-1 border-t border-slate-200/60 dark:border-slate-800">
-                    <span className="text-slate-400 text-[10px] block">Event & Mitra:</span>
-                    <span className="text-slate-700 dark:text-slate-300 font-medium truncate block">
-                      {activePayoutTarget.eventTitle} ({activePayoutTarget.organizerName})
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {activePayoutTarget.status === "PAID"
-                ? "Masukkan nomor referensi transfer bank manual (dari mutasi/resi m-Banking DAGO Finance) sebagai bukti payout kepada penyelenggara."
-                : "Tuliskan alasan penolakan pencairan saldo untuk catatan penyelenggara."}
-            </p>
-
-            <input
-              type="text"
-              value={payoutInputText}
-              onChange={(e) => setPayoutInputText(e.target.value)}
-              placeholder={
-                activePayoutTarget.status === "PAID"
-                  ? "Contoh: BCA-TRF-20261102-98412"
-                  : "Contoh: Nomor rekening bank tidak sesuai dengan nama penyelenggara"
-              }
-              className="w-full px-3 py-2 text-xs rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]"
-            />
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setPayoutPromptModalOpen(false);
-                  setActivePayoutTarget(null);
-                }}
-                className="text-xs cursor-pointer"
-              >
-                Batal
-              </Button>
-              <Button
-                size="sm"
-                disabled={isProcessingPayout || !payoutInputText.trim()}
-                onClick={() =>
-                  handleUpdatePayoutStatus(
-                    activePayoutTarget.id,
-                    activePayoutTarget.status,
-                    activePayoutTarget.status === "PAID" ? payoutInputText : undefined,
-                    activePayoutTarget.status === "REJECTED" ? payoutInputText : undefined,
-                    activePayoutTarget.eventId
-                  )
-                }
-                className={`text-xs font-bold text-white cursor-pointer ${activePayoutTarget.status === "PAID"
-                    ? "bg-emerald-600 hover:bg-emerald-700"
-                    : "bg-rose-600 hover:bg-rose-700"
-                  }`}
-              >
-                {activePayoutTarget.status === "PAID" ? "Simpan & Tandai Lunas" : "Tolak Pengajuan"}
-              </Button>
-            </div>
-          </div>
-        </div>
+          searchQuery={paymentSearchQuery}
+          onSearchChange={(q) => {
+            setPaymentSearchQuery(q);
+            setPaymentsPage(1);
+          }}
+          currentPage={paymentsPage}
+          pageSize={paymentsPageSize}
+          onPageChange={setPaymentsPage}
+          onPageSizeChange={setPaymentsPageSize}
+          onApprove={handleApprovePayment}
+          onReject={(b) => {
+            setRejectPaymentTarget(b);
+            setRejectPaymentReason("");
+            setRejectPaymentCancelBooking(false);
+          }}
+          onPreviewProof={(b) => setSelectedProofBooking(b)}
+          isProcessing={isProcessingPaymentAction}
+        />
       )}
 
-      {/* MODAL TOLAK BUKTI PEMBAYARAN */}
-      {rejectPaymentTarget && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setRejectPaymentTarget(null);
+      {adminSection === "PAYOUTS" && (
+        <EventsPayoutsTable
+          payouts={allPayouts}
+          filterStatus={payoutFilterStatus}
+          onFilterStatusChange={(s) => {
+            setPayoutFilterStatus(s);
+            setPayoutsPage(1);
           }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4 cursor-default"
-          >
-            <div className="flex items-start justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                  Tolak Bukti Pembayaran
-                </h4>
-                <span className="text-xs text-slate-400">
-                  Kode: {rejectPaymentTarget.ticketCode} • {rejectPaymentTarget.guestName}
-                </span>
-              </div>
-              <button
-                onClick={() => setRejectPaymentTarget(null)}
-                className="text-slate-400 hover:text-slate-600 text-sm cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-1 text-xs">
-              <label className="font-semibold text-slate-700 dark:text-slate-300 block">
-                Alasan Penolakan <span className="text-rose-500">*</span>
-              </label>
-              <textarea
-                rows={3}
-                required
-                value={rejectPaymentReason}
-                onChange={(e) => setRejectPaymentReason(e.target.value)}
-                placeholder="Contoh: Foto bukti transfer blur-sm / nominal tidak sesuai / nomor rekening tujuan salah..."
-                className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs focus:ring-2 focus:ring-rose-500"
-              />
-              <span className="text-[10.5px] text-slate-400 block">
-                Alasan ini akan ditampilkan langsung kepada peserta pada halaman e-tiket mereka.
-              </span>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1.5 text-xs">
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={rejectPaymentCancelBooking}
-                  onChange={(e) => setRejectPaymentCancelBooking(e.target.checked)}
-                  className="rounded text-rose-600 focus:ring-rose-500"
-                />
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  Batalkan pemesanan sekaligus (Lepaskan kuota tiket)
-                </span>
-              </label>
-              <p className="text-[10px] text-slate-400 pl-5">
-                Jika tidak dicentang, tiket tetap berstatus PENDING sehingga peserta masih dapat mengunggah bukti perbaikan sebelum batas waktu habis.
-              </p>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setRejectPaymentTarget(null)}
-                className="text-xs cursor-pointer"
-              >
-                Batal
-              </Button>
-              <Button
-                size="sm"
-                disabled={isProcessingPaymentAction || !rejectPaymentReason.trim()}
-                onClick={handleConfirmRejectPayment}
-                className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold cursor-pointer"
-              >
-                {isProcessingPaymentAction ? "Memproses..." : "Konfirmasi Penolakan"}
-              </Button>
-            </div>
-          </div>
-        </div>
+          searchQuery={payoutSearchQuery}
+          onSearchChange={(q) => {
+            setPayoutSearchQuery(q);
+            setPayoutsPage(1);
+          }}
+          currentPage={payoutsPage}
+          pageSize={payoutsPageSize}
+          onPageChange={setPayoutsPage}
+          onPageSizeChange={setPayoutsPageSize}
+          onActionClick={(target) => {
+            setPayoutTarget(target);
+            setPayoutInputText("");
+          }}
+          isProcessing={isProcessingPayout}
+        />
       )}
 
-      {/* MODAL TAMBAH REKENING BANK */}
-      {isAddBankModalOpen && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setIsAddBankModalOpen(false);
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4 cursor-default"
-          >
-            <div className="flex items-start justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                  Tambah Rekening Bank Resmi
-                </h4>
-                <span className="text-xs text-slate-400">
-                  Rekening baru dapat segera digunakan untuk transaksi tiket event tanpa deployment ulang.
-                </span>
-              </div>
-              <button
-                onClick={() => setIsAddBankModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-sm cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateBank} className="space-y-3 text-xs">
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700 dark:text-slate-300">
-                  Label Rekening <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newBankForm.label}
-                  onChange={(e) => setNewBankForm({ ...newBankForm, label: e.target.value })}
-                  placeholder="Contoh: Rekening Operasional / Utama Platform"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">
-                    Nama Bank <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newBankForm.bankName}
-                    onChange={(e) => setNewBankForm({ ...newBankForm, bankName: e.target.value })}
-                    placeholder="Contoh: BCA / Mandiri / BRI"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">
-                    Nomor Rekening <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newBankForm.accountNumber}
-                    onChange={(e) => setNewBankForm({ ...newBankForm, accountNumber: e.target.value })}
-                    placeholder="Contoh: 000012345678"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700 dark:text-slate-300">
-                  Nama Pemilik Rekening (a.n.) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newBankForm.accountHolder}
-                  onChange={(e) => setNewBankForm({ ...newBankForm, accountHolder: e.target.value })}
-                  placeholder="Contoh: PT DAGO CREATIVE HUB"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">
-                    Cabang (Opsional)
-                  </label>
-                  <input
-                    type="text"
-                    value={newBankForm.branch}
-                    onChange={(e) => setNewBankForm({ ...newBankForm, branch: e.target.value })}
-                    placeholder="Contoh: KCU Dago Bandung"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">
-                    Badge / Tag (Opsional)
-                  </label>
-                  <input
-                    type="text"
-                    value={newBankForm.badge}
-                    onChange={(e) => setNewBankForm({ ...newBankForm, badge: e.target.value })}
-                    placeholder="Contoh: Utama / Bebas Biaya"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-1">
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newBankForm.isDefault}
-                    onChange={(e) => setNewBankForm({ ...newBankForm, isDefault: e.target.checked })}
-                    className="rounded text-brand-sage focus:ring-[#3B7A57]"
-                  />
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    Jadikan rekening default utama platform
-                  </span>
-                </label>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsAddBankModalOpen(false)}
-                  className="text-xs cursor-pointer"
-                >
-                  Batal
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={isSavingSettings}
-                  className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold cursor-pointer"
-                >
-                  {isSavingSettings ? "Menyimpan..." : "Simpan Rekening"}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {adminSection === "SETTINGS" && (
+        <EventsSettingsView
+          businessPolicy={businessPolicy}
+          setBusinessPolicy={setBusinessPolicy}
+          bankAccountsList={bankAccountsList}
+          bankChangeHistory={bankChangeHistory}
+          onSavePolicy={handleSavePolicy}
+          onOpenAddBank={handleOpenAddBank}
+          onEditBank={handleOpenEditBank}
+          onDeleteBank={handleDeleteBank}
+          onSetDefaultBank={handleSetDefaultBank}
+          onToggleBankActive={handleToggleBankActive}
+          isSaving={isSavingSettings}
+        />
       )}
-      {/* MODAL EDIT REKENING BANK */}
-      {editingBank && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setEditingBank(null);
-          }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 animate-in fade-in cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-[#1E293B] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 max-w-md w-full space-y-4 cursor-default"
-          >
-            <div className="flex items-start justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-              <div>
-                <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                  Edit Rekening Bank Resmi
-                </h4>
-                <span className="text-xs text-slate-400">
-                  Perubahan akan langsung tercatat di riwayat audit dan berlaku untuk transaksi baru.
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingBank(null)}
-                className="text-slate-400 hover:text-slate-600 text-sm cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
 
-            <form onSubmit={handleUpdateBank} className="space-y-3 text-xs">
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700 dark:text-slate-300">
-                  Label Rekening <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editBankForm.label}
-                  onChange={(e) => setEditBankForm({ ...editBankForm, label: e.target.value })}
-                  placeholder="Contoh: Rekening Operasional / Utama Platform"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                />
-              </div>
+      {/* Sheets & Dialogs */}
+      <EventDetailSheet
+        event={selectedEvent}
+        open={isDetailSheetOpen}
+        onOpenChange={setIsDetailSheetOpen}
+        onApprove={(e) => openModerationDialog(e, "APPROVE")}
+        onRequestRevision={(e) => openModerationDialog(e, "REVISION")}
+        onReject={(e) => openModerationDialog(e, "REJECT")}
+        onArchive={(e) => openModerationDialog(e, "ARCHIVE")}
+        onEdit={handleOpenEdit}
+        onManageAttendees={(e) => {
+          setSelectedEventForAttendees(e);
+          setIsAttendeesModalOpen(true);
+        }}
+        isProcessing={isProcessingModeration}
+      />
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">
-                    Nama Bank <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editBankForm.bankName}
-                    onChange={(e) => setEditBankForm({ ...editBankForm, bankName: e.target.value })}
-                    placeholder="Contoh: BCA / Mandiri / BRI"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">
-                    Nomor Rekening <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={editBankForm.accountNumber}
-                    onChange={(e) => setEditBankForm({ ...editBankForm, accountNumber: e.target.value })}
-                    placeholder="Contoh: 000012345678"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                  />
-                </div>
-              </div>
+      <EventAttendeesModal
+        open={isAttendeesModalOpen}
+        onOpenChange={setIsAttendeesModalOpen}
+        event={selectedEventForAttendees}
+        bookings={allBookings}
+        onToggleCheckIn={handleCheckInToggle}
+        isUpdatingCheckInId={isUpdatingCheckInId}
+      />
 
-              <div className="space-y-1">
-                <label className="font-semibold text-slate-700 dark:text-slate-300">
-                  Nama Pemilik Rekening (a.n.) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={editBankForm.accountHolder}
-                  onChange={(e) => setEditBankForm({ ...editBankForm, accountHolder: e.target.value })}
-                  placeholder="Contoh: PT DAGO CREATIVE HUB"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                />
-              </div>
+      <PaymentProofDialog
+        booking={selectedProofBooking}
+        open={Boolean(selectedProofBooking)}
+        onOpenChange={(open) => !open && setSelectedProofBooking(null)}
+        onApprove={handleApprovePayment}
+        onReject={(b) => {
+          setSelectedProofBooking(null);
+          setRejectPaymentTarget(b);
+          setRejectPaymentReason("");
+          setRejectPaymentCancelBooking(false);
+        }}
+        isProcessing={isProcessingPaymentAction}
+      />
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">
-                    Cabang (Opsional)
-                  </label>
-                  <input
-                    type="text"
-                    value={editBankForm.branch}
-                    onChange={(e) => setEditBankForm({ ...editBankForm, branch: e.target.value })}
-                    placeholder="Contoh: KCU Dago Bandung"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="font-semibold text-slate-700 dark:text-slate-300">
-                    Badge / Tag (Opsional)
-                  </label>
-                  <input
-                    type="text"
-                    value={editBankForm.badge}
-                    onChange={(e) => setEditBankForm({ ...editBankForm, badge: e.target.value })}
-                    placeholder="Contoh: Utama / Bebas Biaya"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200"
-                  />
-                </div>
-              </div>
+      <RejectPaymentDialog
+        booking={rejectPaymentTarget}
+        open={Boolean(rejectPaymentTarget)}
+        onOpenChange={(open) => !open && setRejectPaymentTarget(null)}
+        reason={rejectPaymentReason}
+        onReasonChange={setRejectPaymentReason}
+        cancelBooking={rejectPaymentCancelBooking}
+        onCancelBookingChange={setRejectPaymentCancelBooking}
+        onConfirmReject={handleConfirmRejectPayment}
+        isProcessing={isProcessingPaymentAction}
+      />
 
-              <div className="pt-1">
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editBankForm.isDefault}
-                    onChange={(e) => setEditBankForm({ ...editBankForm, isDefault: e.target.checked })}
-                    className="rounded text-brand-sage focus:ring-[#3B7A57]"
-                  />
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    Jadikan rekening default utama platform
-                  </span>
-                </label>
-              </div>
+      <ModerationActionDialog
+        event={moderationTarget?.event || null}
+        actionType={moderationTarget?.action || null}
+        open={Boolean(moderationTarget)}
+        onOpenChange={(open) => !open && setModerationTarget(null)}
+        notes={moderationNotes}
+        onNotesChange={setModerationNotes}
+        onConfirm={handleConfirmModeration}
+        isProcessing={isProcessingModeration}
+      />
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditingBank(null)}
-                  className="text-xs cursor-pointer"
-                >
-                  Batal
-                </Button>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={isSavingSettings}
-                  className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold cursor-pointer"
-                >
-                  {isSavingSettings ? "Menyimpan..." : "Simpan Perubahan"}
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <PayoutActionDialog
+        target={payoutTarget}
+        open={Boolean(payoutTarget)}
+        onOpenChange={(open) => !open && setPayoutTarget(null)}
+        inputText={payoutInputText}
+        onInputTextChange={setPayoutInputText}
+        onConfirm={handleConfirmPayoutAction}
+        isProcessing={isProcessingPayout}
+      />
+
+      <BankModal
+        open={isAddBankModalOpen}
+        onOpenChange={setIsAddBankModalOpen}
+        isEdit={Boolean(editingBank)}
+        formData={bankForm}
+        onFormChange={setBankForm}
+        onSubmit={handleSubmitBankForm}
+        isSaving={isSavingSettings}
+      />
+
+      <EventEditModal
+        open={isEditModalOpen}
+        onOpenChange={setIsEditModalOpen}
+        event={selectedEvent}
+        formData={editFormData}
+        onFormDataChange={setEditFormData}
+        guidelinesText={editGuidelinesText}
+        onGuidelinesTextChange={setEditGuidelinesText}
+        onSave={handleSaveEdit}
+        isSaving={isSavingEdit}
+      />
     </div>
   );
 }

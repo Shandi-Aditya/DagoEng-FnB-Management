@@ -38,10 +38,10 @@ export interface AIResponseParams {
 }
 
 export const QUICK_PROMPTS = [
-  "Berapa total omset dan performa penjualan di outlet ini?",
-  "Bagaimana status stok bahan baku kritis dan rekomendasi restock?",
-  "Bagaimana okupansi meja dan booking co-working space saat ini?",
-  "Analisis margin produk dan rekomendasi promosi pelanggan",
+  "Berapa total omzet dan performa penjualan di outlet ini?",
+  "Bagaimana status stok bahan kritis dan rekomendasi restock?",
+  "Bagaimana okupansi meja dan booking ruang kerja saat ini?",
+  "Analisis rata-rata nilai pesanan dan rekomendasi promosi pelanggan",
 ];
 
 /**
@@ -58,17 +58,18 @@ export function createWelcomeMessage(params: {
     hour: "2-digit",
     minute: "2-digit",
   });
+  const outlet = params.outletName?.trim() ? params.outletName : "Semua outlet";
 
   return {
     id: "msg-welcome",
     sender: "AI",
     timestamp: nowTime,
     systemData: [
-      `Outlet: ${params.outletName}`,
+      `Outlet: ${outlet}`,
       `Omzet: Rp ${params.totalRevenue.toLocaleString("id-ID")} dari ${params.ordersCount} pesanan`,
       `Bahan kritis atau habis: ${params.criticalItemsCount}`,
     ],
-    aiAnalysis: `Halo ${params.userName}. Saya merangkum data kasir, stok, ruang kerja, dan member di ${params.outletName}. Ajukan pertanyaan atau pilih pertanyaan cepat di bawah.`,
+    aiAnalysis: `Halo ${params.userName}. Saya merangkum data kasir, stok, ruang kerja, dan member di ${outlet}. Ajukan pertanyaan atau pilih pertanyaan cepat di bawah.`,
     actionRecommendation: "Lihat rincian penjualan per periode di Laporan.",
     actionLabel: "Buka laporan",
     actionUrl: "/reports",
@@ -133,8 +134,9 @@ export function generateAIInsightResponse(params: AIResponseParams): AIChatMessa
     };
   }
 
-  // 2. Sales / Omset / Revenue query
+  // 2. Sales / Omzet / Revenue query
   if (
+    q.includes("omzet") ||
     q.includes("omset") ||
     q.includes("penjualan") ||
     q.includes("revenue") ||

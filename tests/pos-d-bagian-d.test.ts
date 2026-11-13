@@ -37,8 +37,9 @@ describe("POS Bagian D — Perbaikan Minor UI/UX", () => {
     });
 
     it("memastikan settings/page.tsx memiliki onError fallback placeholder pada tabel menu", () => {
+      // The product catalog table was extracted to features/settings/ProductsCatalogTab.tsx
       const settingsContent = fs.readFileSync(
-        path.resolve(process.cwd(), "src/app/(dashboard)/settings/page.tsx"),
+        path.resolve(process.cwd(), "src/features/settings/ProductsCatalogTab.tsx"),
         "utf-8"
       );
 

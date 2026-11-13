@@ -72,6 +72,7 @@ import {
   validateEventCapacity,
   MIN_EVENT_CAPACITY,
   MAX_EVENT_CAPACITY,
+  resolveEffectivePlatformFeePercent,
 } from "@/lib/event-validation";
 import {
   getMissingPayoutFields,
@@ -143,7 +144,7 @@ export async function syncBookingsStorageFailClosed(): Promise<void> {
 
 /**
  * Generates a deterministic 64-bit BigInt key for PostgreSQL transaction-level advisory lock.
- * Uses SHA-256 hash of eventId, ensuring uniform distribution and minimal collision probability.
+ * Uses SHA-256 hash of lock target (e.g. eventId or document filename), ensuring uniform distribution.
  */
 export function getEventAdvisoryLockKey(eventId: string): bigint {
   const normalized = `event_capacity_lock:${(eventId || "").trim().toLowerCase()}`;
@@ -151,45 +152,53 @@ export function getEventAdvisoryLockKey(eventId: string): bigint {
   return hash.readBigInt64BE(0);
 }
 
+/** Document-level advisory lock key name for the entire events collection. */
+export const EVENTS_STORAGE_DOCUMENT_LOCK_NAME = "STORAGE_events.json";
+
+export function getEventsDocumentLockKey(): bigint {
+  return getEventAdvisoryLockKey(EVENTS_STORAGE_DOCUMENT_LOCK_NAME);
+}
+
 /**
  * Transaction-Level Distributed Event Lock Executor.
  * When DATABASE_URL is configured (or in production), executes the operation inside a
  * PostgreSQL interactive transaction with `pg_advisory_xact_lock(bigint)`.
  * This serializes capacity mutations and bookings across ALL instances/containers in real-time.
- * In local development without DATABASE_URL, safely falls back to in-memory `withBookingLock`.
+ * In local development without DATABASE_URL, safely falls back to in-memory lock.
  */
 export async function runWithDistributedEventLock<T>(
   eventId: string,
   operation: (tx?: any) => Promise<T>
 ): Promise<T> {
   const isDbConfigured = Boolean(process.env.DATABASE_URL || process.env.NODE_ENV === "production");
-
-  // In test environment, safely bypass live Neon DB connection unless test specifically activates distributed lock harness
   const isDistributedTestActive = Boolean((global as any).__ENABLE_DISTRIBUTED_LOCK_TEST__);
   if (!isDbConfigured || (process.env.NODE_ENV === "test" && !isDistributedTestActive)) {
-    // Local development & test suite fallback: directly execute operation since caller already holds sequential queue lock
     return operation();
   }
 
-  // Multi-Instance Concurrency: PostgreSQL Transaction Advisory Lock
+  let operationError: any = null;
   try {
     const { db } = await import("./db");
     const lockKey = getEventAdvisoryLockKey(eventId);
 
     return await db.$transaction(
       async (tx) => {
-        // 1. Acquire transaction-level advisory lock on event ID
-        // Parameterized SQL preventing injection; blocks other transactions on same eventId
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
-
-        // 2. Execute operation inside transaction context
-        return await operation(tx);
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(${lockKey})::text AS lock_status`;
+        try {
+          return await operation(tx);
+        } catch (opErr) {
+          operationError = opErr;
+          throw opErr;
+        }
       },
       {
         timeout: 10000,
       }
     );
   } catch (err: any) {
+    if (operationError && (err === operationError || err?.message === operationError?.message)) {
+      throw operationError;
+    }
     if (err?.name === "DatabasePersistenceError") {
       throw err;
     }
@@ -198,7 +207,10 @@ export async function runWithDistributedEventLock<T>(
       message.includes("timeout") ||
       message.includes("connection") ||
       message.includes("terminat") ||
-      message.includes("Can't reach database")
+      message.includes("Can't reach database") ||
+      message.includes("Raw query failed") ||
+      err?.name === "PrismaClientKnownRequestError" ||
+      err?.name === "PrismaClientInitializationError"
     ) {
       throw new DatabasePersistenceError(
         "Layanan database cloud sedang mengalami gangguan. Operasi transaksi dibatalkan demi menjaga konsistensi data. Silakan coba kembali.",
@@ -208,6 +220,140 @@ export async function runWithDistributedEventLock<T>(
     }
     throw err;
   }
+}
+
+/**
+ * Transaction-Level Distributed Document Lock Executor for STORAGE_events.json.
+ * Serializes all mutations targeting the events collection across ALL instances/containers.
+ * Ensures that two concurrent workers modifying different events in the same JSON blob document
+ * do not overwrite each other (Lost Update prevention).
+ */
+export async function runWithDistributedEventsStorageLock<T>(
+  operation: (tx: any) => Promise<T>
+): Promise<T> {
+  const isDbConfigured = Boolean(process.env.DATABASE_URL || process.env.NODE_ENV === "production");
+  const isDistributedTestActive = Boolean((global as any).__ENABLE_DISTRIBUTED_LOCK_TEST__);
+  if (!isDbConfigured || (process.env.NODE_ENV === "test" && !isDistributedTestActive)) {
+    return operation(null);
+  }
+
+  let operationError: any = null;
+  try {
+    const { db } = await import("./db");
+    const lockKey = getEventsDocumentLockKey();
+
+    return await db.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(${lockKey})::text AS lock_status`;
+        try {
+          return await operation(tx);
+        } catch (opErr) {
+          operationError = opErr;
+          throw opErr;
+        }
+      },
+      { timeout: 10000 }
+    );
+  } catch (err: any) {
+    if (operationError && (err === operationError || err?.message === operationError?.message)) {
+      throw operationError;
+    }
+    if (err?.name === "DatabasePersistenceError") {
+      throw err;
+    }
+    const message = err?.message || "";
+    if (
+      message.includes("timeout") ||
+      message.includes("connection") ||
+      message.includes("terminat") ||
+      message.includes("Can't reach database") ||
+      message.includes("Raw query failed") ||
+      err?.name === "PrismaClientKnownRequestError" ||
+      err?.name === "PrismaClientInitializationError"
+    ) {
+      throw new DatabasePersistenceError(
+        "Layanan database cloud sedang mengalami gangguan. Operasi transaksi dibatalkan demi menjaga konsistensi data. Silakan coba kembali.",
+        "events.json",
+        true
+      );
+    }
+    throw err;
+  }
+}
+
+/**
+ * Re-reads the latest events collection from PostgreSQL SystemSetting directly inside tx.
+ * Guarantees that mutations operate on the most up-to-date document snapshot.
+ * Fails closed with DatabasePersistenceError if reading from active database fails.
+ */
+export async function loadEventsFromTxOrDisk(tx?: any): Promise<CommunityEvent[]> {
+  if (tx) {
+    const eventsRow = await tx.systemSetting.findUnique({
+      where: { key: "STORAGE_events.json" },
+    }).catch((dbErr: any) => {
+      console.error("[events] Gagal membaca STORAGE_events.json di dalam transaksi:", dbErr);
+      throw new DatabasePersistenceError(
+        `Gagal membaca snapshot events dari database PostgreSQL: ${dbErr?.message || "Koneksi terputus"}`,
+        "events.json",
+        true
+      );
+    });
+
+    if (eventsRow?.value) {
+      try {
+        const parsed = JSON.parse(eventsRow.value);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+        throw new Error("Format STORAGE_events.json di database bukan array valid.");
+      } catch (jsonErr: any) {
+        throw new DatabasePersistenceError(
+          `Format data events di database PostgreSQL tidak valid: ${jsonErr?.message}`,
+          "events.json",
+          true
+        );
+      }
+    }
+  }
+
+  // Fallback to local replica when no database transaction is active (e.g. offline dev / tests)
+  return loadEventsFromDisk();
+}
+
+/**
+ * Re-reads the latest bookings collection from PostgreSQL SystemSetting directly inside tx.
+ */
+export async function loadBookingsFromTxOrDisk(tx?: any): Promise<EventTicketOrder[]> {
+  if (tx) {
+    const bookingsRow = await tx.systemSetting.findUnique({
+      where: { key: "STORAGE_event_bookings.json" },
+    }).catch((dbErr: any) => {
+      console.error("[events] Gagal membaca STORAGE_event_bookings.json di dalam transaksi:", dbErr);
+      throw new DatabasePersistenceError(
+        `Gagal membaca snapshot bookings dari database PostgreSQL: ${dbErr?.message || "Koneksi terputus"}`,
+        "event_bookings.json",
+        true
+      );
+    });
+
+    if (bookingsRow?.value) {
+      try {
+        const parsed = JSON.parse(bookingsRow.value);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+        throw new Error("Format STORAGE_event_bookings.json di database bukan array valid.");
+      } catch (jsonErr: any) {
+        throw new DatabasePersistenceError(
+          `Format data bookings di database PostgreSQL tidak valid: ${jsonErr?.message}`,
+          "event_bookings.json",
+          true
+        );
+      }
+    }
+  }
+
+  return loadBookingsFromDisk();
 }
 
 let cachedPolicy: EventRevenueSharingPolicy | null = null;
@@ -437,19 +583,12 @@ export function validateRevenueSplitPercentage(platformFeePercent: number): { va
  * with lazy fallback to default policy (20%).
  */
 export function getEventEffectivePlatformFeePercent(
-  event?: Pick<CommunityEvent, "customPlatformFeePercent"> | null,
+  event?: Pick<CommunityEvent, "customPlatformFeePercent" | "organizerFeePercent"> | null,
   fallbackDefault?: number
 ): number {
-  if (
-    event &&
-    typeof event.customPlatformFeePercent === "number" &&
-    !isNaN(event.customPlatformFeePercent)
-  ) {
-    return Math.max(0, Math.min(50, Math.round(event.customPlatformFeePercent)));
-  }
   const defaultVal =
     typeof fallbackDefault === "number" ? fallbackDefault : getEventRevenuePolicy().defaultPlatformFeePercent ?? 20;
-  return Math.max(0, Math.min(50, Math.round(defaultVal)));
+  return resolveEffectivePlatformFeePercent(event, defaultVal);
 }
 
 /**
@@ -1189,13 +1328,23 @@ let writeQueue = Promise.resolve();
 /**
  * Ensures that normalized legacy events in memory are permanently written to PostgreSQL SystemSetting.
  * Only executes if loadEventsFromDisk flagged that legacy events lacked explicit split rates.
- * Awaited in all async event read/write paths.
+ * Protected by distributed document lock to prevent lost updates.
  */
 export async function syncNormalizedEventsToDb(): Promise<void> {
   if (!legacyEventsPendingDbPersistence || !cachedEvents) return;
   legacyEventsPendingDbPersistence = false;
   try {
-    await persistStorageToDb("events.json", JSON.stringify(cachedEvents, null, 2));
+    let committedEventsList: CommunityEvent[] | null = null;
+    await runWithDistributedEventsStorageLock(async (tx) => {
+      const eventsToPersist = cachedEvents!;
+      await saveEventsToDisk(eventsToPersist, { tx });
+      committedEventsList = eventsToPersist;
+    });
+
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
+    }
   } catch (err) {
     // If persistence fails, keep the flag true so the next async operation retries
     legacyEventsPendingDbPersistence = true;
@@ -1976,114 +2125,125 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
   }
 
   return withEventLock(async () => {
-    await syncStorageFromDb("events.json").catch(() => {});
-    const all = loadEventsFromDisk();
+    let committedEventsList: CommunityEvent[] | null = null;
+    const result = await runWithDistributedEventsStorageLock(async (tx) => {
+      const all: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
 
-    // Prevent rapid duplicate submission (same email + same title within 5 minutes)
-    const normalizedTitle = payload.title.trim().toLowerCase();
-    const normalizedEmail = payload.organizerEmail.trim().toLowerCase();
-    const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+      // Prevent rapid duplicate submission (same email + same title within 5 minutes)
+      const normalizedTitle = payload.title.trim().toLowerCase();
+      const normalizedEmail = payload.organizerEmail.trim().toLowerCase();
+      const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
 
-    const isDuplicate = all.some((e) => {
-      const isSameOrganizer = e.organizerEmail.toLowerCase() === normalizedEmail;
-      const isSameTitle = e.title.toLowerCase() === normalizedTitle;
-      const isRecent = new Date(e.createdAt).getTime() > fiveMinutesAgo;
-      return isSameOrganizer && isSameTitle && isRecent && e.status === "PENDING";
-    });
+      const isDuplicate = all.some((e) => {
+        const isSameOrganizer = e.organizerEmail.toLowerCase() === normalizedEmail;
+        const isSameTitle = e.title.toLowerCase() === normalizedTitle;
+        const isRecent = new Date(e.createdAt).getTime() > fiveMinutesAgo;
+        return isSameOrganizer && isSameTitle && isRecent && e.status === "PENDING";
+      });
 
-    if (isDuplicate) {
-      throw new Error(
-        "Pengajuan event dengan judul serupa dari email ini baru saja dikirimkan dan sedang dalam antrean review. Mohon menunggu proses kurasi tim kurator platform."
-      );
-    }
-
-    const defaultPlatformFee = getEventRevenuePolicy().defaultPlatformFeePercent ?? 20;
-    if (payload.proposedOrganizerPercent !== undefined) {
-      const orgRaw = Number(payload.proposedOrganizerPercent);
-      const pltRaw = 100 - orgRaw;
-      if (!Number.isInteger(orgRaw) || !Number.isInteger(pltRaw) || pltRaw < 0 || pltRaw > 50) {
+      if (isDuplicate) {
         throw new Error(
-          "Usulan persentase komisi platform harus berupa bilangan bulat antara 0% hingga 50% (bagian penyelenggara 50% - 100%)."
+          "Pengajuan event dengan judul serupa dari email ini baru saja dikirimkan dan sedang dalam antrean review. Mohon menunggu proses kurasi tim kurator platform."
         );
       }
+
+      const defaultPlatformFee = getEventRevenuePolicy().defaultPlatformFeePercent ?? 20;
+      if (payload.proposedOrganizerPercent !== undefined) {
+        const orgRaw = Number(payload.proposedOrganizerPercent);
+        const pltRaw = 100 - orgRaw;
+        if (!Number.isInteger(orgRaw) || !Number.isInteger(pltRaw) || pltRaw < 0 || pltRaw > 50) {
+          throw new Error(
+            "Usulan persentase komisi platform harus berupa bilangan bulat antara 0% hingga 50% (bagian penyelenggara 50% - 100%)."
+          );
+        }
+      }
+
+      const orgPct =
+        typeof payload.proposedOrganizerPercent === "number" &&
+        Number.isInteger(payload.proposedOrganizerPercent)
+          ? payload.proposedOrganizerPercent
+          : 100 - defaultPlatformFee;
+      const pltPct = 100 - orgPct;
+
+      const newEvent: CommunityEvent = {
+        id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        title: sanitizeHtmlText(payload.title),
+        category: payload.category,
+        description: sanitizeHtmlText(payload.description),
+        startDate: parseToWITAISO(payload.startDate),
+        endDate: parseToWITAISO(payload.endDate),
+        location: sanitizeHtmlText(payload.location),
+        maxCapacity:
+          payload.maxCapacity !== undefined &&
+          payload.maxCapacity !== null &&
+          (payload.maxCapacity as unknown) !== ""
+            ? validateEventCapacity(payload.maxCapacity, false).value
+            : undefined,
+        maxTicketsPerBooking:
+          typeof payload.maxTicketsPerBooking === "number" && payload.maxTicketsPerBooking > 0
+            ? Math.floor(payload.maxTicketsPerBooking)
+            : undefined,
+        destinationBankId: payload.destinationBankId || null,
+        isPaid: Boolean(payload.isPaid),
+        price: validateEventPrice(Boolean(payload.isPaid), payload.price).value ?? 0,
+        posterUrl: payload.posterUrl.trim(),
+        externalRegistrationUrl: payload.externalRegistrationUrl ? payload.externalRegistrationUrl.trim() : null,
+        organizerName: sanitizeHtmlText(payload.organizerName),
+        organizerEmail: payload.organizerEmail.trim().toLowerCase(),
+        organizerPhone: payload.organizerPhone.trim(),
+        guidelines: parseGuidelinesInput(payload.guidelines),
+        status: "PENDING", // Always PENDING on submission
+
+        // Collaboration requirements
+        collaborationFacilities: Array.isArray(payload.collaborationFacilities)
+          ? payload.collaborationFacilities.map((f) => sanitizeHtmlText(String(f)))
+          : typeof payload.collaborationFacilities === "string"
+          ? payload.collaborationFacilities.split(",").map((f) => sanitizeHtmlText(f.trim())).filter(Boolean)
+          : null,
+        collaborationPromotion: Array.isArray(payload.collaborationPromotion)
+          ? payload.collaborationPromotion.map((p) => sanitizeHtmlText(String(p)))
+          : typeof payload.collaborationPromotion === "string"
+          ? sanitizeHtmlText(payload.collaborationPromotion)
+          : null,
+        collaborationNotes: payload.collaborationNotes ? sanitizeHtmlText(payload.collaborationNotes) : null,
+
+        // Revenue sharing proposal: active agreement remains at platform default 80:20 until mutually agreed
+        organizerFeePercent: 80,
+        customPlatformFeePercent: 20,
+        proposedRevenueSplit:
+          payload.proposedOrganizerPercent !== undefined
+            ? {
+                organizerPercent: orgPct,
+                platformPercent: pltPct,
+                proposedBy: "ORGANIZER",
+                reason: sanitizeHtmlText(payload.revenueSplitReason || "Usulan bagi hasil awal saat pengajuan event"),
+                status: "PENDING",
+                proposedAt: new Date().toISOString(),
+                counterProposal: null,
+              }
+            : null,
+        revenueSplitHistory: [],
+        payoutStatus: "UNQUALIFIED",
+        payoutHistory: [],
+
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      all.unshift(newEvent);
+      await saveEventsToDisk(all, { tx });
+      committedEventsList = all;
+
+      return newEvent;
+    });
+
+    // POST-COMMIT PHASE: Only executed if db.$transaction committed successfully
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
     }
 
-    const orgPct =
-      typeof payload.proposedOrganizerPercent === "number" &&
-      Number.isInteger(payload.proposedOrganizerPercent)
-        ? payload.proposedOrganizerPercent
-        : 100 - defaultPlatformFee;
-    const pltPct = 100 - orgPct;
-
-    const newEvent: CommunityEvent = {
-      id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      title: sanitizeHtmlText(payload.title),
-      category: payload.category,
-      description: sanitizeHtmlText(payload.description),
-      startDate: parseToWITAISO(payload.startDate),
-      endDate: parseToWITAISO(payload.endDate),
-      location: sanitizeHtmlText(payload.location),
-      maxCapacity:
-        payload.maxCapacity !== undefined &&
-        payload.maxCapacity !== null &&
-        (payload.maxCapacity as unknown) !== ""
-          ? validateEventCapacity(payload.maxCapacity, false).value
-          : undefined,
-      maxTicketsPerBooking:
-        typeof payload.maxTicketsPerBooking === "number" && payload.maxTicketsPerBooking > 0
-          ? Math.floor(payload.maxTicketsPerBooking)
-          : undefined,
-      destinationBankId: payload.destinationBankId || null,
-      isPaid: Boolean(payload.isPaid),
-      price: validateEventPrice(Boolean(payload.isPaid), payload.price).value ?? 0,
-      posterUrl: payload.posterUrl.trim(),
-      externalRegistrationUrl: payload.externalRegistrationUrl ? payload.externalRegistrationUrl.trim() : null,
-      organizerName: sanitizeHtmlText(payload.organizerName),
-      organizerEmail: payload.organizerEmail.trim().toLowerCase(),
-      organizerPhone: payload.organizerPhone.trim(),
-      guidelines: parseGuidelinesInput(payload.guidelines),
-      status: "PENDING", // Always PENDING on submission
-
-      // Collaboration requirements
-      collaborationFacilities: Array.isArray(payload.collaborationFacilities)
-        ? payload.collaborationFacilities.map((f) => sanitizeHtmlText(String(f)))
-        : typeof payload.collaborationFacilities === "string"
-        ? payload.collaborationFacilities.split(",").map((f) => sanitizeHtmlText(f.trim())).filter(Boolean)
-        : null,
-      collaborationPromotion: Array.isArray(payload.collaborationPromotion)
-        ? payload.collaborationPromotion.map((p) => sanitizeHtmlText(String(p)))
-        : typeof payload.collaborationPromotion === "string"
-        ? sanitizeHtmlText(payload.collaborationPromotion)
-        : null,
-      collaborationNotes: payload.collaborationNotes ? sanitizeHtmlText(payload.collaborationNotes) : null,
-
-      // Revenue sharing proposal: active agreement remains at platform default 80:20 until mutually agreed
-      organizerFeePercent: 80,
-      customPlatformFeePercent: 20,
-      proposedRevenueSplit:
-        payload.proposedOrganizerPercent !== undefined
-          ? {
-              organizerPercent: orgPct,
-              platformPercent: pltPct,
-              proposedBy: "ORGANIZER",
-              reason: sanitizeHtmlText(payload.revenueSplitReason || "Usulan bagi hasil awal saat pengajuan event"),
-              status: "PENDING",
-              proposedAt: new Date().toISOString(),
-              counterProposal: null,
-            }
-          : null,
-      revenueSplitHistory: [],
-      payoutStatus: "UNQUALIFIED",
-      payoutHistory: [],
-
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    all.unshift(newEvent);
-    await saveEventsToDisk(all);
-
-    return newEvent;
+    return result;
   });
 }
 
@@ -2111,61 +2271,66 @@ export async function updateEventStatus(
         : { adminNotes: options }
       : options;
 
-  return withEventLock(async () => {
-    await syncStorageFromDb("events.json").catch(() => {});
-    const normalizedId = (id || "").trim().toLowerCase();
-    let all = loadEventsFromDisk();
-    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
-    if (index === -1) {
-      // Retry once in case of serverless cold-start sync delay
-      await syncStorageFromDb("events.json").catch(() => {});
-      all = loadEventsFromDisk();
-      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
-    }
-    if (index === -1) {
-      throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
-    }
-
-    const existing = all[index];
-    const updated: CommunityEvent = {
-      ...existing,
-      status,
-      adminNotes: resolvedOptions?.adminNotes !== undefined ? resolvedOptions.adminNotes : existing.adminNotes,
-      rejectionReason: resolvedOptions?.rejectionReason !== undefined ? resolvedOptions.rejectionReason : existing.rejectionReason,
-      revisionNotes: resolvedOptions?.revisionNotes !== undefined ? resolvedOptions.revisionNotes : existing.revisionNotes,
-      updatedAt: new Date().toISOString(),
-    };
-
-    // If approved, ensure organizer profile is registered and active, and write explicit effective revenue split
-    if (status === "APPROVED") {
-      const effectivePlatformFee = getEventEffectivePlatformFeePercent(existing);
-      updated.customPlatformFeePercent = effectivePlatformFee;
-      updated.organizerFeePercent = 100 - effectivePlatformFee;
-
-      const now = Date.now();
-      const endMs = existing.endDate
-        ? new Date(existing.endDate).getTime()
-        : new Date(existing.startDate).getTime() + 24 * 60 * 60 * 1000;
-      if (endMs < now) {
-        throw new Error(
-          "Tidak dapat menyetujui event: tanggal pelaksanaan acara telah terlewat. Event ini otomatis diarahkan ke Arsip."
-        );
+  let committedEventsList: CommunityEvent[] | null = null;
+  const result = await runWithDistributedEventsStorageLock(async (tx) => {
+    return withEventLock(async () => {
+      let all = await loadEventsFromTxOrDisk(tx);
+      const normalizedId = (id || "").trim().toLowerCase();
+      let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
+      if (index === -1) {
+        throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
       }
 
-      ensureOrganizerActive({
-        email: existing.organizerEmail,
-        name: existing.organizerName,
-        category: existing.category,
-        phone: existing.organizerPhone,
-        notes: `Penyelenggara aktif resmi dari event disetujui: ${existing.title}`,
-      });
-    }
+      const existing = all[index];
+      const updated: CommunityEvent = {
+        ...existing,
+        status,
+        adminNotes: resolvedOptions?.adminNotes !== undefined ? resolvedOptions.adminNotes : existing.adminNotes,
+        rejectionReason: resolvedOptions?.rejectionReason !== undefined ? resolvedOptions.rejectionReason : existing.rejectionReason,
+        revisionNotes: resolvedOptions?.revisionNotes !== undefined ? resolvedOptions.revisionNotes : existing.revisionNotes,
+        updatedAt: new Date().toISOString(),
+      };
 
-    all[index] = updated;
-    await saveEventsToDisk(all);
+      // If approved, ensure organizer profile is registered and active, and write explicit effective revenue split
+      if (status === "APPROVED") {
+        const effectivePlatformFee = getEventEffectivePlatformFeePercent(existing);
+        updated.customPlatformFeePercent = effectivePlatformFee;
+        updated.organizerFeePercent = 100 - effectivePlatformFee;
 
-    return updated;
+        const now = Date.now();
+        const endMs = existing.endDate
+          ? new Date(existing.endDate).getTime()
+          : new Date(existing.startDate).getTime() + 24 * 60 * 60 * 1000;
+        if (endMs < now) {
+          throw new Error(
+            "Tidak dapat menyetujui event: tanggal pelaksanaan acara telah terlewat. Event ini otomatis diarahkan ke Arsip."
+          );
+        }
+
+        ensureOrganizerActive({
+          email: existing.organizerEmail,
+          name: existing.organizerName,
+          category: existing.category,
+          phone: existing.organizerPhone,
+          notes: `Penyelenggara aktif resmi dari event disetujui: ${existing.title}`,
+        });
+      }
+
+      all[index] = updated;
+      await saveEventsToDisk(all, { tx });
+      committedEventsList = all;
+
+      return updated;
+    });
   });
+
+  // Post-commit disk replica and cache synchronization
+  if (committedEventsList) {
+    syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+    markStorageSyncSynced("events.json");
+  }
+
+  return result;
 }
 
 /**
@@ -2186,87 +2351,13 @@ export async function updateEventDetails(
 
   const executeUpdate = async (tx?: any) => {
     return withEventLock(async () => {
-      let all: CommunityEvent[];
-      let allBookings: EventTicketOrder[] = [];
-
-      if (tx) {
-        const eventsRow = await tx.systemSetting.findUnique({ where: { key: "STORAGE_events.json" } })
-          .catch((dbErr: any) => {
-            console.error("[events] Gagal membaca STORAGE_events.json di dalam transaksi updateEventDetails:", dbErr);
-            throw new DatabasePersistenceError(
-              `Gagal membaca snapshot events dari database PostgreSQL: ${dbErr?.message || "Koneksi terputus"}`,
-              "events.json",
-              true
-            );
-          });
-
-        if (eventsRow?.value) {
-          try {
-            const parsed = JSON.parse(eventsRow.value);
-            if (Array.isArray(parsed)) {
-              all = parsed;
-            } else {
-              throw new Error("Data STORAGE_events.json bukan array valid");
-            }
-          } catch (jsonErr: any) {
-            throw new DatabasePersistenceError(
-              `Format data events di database PostgreSQL tidak valid: ${jsonErr?.message}`,
-              "events.json",
-              true
-            );
-          }
-        } else {
-          all = loadEventsFromDisk();
-        }
-
-        if (hasCapacityChange) {
-          const bookingsRow = await tx.systemSetting.findUnique({ where: { key: "STORAGE_event_bookings.json" } })
-            .catch((dbErr: any) => {
-              console.error("[events] Gagal membaca STORAGE_event_bookings.json di dalam transaksi updateEventDetails:", dbErr);
-              throw new DatabasePersistenceError(
-                `Gagal membaca snapshot bookings dari database PostgreSQL: ${dbErr?.message || "Koneksi terputus"}`,
-                "event_bookings.json",
-                true
-              );
-            });
-
-          if (bookingsRow?.value) {
-            try {
-              const parsed = JSON.parse(bookingsRow.value);
-              if (Array.isArray(parsed)) {
-                allBookings = parsed;
-              } else {
-                throw new Error("Data STORAGE_event_bookings.json bukan array valid");
-              }
-            } catch (jsonErr: any) {
-              throw new DatabasePersistenceError(
-                `Format data bookings di database PostgreSQL tidak valid: ${jsonErr?.message}`,
-                "event_bookings.json",
-                true
-              );
-            }
-          } else {
-            allBookings = loadBookingsFromDisk();
-          }
-        }
-      } else {
-        if (Boolean(process.env.DATABASE_URL)) {
-          await syncStorageFromDb("events.json");
-          if (hasCapacityChange) {
-            await syncBookingsStorageFailClosed();
-          }
-        }
-        all = loadEventsFromDisk();
-        allBookings = loadBookingsFromDisk();
-      }
+      let all: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
+      let allBookings: EventTicketOrder[] = hasCapacityChange
+        ? await loadBookingsFromTxOrDisk(tx)
+        : [];
 
       const normalizedId = (id || "").trim().toLowerCase();
       let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
-      if (index === -1 && !tx) {
-        await syncStorageFromDb("events.json").catch(() => {});
-        all = loadEventsFromDisk();
-        index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
-      }
       if (index === -1) {
         throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
       }
@@ -2366,27 +2457,26 @@ export async function updateEventDetails(
     });
   };
 
-  // RC-01 & Distributed Advisory Lock: Serialisasikan seluruh proses update dengan antrean booking jika kapasitas berubah
-  if (hasCapacityChange) {
-    return await withBookingLock(async () => {
-      let committedEventsList: CommunityEvent[] | null = null;
-      const result = await runWithDistributedEventLock(id, async (tx) => {
-        const updated = await executeUpdate(tx);
-        committedEventsList = updatedAllEvents;
-        return updated;
-      });
-
-      // POST-COMMIT PHASE: Only executed if db.$transaction committed successfully
-      if (committedEventsList) {
-        syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
-        markStorageSyncSynced("events.json");
+  return withBookingLock(async () => {
+    let committedEventsList: CommunityEvent[] | null = null;
+    const result = await runWithDistributedEventsStorageLock(async (tx) => {
+      if (hasCapacityChange && tx) {
+        const eventLockKey = getEventAdvisoryLockKey(id);
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(${eventLockKey})::text AS lock_status`;
       }
-
-      return result;
+      const updated = await executeUpdate(tx);
+      committedEventsList = updatedAllEvents;
+      return updated;
     });
-  } else {
-    return await executeUpdate();
-  }
+
+    // POST-COMMIT PHASE: Only executed if db.$transaction committed successfully
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
+    }
+
+    return result;
+  });
 }
 
 /**
@@ -2397,56 +2487,64 @@ export async function setEventCommissionOverride(
   customFeePercent: number | null
 ): Promise<CommunityEvent> {
   return withEventLock(async () => {
-    await syncStorageFromDb("events.json").catch(() => {});
-    const normalizedId = (eventId || "").trim().toLowerCase();
-    let all = loadEventsFromDisk();
-    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-    if (index === -1) {
-      await syncStorageFromDb("events.json").catch(() => {});
-      all = loadEventsFromDisk();
-      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-    }
-    if (index === -1) {
-      throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
-    }
-
-    const event = all[index];
-    if (event.status === "REJECTED" || event.status === "ARCHIVED") {
-      throw new Error(`Tidak dapat mengatur override komisi untuk event berstatus ${event.status}.`);
-    }
-
-    if (isEventRevenueSplitLocked(eventId)) {
-      const lockErr = new Error(
-        "EVENT_REVENUE_SPLIT_LOCKED: Skema bagi hasil untuk event ini telah terkunci permanen karena telah terdapat transaksi tiket. Commission override tidak dapat diubah."
-      );
-      (lockErr as any).code = "EVENT_REVENUE_SPLIT_LOCKED";
-      throw lockErr;
-    }
-
-    let finalPercent: number | null = null;
-    if (customFeePercent !== null) {
-      const num = Number(customFeePercent);
-      const validation = validateRevenueSplitPercentage(num);
-      if (!validation.valid) {
-        throw new Error(validation.error || "Persentase komisi override tidak valid.");
+    let committedEventsList: CommunityEvent[] | null = null;
+    const result = await runWithDistributedEventsStorageLock(async (tx) => {
+      let all: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
+      const normalizedId = (eventId || "").trim().toLowerCase();
+      let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+      if (index === -1) {
+        throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
       }
-      finalPercent = num;
+
+      const event = all[index];
+      if (event.status === "REJECTED" || event.status === "ARCHIVED") {
+        throw new Error(`Tidak dapat mengatur override komisi untuk event berstatus ${event.status}.`);
+      }
+
+      const allBookings = await loadBookingsFromTxOrDisk(tx);
+      if (isEventRevenueSplitLocked(eventId, allBookings)) {
+        const lockErr = new Error(
+          "EVENT_REVENUE_SPLIT_LOCKED: Skema bagi hasil untuk event ini telah terkunci permanen karena telah terdapat transaksi tiket. Commission override tidak dapat diubah."
+        );
+        (lockErr as any).code = "EVENT_REVENUE_SPLIT_LOCKED";
+        throw lockErr;
+      }
+
+      let finalPercent: number | null = null;
+      if (customFeePercent !== null) {
+        const num = Number(customFeePercent);
+        const validation = validateRevenueSplitPercentage(num);
+        if (!validation.valid) {
+          throw new Error(validation.error || "Persentase komisi override tidak valid.");
+        }
+        finalPercent = num;
+      }
+
+      const defaultPlatformFee = getEventRevenuePolicy().defaultPlatformFeePercent ?? 20;
+      const effectivePlatformFee = finalPercent !== null ? finalPercent : defaultPlatformFee;
+      const updatedOrganizerFee = 100 - effectivePlatformFee;
+
+      const updated: CommunityEvent = {
+        ...all[index],
+        customPlatformFeePercent: finalPercent,
+        organizerFeePercent: updatedOrganizerFee,
+        updatedAt: new Date().toISOString(),
+      };
+
+      all[index] = updated;
+      await saveEventsToDisk(all, { tx });
+      committedEventsList = all;
+
+      return updated;
+    });
+
+    // POST-COMMIT PHASE: Only executed if db.$transaction committed successfully
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
     }
 
-    const defaultPlatformFee = getEventRevenuePolicy().defaultPlatformFeePercent ?? 20;
-    const effectivePlatformFee = finalPercent !== null ? finalPercent : defaultPlatformFee;
-    const updatedOrganizerFee = 100 - effectivePlatformFee;
-
-    const updated: CommunityEvent = {
-      ...all[index],
-      customPlatformFeePercent: finalPercent,
-      organizerFeePercent: updatedOrganizerFee,
-      updatedAt: new Date().toISOString(),
-    };
-
-    all[index] = updated;
-    await saveEventsToDisk(all);
-    return updated;
+    return result;
   });
 }
 
@@ -2457,35 +2555,66 @@ export async function setEventCommissionOverride(
  */
 export async function deleteEvent(
   id: string,
-  options?: { actorName?: string; actorRole?: string }
+  options?: { actorName?: string; actorRole?: string; expectedUpdatedAt?: string }
 ): Promise<{ success: boolean; event: CommunityEvent }> {
-  return withEventLock(async () => {
-    await syncStorageFromDb("events.json").catch(() => {});
-    await syncStorageFromDb("event_bookings.json").catch(() => {});
+  if (Boolean(process.env.DATABASE_URL || process.env.NODE_ENV === "production")) {
+    await syncStorageFromDbWithSnapshot("events.json");
+  }
+  let committedEventsList: CommunityEvent[] | null = null;
+  const result = await runWithDistributedEventsStorageLock(async (tx) => {
+    return withEventLock(async () => {
+      // 1. Re-read the latest events collection directly from tx (or local replica if offline)
+      let all = await loadEventsFromTxOrDisk(tx);
+      const normalizedId = (id || "").trim().toLowerCase();
+      let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
+      if (index === -1) {
+        throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
+      }
 
-    const normalizedId = (id || "").trim().toLowerCase();
-    let all = loadEventsFromDisk();
-    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === id);
-    if (index === -1) {
-      throw new Error(`Event dengan ID ${id} tidak ditemukan.`);
-    }
+      const event = all[index];
 
-    const event = all[index];
+      // 2. CAS / Optimistic Concurrency Control
+      if (options?.expectedUpdatedAt) {
+        const expectedTime = new Date(options.expectedUpdatedAt).getTime();
+        const currentTime = event.updatedAt ? new Date(event.updatedAt).getTime() : NaN;
 
-    // Check all bookings associated with this event
-    const allBookings = loadBookingsFromDisk();
-    const relatedBookings = allBookings.filter((b) => b.eventId === event.id);
+        // If target event has no valid updatedAt OR timestamp differs, strictly reject
+        if (isNaN(currentTime) || isNaN(expectedTime) || currentTime !== expectedTime) {
+          const casError = new Error(
+            `CONCURRENT_MODIFICATION_ERROR: Event '${event.title}' (${event.id}) telah dimodifikasi oleh proses lain (expected: ${options.expectedUpdatedAt}, current: ${event.updatedAt || "KOSONG"}). Penghapusan dibatalkan demi integritas data.`
+          );
+          (casError as any).code = "CONCURRENT_MODIFICATION_ERROR";
+          throw casError;
+        }
+      }
 
-    if (relatedBookings.length > 0) {
-      throw new Error(
-        `FORBIDDEN_DELETE: Event [${event.title}] (${event.id}) memiliki ${relatedBookings.length} data pemesanan/tiket terkait dan tidak dapat dihapus permanen demi integritas data. Silakan gunakan opsi pengarsipan (ARCHIVE).`
-      );
-    }
+      // 3. Re-read bookings collection directly from tx to ensure zero associated bookings
+      const allBookings = await loadBookingsFromTxOrDisk(tx);
+      const relatedBookings = allBookings.filter((b) => b.eventId === event.id);
 
-    const updatedEvents = all.filter((e) => e.id !== event.id);
-    await saveEventsToDisk(updatedEvents);
+      if (relatedBookings.length > 0) {
+        throw new Error(
+          `FORBIDDEN_DELETE: Event [${event.title}] (${event.id}) memiliki ${relatedBookings.length} data pemesanan/tiket terkait dan tidak dapat dihapus permanen demi integritas data. Silakan gunakan opsi pengarsipan (ARCHIVE).`
+        );
+      }
 
-    // Append append-only audit log
+      // 4. Atomic filter and write back to database inside tx
+      const updatedEvents = all.filter((e) => e.id !== event.id);
+      await saveEventsToDisk(updatedEvents, { tx });
+      committedEventsList = updatedEvents;
+
+      return { success: true, event };
+    });
+  });
+
+  // 5. Post-Commit Phase: Sync replica to local disk only after DB transaction succeeds
+  if (committedEventsList) {
+    syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+    markStorageSyncSynced("events.json");
+  }
+
+  // Append append-only audit log
+  try {
     await appendAuditLog({
       id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       timestamp: new Date().toISOString(),
@@ -2496,13 +2625,15 @@ export async function deleteEvent(
       status: "SUCCESS",
       actorName: options?.actorName || "Admin Dago",
       actorRole: options?.actorRole || "SUPER_ADMIN",
-      recordId: event.id,
-      description: `Menghapus permanen event testing [${event.title}] (${event.id}) tanpa riwayat booking/transaksi.`,
-      previousValue: JSON.stringify({ id: event.id, title: event.title, status: event.status }),
-    }).catch(() => {});
+      recordId: result.event.id,
+      description: `Menghapus permanen event testing [${result.event.title}] (${result.event.id}) tanpa riwayat booking/transaksi.`,
+      previousValue: JSON.stringify({ id: result.event.id, title: result.event.title, status: result.event.status }),
+    });
+  } catch (auditErr) {
+    console.error("[events] Gagal mencatat audit log deleteEvent:", auditErr);
+  }
 
-    return { success: true, event };
-  });
+  return result;
 }
 
 // =============================================================================
@@ -2887,78 +3018,9 @@ export async function createEventBooking(
     let committedBookingsList: EventTicketOrder[] | null = null;
 
     const result = await runWithDistributedEventLock(payload.eventId, async (tx) => {
-      let allEvents: CommunityEvent[];
-      let allBookings: EventTicketOrder[];
+      let allEvents: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
+      let allBookings: EventTicketOrder[] = await loadBookingsFromTxOrDisk(tx);
 
-      if (tx) {
-        // FAIL-CLOSED: Database read must NOT swallow errors when database is active
-        const eventsRow = await tx.systemSetting.findUnique({ where: { key: "STORAGE_events.json" } })
-          .catch((dbErr: any) => {
-            console.error("[events] Gagal membaca STORAGE_events.json di dalam transaksi:", dbErr);
-            throw new DatabasePersistenceError(
-              `Gagal membaca snapshot events dari database PostgreSQL saat transaksi booking: ${dbErr?.message || "Koneksi terputus"}`,
-              "events.json",
-              true
-            );
-          });
-
-        if (eventsRow?.value) {
-          try {
-            const parsed = JSON.parse(eventsRow.value);
-            if (Array.isArray(parsed)) {
-              allEvents = parsed;
-            } else {
-              throw new Error("Data STORAGE_events.json bukan array valid");
-            }
-          } catch (jsonErr: any) {
-            throw new DatabasePersistenceError(
-              `Format data events di database PostgreSQL tidak valid: ${jsonErr?.message}`,
-              "events.json",
-              true
-            );
-          }
-        } else {
-          allEvents = loadEventsFromDisk();
-        }
-
-        const bookingsRow = await tx.systemSetting.findUnique({ where: { key: "STORAGE_event_bookings.json" } })
-          .catch((dbErr: any) => {
-            console.error("[events] Gagal membaca STORAGE_event_bookings.json di dalam transaksi:", dbErr);
-            throw new DatabasePersistenceError(
-              `Gagal membaca snapshot bookings dari database PostgreSQL saat transaksi booking: ${dbErr?.message || "Koneksi terputus"}`,
-              "event_bookings.json",
-              true
-            );
-          });
-
-        if (bookingsRow?.value) {
-          try {
-            const parsed = JSON.parse(bookingsRow.value);
-            if (Array.isArray(parsed)) {
-              allBookings = parsed;
-            } else {
-              throw new Error("Data STORAGE_event_bookings.json bukan array valid");
-            }
-          } catch (jsonErr: any) {
-            throw new DatabasePersistenceError(
-              `Format data bookings di database PostgreSQL tidak valid: ${jsonErr?.message}`,
-              "event_bookings.json",
-              true
-            );
-          }
-        } else {
-          allBookings = loadBookingsFromDisk();
-        }
-      } else {
-        if (Boolean(process.env.DATABASE_URL)) {
-          await syncStorageFromDb("events.json");
-          await syncStorageFromDb("event_bookings.json");
-        }
-        allEvents = loadEventsFromDisk();
-        allBookings = loadBookingsFromDisk();
-      }
-
-      await syncNormalizedEventsToDb();
       const event = allEvents.find((e) => e.id === payload.eventId);
       if (!event) {
         throw new Error(`Event dengan ID ${payload.eventId} tidak ditemukan.`);
@@ -3164,78 +3226,9 @@ export async function updateBookingCheckIn(
 
         // 2. Execute within PostgreSQL distributed event advisory lock
         await runWithDistributedEventLock(candidateEventId, async (tx) => {
-          let allEvents: CommunityEvent[];
-          let bookingsInTx: EventTicketOrder[];
-
           // 3. Re-read bookings and events inside transaction
-          if (tx) {
-            const eventsRow = await tx.systemSetting
-              .findUnique({ where: { key: "STORAGE_events.json" } })
-              .catch((dbErr: any) => {
-                console.error("[events] Gagal membaca STORAGE_events.json di dalam transaksi check-in:", dbErr);
-                throw new DatabasePersistenceError(
-                  `Gagal membaca snapshot events dari database PostgreSQL saat update check-in: ${dbErr?.message || "Koneksi terputus"}`,
-                  "events.json",
-                  true
-                );
-              });
-
-            if (eventsRow?.value) {
-              try {
-                const parsed = JSON.parse(eventsRow.value);
-                if (Array.isArray(parsed)) {
-                  allEvents = parsed;
-                } else {
-                  throw new Error("Data STORAGE_events.json bukan array valid");
-                }
-              } catch (jsonErr: any) {
-                throw new DatabasePersistenceError(
-                  `Format data events di database PostgreSQL tidak valid: ${jsonErr?.message}`,
-                  "events.json",
-                  true
-                );
-              }
-            } else {
-              allEvents = loadEventsFromDisk();
-            }
-
-            const bookingsRow = await tx.systemSetting
-              .findUnique({ where: { key: "STORAGE_event_bookings.json" } })
-              .catch((dbErr: any) => {
-                console.error("[events] Gagal membaca STORAGE_event_bookings.json di dalam transaksi check-in:", dbErr);
-                throw new DatabasePersistenceError(
-                  `Gagal membaca snapshot bookings dari database PostgreSQL saat update check-in: ${dbErr?.message || "Koneksi terputus"}`,
-                  "event_bookings.json",
-                  true
-                );
-              });
-
-            if (bookingsRow?.value) {
-              try {
-                const parsed = JSON.parse(bookingsRow.value);
-                if (Array.isArray(parsed)) {
-                  bookingsInTx = parsed;
-                } else {
-                  throw new Error("Data STORAGE_event_bookings.json bukan array valid");
-                }
-              } catch (jsonErr: any) {
-                throw new DatabasePersistenceError(
-                  `Format data bookings di database PostgreSQL tidak valid: ${jsonErr?.message}`,
-                  "event_bookings.json",
-                  true
-                );
-              }
-            } else {
-              bookingsInTx = loadBookingsFromDisk();
-            }
-          } else {
-            if (Boolean(process.env.DATABASE_URL)) {
-              await syncStorageFromDb("events.json").catch(() => {});
-              await syncStorageFromDb("event_bookings.json").catch(() => {});
-            }
-            allEvents = loadEventsFromDisk();
-            bookingsInTx = loadBookingsFromDisk();
-          }
+          let allEvents: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
+          let bookingsInTx: EventTicketOrder[] = await loadBookingsFromTxOrDisk(tx);
 
           // 4. Validate booking still exists in transaction snapshot
           const index = bookingsInTx.findIndex(
@@ -3619,78 +3612,9 @@ export async function updateBookingPaymentStatus(
 
     // 2. Acquire distributed event lock using candidate eventId
     await runWithDistributedEventLock(candidateEventId, async (tx) => {
-      let allEvents: CommunityEvent[];
-      let bookingsInTx: EventTicketOrder[];
-
       // 3. Re-read bookings and events inside transaction
-      if (tx) {
-        const eventsRow = await tx.systemSetting
-          .findUnique({ where: { key: "STORAGE_events.json" } })
-          .catch((dbErr: any) => {
-            console.error("[events] Gagal membaca STORAGE_events.json di dalam transaksi payment update:", dbErr);
-            throw new DatabasePersistenceError(
-              `Gagal membaca snapshot events dari database PostgreSQL saat update status pembayaran: ${dbErr?.message || "Koneksi terputus"}`,
-              "events.json",
-              true
-            );
-          });
-
-        if (eventsRow?.value) {
-          try {
-            const parsed = JSON.parse(eventsRow.value);
-            if (Array.isArray(parsed)) {
-              allEvents = parsed;
-            } else {
-              throw new Error("Data STORAGE_events.json bukan array valid");
-            }
-          } catch (jsonErr: any) {
-            throw new DatabasePersistenceError(
-              `Format data events di database PostgreSQL tidak valid: ${jsonErr?.message}`,
-              "events.json",
-              true
-            );
-          }
-        } else {
-          allEvents = loadEventsFromDisk();
-        }
-
-        const bookingsRow = await tx.systemSetting
-          .findUnique({ where: { key: "STORAGE_event_bookings.json" } })
-          .catch((dbErr: any) => {
-            console.error("[events] Gagal membaca STORAGE_event_bookings.json di dalam transaksi payment update:", dbErr);
-            throw new DatabasePersistenceError(
-              `Gagal membaca snapshot bookings dari database PostgreSQL saat update status pembayaran: ${dbErr?.message || "Koneksi terputus"}`,
-              "event_bookings.json",
-              true
-            );
-          });
-
-        if (bookingsRow?.value) {
-          try {
-            const parsed = JSON.parse(bookingsRow.value);
-            if (Array.isArray(parsed)) {
-              bookingsInTx = parsed;
-            } else {
-              throw new Error("Data STORAGE_event_bookings.json bukan array valid");
-            }
-          } catch (jsonErr: any) {
-            throw new DatabasePersistenceError(
-              `Format data bookings di database PostgreSQL tidak valid: ${jsonErr?.message}`,
-              "event_bookings.json",
-              true
-            );
-          }
-        } else {
-          bookingsInTx = loadBookingsFromDisk();
-        }
-      } else {
-        if (Boolean(process.env.DATABASE_URL)) {
-          await syncStorageFromDb("events.json");
-          await syncStorageFromDb("event_bookings.json");
-        }
-        allEvents = loadEventsFromDisk();
-        bookingsInTx = loadBookingsFromDisk();
-      }
+      let allEvents: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
+      let bookingsInTx: EventTicketOrder[] = await loadBookingsFromTxOrDisk(tx);
 
       // 4. Validate booking still exists in transaction snapshot
       const txIndex = bookingsInTx.findIndex((b) => b.id === bookingId);
@@ -3787,7 +3711,9 @@ export async function deleteEventBooking(
   options?: { actorName?: string; actorRole?: string }
 ): Promise<{ success: boolean; booking: EventTicketOrder }> {
   return withBookingLock(async () => {
-    await syncStorageFromDb("event_bookings.json").catch(() => {});
+    if (Boolean(process.env.DATABASE_URL || process.env.NODE_ENV === "production")) {
+      await syncStorageFromDbWithSnapshot("event_bookings.json");
+    }
     const allBookings = loadBookingsFromDisk();
     const normalizedId = (bookingId || "").trim().toLowerCase();
     const index = allBookings.findIndex(
@@ -3808,9 +3734,13 @@ export async function deleteEventBooking(
       );
     }
 
-    if (booking.checkInStatus === "CHECKED_IN" || (booking.checkedInQty && booking.checkedInQty > 0)) {
+    const hasCheckedInSeats = Array.isArray(booking.checkedInSeats) && booking.checkedInSeats.length > 0;
+    const hasCheckedInQty = typeof booking.checkedInQty === "number" && booking.checkedInQty > 0;
+    const isCheckedInStatus = booking.checkInStatus === "CHECKED_IN" || booking.checkInStatus === "PARTIALLY_CHECKED_IN";
+
+    if (isCheckedInStatus || hasCheckedInQty || hasCheckedInSeats) {
       throw new Error(
-        `FORBIDDEN_DELETE: Pemesanan tiket [${booking.ticketCode || booking.id}] memiliki riwayat check-in dan tidak dapat dihapus.`
+        `FORBIDDEN_DELETE: Pemesanan tiket [${booking.ticketCode || booking.id}] memiliki riwayat check-in (status: ${booking.checkInStatus}, kuantitas: ${booking.checkedInQty || 0}, kursi: ${booking.checkedInSeats?.join(",") || "—"}) dan tidak dapat dihapus.`
       );
     }
 
@@ -3824,27 +3754,31 @@ export async function deleteEventBooking(
     await saveBookingsToDisk(updatedBookings);
 
     // Audit log
-    await appendAuditLog({
-      id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      timestamp: new Date().toISOString(),
-      module: "SETTINGS",
-      action: "EVENT_BOOKING_DELETE",
-      category: "CONFIGURATION",
-      severity: "MEDIUM",
-      status: "SUCCESS",
-      actorName: options?.actorName || "Admin Dago",
-      actorRole: options?.actorRole || "SUPER_ADMIN",
-      recordId: booking.id,
-      referenceId: booking.eventId,
-      description: `Menghapus pemesanan tiket testing [${booking.ticketCode || booking.id}] (status: ${booking.paymentStatus}) pada event [${booking.eventTitle}].`,
-      previousValue: JSON.stringify({
-        id: booking.id,
-        ticketCode: booking.ticketCode,
-        eventId: booking.eventId,
-        paymentStatus: booking.paymentStatus,
-        ticketCount: booking.ticketCount,
-      }),
-    }).catch(() => {});
+    try {
+      await appendAuditLog({
+        id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        timestamp: new Date().toISOString(),
+        module: "SETTINGS",
+        action: "EVENT_BOOKING_DELETE",
+        category: "CONFIGURATION",
+        severity: "MEDIUM",
+        status: "SUCCESS",
+        actorName: options?.actorName || "Admin Dago",
+        actorRole: options?.actorRole || "SUPER_ADMIN",
+        recordId: booking.id,
+        referenceId: booking.eventId,
+        description: `Menghapus pemesanan tiket testing [${booking.ticketCode || booking.id}] (status: ${booking.paymentStatus}) pada event [${booking.eventTitle}].`,
+        previousValue: JSON.stringify({
+          id: booking.id,
+          ticketCode: booking.ticketCode,
+          eventId: booking.eventId,
+          paymentStatus: booking.paymentStatus,
+          ticketCount: booking.ticketCount,
+        }),
+      });
+    } catch (auditErr) {
+      console.error("[events] Gagal mencatat audit log deleteEventBooking:", auditErr);
+    }
 
     return { success: true, booking };
   });
@@ -4249,87 +4183,13 @@ export async function organizerResubmitEvent(
   const executeResubmit = async (tx?: any) => {
     return withEventLock(async () => {
       const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
-      let all: CommunityEvent[];
-      let allBookings: EventTicketOrder[] = [];
-
-      if (tx) {
-        const eventsRow = await tx.systemSetting.findUnique({ where: { key: "STORAGE_events.json" } })
-          .catch((dbErr: any) => {
-            console.error("[events] Gagal membaca STORAGE_events.json di dalam transaksi organizerResubmitEvent:", dbErr);
-            throw new DatabasePersistenceError(
-              `Gagal membaca snapshot events dari database PostgreSQL saat resubmit: ${dbErr?.message || "Koneksi terputus"}`,
-              "events.json",
-              true
-            );
-          });
-
-        if (eventsRow?.value) {
-          try {
-            const parsed = JSON.parse(eventsRow.value);
-            if (Array.isArray(parsed)) {
-              all = parsed;
-            } else {
-              throw new Error("Data STORAGE_events.json bukan array valid");
-            }
-          } catch (jsonErr: any) {
-            throw new DatabasePersistenceError(
-              `Format data events di database PostgreSQL tidak valid: ${jsonErr?.message}`,
-              "events.json",
-              true
-            );
-          }
-        } else {
-          all = loadEventsFromDisk();
-        }
-
-        if (hasCapacityChange) {
-          const bookingsRow = await tx.systemSetting.findUnique({ where: { key: "STORAGE_event_bookings.json" } })
-            .catch((dbErr: any) => {
-              console.error("[events] Gagal membaca STORAGE_event_bookings.json di dalam transaksi organizerResubmitEvent:", dbErr);
-              throw new DatabasePersistenceError(
-                `Gagal membaca snapshot bookings dari database PostgreSQL saat resubmit: ${dbErr?.message || "Koneksi terputus"}`,
-                "event_bookings.json",
-                true
-              );
-            });
-
-          if (bookingsRow?.value) {
-            try {
-              const parsed = JSON.parse(bookingsRow.value);
-              if (Array.isArray(parsed)) {
-                allBookings = parsed;
-              } else {
-                throw new Error("Data STORAGE_event_bookings.json bukan array valid");
-              }
-            } catch (jsonErr: any) {
-              throw new DatabasePersistenceError(
-                `Format data bookings di database PostgreSQL tidak valid: ${jsonErr?.message}`,
-                "event_bookings.json",
-                true
-              );
-            }
-          } else {
-            allBookings = loadBookingsFromDisk();
-          }
-        }
-      } else {
-        if (Boolean(process.env.DATABASE_URL)) {
-          await syncStorageFromDb("events.json");
-          if (hasCapacityChange) {
-            await syncBookingsStorageFailClosed();
-          }
-        }
-        all = loadEventsFromDisk();
-        allBookings = loadBookingsFromDisk();
-      }
+      let all: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
+      let allBookings: EventTicketOrder[] = hasCapacityChange
+        ? await loadBookingsFromTxOrDisk(tx)
+        : [];
 
       const normalizedId = (eventId || "").trim().toLowerCase();
       let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-      if (index === -1 && !tx) {
-        await syncStorageFromDb("events.json").catch(() => {});
-        all = loadEventsFromDisk();
-        index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-      }
       if (index === -1) {
         throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
       }
@@ -4421,27 +4281,26 @@ export async function organizerResubmitEvent(
     });
   };
 
-  // RC-01 & Distributed Advisory Lock: Serialisasikan seluruh proses resubmit dengan antrean booking jika kapasitas berubah
-  if (hasCapacityChange) {
-    return await withBookingLock(async () => {
-      let committedEventsList: CommunityEvent[] | null = null;
-      const result = await runWithDistributedEventLock(eventId, async (tx) => {
-        const updated = await executeResubmit(tx);
-        committedEventsList = updatedAllEvents;
-        return updated;
-      });
-
-      // POST-COMMIT PHASE: Only executed if db.$transaction committed successfully
-      if (committedEventsList) {
-        syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
-        markStorageSyncSynced("events.json");
+  return withBookingLock(async () => {
+    let committedEventsList: CommunityEvent[] | null = null;
+    const result = await runWithDistributedEventsStorageLock(async (tx) => {
+      if (hasCapacityChange && tx) {
+        const eventLockKey = getEventAdvisoryLockKey(eventId);
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(${eventLockKey})::text AS lock_status`;
       }
-
-      return result;
+      const updated = await executeResubmit(tx);
+      committedEventsList = updatedAllEvents;
+      return updated;
     });
-  } else {
-    return await executeResubmit();
-  }
+
+    // POST-COMMIT PHASE: Only executed if db.$transaction committed successfully
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
+    }
+
+    return result;
+  });
 }
 
 /**
@@ -4459,67 +4318,73 @@ export async function proposeEventRevenueSplit(
   isAdmin: boolean = false
 ): Promise<CommunityEvent> {
   return withEventLock(async () => {
-    if (!Number.isInteger(platformPercent) || platformPercent < 0 || platformPercent > 50) {
-      throw new Error("Persentase komisi platform harus berupa bilangan bulat antara 0% hingga 50%.");
+    let committedEventsList: CommunityEvent[] | null = null;
+    const result = await runWithDistributedEventsStorageLock(async (tx) => {
+      if (!Number.isInteger(platformPercent) || platformPercent < 0 || platformPercent > 50) {
+        throw new Error("Persentase komisi platform harus berupa bilangan bulat antara 0% hingga 50%.");
+      }
+      if (!Number.isInteger(organizerPercent) || organizerPercent !== 100 - platformPercent) {
+        throw new Error("Total persentase bagi hasil harus tepat 100%. Persentase bagian penyelenggara harus berupa bilangan bulat.");
+      }
+
+      let all: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
+      const normalizedId = (eventId || "").trim().toLowerCase();
+      let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+      if (index === -1) {
+        throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
+      }
+
+      const event = all[index];
+      const normalizedActorEmail = (actorEmail || "").trim().toLowerCase();
+      const normalizedOrganizerEmail = (event.organizerEmail || "").trim().toLowerCase();
+
+      const isDagoAdminParty = proposedBy === "DAGO_ADMIN" || (proposedBy as string) === "ADMIN";
+
+      if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
+        throw new Error("FORBIDDEN: Pelanggaran isolasi data. Anda tidak memiliki izin untuk mengusulkan bagi hasil event milik penyelenggara lain.");
+      }
+      if (isDagoAdminParty && !isAdmin) {
+        throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat mengusulkan bagi hasil atas nama Dago.");
+      }
+
+      // LOCK GUARD: Revenue split is locked once a booking exists (anything other than CANCELLED or EXPIRED)
+      const allBookings = await loadBookingsFromTxOrDisk(tx);
+      if (isEventRevenueSplitLocked(event.id, allBookings)) {
+        const err: any = new Error(
+          "EVENT_REVENUE_SPLIT_LOCKED: Ketentuan bagi hasil event ini telah terkunci permanen karena telah terdapat pemesanan tiket aktif. Persentase bagi hasil tidak dapat diubah kembali."
+        );
+        err.code = "EVENT_REVENUE_SPLIT_LOCKED";
+        throw err;
+      }
+
+      const newProposal: ProposedRevenueSplit = {
+        id: `split-prop-${Date.now()}`,
+        proposedBy,
+        organizerPercent,
+        platformPercent,
+        reason: sanitizeHtmlText(reason || "Usulan penyesuaian bagi hasil"),
+        status: "PENDING",
+        createdAt: new Date().toISOString(),
+        proposedAt: new Date().toISOString(),
+      };
+
+      event.proposedRevenueSplit = newProposal;
+      event.updatedAt = new Date().toISOString();
+
+      all[index] = event;
+      await saveEventsToDisk(all, { tx });
+      committedEventsList = all;
+
+      return event;
+    });
+
+    // POST-COMMIT PHASE: Only executed if db.$transaction committed successfully
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
     }
-    if (!Number.isInteger(organizerPercent) || organizerPercent !== 100 - platformPercent) {
-      throw new Error("Total persentase bagi hasil harus tepat 100%. Persentase bagian penyelenggara harus berupa bilangan bulat.");
-    }
 
-    await syncStorageFromDb("events.json").catch(() => {});
-    await syncStorageFromDb("event_bookings.json").catch(() => {});
-    const normalizedId = (eventId || "").trim().toLowerCase();
-    let all = loadEventsFromDisk();
-    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-    if (index === -1) {
-      await syncStorageFromDb("events.json").catch(() => {});
-      all = loadEventsFromDisk();
-      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-    }
-    if (index === -1) {
-      throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
-    }
-
-    const event = all[index];
-    const normalizedActorEmail = (actorEmail || "").trim().toLowerCase();
-    const normalizedOrganizerEmail = (event.organizerEmail || "").trim().toLowerCase();
-
-    const isDagoAdminParty = proposedBy === "DAGO_ADMIN" || (proposedBy as string) === "ADMIN";
-
-    if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
-      throw new Error("FORBIDDEN: Pelanggaran isolasi data. Anda tidak memiliki izin untuk mengusulkan bagi hasil event milik penyelenggara lain.");
-    }
-    if (isDagoAdminParty && !isAdmin) {
-      throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat mengusulkan bagi hasil atas nama Dago.");
-    }
-
-    // LOCK GUARD: Revenue split is locked once a booking exists (anything other than CANCELLED or EXPIRED)
-    if (isEventRevenueSplitLocked(event.id)) {
-      const err: any = new Error(
-        "EVENT_REVENUE_SPLIT_LOCKED: Ketentuan bagi hasil event ini telah terkunci permanen karena telah terdapat pemesanan tiket aktif. Persentase bagi hasil tidak dapat diubah kembali."
-      );
-      err.code = "EVENT_REVENUE_SPLIT_LOCKED";
-      throw err;
-    }
-
-    const newProposal: ProposedRevenueSplit = {
-      id: `split-prop-${Date.now()}`,
-      proposedBy,
-      organizerPercent,
-      platformPercent,
-      reason: sanitizeHtmlText(reason || "Usulan penyesuaian bagi hasil"),
-      status: "PENDING",
-      createdAt: new Date().toISOString(),
-      proposedAt: new Date().toISOString(),
-    };
-
-    event.proposedRevenueSplit = newProposal;
-    event.updatedAt = new Date().toISOString();
-
-    all[index] = event;
-    await saveEventsToDisk(all);
-
-    return event;
+    return result;
   });
 }
 
@@ -4538,130 +4403,136 @@ export async function respondToEventRevenueSplit(
   isAdmin: boolean = false
 ): Promise<CommunityEvent> {
   return withEventLock(async () => {
-    await syncStorageFromDb("events.json").catch(() => {});
-    await syncStorageFromDb("event_bookings.json").catch(() => {});
-    const normalizedId = (eventId || "").trim().toLowerCase();
-    let all = loadEventsFromDisk();
-    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-    if (index === -1) {
-      await syncStorageFromDb("events.json").catch(() => {});
-      all = loadEventsFromDisk();
-      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-    }
-    if (index === -1) {
-      throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
-    }
-
-    const event = all[index];
-    const normalizedActorEmail = (actorEmail || "").trim().toLowerCase();
-    const normalizedOrganizerEmail = (event.organizerEmail || "").trim().toLowerCase();
-
-    const isDagoAdminParty = respondingParty === "DAGO_ADMIN" || (respondingParty as string) === "ADMIN";
-
-    if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
-      throw new Error("FORBIDDEN: Pelanggaran isolasi data. Anda tidak memiliki izin untuk merespons bagi hasil event milik penyelenggara lain.");
-    }
-    if (isDagoAdminParty && !isAdmin) {
-      throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat merespons kesepakatan atas nama Dago.");
-    }
-
-    // LOCK GUARD: Revenue split is locked once a booking exists (anything other than CANCELLED or EXPIRED)
-    if (isEventRevenueSplitLocked(event.id)) {
-      const err: any = new Error(
-        "EVENT_REVENUE_SPLIT_LOCKED: Ketentuan bagi hasil event ini telah terkunci permanen karena telah terdapat pemesanan tiket aktif. Persentase bagi hasil tidak dapat diubah kembali."
-      );
-      err.code = "EVENT_REVENUE_SPLIT_LOCKED";
-      throw err;
-    }
-
-    const pendingProposal = event.proposedRevenueSplit;
-    if (!pendingProposal && decision !== "COUNTER") {
-      throw new Error("Tidak ada usulan bagi hasil yang sedang aktif untuk direspons.");
-    }
-
-    const now = new Date().toISOString();
-
-    if (decision === "ACCEPT" && pendingProposal) {
-      const isProposerSameParty =
-        (pendingProposal.proposedBy === "ORGANIZER" && respondingParty === "ORGANIZER") ||
-        ((pendingProposal.proposedBy === "DAGO_ADMIN" || (pendingProposal.proposedBy as string) === "ADMIN") && isDagoAdminParty);
-      if (isProposerSameParty) {
-        throw new Error("Pihak yang mengajukan usulan tidak dapat menyetujui usulannya sendiri. Menunggu tanggapan dari pihak lawan.");
+    let committedEventsList: CommunityEvent[] | null = null;
+    const result = await runWithDistributedEventsStorageLock(async (tx) => {
+      let all: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
+      const normalizedId = (eventId || "").trim().toLowerCase();
+      let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+      if (index === -1) {
+        throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
       }
 
-      // Admin can accept any proposal. Organizers may only accept counter-proposals initiated by Admin.
-      if (!isAdmin && !isDagoAdminParty) {
-        const proposerIsAdmin =
-          pendingProposal.proposedBy === "DAGO_ADMIN" ||
-          (pendingProposal.proposedBy as string) === "ADMIN";
-        if (!proposerIsAdmin) {
-          throw new Error(
-            "FORBIDDEN: Hanya Admin Dago yang memiliki wewenang untuk menetapkan atau menyetujui persentase bagi hasil final."
-          );
+      const event = all[index];
+      const normalizedActorEmail = (actorEmail || "").trim().toLowerCase();
+      const normalizedOrganizerEmail = (event.organizerEmail || "").trim().toLowerCase();
+
+      const isDagoAdminParty = respondingParty === "DAGO_ADMIN" || (respondingParty as string) === "ADMIN";
+
+      if (!isDagoAdminParty && !isAdmin && normalizedActorEmail !== normalizedOrganizerEmail) {
+        throw new Error("FORBIDDEN: Pelanggaran isolasi data. Anda tidak memiliki izin untuk merespons bagi hasil event milik penyelenggara lain.");
+      }
+      if (isDagoAdminParty && !isAdmin) {
+        throw new Error("FORBIDDEN: Hanya Admin Dago yang dapat merespons kesepakatan atas nama Dago.");
+      }
+
+      // LOCK GUARD: Revenue split is locked once a booking exists (anything other than CANCELLED or EXPIRED)
+      const allBookings = await loadBookingsFromTxOrDisk(tx);
+      if (isEventRevenueSplitLocked(event.id, allBookings)) {
+        const err: any = new Error(
+          "EVENT_REVENUE_SPLIT_LOCKED: Ketentuan bagi hasil event ini telah terkunci permanen karena telah terdapat pemesanan tiket aktif. Persentase bagi hasil tidak dapat diubah kembali."
+        );
+        err.code = "EVENT_REVENUE_SPLIT_LOCKED";
+        throw err;
+      }
+
+      const pendingProposal = event.proposedRevenueSplit;
+      if (!pendingProposal && decision !== "COUNTER") {
+        throw new Error("Tidak ada usulan bagi hasil yang sedang aktif untuk direspons.");
+      }
+
+      const now = new Date().toISOString();
+
+      if (decision === "ACCEPT" && pendingProposal) {
+        const isProposerSameParty =
+          (pendingProposal.proposedBy === "ORGANIZER" && respondingParty === "ORGANIZER") ||
+          ((pendingProposal.proposedBy === "DAGO_ADMIN" || (pendingProposal.proposedBy as string) === "ADMIN") && isDagoAdminParty);
+        if (isProposerSameParty) {
+          throw new Error("Pihak yang mengajukan usulan tidak dapat menyetujui usulannya sendiri. Menunggu tanggapan dari pihak lawan.");
         }
-      }
 
-      const prevOrganizerPercent = event.organizerFeePercent ?? 80;
-      const prevPlatformPercent = event.customPlatformFeePercent ?? 20;
+        // Admin can accept any proposal. Organizers may only accept counter-proposals initiated by Admin.
+        if (!isAdmin && !isDagoAdminParty) {
+          const proposerIsAdmin =
+            pendingProposal.proposedBy === "DAGO_ADMIN" ||
+            (pendingProposal.proposedBy as string) === "ADMIN";
+          if (!proposerIsAdmin) {
+            throw new Error(
+              "FORBIDDEN: Hanya Admin Dago yang memiliki wewenang untuk menetapkan atau menyetujui persentase bagi hasil final."
+            );
+          }
+        }
 
-      const historyEntry: RevenueSplitAgreementHistory = {
-        id: `rev-hist-${Date.now()}`,
-        previousOrganizerPercent: prevOrganizerPercent,
-        previousPlatformPercent: prevPlatformPercent,
-        newOrganizerPercent: pendingProposal.organizerPercent,
-        newPlatformPercent: pendingProposal.platformPercent,
-        agreedOrganizerPercent: pendingProposal.organizerPercent,
-        agreedPlatformPercent: pendingProposal.platformPercent,
-        proposedBy: pendingProposal.proposedBy,
-        reason: pendingProposal.reason || "Kesepakatan bagi hasil disetujui",
-        approvedBy: actorName || "Admin Dago",
-        approvedAt: now,
-        agreedBy: actorName || "Admin Dago",
-        agreedAt: now,
-        effectiveDate: now,
-        notes: pendingProposal.reason || "Disetujui oleh Admin Dago",
-      };
+        const prevOrganizerPercent = event.organizerFeePercent ?? 80;
+        const prevPlatformPercent = event.customPlatformFeePercent ?? 20;
 
-      event.revenueSplitHistory = [historyEntry, ...(event.revenueSplitHistory || [])];
-      event.organizerFeePercent = pendingProposal.organizerPercent;
-      event.customPlatformFeePercent = pendingProposal.platformPercent;
-      event.proposedRevenueSplit = null;
-      event.updatedAt = now;
-    } else if (decision === "REJECT") {
-      // Rejection keeps active agreement intact
-      if (pendingProposal) {
-        pendingProposal.status = "REJECTED";
+        const historyEntry: RevenueSplitAgreementHistory = {
+          id: `rev-hist-${Date.now()}`,
+          previousOrganizerPercent: prevOrganizerPercent,
+          previousPlatformPercent: prevPlatformPercent,
+          newOrganizerPercent: pendingProposal.organizerPercent,
+          newPlatformPercent: pendingProposal.platformPercent,
+          agreedOrganizerPercent: pendingProposal.organizerPercent,
+          agreedPlatformPercent: pendingProposal.platformPercent,
+          proposedBy: pendingProposal.proposedBy,
+          reason: pendingProposal.reason || "Kesepakatan bagi hasil disetujui",
+          approvedBy: actorName || "Admin Dago",
+          approvedAt: now,
+          agreedBy: actorName || "Admin Dago",
+          agreedAt: now,
+          effectiveDate: now,
+          notes: pendingProposal.reason || "Disetujui oleh Admin Dago",
+        };
+
+        event.revenueSplitHistory = [historyEntry, ...(event.revenueSplitHistory || [])];
+        event.organizerFeePercent = pendingProposal.organizerPercent;
+        event.customPlatformFeePercent = pendingProposal.platformPercent;
         event.proposedRevenueSplit = null;
         event.updatedAt = now;
-      }
-    } else if (decision === "COUNTER") {
-      if (!counterOffer) {
-        throw new Error("Rincian penawaran tandingan wajib disertakan.");
-      }
-      if (!Number.isInteger(counterOffer.platformPercent) || counterOffer.platformPercent < 0 || counterOffer.platformPercent > 50) {
-        throw new Error("Persentase komisi platform pada penawaran tandingan harus berupa bilangan bulat antara 0% hingga 50%.");
-      }
-      if (!Number.isInteger(counterOffer.organizerPercent) || counterOffer.organizerPercent !== 100 - counterOffer.platformPercent) {
-        throw new Error("Total persentase penawaran tandingan harus tepat 100%.");
+      } else if (decision === "REJECT") {
+        // Rejection keeps active agreement intact
+        if (pendingProposal) {
+          pendingProposal.status = "REJECTED";
+          event.proposedRevenueSplit = null;
+          event.updatedAt = now;
+        }
+      } else if (decision === "COUNTER") {
+        if (!counterOffer) {
+          throw new Error("Rincian penawaran tandingan wajib disertakan.");
+        }
+        if (!Number.isInteger(counterOffer.platformPercent) || counterOffer.platformPercent < 0 || counterOffer.platformPercent > 50) {
+          throw new Error("Persentase komisi platform pada penawaran tandingan harus berupa bilangan bulat antara 0% hingga 50%.");
+        }
+        if (!Number.isInteger(counterOffer.organizerPercent) || counterOffer.organizerPercent !== 100 - counterOffer.platformPercent) {
+          throw new Error("Total persentase penawaran tandingan harus tepat 100%.");
+        }
+
+        event.proposedRevenueSplit = {
+          id: `split-counter-${Date.now()}`,
+          proposedBy: respondingParty,
+          organizerPercent: counterOffer.organizerPercent,
+          platformPercent: counterOffer.platformPercent,
+          reason: sanitizeHtmlText(counterOffer.reason || "Penawaran tandingan bagi hasil"),
+          status: "PENDING",
+          createdAt: now,
+          proposedAt: now,
+        };
+        event.updatedAt = now;
       }
 
-      event.proposedRevenueSplit = {
-        id: `split-counter-${Date.now()}`,
-        proposedBy: respondingParty,
-        organizerPercent: counterOffer.organizerPercent,
-        platformPercent: counterOffer.platformPercent,
-        reason: sanitizeHtmlText(counterOffer.reason || "Penawaran tandingan bagi hasil"),
-        status: "PENDING",
-        createdAt: now,
-        proposedAt: now,
-      };
-      event.updatedAt = now;
+      all[index] = event;
+      await saveEventsToDisk(all, { tx });
+      committedEventsList = all;
+
+      return event;
+    });
+
+    // POST-COMMIT PHASE: Only executed if db.$transaction committed successfully
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
     }
 
-    all[index] = event;
-    await saveEventsToDisk(all);
-
-    return event;
+    return result;
   });
 }
 
@@ -4719,102 +4590,108 @@ export async function requestOrganizerPayout(
   isAdmin: boolean = false
 ): Promise<{ event: CommunityEvent; payout: PayoutRecord }> {
   return withEventLock(async () => {
-    const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
-    await syncStorageFromDb("events.json").catch(() => {});
-    const normalizedId = (eventId || "").trim().toLowerCase();
-    let all = loadEventsFromDisk();
-    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-    if (index === -1) {
-      await syncStorageFromDb("events.json").catch(() => {});
-      all = loadEventsFromDisk();
-      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-    }
-    if (index === -1) {
-      throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
-    }
+    let committedEventsList: CommunityEvent[] | null = null;
+    const result = await runWithDistributedEventsStorageLock(async (tx) => {
+      const normalizedEmail = (organizerEmail || "").trim().toLowerCase();
+      let all: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
+      const normalizedId = (eventId || "").trim().toLowerCase();
+      let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+      if (index === -1) {
+        throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
+      }
 
-    const event = all[index];
-    if (!isAdmin && (event.organizerEmail || "").toLowerCase() !== normalizedEmail) {
-      throw new Error("FORBIDDEN: Anda tidak memiliki akses ke event ini.");
-    }
+      const event = all[index];
+      if (!isAdmin && (event.organizerEmail || "").toLowerCase() !== normalizedEmail) {
+        throw new Error("FORBIDDEN: Anda tidak memiliki akses ke event ini.");
+      }
 
-    // Double-payout prevention: Disallow new request if there is already a pending or processing request
-    const hasPendingPayout = event.payoutHistory?.some(
-      (p) => p.status === "REQUESTED" || p.status === "PROCESSING"
-    );
-    if (hasPendingPayout) {
-      throw new Error(
-        "Masih terdapat pengajuan pencairan dana yang sedang menunggu verifikasi atau diproses untuk event ini. Harap tunggu hingga proses selesai sebelum mengajukan pencairan baru."
+      // Double-payout prevention: Disallow new request if there is already a pending or processing request
+      const hasPendingPayout = event.payoutHistory?.some(
+        (p) => p.status === "REQUESTED" || p.status === "PROCESSING"
       );
-    }
+      if (hasPendingPayout) {
+        throw new Error(
+          "Masih terdapat pengajuan pencairan dana yang sedang menunggu verifikasi atau diproses untuk event ini. Harap tunggu hingga proses selesai sebelum mengajukan pencairan baru."
+        );
+      }
 
-    // SERVER STORAGE GUARD:
-    // Read organizer bank credentials directly from server storage (never trust client payload blindly)
-    const serverBank = getOrganizerServerBankAccount(event.organizerEmail || normalizedEmail);
-    const effectiveBank = serverBank || bankDetails;
-    const validation = getMissingPayoutFields(effectiveBank);
-    if (!validation.isValid) {
-      const err: any = new Error(
-        `PAYOUT_BANK_INCOMPLETE: Lengkapi data rekening terlebih dahulu pada menu Pengaturan sebelum mengajukan pencairan dana. ${validation.errorSummary}`
+      // SERVER STORAGE GUARD:
+      // Read organizer bank credentials directly from server storage (never trust client payload blindly)
+      const serverBank = getOrganizerServerBankAccount(event.organizerEmail || normalizedEmail);
+      const effectiveBank = serverBank || bankDetails;
+      const validation = getMissingPayoutFields(effectiveBank);
+      if (!validation.isValid) {
+        const err: any = new Error(
+          `PAYOUT_BANK_INCOMPLETE: Lengkapi data rekening terlebih dahulu pada menu Pengaturan sebelum mengajukan pencairan dana. ${validation.errorSummary}`
+        );
+        err.code = "PAYOUT_BANK_INCOMPLETE";
+        err.missingFields = validation.missingFields;
+        err.errors = validation.errors;
+        throw err;
+      }
+
+      // Calculate event available earnings strictly from verified PAID bookings
+      const allBookings = await loadBookingsFromTxOrDisk(tx);
+      const eventPaidBookings = allBookings.filter(
+        (b) => b.eventId === eventId && b.paymentStatus === "PAID"
       );
-      err.code = "PAYOUT_BANK_INCOMPLETE";
-      err.missingFields = validation.missingFields;
-      err.errors = validation.errors;
-      throw err;
-    }
-
-    // Calculate event available earnings strictly from verified PAID bookings
-    const allBookings = loadBookingsFromDisk();
-    const eventPaidBookings = allBookings.filter(
-      (b) => b.eventId === eventId && b.paymentStatus === "PAID"
-    );
-    const totalOrganizerEarnings = eventPaidBookings.reduce(
-      (sum, b) => sum + (b.organizerRevenueAmount || 0),
-      0
-    );
-
-    let committedPayouts = 0;
-    if (event.payoutHistory && Array.isArray(event.payoutHistory)) {
-      event.payoutHistory.forEach((p) => {
-        if (p.status === "REQUESTED" || p.status === "PROCESSING" || p.status === "PAID") {
-          committedPayouts += p.amount;
-        }
-      });
-    }
-
-    const availableAmount = Math.max(0, totalOrganizerEarnings - committedPayouts);
-
-    if (amount <= 0) {
-      throw new Error("Nominal pencairan harus lebih besar dari Rp 0.");
-    }
-    if (amount > availableAmount) {
-      throw new Error(
-        `Nominal pencairan (Rp ${amount.toLocaleString("id-ID")}) melebihi saldo yang tersedia untuk event ini (Rp ${availableAmount.toLocaleString("id-ID")}).`
+      const totalOrganizerEarnings = eventPaidBookings.reduce(
+        (sum, b) => sum + (b.organizerRevenueAmount || 0),
+        0
       );
+
+      let committedPayouts = 0;
+      if (event.payoutHistory && Array.isArray(event.payoutHistory)) {
+        event.payoutHistory.forEach((p) => {
+          if (p.status === "REQUESTED" || p.status === "PROCESSING" || p.status === "PAID") {
+            committedPayouts += p.amount;
+          }
+        });
+      }
+
+      const availableAmount = Math.max(0, totalOrganizerEarnings - committedPayouts);
+
+      if (amount <= 0) {
+        throw new Error("Nominal pencairan harus lebih besar dari Rp 0.");
+      }
+      if (amount > availableAmount) {
+        throw new Error(
+          `Nominal pencairan (Rp ${amount.toLocaleString("id-ID")}) melebihi saldo yang tersedia untuk event ini (Rp ${availableAmount.toLocaleString("id-ID")}).`
+        );
+      }
+
+      const now = new Date().toISOString();
+      const targetBank = effectiveBank!;
+      const newPayout: PayoutRecord = {
+        id: `pay-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        eventId,
+        amount,
+        status: "REQUESTED",
+        bankName: targetBank.bankName!.trim(),
+        accountNumber: targetBank.accountNumber!.trim(),
+        accountHolder: targetBank.accountHolder!.trim(),
+        requestedAt: now,
+        notes: notes ? sanitizeHtmlText(notes) : undefined,
+      };
+
+      event.payoutHistory = [newPayout, ...(event.payoutHistory || [])];
+      event.payoutStatus = "REQUESTED";
+      event.updatedAt = now;
+
+      all[index] = event;
+      await saveEventsToDisk(all, { tx });
+      committedEventsList = all;
+
+      return { event, payout: newPayout };
+    });
+
+    // POST-COMMIT PHASE: Only executed if db.$transaction committed successfully
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
     }
 
-    const now = new Date().toISOString();
-    const targetBank = effectiveBank!;
-    const newPayout: PayoutRecord = {
-      id: `pay-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      eventId,
-      amount,
-      status: "REQUESTED",
-      bankName: targetBank.bankName!.trim(),
-      accountNumber: targetBank.accountNumber!.trim(),
-      accountHolder: targetBank.accountHolder!.trim(),
-      requestedAt: now,
-      notes: notes ? sanitizeHtmlText(notes) : undefined,
-    };
-
-    event.payoutHistory = [newPayout, ...(event.payoutHistory || [])];
-    event.payoutStatus = "REQUESTED";
-    event.updatedAt = now;
-
-    all[index] = event;
-    await saveEventsToDisk(all);
-
-    return { event, payout: newPayout };
+    return result;
   });
 }
 
@@ -4832,91 +4709,97 @@ export async function processOrganizerPayout(
   actorName: string = "Admin Dago"
 ): Promise<{ event: CommunityEvent; payout: PayoutRecord }> {
   return withEventLock(async () => {
-    await syncStorageFromDb("events.json").catch(() => {});
-    const normalizedId = (eventId || "").trim().toLowerCase();
-    let all = loadEventsFromDisk();
-    let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-    if (index === -1) {
-      await syncStorageFromDb("events.json").catch(() => {});
-      all = loadEventsFromDisk();
-      index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
-    }
-    if (index === -1) {
-      throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
-    }
-
-    const event = all[index];
-    if (!event.payoutHistory || !Array.isArray(event.payoutHistory)) {
-      throw new Error("Belum ada riwayat pencairan pada event ini.");
-    }
-
-    const pIndex = event.payoutHistory.findIndex((p) => p.id === payoutId);
-    if (pIndex === -1) {
-      throw new Error(`Pengajuan pencairan dengan ID ${payoutId} tidak ditemukan.`);
-    }
-
-    const payout = event.payoutHistory[pIndex];
-
-    // Status transition enforcement
-    if (payout.status === "PAID") {
-      throw new Error("Pengajuan pencairan ini telah selesai dibayarkan (PAID) dan tidak dapat diubah kembali.");
-    }
-    if (payout.status === "REJECTED") {
-      throw new Error("Pengajuan pencairan ini telah ditolak sebelumnya.");
-    }
-
-    // SERVER GUARD: Admin cannot process or pay payout if recipient bank details are invalid/incomplete
-    if (newStatus === "PAID" || newStatus === "PROCESSING") {
-      const validation = getMissingPayoutFields(payout);
-      if (!validation.isValid) {
-        const err: any = new Error(
-          `PAYOUT_BANK_INCOMPLETE: Rekening tujuan pencairan pada pengajuan ini tidak lengkap atau tidak valid (${maskAccountNumber(payout.accountNumber)}). ${validation.errorSummary}`
-        );
-        err.code = "PAYOUT_BANK_INCOMPLETE";
-        err.missingFields = validation.missingFields;
-        err.errors = validation.errors;
-        throw err;
+    let committedEventsList: CommunityEvent[] | null = null;
+    const result = await runWithDistributedEventsStorageLock(async (tx) => {
+      let all: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
+      const normalizedId = (eventId || "").trim().toLowerCase();
+      let index = all.findIndex((e) => (e.id || "").trim().toLowerCase() === normalizedId || e.id === eventId);
+      if (index === -1) {
+        throw new Error(`Event dengan ID ${eventId} tidak ditemukan.`);
       }
+
+      const event = all[index];
+      if (!event.payoutHistory || !Array.isArray(event.payoutHistory)) {
+        throw new Error("Belum ada riwayat pencairan pada event ini.");
+      }
+
+      const pIndex = event.payoutHistory.findIndex((p) => p.id === payoutId);
+      if (pIndex === -1) {
+        throw new Error(`Pengajuan pencairan dengan ID ${payoutId} tidak ditemukan.`);
+      }
+
+      const payout = event.payoutHistory[pIndex];
+
+      // Status transition enforcement
+      if (payout.status === "PAID") {
+        throw new Error("Pengajuan pencairan ini telah selesai dibayarkan (PAID) dan tidak dapat diubah kembali.");
+      }
+      if (payout.status === "REJECTED") {
+        throw new Error("Pengajuan pencairan ini telah ditolak sebelumnya.");
+      }
+
+      // SERVER GUARD: Admin cannot process or pay payout if recipient bank details are invalid/incomplete
+      if (newStatus === "PAID" || newStatus === "PROCESSING") {
+        const validation = getMissingPayoutFields(payout);
+        if (!validation.isValid) {
+          const err: any = new Error(
+            `PAYOUT_BANK_INCOMPLETE: Rekening tujuan pencairan pada pengajuan ini tidak lengkap atau tidak valid (${maskAccountNumber(payout.accountNumber)}). ${validation.errorSummary}`
+          );
+          err.code = "PAYOUT_BANK_INCOMPLETE";
+          err.missingFields = validation.missingFields;
+          err.errors = validation.errors;
+          throw err;
+        }
+      }
+
+      if (newStatus === "PAID" && (!referenceNo || !referenceNo.trim())) {
+        throw new Error("Nomor referensi transfer bank wajib disertakan untuk konfirmasi status PAID.");
+      }
+      if (newStatus === "REJECTED" && (!rejectionReason || !rejectionReason.trim())) {
+        throw new Error("Alasan penolakan pencairan saldo wajib disertakan.");
+      }
+
+      const now = new Date().toISOString();
+      payout.status = newStatus;
+      payout.processedAt = now;
+      payout.processedBy = actorName;
+
+      if (newStatus === "PAID" && referenceNo) {
+        payout.referenceNo = referenceNo.trim();
+      }
+      if (newStatus === "REJECTED" && rejectionReason) {
+        payout.rejectionReason = sanitizeHtmlText(rejectionReason);
+      }
+
+      // Recalculate event overall payout status
+      const hasRequested = event.payoutHistory.some((p) => p.status === "REQUESTED");
+      const hasProcessing = event.payoutHistory.some((p) => p.status === "PROCESSING");
+      const hasPaid = event.payoutHistory.some((p) => p.status === "PAID");
+
+      if (hasProcessing) {
+        event.payoutStatus = "PROCESSING";
+      } else if (hasRequested) {
+        event.payoutStatus = "REQUESTED";
+      } else if (hasPaid) {
+        event.payoutStatus = "PAID";
+      } else {
+        event.payoutStatus = "AVAILABLE";
+      }
+
+      event.updatedAt = now;
+      all[index] = event;
+      await saveEventsToDisk(all, { tx });
+      committedEventsList = all;
+
+      return { event, payout };
+    });
+
+    // POST-COMMIT PHASE: Only executed if db.$transaction committed successfully
+    if (committedEventsList) {
+      syncEventsToLocalDiskAndCache(committedEventsList, Date.now());
+      markStorageSyncSynced("events.json");
     }
 
-    if (newStatus === "PAID" && (!referenceNo || !referenceNo.trim())) {
-      throw new Error("Nomor referensi transfer bank wajib disertakan untuk konfirmasi status PAID.");
-    }
-    if (newStatus === "REJECTED" && (!rejectionReason || !rejectionReason.trim())) {
-      throw new Error("Alasan penolakan pencairan saldo wajib disertakan.");
-    }
-
-    const now = new Date().toISOString();
-    payout.status = newStatus;
-    payout.processedAt = now;
-    payout.processedBy = actorName;
-
-    if (newStatus === "PAID" && referenceNo) {
-      payout.referenceNo = referenceNo.trim();
-    }
-    if (newStatus === "REJECTED" && rejectionReason) {
-      payout.rejectionReason = sanitizeHtmlText(rejectionReason);
-    }
-
-    // Recalculate event overall payout status
-    const hasRequested = event.payoutHistory.some((p) => p.status === "REQUESTED");
-    const hasProcessing = event.payoutHistory.some((p) => p.status === "PROCESSING");
-    const hasPaid = event.payoutHistory.some((p) => p.status === "PAID");
-
-    if (hasProcessing) {
-      event.payoutStatus = "PROCESSING";
-    } else if (hasRequested) {
-      event.payoutStatus = "REQUESTED";
-    } else if (hasPaid) {
-      event.payoutStatus = "PAID";
-    } else {
-      event.payoutStatus = "AVAILABLE";
-    }
-
-    event.updatedAt = now;
-    all[index] = event;
-    await saveEventsToDisk(all);
-
-    return { event, payout };
+    return result;
   });
 }

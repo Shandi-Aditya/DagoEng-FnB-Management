@@ -189,3 +189,105 @@ export function isCheckInStaffRole(role: unknown): boolean {
   }
   return false;
 }
+
+export const DEFAULT_PLATFORM_FEE_PERCENT = 20;
+export const MIN_PLATFORM_FEE_PERCENT = 0;
+export const MAX_PLATFORM_FEE_PERCENT = 50;
+
+export interface RevenueSplitValidationResult {
+  valid: boolean;
+  error?: string;
+  value?: number;
+}
+
+/**
+ * Validates platform fee percent strictly according to business policy:
+ * - Must be a safe integer
+ * - Must be between 0 and 50 inclusive
+ * - Rejects decimals, string decimals, NaN, Infinity, negative, >50
+ * - Does NOT round or clamp invalid values
+ */
+export function validatePlatformFeePercent(raw: unknown): RevenueSplitValidationResult {
+  if (raw === undefined || raw === null || raw === "") {
+    return { valid: false, error: "Persentase komisi platform wajib diisi." };
+  }
+
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!/^\d+$/.test(trimmed)) {
+      return {
+        valid: false,
+        error: "Persentase komisi platform harus berupa bilangan bulat tanpa pecahan desimal atau notasi eksponensial.",
+      };
+    }
+  }
+
+  if (typeof raw !== "number" && typeof raw !== "string") {
+    return { valid: false, error: "Format persentase komisi platform tidak valid." };
+  }
+
+  const num = typeof raw === "number" ? raw : Number(raw);
+
+  if (isNaN(num) || !Number.isFinite(num)) {
+    return { valid: false, error: "Persentase komisi platform harus berupa angka yang valid." };
+  }
+
+  if (!Number.isSafeInteger(num)) {
+    return {
+      valid: false,
+      error: "Persentase komisi platform harus berupa bilangan bulat tanpa desimal.",
+    };
+  }
+
+  if (num < MIN_PLATFORM_FEE_PERCENT || num > MAX_PLATFORM_FEE_PERCENT) {
+    return {
+      valid: false,
+      error: `Persentase komisi platform harus berada dalam rentang ${MIN_PLATFORM_FEE_PERCENT}% hingga ${MAX_PLATFORM_FEE_PERCENT}% (bagian penyelenggara 50% hingga 100%).`,
+    };
+  }
+
+  return { valid: true, value: num };
+}
+
+/**
+ * Resolves the effective platform fee percentage (0-50%) for an event.
+ * Uses event.customPlatformFeePercent as the single source of truth (SSOT).
+ * If customPlatformFeePercent is provided, it MUST be valid; invalid values throw an Error.
+ * If not provided (null/undefined), resolves to backend default (default: 20%).
+ * Strictly ignores legacy `organizerFeePercent` to uphold backend policy as SSOT.
+ */
+export function resolveEffectivePlatformFeePercent(
+  event?: { customPlatformFeePercent?: number | null; organizerFeePercent?: number | null } | null,
+  fallbackDefault?: number
+): number {
+  if (event && event.customPlatformFeePercent !== undefined && event.customPlatformFeePercent !== null) {
+    const validation = validatePlatformFeePercent(event.customPlatformFeePercent);
+    if (!validation.valid || validation.value === undefined) {
+      throw new Error(validation.error || "Persentase komisi platform tidak valid.");
+    }
+    return validation.value;
+  }
+
+  // If fallbackDefault is supplied, validate it
+  if (fallbackDefault !== undefined && fallbackDefault !== null) {
+    const fallbackValidation = validatePlatformFeePercent(fallbackDefault);
+    if (!fallbackValidation.valid || fallbackValidation.value === undefined) {
+      throw new Error(fallbackValidation.error || "Default persentase komisi platform tidak valid.");
+    }
+    return fallbackValidation.value;
+  }
+
+  return DEFAULT_PLATFORM_FEE_PERCENT;
+}
+
+/**
+ * Resolves organizer share percentage (50-100%) for an event.
+ * Formula: 100 - effectivePlatformFeePercent.
+ */
+export function resolveOrganizerSharePercent(
+  event?: { customPlatformFeePercent?: number | null; organizerFeePercent?: number | null } | null,
+  fallbackDefault?: number
+): number {
+  const platformFee = resolveEffectivePlatformFeePercent(event, fallbackDefault);
+  return 100 - platformFee;
+}

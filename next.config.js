@@ -14,6 +14,11 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'images.unsplash.com',
       },
+      {
+        // Landing-page stand-in photographs (Wikimedia Commons) until the hub's own photos replace them
+        protocol: 'https',
+        hostname: 'upload.wikimedia.org',
+      },
     ],
   },
 };

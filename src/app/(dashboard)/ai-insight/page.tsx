@@ -53,7 +53,7 @@ export default function AIInsightPage() {
     .reduce((s, o) => s + o.total, 0);
 
   const criticalStockItems = scopedMaterials.filter((m) => m.stockNumber <= m.min);
-  const outletName = activeOutlet?.name || "Semua Gerai";
+  const outletName = activeOutlet?.name || "Semua outlet";
 
   const [messages, setMessages] = useState<AIChatMessage[]>([
     createWelcomeMessage({
@@ -85,15 +85,15 @@ export default function AIInsightPage() {
       action: "AI_CONSULTATION",
       recordId: `ai-${Date.now()}`,
       newValue: q.trim(),
-      description: `Konsultasi AI Insight: "${q.trim().slice(0, 50)}"`,
-      reason: "Permintaan analisis bisnis operasional",
+      description: `Konsultasi asisten data: "${q.trim().slice(0, 50)}"`,
+      reason: "Permintaan analisis data operasional gerai",
       status: "SUCCESS",
       outletId: activeOutletId,
       outletName: activeOutlet?.name,
     });
 
     setTimeout(() => {
-      const topMenu = scopedProducts[0]?.name || "Kopi Senja Signature";
+      const topMenu = scopedProducts[0]?.name || "Menu terlaris";
       const aiResponse = generateAIInsightResponse({
         query: q,
         outletName,

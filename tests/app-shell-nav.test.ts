@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ALL_NAV_ITEMS, type NavigationItem } from "@/lib/rbac";
-import { findActiveNavItem, groupNavItems } from "@/features/layout/nav-groups";
+import { findActiveNavItem, groupNavItems, unitForPath } from "@/features/layout/nav-groups";
 
 function item(name: string, href: string): NavigationItem {
   return { name, href, icon: "LayoutDashboard", module: "CORE", allowedRoles: ["SUPER_ADMIN"] };
@@ -82,4 +82,26 @@ describe("findActiveNavItem", () => {
   it("returns undefined when no item matches", () => {
     expect(findActiveNavItem(items, "/tidak-ada")).toBeUndefined();
   });
+});
+
+describe("unitForPath", () => {
+  it.each([
+    ["/pos", "fnb"],
+    ["/orders/ORD-1", "fnb"],
+    ["/kitchen", "fnb"],
+    ["/customers", "fnb"],
+    ["/coworking", "coworking"],
+    ["/commercial", "coworking"],
+    ["/events-admin", "event"],
+    ["/events/checkin", "event"],
+  ])("maps %s to the %s unit", (pathname, unit) => {
+    expect(unitForPath(pathname)).toBe(unit);
+  });
+
+  it.each(["/dashboard", "/settings", "/reports", "/posters", "/events-adminx", "/"])(
+    "leaves %s without a unit accent",
+    (pathname) => {
+      expect(unitForPath(pathname)).toBeUndefined();
+    },
+  );
 });

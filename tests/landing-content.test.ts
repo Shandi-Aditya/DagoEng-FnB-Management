@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { accountRoleLabel, canOpenDashboard, eventCategoryLabel, selectUpcomingEvents } from "@/features/landing/landing-logic";
+import { HERO } from "@/features/landing/landing-content";
+import { accountRoleLabel, canOpenDashboard, eventCategoryLabel, eventNoticeRow, selectUpcomingEvents } from "@/features/landing/landing-logic";
 import type { PublicCommunityEvent } from "@/types/event";
 
 const NOW = new Date("2026-11-11T10:00:00Z").getTime();
@@ -73,3 +74,36 @@ describe("eventCategoryLabel", () => {
     expect(eventCategoryLabel("TECH")).toBe("Teknologi");
   });
 });
+
+describe("eventNoticeRow", () => {
+  it("splits the start date into day, month and time in WITA", () => {
+    const row = eventNoticeRow(event("e", "2026-11-20T02:00:00Z", "2026-11-20T04:00:00Z"));
+
+    expect(row.day).toBe("20");
+    expect(row.month).toBe("Nov");
+    expect(row.time).toBe("Jum, 10.00");
+  });
+
+  it("labels free and paid events", () => {
+    expect(eventNoticeRow(event("free", "2026-11-20T02:00:00Z", "2026-11-20T04:00:00Z")).price).toBe("Gratis");
+    const paid = { ...event("paid", "2026-11-20T02:00:00Z", "2026-11-20T04:00:00Z"), isPaid: true, price: 75000 };
+    expect(eventNoticeRow(paid).price).toBe("Rp 75.000");
+  });
+
+  it("reports ticket availability only when the server knows it", () => {
+    const base = event("e", "2026-11-20T02:00:00Z", "2026-11-20T04:00:00Z");
+    const availability = { totalCapacity: 10, ticketsReserved: 10, ticketsRemaining: 0, occupancyRate: 1, isConfirmed: true, capacitySource: "", capacityDescription: "", isSoldOut: true };
+
+    expect(eventNoticeRow(base).ticket).toBeNull();
+    expect(eventNoticeRow({ ...base, availability }).ticket).toBe("habis");
+    expect(eventNoticeRow({ ...base, availability: { ...availability, isSoldOut: false, ticketsRemaining: 3 } }).ticket).toBe("tersedia");
+  });
+});
+
+describe("HERO copywriting", () => {
+  it("uses 'event' instead of 'kumpul' in the hero headline", () => {
+    expect(HERO.title.toLowerCase()).toContain("event");
+    expect(HERO.title.toLowerCase()).not.toContain("kumpul");
+  });
+});
+

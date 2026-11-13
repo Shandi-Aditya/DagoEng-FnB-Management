@@ -84,6 +84,7 @@ import { CartOrderSetup } from "@/features/pos/CartOrderSetup";
 import { CartPromoField } from "@/features/pos/CartPromoField";
 import { CartSummary } from "@/features/pos/CartSummary";
 import { ProductCatalog } from "@/features/pos/ProductCatalog";
+import { UnitScope } from "@/components/app/unit-scope";
 import { PosToolbar } from "@/features/pos/PosToolbar";
 import { cartItemCount, tenantClosedMessage } from "@/features/pos/pos-catalog";
 import { CoworkingToolbar } from "@/features/pos/CoworkingToolbar";
@@ -1051,8 +1052,12 @@ export default function POSPage() {
     setIsPaymentModalOpen(true);
   };
 
+  const posUnit = posMode === "COWORKING" ? "coworking" : "fnb";
+
   return (
-    <div className="flex flex-col gap-4">
+    // Co-working mode switches the accent from F&B orange to co-working blue
+    <div data-unit={posUnit} className="flex flex-col gap-4">
+      <UnitScope unit={posUnit} />
       <PosToolbar
         mode={posMode}
         onModeChange={setPosMode}

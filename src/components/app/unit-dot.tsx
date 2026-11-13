@@ -17,6 +17,14 @@ const UNIT_DOT_CLASS: Record<BusinessUnit, string> = {
   loyalty: "bg-unit-loyalty",
 };
 
+/** Icon tint for a unit's menu items. Same logo colors as the dot, used on glyphs only. */
+export const UNIT_ICON_CLASS: Record<BusinessUnit, string> = {
+  fnb: "text-unit-fnb",
+  coworking: "text-unit-coworking",
+  event: "text-unit-event",
+  loyalty: "text-unit-loyalty",
+};
+
 export interface UnitDotProps {
   unit: BusinessUnit;
   showLabel?: boolean;

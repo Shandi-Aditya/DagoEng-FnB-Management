@@ -152,6 +152,7 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
  * DELETE /api/events/[id]
  * Admin endpoint to permanently delete an event with zero bookings/transactions.
  * Strictly restricted to SUPER_ADMIN, OWNER, and MANAGER.
+ * Supports optimistic concurrency control via `If-Match` header or `expectedUpdatedAt` query parameter.
  */
 export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -165,7 +166,40 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     }
 
     const { id } = params;
+
+    // Concurrency control: extract expectedUpdatedAt from If-Match header or query param
+    const ifMatchRaw = req.headers.get("if-match") || req.headers.get("If-Match");
+    const ifMatch = ifMatchRaw ? ifMatchRaw.replace(/^"|"$/g, "").trim() : null;
+
+    const url = new URL(req.url);
+    const queryExpectedUpdatedAt = url.searchParams.get("expectedUpdatedAt")?.trim() || null;
+
+    if (ifMatch && queryExpectedUpdatedAt && ifMatch !== queryExpectedUpdatedAt) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Konflik parameter: Nilai header If-Match dan query parameter expectedUpdatedAt tidak cocok.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const expectedUpdatedAt = ifMatch || queryExpectedUpdatedAt;
+    if (expectedUpdatedAt) {
+      const parsedTime = new Date(expectedUpdatedAt).getTime();
+      if (isNaN(parsedTime)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Format timestamp expectedUpdatedAt tidak valid. Gunakan format ISO-8601.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const result = await deleteEvent(id, {
+      expectedUpdatedAt: expectedUpdatedAt || undefined,
       actorName: auth.name || "Admin Dago",
       actorRole: auth.role || "SUPER_ADMIN",
     });
@@ -186,10 +220,28 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
         { status: 503 }
       );
     }
+    if (
+      error?.code === "CONCURRENT_MODIFICATION_ERROR" ||
+      error?.message?.includes("CONCURRENT_MODIFICATION_ERROR")
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "CONCURRENT_MODIFICATION_ERROR",
+          error: error.message.replace(/^CONCURRENT_MODIFICATION_ERROR:\s*/, ""),
+        },
+        { status: 409 }
+      );
+    }
     const isForbidden = error?.message?.startsWith("FORBIDDEN_DELETE");
+    const isNotFound = error?.message?.includes("tidak ditemukan");
     return NextResponse.json(
-      { success: false, error: error.message || "Gagal menghapus event." },
-      { status: isForbidden ? 409 : 400 }
+      {
+        success: false,
+        code: isForbidden ? "FORBIDDEN_DELETE" : undefined,
+        error: error.message || "Gagal menghapus event.",
+      },
+      { status: isForbidden ? 409 : isNotFound ? 404 : 400 }
     );
   }
 }
