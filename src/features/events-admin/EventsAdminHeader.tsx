@@ -59,7 +59,7 @@ export function EventsAdminHeader({
 
           <Button
             size="sm"
-            render={<Link href="/events/submit" />}
+            render={<Link href="/events/portal?view=submit" />}
             nativeButton={false}
           >
             <PlusCircle />

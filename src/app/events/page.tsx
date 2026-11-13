@@ -1,69 +1,93 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
-import Image from "next/image";
+import { ChevronDown, LogIn, Search, Ticket } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
-  Calendar,
-  Clock,
-  MapPin,
-  Search,
-  Filter,
-  PlusCircle,
-  ArrowRight,
-  Sparkles,
-  Ticket,
-  ChevronRight,
-  ChevronLeft,
-  ChevronDown,
-  LogIn,
-  History,
-  Tag,
-  Home,
-  CheckCircle2,
-  Users,
-  Compass,
-} from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
-import { Card } from "@/components/legacy/ui/card";
-import { Badge } from "@/components/legacy/ui/badge";
-import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
-import { PublicCommunityEvent, EventCategory } from "@/types/event";
-import { formatCurrencyIDR } from "@/lib/utils";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
+import { HomeNav } from "@/features/landing/home/HomeNav";
+import type { AuthenticatedUser } from "@/types/auth";
+import type { PublicCommunityEvent } from "@/types/event";
 
-const CATEGORY_TABS: { key: string; label: string }[] = [
-  { key: "ALL", label: "Semua Kategori" },
-  { key: "WORKSHOP", label: "Workshop" },
-  { key: "MEETUP", label: "Meetup" },
-  { key: "CREATIVE", label: "Kreatif" },
-  { key: "TECH", label: "Teknologi" },
-  { key: "COMMUNITY", label: "Komunitas" },
-  { key: "SEMINAR", label: "Seminar" },
-];
+import { EventsCatalogToolbar } from "@/features/events-catalog/EventsCatalogToolbar";
+import { EventsCatalogGrid } from "@/features/events-catalog/EventsCatalogGrid";
+import {
+  emptyCatalogMessage,
+  filterPublicEvents,
+  sortPublicEvents,
+  type EventPriceFilter,
+  type EventTimeTab,
+} from "@/features/events-catalog/events-catalog-domain";
+
+function MyTicketsNavAction({ user }: { user: AuthenticatedUser | null }) {
+  if (user) {
+    return (
+      <Button
+        variant="ghost"
+        render={<Link href="/customer?tab=PROFILE" />}
+        nativeButton={false}
+      >
+        <Ticket className="size-4" />
+        <span className="hidden sm:inline">Tiket saya</span>
+      </Button>
+    );
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="ghost">
+            <Ticket className="size-4" />
+            <span className="hidden sm:inline">Tiket saya</span>
+            <ChevronDown className="size-3 text-muted-foreground" />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuItem
+          render={
+            <Link
+              href={`/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&from=events&mode=customer`}
+            />
+          }
+        >
+          <LogIn />
+          <span>Masuk dengan akun</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem render={<Link href="/events/tickets/recovery" />}>
+          <Search />
+          <span>Cari e-tiket tamu</span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export default function EventsListingPage() {
   const { user } = useAuth();
   const [events, setEvents] = useState<PublicCommunityEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Filters & Tabs
+  const [viewTab, setViewTab] = useState<EventTimeTab>("UPCOMING");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
+  const [priceFilter, setPriceFilter] = useState<EventPriceFilter>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewTab, setViewTab] = useState<"UPCOMING" | "PAST">("UPCOMING");
-  const [priceFilter, setPriceFilter] = useState<"ALL" | "FREE" | "PAID">("ALL");
-  const [isMyTicketsDropdownOpen, setIsMyTicketsDropdownOpen] = useState(false);
+
+  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(8);
+  const [pageSize, setPageSize] = useState(9);
 
-  // Reset to page 1 on search, category, tab, price, or items-per-page change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedCategory, priceFilter, viewTab, itemsPerPage]);
-
-  useEffect(() => {
-    fetchEvents();
-  }, []);
-
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     try {
       setIsLoading(true);
       const res = await fetch("/api/events");
@@ -76,587 +100,123 @@ export default function EventsListingPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const now = useMemo(() => new Date().getTime(), []);
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
 
-  // Split into upcoming and past
-  const { upcomingEvents, pastEvents } = useMemo(() => {
-    const upcoming: PublicCommunityEvent[] = [];
-    const past: PublicCommunityEvent[] = [];
+  // Reset to page 1 on filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCategory, priceFilter, viewTab, pageSize]);
 
-    events.forEach((evt) => {
-      const end = new Date(evt.endDate).getTime();
-      if (end < now) {
-        past.push(evt);
-      } else {
-        upcoming.push(evt);
-      }
-    });
+  const nowMs = useMemo(() => Date.now(), []);
 
-    // Upcoming: closest first
-    upcoming.sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-    // Past: most recent first
-    past.sort((a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime());
+  // Counts for upcoming vs past
+  const upcomingCount = useMemo(() => {
+    return sortPublicEvents(events, "UPCOMING", nowMs).length;
+  }, [events, nowMs]);
 
-    return { upcomingEvents: upcoming, pastEvents: past };
-  }, [events, now]);
+  const pastCount = useMemo(() => {
+    return sortPublicEvents(events, "PAST", nowMs).length;
+  }, [events, nowMs]);
 
-  // Current active pool based on tab
-  const activePool = viewTab === "UPCOMING" ? upcomingEvents : pastEvents;
-
-  // Filter by category, price, and search
+  // Filtered pool
   const filteredEvents = useMemo(() => {
-    return activePool.filter((evt) => {
-      const matchesCategory =
-        selectedCategory === "ALL" || evt.category === selectedCategory;
-      const matchesPrice =
-        priceFilter === "ALL" ||
-        (priceFilter === "FREE" && !evt.isPaid) ||
-        (priceFilter === "PAID" && evt.isPaid);
-      const matchesSearch =
-        searchQuery === "" ||
-        evt.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        evt.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        evt.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        evt.organizerName.toLowerCase().includes(searchQuery.toLowerCase());
+    return filterPublicEvents(
+      events,
+      viewTab,
+      selectedCategory,
+      priceFilter,
+      searchQuery,
+      nowMs
+    );
+  }, [events, viewTab, selectedCategory, priceFilter, searchQuery, nowMs]);
 
-      return matchesCategory && matchesPrice && matchesSearch;
-    });
-  }, [activePool, selectedCategory, priceFilter, searchQuery]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / itemsPerPage));
+  // Paginated events
   const paginatedEvents = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredEvents.slice(start, start + itemsPerPage);
-  }, [filteredEvents, currentPage, itemsPerPage]);
+    const start = (currentPage - 1) * pageSize;
+    return filteredEvents.slice(start, start + pageSize);
+  }, [filteredEvents, currentPage, pageSize]);
 
-  const parseDateParts = (isoStr: string) => {
-    try {
-      const d = new Date(isoStr);
-      const month = d.toLocaleDateString("id-ID", { month: "short" }).toUpperCase();
-      const day = d.toLocaleDateString("id-ID", { day: "numeric" });
-      const weekday = d.toLocaleDateString("id-ID", { weekday: "short" });
-      const time = d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-      return { month, day, weekday, time };
-    } catch {
-      return { month: "EVT", day: "--", weekday: "", time: "" };
-    }
+  const hasFilterActive = Boolean(
+    searchQuery.trim() || selectedCategory !== "ALL" || priceFilter !== "ALL"
+  );
+
+  const handleResetFilter = () => {
+    setSearchQuery("");
+    setSelectedCategory("ALL");
+    setPriceFilter("ALL");
+    setCurrentPage(1);
   };
 
-  const formatDateDisplay = (isoStr: string) => {
-    try {
-      const d = new Date(isoStr);
-      return d.toLocaleDateString("id-ID", {
-        weekday: "short",
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }) + " WITA";
-    } catch {
-      return isoStr;
-    }
-  };
+  const emptyMsg = emptyCatalogMessage(viewTab, hasFilterActive);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B1120] text-[#1E293B] dark:text-[#E2E8F0] transition-colors duration-200 flex flex-col justify-between">
-      {/* 1. Top Navbar */}
-      <header className="sticky top-0 z-40 bg-white/90 dark:bg-[#0B1120]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-3 sm:space-x-4">
-            <Link href="/" className="flex items-center space-x-2.5 group">
-              <div className="w-8 h-8 relative transition-transform group-hover:scale-105 shrink-0">
-                <Image
-                  src="/logo-dago.png"
-                  alt="DagoEng Logo"
-                  width={32}
-                  height={32}
-                  className="object-contain"
-                />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-black text-sm tracking-tight text-slate-900 dark:text-white leading-tight">
-                  Dago Creative Hub
-                </span>
-                <span className="text-[10px] font-bold text-brand-sage dark:text-brand-sageBright uppercase tracking-wider">
-                  Event Marketplace
-                </span>
-              </div>
-            </Link>
-          </div>
+    <div className="flex min-h-screen flex-col bg-background text-foreground justify-between">
+      {/* 1. Header (consistent HomeNav layout: ModeToggle on the left, ghost tickets action, and blue Portal Mitra button) */}
+      <HomeNav
+        showLinks={false}
+        action={<MyTicketsNavAction user={user} />}
+        cta={{ href: "/events/portal", label: "Portal mitra" }}
+      />
 
-          <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Unified Tiket Saya Button (supports logged-in user + guest recovery) */}
-            {user ? (
-              <Link href="/customer?tab=PROFILE">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-xs h-9 px-3 sm:px-3.5 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-sage hover:text-brand-sage rounded-xl transition-all cursor-pointer"
-                >
-                  <Ticket className="w-3.5 h-3.5 mr-1.5 text-brand-sage dark:text-brand-sageBright" />
-                  <span className="hidden sm:inline">Tiket Saya</span>
-                  <span className="sm:hidden">Tiket</span>
-                </Button>
-              </Link>
-            ) : (
-              <div className="relative">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsMyTicketsDropdownOpen(!isMyTicketsDropdownOpen)}
-                  className="text-xs h-9 px-3 sm:px-3.5 font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-sage hover:text-brand-sage rounded-xl transition-all cursor-pointer"
-                >
-                  <Ticket className="w-3.5 h-3.5 mr-1.5 text-brand-sage dark:text-brand-sageBright" />
-                  <span className="hidden sm:inline">Tiket Saya</span>
-                  <span className="sm:hidden">Tiket</span>
-                  <ChevronDown className="w-3 h-3 ml-1 text-slate-400" />
-                </Button>
-
-                {isMyTicketsDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-800 shadow-2xl p-2 z-50 animate-in fade-in slide-in-from-top-2">
-                    <Link
-                      href={`/login?returnTo=${encodeURIComponent("/customer?tab=PROFILE")}&from=events&mode=customer`}
-                      onClick={() => setIsMyTicketsDropdownOpen(false)}
-                      className="flex items-center space-x-2.5 p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors"
-                    >
-                      <LogIn className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0" />
-                      <div>
-                        <div className="font-bold">Masuk dengan Akun</div>
-                        <div className="text-[10px] text-slate-400 font-normal">Akses tiket & riwayat akun</div>
-                      </div>
-                    </Link>
-                    <Link
-                      href="/events/tickets/recovery"
-                      onClick={() => setIsMyTicketsDropdownOpen(false)}
-                      className="flex items-center space-x-2.5 p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 transition-colors mt-1 border-t border-slate-100 dark:border-slate-800/80"
-                    >
-                      <Search className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0" />
-                      <div>
-                        <div className="font-bold">Cari E-Tiket Tamu</div>
-                        <div className="text-[10px] text-slate-400 font-normal">Pemesanan tanpa akun Dago</div>
-                      </div>
-                    </Link>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <Link href="/events/submit">
-              <Button
-                size="sm"
-                className="text-xs h-9 px-3.5 sm:px-4 font-bold bg-brand-sage hover:bg-[#2E6044] dark:bg-brand-sage dark:hover:bg-[#488e68] text-white rounded-xl shadow-sm transition-all hover:scale-105 active:scale-95 cursor-pointer"
-              >
-                <PlusCircle className="w-3.5 h-3.5 mr-1.5" />
-                <span>Buat Event</span>
-              </Button>
-            </Link>
-
-            <ThemeToggle variant="pill" />
-          </div>
-        </div>
-      </header>
-
-      {/* 2. Hero Section - Eventbrite Style */}
-      <section className="relative overflow-hidden bg-linear-to-b from-emerald-50/70 via-slate-50 to-[#F8FAFC] dark:from-emerald-950/20 dark:via-[#0B1120] dark:to-[#0B1120] border-b border-slate-200/60 dark:border-slate-800/80 pt-10 pb-12 sm:pt-14 sm:pb-16 transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mx-auto text-center space-y-4">
-            <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-emerald-100/70 dark:bg-emerald-900/40 border border-emerald-300/50 dark:border-emerald-700/50 text-brand-sage dark:text-brand-sageBright text-xs font-bold shadow-xs">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Pusat Kegiatan Kreatif, Workshop & Komunitas Singaraja</span>
-            </div>
-
-            <h1 className="text-3xl sm:text-5xl font-black text-slate-900 dark:text-white tracking-tight leading-tight">
-              Temukan Acara Komunitas Berikutnya
-            </h1>
-
-            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed max-w-2xl mx-auto">
-              Ikuti lokakarya kopi spesialti, meetup teknologi, pameran seni grafis, hingga sesi berbagi inspirasi dari berbagai kreator di kawasan Dago Creative Hub.
-            </p>
-
-            {/* Eventbrite-Style Unified Search Bar */}
-            <div className="pt-4 max-w-2xl mx-auto">
-              <div className="p-2 sm:p-2.5 rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 shadow-lg shadow-slate-200/50 dark:shadow-none flex flex-col sm:flex-row items-center gap-2">
-                <div className="relative flex-1 w-full">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Cari acara, topik, workshop, atau komunitas..."
-                    className="w-full pl-10 pr-3 py-2 text-xs sm:text-sm bg-transparent border-0 focus:outline-hidden text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
-                  />
-                </div>
-
-                <div className="flex items-center w-full sm:w-auto space-x-1.5 border-t sm:border-t-0 sm:border-l border-slate-200 dark:border-slate-700 pt-2 sm:pt-0 sm:pl-2">
-                  <button
-                    onClick={() => setPriceFilter("ALL")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      priceFilter === "ALL"
-                        ? "bg-brand-sage text-white shadow-xs"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    Semua
-                  </button>
-                  <button
-                    onClick={() => setPriceFilter("FREE")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      priceFilter === "FREE"
-                        ? "bg-brand-sage text-white shadow-xs"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    Gratis
-                  </button>
-                  <button
-                    onClick={() => setPriceFilter("PAID")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                      priceFilter === "PAID"
-                        ? "bg-brand-sage text-white shadow-xs"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                    }`}
-                  >
-                    Berbayar
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. Main Directory Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
-        {/* Navigation Bar: Tabs & Categories */}
-        <div className="space-y-4 pb-6 border-b border-slate-200 dark:border-slate-800 mb-8">
-          {/* Upcoming vs Past Toggle */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
-              <button
-                type="button"
-                onClick={() => setViewTab("UPCOMING")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  viewTab === "UPCOMING"
-                    ? "bg-white dark:bg-[#1E293B] text-brand-sage dark:text-brand-sageBright shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                Event Mendatang ({upcomingEvents.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewTab("PAST")}
-                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${
-                  viewTab === "PAST"
-                    ? "bg-white dark:bg-[#1E293B] text-brand-sage dark:text-brand-sageBright shadow-xs"
-                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                <History className="w-3.5 h-3.5" />
-                <span>Telah Berlalu ({pastEvents.length})</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Category Chips Bar + Items Per Page & Count (Directly Adjacent to Filter Bar) */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-1">
-            {/* Category Chips - Scrollable */}
-            <div className="flex items-center space-x-2 overflow-x-auto w-full md:w-auto pb-1 scrollbar-none">
-              {CATEGORY_TABS.map((tab) => {
-                const active = selectedCategory === tab.key;
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setSelectedCategory(tab.key)}
-                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                      active
-                        ? "bg-brand-sage text-white shadow-xs"
-                        : "bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-600 hover:text-slate-900 dark:hover:text-white"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Event Count & Items-per-page Dropdown */}
-            <div className="flex items-center space-x-3 text-xs text-slate-500 dark:text-slate-400 shrink-0 self-end md:self-auto">
-              <span>
-                Menampilkan{" "}
-                <span className="font-bold text-slate-900 dark:text-white">
-                  {filteredEvents.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0}
-                  –
-                  {Math.min(currentPage * itemsPerPage, filteredEvents.length)}
-                </span>{" "}
-                dari{" "}
-                <span className="font-bold text-slate-900 dark:text-white">{filteredEvents.length}</span> event
-              </span>
-
-              <div className="flex items-center space-x-1.5 pl-2 border-l border-slate-200 dark:border-slate-700">
-                <span className="text-[11px] font-medium">Per hal:</span>
-                <select
-                  value={itemsPerPage}
-                  onChange={(e) => {
-                    setItemsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="text-xs font-semibold py-1 px-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-[#3B7A57] cursor-pointer"
-                  aria-label="Pilih jumlah event per halaman"
-                >
-                  <option value={8}>8</option>
-                  <option value={16}>16</option>
-                  <option value={24}>24</option>
-                  <option value={32}>32</option>
-                </select>
-              </div>
-            </div>
-          </div>
+      {/* 2. Hero & Main Directory */}
+      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-8 px-4 py-8 sm:px-6 lg:px-8">
+        {/* Hero Title */}
+        <div className="flex flex-col gap-2 max-w-2xl">
+          <h1 className="text-3xl font-medium tracking-tight text-foreground sm:text-4xl">
+            Event komunitas
+          </h1>
+          <p className="text-base text-muted-foreground text-pretty">
+            Temukan lokakarya, sesi berbagi, dan kegiatan kreatif yang diselenggarakan oleh berbagai komunitas di Dago Creative Hub.
+          </p>
         </div>
 
-        {/* Loading State */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div
-                key={i}
-                className="h-96 rounded-2xl bg-slate-200/60 dark:bg-slate-800/60 animate-pulse border border-slate-200 dark:border-slate-800"
-              />
-            ))}
-          </div>
-        ) : filteredEvents.length === 0 ? (
-          /* EMPTY STATE */
-          <div className="py-16 text-center max-w-md mx-auto">
-            <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 mb-4">
-              <Calendar className="w-8 h-8 text-brand-sage dark:text-brand-sageBright" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-2">
-              {viewTab === "UPCOMING"
-                ? "Tidak ada event yang sesuai pencarian."
-                : "Belum ada arsip event yang selesai pada filter ini."}
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed mb-6">
-              Coba gunakan kata kunci lain atau reset filter kategori. Anda juga dapat mendaftarkan event komunitas Anda sendiri.
-            </p>
-            <div className="flex items-center justify-center space-x-3">
-              {(searchQuery || selectedCategory !== "ALL" || priceFilter !== "ALL") && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSearchQuery("");
-                    setSelectedCategory("ALL");
-                    setPriceFilter("ALL");
-                  }}
-                  className="text-xs rounded-xl"
-                >
-                  Reset Filter
-                </Button>
-              )}
-              <Link href="/events/submit">
-                <Button className="bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs px-4 py-2 rounded-xl">
-                  <PlusCircle className="w-4 h-4 mr-1.5" />
-                  Buat Event Baru
-                </Button>
-              </Link>
-            </div>
-          </div>
-        ) : (
-          /* EVENT GRID - EVENTBRITE STYLE */
-          <div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {paginatedEvents.map((evt) => {
-                const startMs = new Date(evt.startDate).getTime();
-                const endMs = new Date(evt.endDate).getTime();
-                const isPast = endMs < now;
-                const isOngoing = startMs <= now && now <= endMs;
-                const dateParts = parseDateParts(evt.startDate);
+        {/* Toolbar & Filters */}
+        <EventsCatalogToolbar
+          viewTab={viewTab}
+          onViewTabChange={setViewTab}
+          upcomingCount={upcomingCount}
+          pastCount={pastCount}
+          selectedCategory={selectedCategory}
+          onSelectCategory={setSelectedCategory}
+          priceFilter={priceFilter}
+          onPriceFilterChange={setPriceFilter}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+        />
 
-                return (
-                  <Card
-                    key={evt.id}
-                    className={`group overflow-hidden rounded-2xl border transition-all duration-300 hover:shadow-xl flex flex-col justify-between ${
-                      isPast
-                        ? "opacity-75 bg-slate-50/60 dark:bg-[#161F31]/60 border-slate-200 dark:border-slate-800"
-                        : "bg-white dark:bg-[#1E293B] border-slate-200/90 dark:border-slate-800 hover:-translate-y-1 hover:border-brand-sage/40 shadow-xs"
-                    }`}
-                  >
-                    <Link href={`/events/${evt.id}`} className="block flex-1">
-                      {/* Poster Image Container */}
-                      <div className="relative h-48 w-full bg-slate-900 overflow-hidden">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={evt.posterUrl}
-                          alt={evt.title}
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                        <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/20 to-transparent" />
-
-                        {/* Top Badges */}
-                        <div className="absolute top-3 left-3 flex items-center space-x-1.5 flex-wrap gap-1">
-                          <Badge className="bg-slate-950/80 backdrop-blur-md text-white border-0 text-[10px] font-bold px-2.5 py-0.5">
-                            {evt.category}
-                          </Badge>
-                          {isPast ? (
-                            <Badge variant="outline" className="bg-rose-950/80 text-rose-300 border-rose-800 text-[10px] px-2 py-0.5">
-                              Selesai
-                            </Badge>
-                          ) : isOngoing ? (
-                            <Badge className="bg-emerald-600 text-white border-0 text-[10px] font-bold px-2.5 py-0.5 shadow-xs flex items-center gap-1 animate-pulse">
-                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                              Sedang Berlangsung
-                            </Badge>
-                          ) : null}
-                        </div>
-
-                        {/* Pricing Tag Overlay */}
-                        <div className="absolute top-3 right-3">
-                          <span
-                            className={`text-[11px] font-black px-2.5 py-1 rounded-full shadow-xs backdrop-blur-md ${
-                              evt.isPaid
-                                ? "bg-amber-500/95 text-white"
-                                : "bg-brand-sage/95 text-white"
-                            }`}
-                          >
-                            {evt.isPaid ? formatCurrencyIDR(evt.price) : "GRATIS"}
-                          </span>
-                        </div>
-
-                        {/* Organizer Name Floating */}
-                        <div className="absolute bottom-2.5 left-3 right-3 flex items-center space-x-1.5 text-[11px] font-medium text-white/95 drop-shadow-xs">
-                          <Users className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-                          <span className="truncate">Oleh: <strong className="font-bold">{evt.organizerName}</strong></span>
-                        </div>
-                      </div>
-
-                      {/* Card Body with Eventbrite Date Box Pattern */}
-                      <div className="p-4 sm:p-5 flex items-start space-x-3.5">
-                        {/* Date Block */}
-                        <div className="shrink-0 w-11 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-800/60 flex flex-col items-center justify-center text-center shadow-xs">
-                          <span className="text-[9px] font-black tracking-wider text-brand-sage dark:text-brand-sageBright leading-none uppercase">
-                            {dateParts.month}
-                          </span>
-                          <span className="text-base font-black text-slate-900 dark:text-white leading-none mt-1">
-                            {dateParts.day}
-                          </span>
-                        </div>
-
-                        {/* Info Column */}
-                        <div className="flex-1 min-w-0 space-y-2">
-                          <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white line-clamp-2 leading-snug group-hover:text-brand-sage dark:group-hover:text-brand-sageBright transition-colors">
-                            {evt.title}
-                          </h3>
-
-                          <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                            <div className="flex items-center space-x-1.5">
-                              <Clock className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
-                              <span className="truncate">
-                                {isOngoing
-                                  ? `Berlangsung s/d ${new Date(evt.endDate).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}`
-                                  : `${dateParts.weekday}, ${dateParts.time} WITA`}
-                              </span>
-                            </div>
-                            <div className="flex items-center space-x-1.5">
-                              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                              <span className="truncate">{evt.location}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-
-                    {/* Card Footer Action */}
-                    <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-0">
-                      <Link href={`/events/${evt.id}`}>
-                        <Button
-                          variant="outline"
-                          className="w-full text-xs font-bold border-slate-200 dark:border-slate-700 hover:bg-brand-sage hover:text-white hover:border-brand-sage dark:hover:bg-brand-sage dark:hover:text-white transition-all rounded-xl justify-between group/btn"
-                        >
-                          <span>{evt.isPaid ? "Pesan Tiket" : "Daftar Tiket"}</span>
-                          <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover/btn:translate-x-1" />
-                        </Button>
-                      </Link>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-
-            {/* Pagination Navigation Bar */}
-            {totalPages > 1 && (
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-8 mt-6 border-t border-slate-200 dark:border-slate-800">
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  Halaman <span className="font-bold text-slate-900 dark:text-white">{currentPage}</span> dari <span className="font-bold text-slate-900 dark:text-white">{totalPages}</span>
-                </div>
-
-                <div className="flex items-center space-x-1.5">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="h-8 px-2.5 text-xs font-semibold rounded-lg border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer"
-                  >
-                    <ChevronLeft className="w-3.5 h-3.5 mr-1" />
-                    <span>Sebelumnya</span>
-                  </Button>
-
-                  {/* Page Numbers */}
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
-                    const isCurrent = pageNum === currentPage;
-                    return (
-                      <button
-                        key={pageNum}
-                        type="button"
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                          isCurrent
-                            ? "bg-brand-sage text-white shadow-xs"
-                            : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-brand-sage/50"
-                        }`}
-                      >
-                        {pageNum}
-                      </button>
-                    );
-                  })}
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="h-8 px-2.5 text-xs font-semibold rounded-lg border-slate-200 dark:border-slate-700 disabled:opacity-40 cursor-pointer"
-                  >
-                    <span>Berikutnya</span>
-                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Grid & Pagination */}
+        <EventsCatalogGrid
+          events={paginatedEvents}
+          isLoading={isLoading}
+          viewTab={viewTab}
+          emptyMessage={emptyMsg}
+          hasFilterActive={hasFilterActive}
+          onResetFilter={handleResetFilter}
+          currentPage={currentPage}
+          pageSize={pageSize}
+          totalItems={filteredEvents.length}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+        />
       </main>
 
-      {/* 4. Footer */}
-      <footer className="border-t border-slate-200 dark:border-slate-800 py-6 text-center text-xs text-slate-500 dark:text-slate-400 bg-white/50 dark:bg-[#0B1120]">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+      {/* 3. Footer */}
+      <footer className="border-t py-6 text-xs text-muted-foreground bg-muted/20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p>© {new Date().getFullYear()} Dago Creative Hub — Ekosistem Terpadu F&B, Co-Working & Komunitas.</p>
-          <div className="flex items-center space-x-4 font-medium">
-            <Link href="/" className="hover:text-slate-800 dark:hover:text-white transition-colors">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="hover:text-foreground transition-colors">
               Beranda
             </Link>
-            <Link href="/events/tickets/recovery" className="hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors">
-              Cari / Pemulihan Tiket
+            <Link href="/events/tickets/recovery" className="hover:text-foreground transition-colors">
+              Cari tiket
             </Link>
-            <Link href="/events/submit" className="hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors">
-              Pasang Event
-            </Link>
-            <Link href="/events/portal" className="hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors">
-              Portal Penyelenggara
+            <Link href="/events/portal" className="hover:text-foreground transition-colors">
+              Portal mitra
             </Link>
           </div>
         </div>

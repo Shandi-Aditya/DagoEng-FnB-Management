@@ -241,10 +241,10 @@ function PartnerRoles() {
           </Button>
           <Button
             variant="outline"
-            render={<Link href="/events/submit" />}
+            render={<Link href="/events/portal" />}
             nativeButton={false}
           >
-            Ajukan event
+            Portal event
           </Button>
         </div>
       </Reveal>
@@ -389,7 +389,6 @@ const FOOTER_COLUMNS: readonly {
     title: "Mitra",
     links: [
       { href: "/login", label: "Masuk" },
-      { href: "/events/submit", label: "Ajukan event" },
       { href: "/events/portal", label: "Portal penyelenggara" },
     ],
   },

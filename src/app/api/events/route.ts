@@ -16,6 +16,7 @@ import {
 import { getOrganizerByEmail, createOrganizer } from "@/lib/organizers";
 import { createOrganizerSession } from "@/lib/organizer-activation";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
+import { decideSubmitterAccount } from "@/lib/event-submitter-account";
 export const dynamic = "force-dynamic";
 
 /**
@@ -109,98 +110,96 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Create submission with status PENDING
+    // 5. Decide whose account this submission belongs to before anything is stored.
+    const normalizedEmail = body.organizerEmail.trim().toLowerCase();
+    const organizerName = body.organizerName.trim();
+    const organizerPhone = body.organizerPhone.trim();
+    const submittedPassword = body.password?.trim() || "";
+
+    const existingAuth = await getRequestAuthUser(req);
+    const existingUser = findUnifiedUserByEmail(normalizedEmail);
+    const passwordMatches =
+      Boolean(existingUser && submittedPassword) &&
+      (await verifyUnifiedUserPassword(normalizedEmail, submittedPassword)).success;
+
+    const decision = decideSubmitterAccount({
+      sessionEmail: existingAuth.isAuthenticated ? existingAuth.email ?? null : null,
+      email: normalizedEmail,
+      accountExists: Boolean(existingUser),
+      password: submittedPassword,
+      passwordMatches,
+    });
+    if (decision.kind === "reject") {
+      return NextResponse.json({ success: false, error: decision.error }, { status: decision.status });
+    }
+
+    // 6. Create submission with status PENDING
     const created = await createEventSubmission(body);
 
-    // 6. Seamless Organizer Account Setup & Auto-Login Session
+    // 7. Organizer account and portal session
     let sessionUser: any = null;
     let rawSessionToken: string | null = null;
 
     try {
-      const normalizedEmail = body.organizerEmail.trim().toLowerCase();
-      const organizerName = body.organizerName.trim();
-      const organizerPhone = body.organizerPhone.trim();
-
-      // Check if user is already authenticated
-      const existingAuth = await getRequestAuthUser(req);
-      if (existingAuth.isAuthenticated && existingAuth.email?.toLowerCase() === normalizedEmail) {
+      if (decision.kind === "session") {
         sessionUser = {
           id: existingAuth.userId,
           name: existingAuth.name || organizerName,
           email: existingAuth.email,
           role: existingAuth.role,
         };
+      } else if (decision.kind === "existing" && existingUser) {
+        sessionUser = {
+          id: existingUser.id,
+          name: existingUser.name,
+          email: existingUser.email,
+          phone: existingUser.phone,
+          role: existingUser.role,
+        };
       } else {
-        const rawPassword = body.password?.trim() || "Password123!";
-        const existingUser = findUnifiedUserByEmail(normalizedEmail);
+        const regResult = await registerUnifiedUser({
+          name: organizerName,
+          email: normalizedEmail,
+          phone: organizerPhone,
+          password: submittedPassword,
+          role: "CUSTOMER",
+        });
+        sessionUser = {
+          id: regResult.user.id,
+          name: regResult.user.name,
+          email: regResult.user.email,
+          phone: regResult.user.phone,
+          role: regResult.user.role,
+        };
+      }
 
-        if (existingUser) {
-          // If user exists, check credentials if password provided
-          const passCheck = await verifyUnifiedUserPassword(normalizedEmail, rawPassword);
-          if (passCheck.success && passCheck.user) {
-            sessionUser = {
-              id: passCheck.user.id,
-              name: passCheck.user.name,
-              email: passCheck.user.email,
-              phone: passCheck.user.phone,
-              role: passCheck.user.role,
-            };
-          } else {
-            sessionUser = {
-              id: existingUser.id,
-              name: existingUser.name,
-              email: existingUser.email,
-              phone: existingUser.phone,
-              role: existingUser.role,
-            };
-          }
-        } else {
-          // Register new unified user account
-          const regResult = await registerUnifiedUser({
-            name: organizerName,
-            email: normalizedEmail,
-            phone: organizerPhone,
-            password: rawPassword,
-            role: "CUSTOMER",
-          });
-          sessionUser = {
-            id: regResult.user.id,
-            name: regResult.user.name,
-            email: regResult.user.email,
-            phone: regResult.user.phone,
-            role: regResult.user.role,
-          };
-        }
+      // Every submitter becomes an organizer, including a member who was already signed in.
+      let orgProfile = getOrganizerByEmail(normalizedEmail);
+      if (!orgProfile) {
+        orgProfile = createOrganizer({
+          name: organizerName,
+          category: body.category || "Komunitas",
+          contactPerson: organizerName,
+          phone: organizerPhone,
+          email: normalizedEmail,
+          notes: "Akun penyelenggara otomatis dari pengajuan event",
+          initialStatus: "ACTIVE",
+        });
+      }
 
-        // Ensure community organizer profile exists in organizers.json
-        let orgProfile = getOrganizerByEmail(normalizedEmail);
-        if (!orgProfile) {
-          orgProfile = createOrganizer({
-            name: organizerName,
-            category: body.category || "Komunitas",
-            contactPerson: organizerName,
-            phone: organizerPhone,
-            email: normalizedEmail,
-            notes: "Akun penyelenggara otomatis dari pengajuan event",
-            initialStatus: "ACTIVE",
-          });
-        }
+      // Keep organizer_credentials.json synchronized with the unified user's password
+      const uUser = findUnifiedUserByEmail(normalizedEmail);
+      if (orgProfile && uUser?.passwordHash) {
+        syncOrganizerCredentials(orgProfile.id, normalizedEmail, uUser.passwordHash);
+      }
 
-        // Keep organizer_credentials.json synchronized with the unified user's password
-        const uUser = findUnifiedUserByEmail(normalizedEmail);
-        if (orgProfile && uUser?.passwordHash) {
-          syncOrganizerCredentials(orgProfile.id, normalizedEmail, uUser.passwordHash);
-        }
-
-        // Create server session for seamless portal access
-        if (sessionUser) {
-          const session = await createOrganizerSession(
-            normalizedEmail,
-            req.headers.get("user-agent") || undefined,
-            req.headers.get("x-forwarded-for") || undefined
-          );
-          rawSessionToken = session.rawToken;
-        }
+      if (decision.kind !== "session") {
+        const session = await createOrganizerSession(
+          normalizedEmail,
+          req.headers.get("user-agent") || undefined,
+          req.headers.get("x-forwarded-for") || undefined
+        );
+        rawSessionToken = session.rawToken;
       }
     } catch (authErr) {
       console.error("Auto-login organizer setup error:", authErr);
