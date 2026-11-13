@@ -2,7 +2,7 @@
 
 import { Minus, Plus } from "lucide-react";
 
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -40,23 +40,21 @@ interface CheckoutSheetProps {
   isSubmitting: boolean;
 }
 
-const SEGMENT = cn(buttonVariants({ variant: "outline", size: "lg" }), "h-10 flex-1 text-sm text-muted-foreground");
-const SEGMENT_ACTIVE = "border-foreground/25 bg-secondary text-foreground";
-
 function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: readonly { id: T; label: string }[]; onChange: (id: T) => void; label: string }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex gap-2">
+    <div role="group" aria-label={label} className="flex gap-2">
       {options.map((option) => (
-        <button
+        <Button
           key={option.id}
           type="button"
-          role="radio"
-          aria-checked={option.id === value}
+          size="lg"
+          variant={option.id === value ? "default" : "outline"}
+          aria-pressed={option.id === value}
           onClick={() => onChange(option.id)}
-          className={cn(SEGMENT, option.id === value && SEGMENT_ACTIVE)}
+          className="h-10 flex-1 text-sm"
         >
           {option.label}
-        </button>
+        </Button>
       ))}
     </div>
   );

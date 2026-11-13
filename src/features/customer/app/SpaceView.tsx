@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Laptop, Minus, Plus, Users } from "lucide-react";
 
 import { EmptyState } from "@/components/app/empty-state";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -49,8 +49,6 @@ function upcomingDays(): { value: string; weekday: string; day: string }[] {
   });
 }
 
-const CHIP = cn(buttonVariants({ variant: "outline", size: "lg" }), "h-auto shrink-0 flex-col gap-0 px-3 py-1.5 text-muted-foreground");
-const CHIP_ACTIVE = "border-foreground/25 bg-secondary text-foreground";
 
 /** Current hour in WITA as "HH:00", for hiding today's past slots. */
 function currentHourWita(): string {
@@ -96,19 +94,20 @@ export function SpaceView(props: SpaceViewProps) {
         <p className="text-sm text-muted-foreground">Pilih hari, lalu ketuk jam yang masih kosong.</p>
       </div>
 
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 no-scrollbar" role="radiogroup" aria-label="Tanggal">
+      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 no-scrollbar" role="group" aria-label="Tanggal">
         {days.map((day) => (
-          <button
+          <Button
             key={day.value}
             type="button"
-            role="radio"
-            aria-checked={day.value === date}
+            size="lg"
+            variant={day.value === date ? "default" : "outline"}
+            aria-pressed={day.value === date}
             onClick={() => setDate(day.value)}
-            className={cn(CHIP, day.value === date && CHIP_ACTIVE)}
+            className="h-auto shrink-0 flex-col gap-0 px-3 py-1.5"
           >
             <span className="text-xs">{day.weekday}</span>
             <span className="text-sm font-medium">{day.day}</span>
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -196,18 +195,19 @@ export function SpaceView(props: SpaceViewProps) {
                   </Field>
                   <Field>
                     <FieldLabel>Bayar</FieldLabel>
-                    <div role="radiogroup" aria-label="Metode bayar" className="flex gap-2">
+                    <div role="group" aria-label="Metode bayar" className="flex gap-2">
                       {(["QRIS", "CASHIER"] as const).map((method) => (
-                        <button
+                        <Button
                           key={method}
                           type="button"
-                          role="radio"
-                          aria-checked={payment === method}
+                          size="lg"
+                          variant={payment === method ? "default" : "outline"}
+                          aria-pressed={payment === method}
                           onClick={() => setPayment(method)}
-                          className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-10 flex-1 text-sm text-muted-foreground", payment === method && CHIP_ACTIVE)}
+                          className="h-10 flex-1 text-sm"
                         >
                           {method === "QRIS" ? "QRIS" : "Di kasir"}
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   </Field>

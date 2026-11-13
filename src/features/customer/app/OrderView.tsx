@@ -5,6 +5,7 @@ import { Minus, Plus, Search, ShoppingBag, UtensilsCrossed } from "lucide-react"
 import { EmptyState } from "@/components/app/empty-state";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { CustomerCartItem } from "@/features/customer/customer-domain";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 import type { MasterProduct } from "@/types/product";
@@ -16,8 +17,9 @@ export interface PartnerOption {
   isOpen: boolean;
 }
 
-const CHIP = cn(buttonVariants({ variant: "outline", size: "lg" }), "h-9 shrink-0 px-3 text-sm text-muted-foreground");
-const CHIP_ACTIVE = "border-foreground/25 bg-secondary text-foreground";
+// Phone-sized touch targets for the filter rows
+const TAB_LIST = "max-w-full justify-start overflow-x-auto no-scrollbar group-data-horizontal/tabs:h-10";
+const TAB_TRIGGER = "flex-none px-3 text-sm";
 const CART_BAR = "mx-auto flex h-12 w-full max-w-2xl justify-between px-4 text-sm shadow-lg";
 
 interface OrderViewProps {
@@ -72,20 +74,15 @@ export function OrderView(props: OrderViewProps) {
         <p className="text-sm text-muted-foreground">Pilih dapur, tambah menu, lalu bayar dari sini.</p>
       </div>
 
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 no-scrollbar" role="tablist" aria-label="Dapur mitra">
-        {partners.map((partner) => (
-          <button
-            key={partner.id}
-            type="button"
-            role="tab"
-            aria-selected={partner.id === activePartnerId}
-            onClick={() => props.onPartnerChange(partner.id)}
-            className={cn(CHIP, partner.id === activePartnerId && CHIP_ACTIVE)}
-          >
-            {partner.name}
-          </button>
-        ))}
-      </div>
+      <Tabs value={activePartnerId} onValueChange={(value) => props.onPartnerChange(String(value))}>
+        <TabsList aria-label="Dapur mitra" className={TAB_LIST}>
+          {partners.map((partner) => (
+            <TabsTrigger key={partner.id} value={partner.id} className={TAB_TRIGGER}>
+              {partner.name}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {activePartner && !activePartner.isOpen ? (
         <p className="rounded-lg border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
@@ -107,18 +104,15 @@ export function OrderView(props: OrderViewProps) {
       </InputGroup>
 
       {props.categories.length > 1 ? (
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 no-scrollbar" aria-label="Kategori">
-          {["ALL", ...props.categories].map((category) => (
-            <button
-              key={category}
-              type="button"
-              onClick={() => props.onCategoryChange(category)}
-              className={cn(CHIP, "h-8", category === props.activeCategory && CHIP_ACTIVE)}
-            >
-              {category === "ALL" ? "Semua" : category}
-            </button>
-          ))}
-        </div>
+        <Tabs value={props.activeCategory} onValueChange={(value) => props.onCategoryChange(String(value))}>
+          <TabsList variant="line" aria-label="Kategori" className={TAB_LIST}>
+            {["ALL", ...props.categories].map((category) => (
+              <TabsTrigger key={category} value={category} className={TAB_TRIGGER}>
+                {category === "ALL" ? "Semua" : category}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       ) : null}
 
       {products.length === 0 ? (

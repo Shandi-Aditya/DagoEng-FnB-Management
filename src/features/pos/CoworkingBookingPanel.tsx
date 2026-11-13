@@ -165,27 +165,18 @@ export function CoworkingBookingPanel({
               : selectedSpace.hourlyRate * item.hours;
 
             return (
-              <button
+              <Button
                 key={item.hours}
                 type="button"
+                variant={isSelected ? "default" : "outline"}
                 onClick={() => onDurationChange(item.hours)}
-                className={cn(
-                  "flex min-h-[46px] flex-col items-center justify-center rounded-lg border p-1.5 transition-colors touch-manipulation",
-                  isSelected
-                    ? "border-primary bg-primary text-primary-foreground shadow-xs"
-                    : "border-border bg-card hover:bg-accent/40 text-foreground"
-                )}
+                className="h-auto min-h-[46px] flex-col gap-0 p-1.5 touch-manipulation"
               >
                 <span className="text-xs font-medium">{item.label}</span>
-                <span
-                  className={cn(
-                    "font-mono text-[11px] tabular-nums",
-                    isSelected ? "text-primary-foreground/90" : "text-muted-foreground"
-                  )}
-                >
+                <span className={cn("font-mono text-[11px] tabular-nums", isSelected ? "text-primary-foreground/90" : "text-muted-foreground")}>
                   {formatCurrencyIDR(price)}
                 </span>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -257,29 +248,25 @@ export function CoworkingBookingPanel({
             const isSelected = cwStartTime === slot;
 
             return (
-              <button
+              <Button
                 key={slot}
                 type="button"
+                variant={isSelected ? "default" : "outline"}
                 disabled={!isAvail}
                 onClick={() => onStartTimeChange(slot)}
-                className={cn(
-                  "flex min-h-[38px] flex-col items-center justify-center rounded-md border p-1 text-center transition-colors touch-manipulation",
-                  !isAvail && "cursor-not-allowed border-border bg-muted/40 text-muted-foreground line-through opacity-50",
-                  isAvail && !isSelected && "border-border bg-card hover:bg-accent/40 text-foreground",
-                  isSelected && "border-primary bg-primary text-primary-foreground shadow-xs"
-                )}
+                className={cn("h-auto min-h-[38px] flex-col gap-0 p-1 touch-manipulation", !isAvail && "line-through")}
               >
                 <span className="font-mono text-xs leading-tight">{slot}</span>
                 <span
                   className={cn(
-                    "text-[10px]",
+                    "text-[10px] no-underline",
                     !isAvail && "text-destructive",
-                    isSelected ? "text-primary-foreground/90" : "text-muted-foreground"
+                    isAvail && (isSelected ? "text-primary-foreground/90" : "text-muted-foreground"),
                   )}
                 >
                   {isAvail ? "Tersedia" : "Terisi"}
                 </span>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -460,27 +447,18 @@ export function CoworkingBookingPanel({
           {PAYMENT_METHODS.map((pm) => {
             const isSelected = cwPaymentMethod === pm.id;
             return (
-              <button
+              <Button
                 key={pm.id}
                 type="button"
+                variant={isSelected ? "default" : "outline"}
                 onClick={() => onPaymentMethodChange(pm.id)}
-                className={cn(
-                  "flex min-h-[44px] flex-col items-center justify-center rounded-lg border p-1.5 text-center transition-colors touch-manipulation",
-                  isSelected
-                    ? "border-primary bg-primary text-primary-foreground shadow-xs"
-                    : "border-border bg-card hover:bg-accent/40 text-foreground"
-                )}
+                className="h-auto min-h-[44px] flex-col gap-0 p-1.5 text-center touch-manipulation"
               >
                 <span className="text-xs font-medium leading-tight">{pm.label}</span>
-                <span
-                  className={cn(
-                    "text-[10px]",
-                    isSelected ? "text-primary-foreground/80" : "text-muted-foreground"
-                  )}
-                >
+                <span className={cn("text-[10px]", isSelected ? "text-primary-foreground/80" : "text-muted-foreground")}>
                   {pm.desc}
                 </span>
-              </button>
+              </Button>
             );
           })}
         </div>

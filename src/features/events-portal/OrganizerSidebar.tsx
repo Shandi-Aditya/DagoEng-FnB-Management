@@ -36,6 +36,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { UNIT_ICON_CLASS } from "@/components/app/unit-dot";
 import type { OrganizerNavView } from "./OrganizerTabs";
 
 interface OrganizerSidebarProps extends ComponentProps<typeof Sidebar> {
@@ -104,7 +105,7 @@ export function OrganizerSidebar({
               return (
                 <SidebarMenuItem key={id}>
                   <SidebarMenuButton isActive={activeNav === id} onClick={() => handleNavClick(id)} tooltip={label}>
-                    <Icon className="size-4" />
+                    <Icon className={UNIT_ICON_CLASS.event} />
                     <span>{label}</span>
                     {typeof count === "number" && count > 0 && (
                       <Badge

@@ -152,6 +152,12 @@
   --unit-coworking: #00b2fe;
   --unit-event: #00c853;
   --unit-loyalty: #ffb300;
+
+  /* Teks di atas isian warna unit (pil aktif). Satu tempat untuk menukar kontras. */
+  --unit-fnb-foreground: #ffffff;
+  --unit-coworking-foreground: #ffffff;
+  --unit-event-foreground: #ffffff;
+  --unit-loyalty-foreground: #1a1a1a;
 }
 
 .dark {
@@ -270,4 +276,56 @@
   &::-webkit-scrollbar {
     display: none;
   }
+}
+
+/*
+ * Aksen unit bisnis. Halaman milik satu unit diberi `data-unit` (F&B oranye,
+ * co-working biru, event hijau, loyalty kuning) oleh layout, pada wrapper halaman
+ * dan pada <html> lewat UnitScope supaya dialog, sheet, dan menu (portal ke body)
+ * ikut berwarna. Di dalam scope, `primary` dan `ring` diganti warna unit, jadi
+ * tombol utama, badge, switch, progress, tautan, dan fokus semuanya mengikuti
+ * tanpa menyentuh komponen. Halaman netral tidak punya atribut ini dan tetap
+ * memakai primary biru.
+ *
+ * Aturan ini sengaja berada di luar @layer agar menang atas utilitas komponen.
+ */
+[data-unit="fnb"] {
+  --unit-accent: var(--unit-fnb);
+  --unit-accent-foreground: var(--unit-fnb-foreground);
+}
+
+[data-unit="coworking"] {
+  --unit-accent: var(--unit-coworking);
+  --unit-accent-foreground: var(--unit-coworking-foreground);
+}
+
+[data-unit="event"] {
+  --unit-accent: var(--unit-event);
+  --unit-accent-foreground: var(--unit-event-foreground);
+}
+
+[data-unit="loyalty"] {
+  --unit-accent: var(--unit-loyalty);
+  --unit-accent-foreground: var(--unit-loyalty-foreground);
+}
+
+/* `[data-unit] body`: in dark mode the theme provider also puts `.dark` on <body>, which
+   re-declares every token there and would hide the <html> scope from portals. */
+[data-unit],
+[data-unit] body {
+  --primary: var(--unit-accent);
+  --primary-foreground: var(--unit-accent-foreground);
+  --ring: var(--unit-accent);
+  --sidebar-primary: var(--unit-accent);
+  --sidebar-primary-foreground: var(--unit-accent-foreground);
+  /* Diturunkan dari --primary di :root, jadi harus dihitung ulang di dalam scope */
+  --button-primary-top: color-mix(in oklch, var(--primary), white 15%);
+  --button-primary-highlight: color-mix(in oklch, var(--primary), white 30%);
+  --button-primary-edge: color-mix(in oklch, var(--primary), black 15%);
+}
+
+[data-unit] [data-slot="tabs-list"][data-variant="default"] [data-slot="tabs-trigger"][data-active] {
+  background-color: var(--primary);
+  border-color: transparent;
+  color: var(--primary-foreground);
 }
