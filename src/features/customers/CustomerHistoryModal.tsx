@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/app/status-badge";
-import { getTierTone } from "./customers-domain";
+import { getTierTone, isEligibleForTierPromotion } from "./customers-domain";
 
 export interface CustomerHistoryModalProps {
   member: LoyaltyMember | null;
@@ -33,7 +33,7 @@ export function CustomerHistoryModal({
             <History className="size-4 text-primary" />
             <span>Riwayat poin dan tier — {member.name}</span>
           </DialogTitle>
-          <DialogDescription className="flex items-center gap-2 pt-1 text-xs">
+          <DialogDescription className="flex flex-wrap items-center gap-2 pt-1 text-xs">
             <span>Tier sekarang:</span>
             <StatusBadge status={getTierTone(member.tier)}>
               {member.tier}
@@ -41,6 +41,11 @@ export function CustomerHistoryModal({
             <span className="font-mono font-medium tabular-nums text-foreground">
               ({member.points.toLocaleString("id-ID")} poin)
             </span>
+            {isEligibleForTierPromotion(member.tier, member.points) ? (
+              <span className="text-xs font-medium text-warning">
+                • Poin memenuhi syarat kenaikan tier
+              </span>
+            ) : null}
           </DialogDescription>
         </DialogHeader>
 
@@ -111,7 +116,7 @@ export function CustomerHistoryModal({
                           ptx.points >= 0 ? "text-success" : "text-destructive"
                         }`}
                       >
-                        {ptx.points >= 0 ? `+${ptx.points}` : ptx.points} Pts
+                        {ptx.points >= 0 ? `+${ptx.points}` : ptx.points} poin
                       </p>
                       <p className="font-mono text-xs text-muted-foreground">
                         Saldo: {ptx.balanceAfter}
