@@ -23,6 +23,10 @@ export const ROUTE_PERMISSIONS: { prefix: string; allowedRoles: RoleSlug[] }[] =
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "WAITER", "CASHIER"],
   },
   {
+    prefix: "/waiter",
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "WAITER"],
+  },
+  {
     prefix: "/events/checkin",
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "CHECKIN_STAFF"],
   },
