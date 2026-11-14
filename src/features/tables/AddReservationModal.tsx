@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +48,13 @@ export function AddReservationModal({
   const [pax, setPax] = useState(4);
   const [downPayment, setDownPayment] = useState(0);
   const [notes, setNotes] = useState("");
+
+  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const tomorrowStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split("T")[0];
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,7 +139,7 @@ export function AddReservationModal({
                 {areas.flatMap((a) =>
                   a.tables.map((t) => (
                     <option key={t.id} value={t.number || t.id}>
-                      {t.number || t.id} ({a.name} · {t.cap}pax)
+                      {t.number || t.id} ({a.name} · {t.cap} orang)
                     </option>
                   ))
                 )}
@@ -192,32 +199,34 @@ export function AddReservationModal({
 
             <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground">
               <span>Cepat:</span>
-              <button
+              <Button
                 type="button"
+                size="sm"
+                variant={date === todayStr ? "default" : "outline"}
                 onClick={() => setShortcutDate(0)}
-                className="rounded border bg-background px-2 py-0.5 text-xs hover:bg-muted"
               >
                 Hari ini
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                size="sm"
+                variant={date === tomorrowStr ? "default" : "outline"}
                 onClick={() => setShortcutDate(1)}
-                className="rounded border bg-background px-2 py-0.5 text-xs hover:bg-muted"
               >
                 Besok
-              </button>
+              </Button>
               <span className="text-muted-foreground/40">|</span>
               {["12:00", "18:30", "19:00", "20:00"].map((t) => (
-                <button
+                <Button
                   key={t}
                   type="button"
+                  size="sm"
+                  variant={time === t ? "default" : "outline"}
                   onClick={() => setTime(t)}
-                  className={`rounded px-1.5 py-0.5 font-mono text-xs ${
-                    time === t ? "bg-primary text-primary-foreground font-medium" : "border bg-background hover:bg-muted"
-                  }`}
+                  className="font-mono tabular-nums"
                 >
                   {t}
-                </button>
+                </Button>
               ))}
             </div>
           </div>

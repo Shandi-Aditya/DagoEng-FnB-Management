@@ -6,6 +6,7 @@ import {
   emptyReservationsMessage,
   filterReservations,
   formatReservationDateTime,
+  isTableAvailableForPax,
   reservationStatusLabel,
   reservationStatusTone,
   tableStatusLabel,
@@ -162,5 +163,19 @@ describe("emptyReservationsMessage", () => {
 
     const allMsg = emptyReservationsMessage("ALL", false);
     expect(allMsg.title).toBe("Belum ada reservasi");
+  });
+});
+
+describe("isTableAvailableForPax", () => {
+  it("validates that a table is in AVAILABLE status and has sufficient capacity", () => {
+    const tableAvailable4 = makeTable("1", "AVAILABLE", 4);
+    const tableOccupied4 = makeTable("2", "OCCUPIED", 4);
+    const tableReserved2 = makeTable("3", "RESERVED", 2);
+
+    expect(isTableAvailableForPax(tableAvailable4, 2)).toBe(true);
+    expect(isTableAvailableForPax(tableAvailable4, 4)).toBe(true);
+    expect(isTableAvailableForPax(tableAvailable4, 5)).toBe(false);
+    expect(isTableAvailableForPax(tableOccupied4, 2)).toBe(false);
+    expect(isTableAvailableForPax(tableReserved2, 2)).toBe(false);
   });
 });
