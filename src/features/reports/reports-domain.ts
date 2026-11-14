@@ -157,6 +157,36 @@ export function isNumericReportCell(cell: string | number): boolean {
   );
 }
 
+/**
+ * Calculates summary metrics aggregating row count and parsed monetary/numeric amounts
+ * for a specific column in a tabular report dataset.
+ */
+export function calculateReportSummaryMetrics(
+  rows: readonly (string | number)[][],
+  amountColumnIndex: number
+): { count: number; totalAmount: number; formattedTotal: string } {
+  let totalAmount = 0;
+
+  for (const row of rows) {
+    const rawVal = row[amountColumnIndex];
+    if (typeof rawVal === "number") {
+      totalAmount += rawVal;
+    } else if (typeof rawVal === "string") {
+      const cleaned = rawVal.replace(/[^\d-]/g, "");
+      const parsed = parseInt(cleaned, 10);
+      if (!Number.isNaN(parsed)) {
+        totalAmount += parsed;
+      }
+    }
+  }
+
+  return {
+    count: rows.length,
+    totalAmount,
+    formattedTotal: `Rp ${totalAmount.toLocaleString("id-ID")}`,
+  };
+}
+
 function formatMakassarDate(iso: string): string {
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return iso.split("T")[0] ?? iso;
