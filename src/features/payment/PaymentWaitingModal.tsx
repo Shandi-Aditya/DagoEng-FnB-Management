@@ -1,49 +1,48 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { OrderRecord } from "@/types/order";
+import type { OrderRecord } from "@/types/order";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
-  X,
-  QrCode,
-  Clock,
-  CheckCircle2,
   AlertCircle,
   ArrowRight,
-  ShieldCheck,
-  RefreshCw,
-  Copy,
-  Check,
-  Sparkles,
-  Store,
-  CreditCard,
   Banknote,
-  Flame,
-  Zap,
-  Laptop,
+  Check,
+  CheckCircle2,
+  Clock,
+  Copy,
+  CreditCard,
+  QrCode,
+  RefreshCw,
+  Store,
 } from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
-import { Badge } from "@/components/legacy/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { StatusBadge } from "@/components/app/status-badge";
+import { EmptyState } from "@/components/app/empty-state";
+import {
+  type UnifiedPaymentItem,
+  type BookingLike,
+  DEFAULT_PAYMENT_EXPIRY_SECONDS,
+  formatPaymentTimer,
+  calculatePaymentProgress,
+  normalizePaymentItem,
+  getPaymentMethodDisplay,
+  calculateSecondsRemaining,
+} from "./payment-waiting";
 
-export interface UnifiedPaymentItem {
-  id: string;
-  itemCode: string; // e.g. "ORD-20260924-001" or "BK-CWK-00195"
-  title: string; // "Pesanan Kuliner F&B" or "Booking Ruang Kerja"
-  subtitle: string; // "Meja T-03" or "Dedicated Desk D-01"
-  customerName: string;
-  total: number;
-  paymentMethod: "QRIS" | "CASH" | "EDC" | string;
-  type: "FNB" | "COWORKING";
-  paymentStatus: "PENDING" | "PAID" | "REFUNDED" | string;
-  createdAt?: string;
-  itemsBreakdown?: { label: string; qty?: number; price: number }[];
-  dateInfo?: string;
-}
+export type { UnifiedPaymentItem };
 
 interface PaymentWaitingModalProps {
   isOpen: boolean;
   order?: OrderRecord | null;
-  booking?: any | null;
+  booking?: BookingLike | null;
   paymentItem?: UnifiedPaymentItem | null;
   onClose: () => void;
   onPaymentSuccess: (payload: { type: "FNB" | "COWORKING"; id: string }) => void;
@@ -61,78 +60,30 @@ export function PaymentWaitingModal({
   onCancelPayment,
   onExpired,
 }: PaymentWaitingModalProps) {
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(900); // 15 minutes
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(DEFAULT_PAYMENT_EXPIRY_SECONDS);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [copiedRef, setCopiedRef] = useState<boolean>(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState<boolean>(false);
   const [isPaidSuccess, setIsPaidSuccess] = useState<boolean>(false);
 
-  // Normalize target item
-  const activeItem: UnifiedPaymentItem | null = useMemo(() => {
-    if (paymentItem) return paymentItem;
-    if (order) {
-      return {
-        id: order.id,
-        itemCode: order.orderNumber,
-        title: "Pesanan Kuliner F&B",
-        subtitle: `Meja ${order.tableNumber} (${order.outletName})`,
-        customerName: order.customerName,
-        total: order.total,
-        paymentMethod: order.paymentMethod || "QRIS",
-        type: "FNB",
-        paymentStatus: order.paymentStatus,
-        createdAt: order.createdAt,
-        itemsBreakdown: order.items.map((i) => ({
-          label: i.productName,
-          qty: i.quantity,
-          price: i.quantity * i.unitPrice,
-        })),
-      };
-    }
-    if (booking) {
-      return {
-        id: booking.id,
-        itemCode: booking.bookingCode,
-        title: "Booking Ruang Kerja Co-working",
-        subtitle: `${booking.spaceName} (${booking.duration} Jam)`,
-        customerName: booking.guestName,
-        total: booking.totalAmount,
-        paymentMethod: booking.paymentMethod || "QRIS",
-        type: "COWORKING",
-        paymentStatus: booking.paymentStatus,
-        dateInfo: `${booking.date} • ${booking.startTime}`,
-        itemsBreakdown: [
-          {
-            label: `${booking.spaceName} (${booking.duration} Jam)`,
-            qty: 1,
-            price: booking.totalAmount,
-          },
-        ],
-      };
-    }
-    return null;
+  // Normalize payment item across F&B and Co-working
+  const activeItem = useMemo(() => {
+    return normalizePaymentItem({ order, booking, paymentItem });
   }, [order, booking, paymentItem]);
 
-  // Initialize countdown on open
+  // Sync initial state when modal opens
   useEffect(() => {
     if (isOpen && activeItem) {
       setIsPaidSuccess(activeItem.paymentStatus === "PAID");
       setShowCancelConfirm(false);
       setIsVerifying(false);
 
-      if (activeItem.createdAt) {
-        const orderTime = new Date(activeItem.createdAt).getTime();
-        const now = Date.now();
-        const elapsedSecs = Math.floor((now - orderTime) / 1000);
-        const remain = Math.max(0, 900 - elapsedSecs);
-        setSecondsRemaining(remain > 0 ? remain : 900);
-      } else {
-        setSecondsRemaining(900);
-      }
+      const remain = calculateSecondsRemaining(activeItem.createdAt, Date.now(), DEFAULT_PAYMENT_EXPIRY_SECONDS);
+      setSecondsRemaining(remain);
     }
   }, [isOpen, activeItem]);
 
-  // Countdown timer
+  // Countdown timer loop
   useEffect(() => {
     if (!isOpen || !activeItem || isPaidSuccess || secondsRemaining <= 0) return;
 
@@ -152,229 +103,210 @@ export function PaymentWaitingModal({
     return () => clearInterval(interval);
   }, [isOpen, activeItem, isPaidSuccess, secondsRemaining, onExpired]);
 
-  // Format MM:SS
-  const formatTimer = (totalSeconds: number) => {
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
+  if (!isOpen) return null;
 
-  const timerProgress = useMemo(() => {
-    return Math.min(100, Math.max(0, (secondsRemaining / 900) * 100));
-  }, [secondsRemaining]);
-
-  if (!isOpen || !activeItem) return null;
+  const timerProgress = calculatePaymentProgress(secondsRemaining, DEFAULT_PAYMENT_EXPIRY_SECONDS);
 
   const handleCopyReference = () => {
+    if (!activeItem) return;
     navigator.clipboard?.writeText(activeItem.itemCode);
     setCopiedRef(true);
     setTimeout(() => setCopiedRef(false), 2000);
   };
 
-  // Simulate payment gateway webhook callback
   const handleSimulateWebhookSuccess = () => {
+    if (!activeItem) return;
     setIsVerifying(true);
     setTimeout(() => {
       setIsVerifying(false);
       setIsPaidSuccess(true);
       onPaymentSuccess({ type: activeItem.type, id: activeItem.id });
-    }, 800);
+    }, 600);
   };
 
-  const methodLabel =
-    activeItem.paymentMethod === "CASH"
-      ? "Tunai di Kasir"
-      : activeItem.paymentMethod === "EDC"
-      ? "Kartu Debit / EDC"
-      : "QRIS Dinamis";
+  const methodDisplay = activeItem ? getPaymentMethodDisplay(activeItem.paymentMethod) : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl border border-slate-200/90 dark:border-slate-800 overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[94vh]">
-        
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="w-full sm:max-w-md p-0 overflow-hidden flex flex-col max-h-[92vh] gap-0">
         {/* Modal Top Header */}
-        <div className="p-4 sm:p-5 bg-linear-to-r from-slate-900 via-slate-850 to-slate-900 text-white flex items-center justify-between border-b border-slate-700/80">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-bold border border-primary/30">
+        <DialogHeader className="p-4 sm:p-5 border-b border-border bg-muted/30 shrink-0 pr-12">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               {isPaidSuccess ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <CheckCircle2 className="size-4 text-success" />
               ) : (
-                <Clock className="w-4 h-4 animate-pulse" />
+                <Clock className="size-4" />
               )}
             </div>
-            <div>
-              <h3 className="font-black text-sm sm:text-base text-white flex items-center gap-1.5">
-                <span>{isPaidSuccess ? "Pembayaran Terverifikasi!" : "Menunggu Pembayaran"}</span>
-                {activeItem.type === "COWORKING" && (
-                  <Badge className="bg-blue-600/80 text-[9px] px-1.5 py-0">Co-working</Badge>
-                )}
-              </h3>
-              <p className="text-[11px] text-slate-300 font-mono">
-                {activeItem.itemCode} &bull; {activeItem.subtitle}
-              </p>
+            <div className="min-w-0">
+              <DialogTitle className="text-sm font-medium text-foreground truncate">
+                {isPaidSuccess ? "Pembayaran terverifikasi" : "Menunggu pembayaran"}
+              </DialogTitle>
+              {activeItem && (
+                <DialogDescription className="text-xs text-muted-foreground truncate">
+                  <span className="font-mono">{activeItem.itemCode}</span> • {activeItem.subtitle}
+                </DialogDescription>
+              )}
             </div>
           </div>
-
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
-          
-          {isPaidSuccess ? (
-            /* ==================================================== */
-            /* SUCCESS STATE VIEW                                  */
-            /* ==================================================== */
-            <div className="text-center py-6 space-y-4 animate-in zoom-in-95 duration-300">
-              <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20 animate-bounce">
-                <CheckCircle2 className="w-10 h-10" />
+        <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
+          {!activeItem ? (
+            <EmptyState
+              className="border"
+              icon={<AlertCircle className="size-8" />}
+              title="Data pembayaran tidak ditemukan"
+              description="Transaksi mungkin telah dibatalkan atau kedaluwarsa."
+            />
+          ) : isPaidSuccess ? (
+            /* Success State */
+            <div className="text-center py-4 space-y-4">
+              <div className="size-16 rounded-full bg-success/10 text-success flex items-center justify-center mx-auto border border-success/20">
+                <CheckCircle2 className="size-8" />
               </div>
 
               <div className="space-y-1">
-                <Badge className="bg-emerald-500 text-white font-bold text-xs px-3 py-0.5">
-                  LUNAS & TERVERIFIKASI
-                </Badge>
-                <h4 className="font-black text-xl text-slate-900 dark:text-slate-100">Pembayaran Berhasil!</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto">
+                <StatusBadge status="success">Lunas terverifikasi</StatusBadge>
+                <h4 className="font-semibold text-base text-foreground pt-1">
+                  Pembayaran berhasil diterima
+                </h4>
+                <p className="text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">
                   {activeItem.type === "COWORKING"
-                    ? `Reservasi ruang kerja ${activeItem.subtitle} atas nama ${activeItem.customerName} telah lunas dan siap digunakan!`
-                    : `Pesanan #${activeItem.itemCode} telah diteruskan ke Dapur (KDS) dan sedang mulai disiapkan.`}
+                    ? `Reservasi ${activeItem.subtitle} atas nama ${activeItem.customerName} telah lunas dan siap digunakan.`
+                    : `Pesanan #${activeItem.itemCode} telah diteruskan ke dapur dan sedang disiapkan.`}
                 </p>
               </div>
 
-              <div className="p-4 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2 text-xs text-left">
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Metode Pembayaran</span>
-                  <span className="font-bold text-slate-900 dark:text-slate-100">{methodLabel}</span>
+              <div className="p-3.5 rounded-lg border border-border bg-card space-y-2 text-xs text-left">
+                <div className="flex justify-between items-center text-muted-foreground">
+                  <span>Metode pembayaran</span>
+                  <span className="font-medium text-foreground">{methodDisplay?.label}</span>
                 </div>
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
-                  <span>Total Tagihan Lunas</span>
-                  <span className="font-black text-primary">{formatCurrencyIDR(activeItem.total)}</span>
+                <div className="flex justify-between items-center text-muted-foreground">
+                  <span>Total tagihan lunas</span>
+                  <span className="font-mono tabular-nums font-semibold text-primary">
+                    {formatCurrencyIDR(activeItem.total)}
+                  </span>
                 </div>
-                <div className="flex justify-between text-slate-600 dark:text-slate-400">
+                <div className="flex justify-between items-center text-muted-foreground">
                   <span>Pelanggan</span>
-                  <span className="font-bold text-slate-900 dark:text-slate-100">{activeItem.customerName}</span>
+                  <span className="font-medium text-foreground">{activeItem.customerName}</span>
                 </div>
               </div>
 
-              <Button
-                onClick={onClose}
-                className="w-full h-11 bg-primary hover:bg-primary/90 text-white font-black text-xs rounded-2xl shadow-md"
-              >
-                <span>Lihat Status di Tab Pesanan & Booking</span>
-                <ArrowRight className="w-4 h-4 ml-1.5" />
+              <Button size="lg" className="w-full" onClick={onClose}>
+                <span>Tutup dan lihat status</span>
+                <ArrowRight className="size-4" />
               </Button>
             </div>
           ) : (
-            /* ==================================================== */
-            /* PENDING PAYMENT STATE VIEW                          */
-            /* ==================================================== */
+            /* Pending Payment State */
             <>
               {/* Countdown Banner */}
-              <div className="p-3.5 bg-primary/10 dark:bg-primary/15 rounded-2xl border border-primary/30 space-y-2">
+              <div className="p-3 rounded-lg border border-border bg-muted/30 space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-1.5 text-primary font-bold">
-                    <Clock className="w-4 h-4 text-primary animate-spin" />
-                    <span>Selesaikan Pembayaran Dalam:</span>
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <Clock className="size-3.5 text-primary" />
+                    <span>Batas waktu pembayaran:</span>
                   </div>
-                  <span className="font-mono font-black text-primary text-sm bg-primary/20 px-2 py-0.5 rounded-md">
-                    {formatTimer(secondsRemaining)}
+                  <span className="font-mono tabular-nums font-semibold text-xs text-primary px-2 py-0.5 rounded bg-primary/10">
+                    {formatPaymentTimer(secondsRemaining)}
                   </span>
                 </div>
-                <div className="w-full bg-primary/20 h-1.5 rounded-full overflow-hidden">
+                <div className="w-full bg-muted h-1.5 rounded-full overflow-hidden">
                   <div
-                    className="bg-primary h-full rounded-full transition-all duration-1000"
+                    className="bg-primary h-full rounded-full transition-[width] duration-500"
                     style={{ width: `${timerProgress}%` }}
                   />
                 </div>
               </div>
 
-              {/* Tagihan Box */}
-              <div className="p-4 bg-slate-900 dark:bg-slate-850 text-white rounded-2xl flex items-center justify-between shadow-xs border border-slate-800">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-                    Total Tagihan {activeItem.type === "COWORKING" ? "Booking Ruang" : "Pesanan F&B"}
+              {/* Total Tagihan Box */}
+              <div className="p-3.5 rounded-lg border border-border bg-card flex items-center justify-between gap-3">
+                <div className="space-y-0.5 min-w-0">
+                  <span className="text-xs text-muted-foreground block truncate">
+                    Total tagihan {activeItem.type === "COWORKING" ? "sewa ruang" : "pesanan"}
                   </span>
-                  <div className="text-xl sm:text-2xl font-black text-white">
+                  <div className="text-xl font-semibold font-mono tabular-nums text-foreground">
                     {formatCurrencyIDR(activeItem.total)}
                   </div>
                 </div>
-                <Badge className="bg-primary text-white font-bold text-[10px] px-2.5 py-1">
-                  {methodLabel}
-                </Badge>
+                {methodDisplay && (
+                  <StatusBadge status="neutral" className="shrink-0">
+                    {methodDisplay.label}
+                  </StatusBadge>
+                )}
               </div>
 
-              {/* Payment Component based on method */}
+              {/* Method-Specific Instruction Card */}
               {activeItem.paymentMethod === "CASH" ? (
-                /* ---------------- CASH INSTRUCTIONS ---------------- */
-                <div className="p-5 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-200/90 dark:border-slate-800 space-y-3 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-primary/15 text-primary flex items-center justify-center mx-auto">
-                    <Banknote className="w-6 h-6" />
+                <div className="p-4 rounded-lg border border-border bg-card space-y-3 text-center">
+                  <div className="size-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center mx-auto">
+                    <Banknote className="size-5" />
                   </div>
-                  <div>
-                    <h5 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Pembayaran Tunai di Kasir</h5>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                      Silakan menuju meja kasir / resepsionis dan tunjukkan kode berikut untuk menyelesaikan pembayaran tunai.
+                  <div className="space-y-1">
+                    <h5 className="font-medium text-foreground text-xs">Pembayaran tunai di kasir</h5>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {methodDisplay?.instruction}
                     </p>
                   </div>
-                  <div className="p-2.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 font-mono text-xs font-black text-slate-800 dark:text-slate-100 flex items-center justify-between">
+                  <div className="p-2.5 rounded-md border border-border bg-muted/40 font-mono text-xs font-semibold text-foreground flex items-center justify-between">
                     <span>{activeItem.itemCode}</span>
-                    <button
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={handleCopyReference}
-                      className="text-primary hover:text-primary/80 flex items-center space-x-1 text-[11px] font-bold"
+                      className="gap-1 text-primary"
                     >
-                      {copiedRef ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedRef ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                       <span>{copiedRef ? "Tersalin" : "Salin"}</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : activeItem.paymentMethod === "EDC" ? (
-                /* ---------------- EDC INSTRUCTIONS ---------------- */
-                <div className="p-5 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-200/90 dark:border-slate-800 space-y-3 text-center">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 flex items-center justify-center mx-auto">
-                    <CreditCard className="w-6 h-6" />
+                <div className="p-4 rounded-lg border border-border bg-card space-y-3 text-center">
+                  <div className="size-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center mx-auto">
+                    <CreditCard className="size-5" />
                   </div>
-                  <div>
-                    <h5 className="font-bold text-slate-900 dark:text-slate-100 text-sm">Pembayaran Kartu Debit / Kredit</h5>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                      Silakan hubungi kasir atau waiter untuk tap/gesek kartu pada mesin EDC Dago Creative Hub.
+                  <div className="space-y-1">
+                    <h5 className="font-medium text-foreground text-xs">Pembayaran kartu debit / kredit</h5>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {methodDisplay?.instruction}
                     </p>
                   </div>
-                  <div className="p-2.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 font-mono text-xs font-black text-slate-800 dark:text-slate-100 flex items-center justify-between">
+                  <div className="p-2.5 rounded-md border border-border bg-muted/40 font-mono text-xs font-semibold text-foreground flex items-center justify-between">
                     <span>{activeItem.itemCode}</span>
-                    <button
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
                       onClick={handleCopyReference}
-                      className="text-primary hover:text-primary/80 flex items-center space-x-1 text-[11px] font-bold"
+                      className="gap-1 text-primary"
                     >
-                      {copiedRef ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedRef ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
                       <span>{copiedRef ? "Tersalin" : "Salin"}</span>
-                    </button>
+                    </Button>
                   </div>
                 </div>
               ) : (
-                /* ---------------- QRIS DINAMIS COMPONENT ---------------- */
-                <div className="p-5 bg-slate-50 dark:bg-slate-850 rounded-3xl border border-slate-200/90 dark:border-slate-800 flex flex-col items-center space-y-3.5 shadow-2xs">
-                  
-                  {/* QRIS Header Branding */}
-                  <div className="flex items-center justify-between w-full border-b border-slate-200 dark:border-slate-700 pb-2 text-[10px]">
-                    <div className="flex items-center space-x-1.5 font-bold text-slate-800 dark:text-slate-200">
-                      <Store className="w-3.5 h-3.5 text-primary" />
+                /* QRIS Dinamis Component */
+                <div className="p-4 rounded-lg border border-border bg-card flex flex-col items-center space-y-3">
+                  <div className="flex items-center justify-between w-full border-b border-border pb-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1.5 font-medium text-foreground">
+                      <Store className="size-3.5 text-primary" />
                       <span>Dago Creative Hub Singaraja</span>
                     </div>
-                    <span className="font-mono text-slate-400 font-medium">NMID: ID10202609240001</span>
+                    <span className="font-mono text-xs">NMID: ID10202609240001</span>
                   </div>
 
-                  {/* QR Box with Stylized SVG Placeholder (Ready for Gateway Payload) */}
-                  <div className="p-3 bg-white rounded-2xl border-2 border-slate-800 shadow-sm relative group flex flex-col items-center">
-                    <div className="relative w-44 h-44 bg-white flex items-center justify-center p-2">
-                      {/* Stylized QR Matrix simulation */}
-                      <svg viewBox="0 0 100 100" className="w-full h-full text-slate-900">
-                        {/* Corner Position Detection Patterns */}
+                  {/* QR Box Matrix */}
+                  <div className="p-3 bg-white rounded-lg border border-border flex flex-col items-center">
+                    <div className="relative size-40 bg-white flex items-center justify-center p-2">
+                      <svg viewBox="0 0 100 100" className="w-full h-full text-foreground" aria-label="QRIS Code Matrix">
                         <rect x="5" y="5" width="26" height="26" fill="currentColor" rx="4" />
                         <rect x="9" y="9" width="18" height="18" fill="white" rx="2" />
                         <rect x="13" y="13" width="10" height="10" fill="currentColor" rx="1" />
@@ -387,7 +319,6 @@ export function PaymentWaitingModal({
                         <rect x="9" y="73" width="18" height="18" fill="white" rx="2" />
                         <rect x="13" y="77" width="10" height="10" fill="currentColor" rx="1" />
 
-                        {/* Alignment & Timing Patterns */}
                         <rect x="36" y="14" width="4" height="4" fill="currentColor" />
                         <rect x="44" y="14" width="4" height="4" fill="currentColor" />
                         <rect x="52" y="14" width="4" height="4" fill="currentColor" />
@@ -398,7 +329,6 @@ export function PaymentWaitingModal({
                         <rect x="14" y="52" width="4" height="4" fill="currentColor" />
                         <rect x="14" y="60" width="4" height="4" fill="currentColor" />
 
-                        {/* Dense Matrix Data Pixels */}
                         <rect x="35" y="35" width="6" height="6" fill="currentColor" />
                         <rect x="45" y="35" width="6" height="6" fill="currentColor" />
                         <rect x="55" y="35" width="6" height="6" fill="currentColor" />
@@ -428,95 +358,90 @@ export function PaymentWaitingModal({
 
                       {/* Center Brand Badge */}
                       <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center font-black text-[10px] shadow-md border-2 border-white">
+                        <div className="size-7 rounded bg-primary text-primary-foreground flex items-center justify-center font-semibold text-xs shadow-xs border border-white">
                           DAGO
                         </div>
                       </div>
                     </div>
 
-                    <span className="text-[10px] font-mono text-slate-500 pt-1 font-bold">
-                      REF: {activeItem.itemCode}
+                    <span className="text-xs font-mono text-muted-foreground pt-1 font-medium">
+                      Ref: {activeItem.itemCode}
                     </span>
                   </div>
 
-                  {/* Webhook Status Pulse Indicator */}
-                  <div className="flex items-center space-x-2 text-[11px] text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
-                    <span className="font-medium">Menunggu notifikasi pembayaran dari jaringan perbankan...</span>
-                  </div>
-
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center leading-relaxed">
-                    Buka aplikasi <strong>BCA, Livin&apos;, GoPay, OVO, Dana, ShopeePay</strong> atau m-Banking Anda, lalu scan QRIS di atas.
+                  <p className="text-xs text-muted-foreground text-center leading-relaxed">
+                    {methodDisplay?.instruction}
                   </p>
                 </div>
               )}
 
               {/* Order / Booking Summary */}
-              <div className="p-3.5 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-100 dark:border-slate-800 text-xs space-y-1.5">
-                <span className="font-bold text-slate-800 dark:text-slate-200 block">
-                  Rincian {activeItem.type === "COWORKING" ? "Booking Ruang Kerja" : "Menu Pesanan"}
-                </span>
-                <div className="space-y-1 divide-y divide-slate-100 dark:divide-slate-800 max-h-28 overflow-y-auto">
-                  {activeItem.itemsBreakdown?.map((it, idx) => (
-                    <div key={idx} className="pt-1 flex justify-between text-slate-600 dark:text-slate-400">
-                      <span>{it.qty ? `${it.qty}x ` : ""}{it.label}</span>
-                      <span className="font-bold text-slate-900 dark:text-slate-100">{formatCurrencyIDR(it.price)}</span>
-                    </div>
-                  ))}
+              {activeItem.itemsBreakdown && activeItem.itemsBreakdown.length > 0 && (
+                <div className="p-3 rounded-lg border border-border bg-muted/20 text-xs space-y-1.5">
+                  <span className="font-medium text-foreground block">
+                    Rincian {activeItem.type === "COWORKING" ? "sewa ruang kerja" : "pesanan menu"}
+                  </span>
+                  <div className="space-y-1 divide-y divide-border max-h-28 overflow-y-auto">
+                    {activeItem.itemsBreakdown.map((it, idx) => (
+                      <div key={idx} className="pt-1 flex justify-between items-center text-muted-foreground">
+                        <span className="truncate">
+                          {it.qty ? `${it.qty}× ` : ""}
+                          {it.label}
+                        </span>
+                        <span className="font-mono tabular-nums font-medium text-foreground shrink-0 pl-2">
+                          {formatCurrencyIDR(it.price)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* ACTION BUTTONS: PROMINENT QRIS SIMULATION BUTTON */}
-              <div className="space-y-2 pt-2">
-                {/* 1. Big Eye-catching Simulation Trigger */}
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-1">
                 <Button
+                  size="lg"
                   onClick={handleSimulateWebhookSuccess}
                   disabled={isVerifying}
-                  className="w-full h-12 bg-linear-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-2xl shadow-lg shadow-emerald-500/25 flex items-center justify-center space-x-2 transition-all hover:scale-[1.01] active:scale-98 border border-emerald-400/40"
+                  className="w-full"
                 >
                   {isVerifying ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin mr-1.5" />
-                      <span>Memproses Notifikasi Webhook QRIS...</span>
+                      <RefreshCw className="size-4 animate-spin" />
+                      <span>Memverifikasi notifikasi pembayaran...</span>
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-4 h-4 text-white mr-1" />
-                      <span>Konfirmasi Pembayaran QRIS Berhasil</span>
+                      <CheckCircle2 className="size-4" />
+                      <span>Konfirmasi pembayaran berhasil</span>
                     </>
                   )}
                 </Button>
-                <p className="text-[10px] text-slate-400 text-center">
-                  *Sistem secara otomatis memverifikasi pembayaran dari m-Banking / e-Wallet.
-                </p>
 
-                {/* 2. Cancellation Action */}
                 {showCancelConfirm ? (
-                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-2xl space-y-2 text-xs text-rose-900 dark:text-rose-200 animate-in fade-in">
-                    <p className="font-bold">Konfirmasi Batalkan {activeItem.type === "COWORKING" ? "Booking Ini" : "Pesanan Ini"}?</p>
-                    <p className="text-[11px] text-rose-700 dark:text-rose-300">
-                      {activeItem.itemCode} akan dibatalkan dan alokasi meja/ruangan akan dibebaskan.
+                  <div className="p-3 rounded-lg border border-destructive/30 bg-destructive/5 space-y-2 text-xs">
+                    <p className="font-medium text-foreground">
+                      Batalkan {activeItem.type === "COWORKING" ? "booking ini" : "pesanan ini"}?
                     </p>
-                    <div className="flex space-x-2 justify-end pt-1">
+                    <p className="text-muted-foreground">
+                      {activeItem.itemCode} akan dibatalkan dan alokasi meja atau ruang kerja akan dibebaskan.
+                    </p>
+                    <div className="flex gap-2 justify-end pt-1">
                       <Button
                         type="button"
                         size="sm"
                         variant="outline"
                         onClick={() => setShowCancelConfirm(false)}
-                        className="h-8 text-xs border-slate-300 dark:border-slate-700 dark:text-slate-300"
                       >
                         Kembali
                       </Button>
                       <Button
                         type="button"
                         size="sm"
+                        variant="destructive"
                         onClick={() => onCancelPayment({ type: activeItem.type, id: activeItem.id })}
-                        className="h-8 text-xs bg-rose-600 hover:bg-rose-700 text-white font-bold"
                       >
-                        Ya, Batalkan
+                        Ya, batalkan
                       </Button>
                     </div>
                   </div>
@@ -526,18 +451,16 @@ export function PaymentWaitingModal({
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowCancelConfirm(true)}
-                    className="w-full h-8 text-xs text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-bold rounded-xl"
+                    className="w-full text-muted-foreground hover:text-destructive"
                   >
-                    Batalkan {activeItem.type === "COWORKING" ? "Booking" : "Pesanan"} Ini
+                    Batalkan {activeItem.type === "COWORKING" ? "booking" : "pesanan"} ini
                   </Button>
                 )}
               </div>
             </>
           )}
-
         </div>
-
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
