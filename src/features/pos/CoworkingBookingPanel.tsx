@@ -12,7 +12,9 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   calculateEndTime,
   COWORKING_TIME_SLOTS,
+  formatCoworkingDuration,
   parseHour,
+  spaceTypeLabel,
 } from "@/features/pos/pos-coworking";
 import type { POSPaymentMethod } from "@/features/pos/types";
 import type { PromoConfig } from "@/lib/promo";
@@ -62,13 +64,13 @@ const QUICK_DURATIONS = [
   { hours: 1, label: "1 jam" },
   { hours: 2, label: "2 jam" },
   { hours: 3, label: "3 jam" },
-  { hours: 8, label: "Full day" },
+  { hours: 8, label: "Seharian (8 jam)" },
 ];
 
 const PAYMENT_METHODS: { id: POSPaymentMethod; label: string; desc: string }[] = [
   { id: "QRIS", label: "QRIS", desc: "e-Wallet" },
   { id: "CASH", label: "Tunai", desc: "Kasir" },
-  { id: "EDC", label: "Debit/EDC", desc: "Kartu" },
+  { id: "EDC", label: "Debit / EDC", desc: "Kartu" },
 ];
 
 /** Side panel for booking configuration, duration, guest, and payment in co-working mode. */
@@ -115,10 +117,10 @@ export function CoworkingBookingPanel({
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 text-xs text-card-foreground shadow-xs">
       {/* Panel header */}
-      <div className="flex items-start justify-between rounded-lg border border-border bg-muted/40 p-3">
+      <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
         <div className="space-y-0.5">
           <span className="text-xs text-muted-foreground">
-            {selectedSpace.type.replace("_", " ").toLowerCase()}
+            {spaceTypeLabel(selectedSpace.type)}
           </span>
           <h4 className="text-sm font-medium text-foreground">
             {selectedSpace.name}
@@ -127,7 +129,7 @@ export function CoworkingBookingPanel({
             {formatCurrencyIDR(selectedSpace.hourlyRate)} /jam
             {selectedSpace.dailyRate ? (
               <span className="ml-1 text-muted-foreground">
-                (Full day: {formatCurrencyIDR(selectedSpace.dailyRate)})
+                (Seharian: {formatCurrencyIDR(selectedSpace.dailyRate)})
               </span>
             ) : null}
           </p>
@@ -135,10 +137,9 @@ export function CoworkingBookingPanel({
 
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="sm"
           onClick={onClosePanel}
-          className="text-xs"
         >
           <X className="size-3.5" />
           <span>Ganti ruang</span>
@@ -152,31 +153,36 @@ export function CoworkingBookingPanel({
             <Clock className="size-3.5 text-muted-foreground" />
             <span>Pilihan durasi sewa</span>
           </FieldLabel>
-          <span className="font-mono text-xs text-muted-foreground">
-            {cwDuration} jam terpilih
+          <span className="font-mono text-xs text-muted-foreground tabular-nums">
+            {formatCoworkingDuration(cwDuration)}
           </span>
         </div>
 
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {QUICK_DURATIONS.map((item) => {
             const isSelected = cwDuration === item.hours;
-            const price = item.hours === 8 && selectedSpace.dailyRate
-              ? selectedSpace.dailyRate
-              : selectedSpace.hourlyRate * item.hours;
+            const price =
+              item.hours === 8 && selectedSpace.dailyRate
+                ? selectedSpace.dailyRate
+                : selectedSpace.hourlyRate * item.hours;
 
             return (
-              <Button
+              <button
                 key={item.hours}
                 type="button"
-                variant={isSelected ? "default" : "outline"}
                 onClick={() => onDurationChange(item.hours)}
-                className="h-auto min-h-[46px] flex-col gap-0 p-1.5 touch-manipulation"
+                className={cn(
+                  "flex flex-col items-center justify-center rounded-lg border p-2 text-center transition-colors touch-manipulation",
+                  isSelected
+                    ? "border-primary bg-primary/10 text-primary font-medium ring-1 ring-primary"
+                    : "border-border bg-card hover:bg-muted/40 text-foreground"
+                )}
               >
                 <span className="text-xs font-medium">{item.label}</span>
-                <span className={cn("font-mono text-[11px] tabular-nums", isSelected ? "text-primary-foreground/90" : "text-muted-foreground")}>
+                <span className="font-mono text-xs tabular-nums text-muted-foreground">
                   {formatCurrencyIDR(price)}
                 </span>
-              </Button>
+              </button>
             );
           })}
         </div>
@@ -186,11 +192,12 @@ export function CoworkingBookingPanel({
           <NativeSelect
             value={cwDuration}
             onChange={(e) => onDurationChange(Number(e.target.value))}
-            className="w-36"
+            className="w-40"
+            aria-label="Pilih durasi lain"
           >
             {[1, 2, 3, 4, 5, 6, 7, 8, 10, 12].map((h) => (
               <NativeSelectOption key={h} value={h}>
-                {h} jam {h === 4 ? "(setengah hari)" : h === 8 ? "(full day)" : h === 12 ? "(maksimal)" : ""}
+                {h} jam {h === 4 ? "(setengah hari)" : h === 8 ? "(seharian)" : h === 12 ? "(maksimal)" : ""}
               </NativeSelectOption>
             ))}
           </NativeSelect>
@@ -209,9 +216,8 @@ export function CoworkingBookingPanel({
             variant="link"
             size="sm"
             onClick={onResetStartTime}
-            className="h-auto p-0 text-xs"
           >
-            Auto waktu terdekat
+            Waktu saat ini
           </Button>
         </div>
 
@@ -225,6 +231,7 @@ export function CoworkingBookingPanel({
               max="18:00"
               onChange={(e) => onStartTimeChange(e.target.value)}
               className="rounded-md border border-input bg-input/20 px-2 py-0.5 font-mono text-xs font-medium text-foreground outline-none focus:ring-1 focus:ring-ring"
+              aria-label="Jam mulai sewa"
             />
           </div>
           <div className="font-mono text-xs tabular-nums text-foreground">
@@ -242,31 +249,29 @@ export function CoworkingBookingPanel({
           </Alert>
         )}
 
-        <div className="grid grid-cols-5 gap-1 pt-1">
+        <div className="grid grid-cols-3 gap-1.5 pt-1 sm:grid-cols-5">
           {COWORKING_TIME_SLOTS.slice(0, 9).map((slot) => {
             const isAvail = checkSlotAvailable(slot);
             const isSelected = cwStartTime === slot;
 
             return (
-              <Button
+              <button
                 key={slot}
                 type="button"
-                variant={isSelected ? "default" : "outline"}
                 disabled={!isAvail}
                 onClick={() => onStartTimeChange(slot)}
-                className={cn("h-auto min-h-[38px] flex-col gap-0 p-1 touch-manipulation", !isAvail && "line-through")}
+                className={cn(
+                  "flex flex-col items-center justify-center rounded-md border p-1 text-center transition-colors touch-manipulation",
+                  !isAvail && "cursor-not-allowed border-border bg-muted/30 opacity-50",
+                  isAvail && isSelected && "border-primary bg-primary text-primary-foreground font-medium",
+                  isAvail && !isSelected && "border-border bg-card hover:bg-muted/40 text-foreground"
+                )}
               >
                 <span className="font-mono text-xs leading-tight">{slot}</span>
-                <span
-                  className={cn(
-                    "text-[10px] no-underline",
-                    !isAvail && "text-destructive",
-                    isAvail && (isSelected ? "text-primary-foreground/90" : "text-muted-foreground"),
-                  )}
-                >
+                <span className="text-xs">
                   {isAvail ? "Tersedia" : "Terisi"}
                 </span>
-              </Button>
+              </button>
             );
           })}
         </div>
@@ -292,6 +297,7 @@ export function CoworkingBookingPanel({
             value={cwCompanyName}
             onChange={(e) => onCompanyNameChange(e.target.value)}
             placeholder="Nama instansi atau perusahaan"
+            aria-label="Nama instansi atau perusahaan"
           />
         )}
       </div>
@@ -319,13 +325,14 @@ export function CoworkingBookingPanel({
             value={cwMemberId}
             onChange={(e) => onMemberIdChange(e.target.value)}
             className="w-full"
+            aria-label="Pilih member loyalty"
           >
             <NativeSelectOption value="">
               Pilih member ({membersList.length})
             </NativeSelectOption>
             {membersList.map((m) => (
               <NativeSelectOption key={m.id} value={m.id}>
-                {m.name} ({m.tier} • {m.points} pts) - {m.phone}
+                {m.name} ({m.tier} • {m.points} poin) - {m.phone}
               </NativeSelectOption>
             ))}
           </NativeSelect>
@@ -335,6 +342,7 @@ export function CoworkingBookingPanel({
               value={cwGuestName}
               onChange={(e) => onGuestNameChange(e.target.value)}
               placeholder="Nama lengkap tamu"
+              aria-label="Nama lengkap tamu"
             />
             <div className="grid grid-cols-2 gap-2">
               <Input
@@ -342,12 +350,14 @@ export function CoworkingBookingPanel({
                 value={cwGuestPhone}
                 onChange={(e) => onGuestPhoneChange(e.target.value)}
                 placeholder="Nomor WhatsApp"
+                aria-label="Nomor WhatsApp"
               />
               <Input
                 type="email"
                 value={cwGuestEmail}
                 onChange={(e) => onGuestEmailChange(e.target.value)}
                 placeholder="Email tamu"
+                aria-label="Email tamu"
               />
             </div>
           </div>
@@ -364,10 +374,10 @@ export function CoworkingBookingPanel({
           {cwAppliedPromo && (
             <Button
               type="button"
-              variant="link"
+              variant="ghost"
               size="sm"
               onClick={onRemoveVoucher}
-              className="h-auto p-0 text-xs text-destructive"
+              className="text-destructive hover:text-destructive"
             >
               Hapus
             </Button>
@@ -375,14 +385,15 @@ export function CoworkingBookingPanel({
         </div>
 
         <div className="flex gap-2">
-          <InputGroup className="flex-1 font-mono uppercase">
+          <InputGroup className="flex-1 font-mono">
             <InputGroupInput
               value={cwVoucherCode}
               onChange={(e) => onVoucherCodeChange(e.target.value.toUpperCase())}
               placeholder="Misalnya COWORK50"
+              aria-label="Kode voucher promo"
             />
           </InputGroup>
-          <Button type="button" variant="secondary" onClick={onApplyVoucher}>
+          <Button type="button" variant="secondary" size="lg" onClick={onApplyVoucher}>
             Terapkan
           </Button>
         </div>
@@ -409,7 +420,7 @@ export function CoworkingBookingPanel({
       {/* Price breakdown */}
       <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
         <div className="flex justify-between text-muted-foreground">
-          <span>Sewa ({cwDuration} jam)</span>
+          <span>Sewa ({formatCoworkingDuration(cwDuration)})</span>
           <span className="font-mono tabular-nums">
             {formatCurrencyIDR(cwPricing.originalSubtotal)}
           </span>
@@ -451,11 +462,12 @@ export function CoworkingBookingPanel({
                 key={pm.id}
                 type="button"
                 variant={isSelected ? "default" : "outline"}
+                size="lg"
                 onClick={() => onPaymentMethodChange(pm.id)}
-                className="h-auto min-h-[44px] flex-col gap-0 p-1.5 text-center touch-manipulation"
+                className="w-full flex-col gap-0.5"
               >
-                <span className="text-xs font-medium leading-tight">{pm.label}</span>
-                <span className={cn("text-[10px]", isSelected ? "text-primary-foreground/80" : "text-muted-foreground")}>
+                <span className="font-medium leading-tight">{pm.label}</span>
+                <span className={cn("text-xs font-normal", isSelected ? "text-primary-foreground/80" : "text-muted-foreground")}>
                   {pm.desc}
                 </span>
               </Button>
@@ -469,7 +481,7 @@ export function CoworkingBookingPanel({
         type="button"
         size="lg"
         onClick={onCompletePayment}
-        className="w-full text-xs font-medium"
+        className="w-full font-medium"
       >
         <ShieldCheck className="size-4" />
         <span>Bayar dan cetak nota ({formatCurrencyIDR(cwPricing.total)})</span>

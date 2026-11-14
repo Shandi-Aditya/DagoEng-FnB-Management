@@ -44,6 +44,7 @@ export function CoworkingToolbar({
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Cari nama ruang, meja, atau tipe"
+            aria-label="Cari nama ruang atau meja"
           />
         </InputGroup>
       </div>
@@ -53,7 +54,7 @@ export function CoworkingToolbar({
           value={spaceTypeFilter}
           onValueChange={(val) => onSpaceTypeFilterChange(val as string)}
         >
-          <TabsList>
+          <TabsList aria-label="Filter tipe ruang kerja">
             {COWORKING_TYPE_FILTERS.map((f) => (
               <TabsTrigger key={f.key} value={f.key}>
                 {f.label}
@@ -71,6 +72,7 @@ export function CoworkingToolbar({
           min={minDate}
           onChange={(e) => onDateChange(e.target.value)}
           className="bg-transparent text-xs font-medium text-foreground outline-none"
+          aria-label="Pilih tanggal operasional"
         />
       </div>
     </div>

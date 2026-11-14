@@ -77,6 +77,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/components/app/notify";
+import { EmptyState } from "@/components/app/empty-state";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { CartItemList } from "@/features/pos/CartItemList";
@@ -100,6 +101,7 @@ import {
   getValidOperationalTime,
   calculateEndTime,
   checkSlotAvailability as checkSlotAvailabilityHelper,
+  coworkingEmptyStateMessage,
 } from "@/features/pos/pos-coworking";
 
 export default function POSPage() {
@@ -1183,44 +1185,52 @@ export default function POSPage() {
                   </h3>
                   <Button
                     type="button"
-                    variant="link"
+                    variant="outline"
                     size="sm"
                     onClick={handleClosePanel}
-                    className="h-auto p-0 text-xs"
                   >
                     Buka tampilan penuh
                   </Button>
                 </div>
               )}
 
-              <div
-                className={`grid gap-3 ${
-                  selectedSpace
-                    ? "grid-cols-1 md:grid-cols-2"
-                    : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
-                }`}
-              >
-                {filteredCwSpaces.map((space) => {
-                  const isSelected = selectedSpace?.id === space.id;
-                  const startH = parseHour(cwStartTime);
-                  const avail = checkSlotAvailability(space.id, cwDate, startH, cwDuration);
+              {filteredCwSpaces.length === 0 ? (
+                <EmptyState
+                  className="border"
+                  icon={<Building />}
+                  title={coworkingEmptyStateMessage(Boolean(cwSearchQuery || cwSpaceTypeFilter !== "ALL")).title}
+                  description={coworkingEmptyStateMessage(Boolean(cwSearchQuery || cwSpaceTypeFilter !== "ALL")).description}
+                />
+              ) : (
+                <div
+                  className={`grid gap-3 ${
+                    selectedSpace
+                      ? "grid-cols-1 md:grid-cols-2"
+                      : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
+                  }`}
+                >
+                  {filteredCwSpaces.map((space) => {
+                    const isSelected = selectedSpace?.id === space.id;
+                    const startH = parseHour(cwStartTime);
+                    const avail = checkSlotAvailability(space.id, cwDate, startH, cwDuration);
 
-                  return (
-                    <CoworkingRoomCard
-                      key={space.id}
-                      space={space}
-                      isAvailable={avail.isAvailable}
-                      isSelected={isSelected}
-                      onSelect={() => {
-                        if (avail.isAvailable) {
-                          handleSelectSpace(space.id);
-                        }
-                      }}
-                      onPreviewPhoto={space.imageUrl ? () => setPreviewSpacePhoto(space) : undefined}
-                    />
-                  );
-                })}
-              </div>
+                    return (
+                      <CoworkingRoomCard
+                        key={space.id}
+                        space={space}
+                        isAvailable={avail.isAvailable}
+                        isSelected={isSelected}
+                        onSelect={() => {
+                          if (avail.isAvailable) {
+                            handleSelectSpace(space.id);
+                          }
+                        }}
+                        onPreviewPhoto={space.imageUrl ? () => setPreviewSpacePhoto(space) : undefined}
+                      />
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {selectedSpace && (

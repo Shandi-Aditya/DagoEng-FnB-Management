@@ -5,6 +5,9 @@ import {
   calculateEndTime,
   getValidOperationalTime,
   checkSlotAvailability,
+  spaceTypeLabel,
+  formatCoworkingDuration,
+  coworkingEmptyStateMessage,
 } from "@/features/pos/pos-coworking";
 import type { CoworkingSpaceItem, CoworkingBooking } from "@/types/coworking";
 
@@ -129,6 +132,44 @@ describe("pos-coworking logic", () => {
         durationHours: 2,
       });
       expect(res.isAvailable).toBe(true);
+    });
+  });
+
+  describe("spaceTypeLabel", () => {
+    it("formats standard space types in sentence case", () => {
+      expect(spaceTypeLabel("HOT_DESK")).toBe("Hot desk");
+      expect(spaceTypeLabel("DEDICATED_DESK")).toBe("Dedicated desk");
+      expect(spaceTypeLabel("MEETING_ROOM")).toBe("Meeting room");
+      expect(spaceTypeLabel("PRIVATE_POD")).toBe("Private pod");
+    });
+
+    it("handles fallback and undefined gracefully", () => {
+      expect(spaceTypeLabel("CUSTOM_ROOM")).toBe("Custom room");
+      expect(spaceTypeLabel("")).toBe("—");
+      expect(spaceTypeLabel(undefined as unknown as string)).toBe("—");
+    });
+  });
+
+  describe("formatCoworkingDuration", () => {
+    it("formats hourly durations and full day label", () => {
+      expect(formatCoworkingDuration(1)).toBe("1 jam");
+      expect(formatCoworkingDuration(2)).toBe("2 jam");
+      expect(formatCoworkingDuration(4)).toBe("4 jam");
+      expect(formatCoworkingDuration(8)).toBe("Seharian (8 jam)");
+    });
+  });
+
+  describe("coworkingEmptyStateMessage", () => {
+    it("returns filter-specific message when filtering or searching", () => {
+      const msg = coworkingEmptyStateMessage(true);
+      expect(msg.title).toBe("Ruang kerja tidak ditemukan");
+      expect(msg.description).toContain("Ubah kata kunci");
+    });
+
+    it("returns general empty state message when no filters applied", () => {
+      const msg = coworkingEmptyStateMessage(false);
+      expect(msg.title).toBe("Belum ada ruang kerja");
+      expect(msg.description).toContain("Ruang kerja aktif");
     });
   });
 });
