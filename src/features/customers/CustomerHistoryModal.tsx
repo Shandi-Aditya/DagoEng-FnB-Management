@@ -133,7 +133,7 @@ export function CustomerHistoryModal({
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="lg"
             onClick={onClose}
           >
             Tutup

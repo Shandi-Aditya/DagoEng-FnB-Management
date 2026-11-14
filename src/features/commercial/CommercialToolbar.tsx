@@ -43,7 +43,7 @@ export function CommercialToolbar({
       actions={
         <div className="flex items-center gap-2">
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" />}>
+            <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
               Lainnya
               <ChevronDown className="text-muted-foreground" />
             </DropdownMenuTrigger>
@@ -71,7 +71,7 @@ export function CommercialToolbar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button onClick={onOpenCreateModal}>
+          <Button size="lg" onClick={onOpenCreateModal}>
             <Plus />
             Tambah kontrak
           </Button>

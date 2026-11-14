@@ -79,7 +79,7 @@ export function TableDetailModal({
             <div className="grid grid-cols-2 gap-2">
               <Button
                 type="button"
-                size="sm"
+                size="lg"
                 variant={table.status === "AVAILABLE" ? "default" : "outline"}
                 onClick={() => onUpdateStatus("AVAILABLE")}
               >
@@ -87,7 +87,7 @@ export function TableDetailModal({
               </Button>
               <Button
                 type="button"
-                size="sm"
+                size="lg"
                 variant={table.status === "OCCUPIED" ? "default" : "outline"}
                 onClick={() => onUpdateStatus("OCCUPIED")}
               >
@@ -95,7 +95,7 @@ export function TableDetailModal({
               </Button>
               <Button
                 type="button"
-                size="sm"
+                size="lg"
                 variant={table.status === "RESERVED" ? "default" : "outline"}
                 onClick={() => onUpdateStatus("RESERVED")}
               >
@@ -103,7 +103,7 @@ export function TableDetailModal({
               </Button>
               <Button
                 type="button"
-                size="sm"
+                size="lg"
                 variant={table.status === "CLEANING" ? "default" : "outline"}
                 onClick={() => onUpdateStatus("CLEANING")}
               >
@@ -114,12 +114,12 @@ export function TableDetailModal({
         </div>
 
         <DialogFooter className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 sm:justify-between">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          <Button type="button" variant="outline" size="lg" onClick={onClose}>
             Tutup
           </Button>
           <Button
             type="button"
-            size="sm"
+            size="lg"
             onClick={onOpenPOS}
           >
             <Utensils />

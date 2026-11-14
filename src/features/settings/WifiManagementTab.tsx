@@ -218,7 +218,7 @@ export function WifiManagementTab(props: WifiManagementTabProps) {
             <span className="text-xs text-muted-foreground">
               Voucher otomatis dicetak pada struk kasir saat belanja mencapai ambang batas.
             </span>
-            <Button type="button" size="sm" onClick={onOpenAddRule}>
+            <Button type="button" size="lg" onClick={onOpenAddRule}>
               <Plus />
               <span>Tambah aturan</span>
             </Button>
@@ -613,10 +613,10 @@ export function WifiManagementTab(props: WifiManagementTabProps) {
             </div>
 
             <DialogFooter className="gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => onRuleModalOpenChange(false)}>
+              <Button type="button" variant="outline" size="lg" onClick={() => onRuleModalOpenChange(false)}>
                 Batal
               </Button>
-              <Button type="submit">Simpan</Button>
+              <Button type="submit" size="lg">Simpan</Button>
             </DialogFooter>
           </form>
         </DialogContent>

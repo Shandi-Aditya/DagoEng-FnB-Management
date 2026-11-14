@@ -56,10 +56,10 @@ export function AddAreaModal({ isOpen, onClose, outletName, onAddArea }: AddArea
           </div>
 
           <DialogFooter className="border-t pt-3">
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" size="lg" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit" size="sm">
+            <Button type="submit" size="lg">
               Simpan area
             </Button>
           </DialogFooter>

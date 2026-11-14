@@ -239,7 +239,7 @@ export function PrinterSettingsTab() {
 
           <div>
             {isManagerOrAdmin ? (
-              <Button type="button" size="sm" onClick={openAddModal}>
+              <Button type="button" size="lg" onClick={openAddModal}>
                 <Plus />
                 <span>Tambah printer</span>
               </Button>
@@ -758,10 +758,10 @@ export function PrinterSettingsTab() {
             </div>
 
             <DialogFooter className="gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setIsDeviceModalOpen(false)}>
+              <Button type="button" variant="outline" size="lg" onClick={() => setIsDeviceModalOpen(false)}>
                 Batal
               </Button>
-              <Button type="submit">Simpan printer</Button>
+              <Button type="submit" size="lg">Simpan printer</Button>
             </DialogFooter>
           </form>
         </DialogContent>

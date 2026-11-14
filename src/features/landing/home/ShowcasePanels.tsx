@@ -167,7 +167,7 @@ export function EventsPanel({ className }: { className?: string }) {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <EventList />
-          <Button variant="outline" render={<Link href="/events" />} nativeButton={false}>
+          <Button variant="outline" size="lg" render={<Link href="/events" />} nativeButton={false}>
             Semua event
           </Button>
         </CardContent>

@@ -111,12 +111,13 @@ export function PODetailModal({ po, isOpen, onClose, onReceivePO }: PODetailModa
         </div>
 
         <DialogFooter className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 sm:justify-between">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" size="lg" onClick={onClose}>
             Tutup
           </Button>
 
           {isSent ? (
             <Button
+              size="lg"
               onClick={() => {
                 onReceivePO(po.id);
                 onClose();

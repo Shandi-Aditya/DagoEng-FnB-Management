@@ -41,7 +41,7 @@ export function TablesToolbar({
         actions={
           <div className="flex items-center gap-2">
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline" />}>
+              <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
                 Kelola denah
                 <ChevronDown className="text-muted-foreground" />
               </DropdownMenuTrigger>
@@ -57,7 +57,7 @@ export function TablesToolbar({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button onClick={onAddReservation}>
+            <Button size="lg" onClick={onAddReservation}>
               <Plus />
               Buat reservasi
             </Button>

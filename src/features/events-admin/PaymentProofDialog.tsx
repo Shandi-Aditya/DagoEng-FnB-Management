@@ -73,11 +73,12 @@ export function PaymentProofDialog({
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="border-t pt-3">
           {isPending ? (
             <>
               <Button
                 variant="outline"
+                size="lg"
                 onClick={() => {
                   onOpenChange(false);
                   onReject(booking);
@@ -88,6 +89,7 @@ export function PaymentProofDialog({
                 <span>Tolak bukti</span>
               </Button>
               <Button
+                size="lg"
                 onClick={() => {
                   onOpenChange(false);
                   onApprove(booking);
@@ -99,7 +101,7 @@ export function PaymentProofDialog({
               </Button>
             </>
           ) : (
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" size="lg" onClick={() => onOpenChange(false)}>
               Tutup
             </Button>
           )}

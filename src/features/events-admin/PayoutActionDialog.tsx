@@ -100,10 +100,11 @@ export function PayoutActionDialog({
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="border-t pt-3">
           <Button
             type="button"
             variant="outline"
+            size="lg"
             onClick={() => onOpenChange(false)}
             disabled={isProcessing}
           >
@@ -111,6 +112,7 @@ export function PayoutActionDialog({
           </Button>
           <Button
             type="button"
+            size="lg"
             variant={isPaid ? "default" : "destructive"}
             onClick={onConfirm}
             disabled={(!isPaid && !inputText.trim()) || isProcessing}

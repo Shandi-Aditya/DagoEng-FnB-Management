@@ -29,7 +29,7 @@ export function EventsAdminHeader({
       actions={
         <div className="flex items-center gap-2">
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
+            <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
               <span>Lainnya</span>
               <ChevronDown />
             </DropdownMenuTrigger>
@@ -58,7 +58,7 @@ export function EventsAdminHeader({
           </DropdownMenu>
 
           <Button
-            size="sm"
+            size="lg"
             render={<Link href="/events/portal?view=submit" />}
             nativeButton={false}
           >

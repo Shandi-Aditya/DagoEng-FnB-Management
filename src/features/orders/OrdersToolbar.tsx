@@ -49,7 +49,7 @@ export function OrdersToolbar({
         actions={
           canExport ? (
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline" />}>
+              <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
                 <Download />
                 Ekspor
                 <ChevronDown className="text-muted-foreground" />

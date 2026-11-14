@@ -27,7 +27,7 @@ export function AccountMenu() {
 
   if (!user) {
     return (
-      <Button variant="outline" size="sm" render={<Link href="/login" />} nativeButton={false}>
+      <Button variant="outline" size="lg" render={<Link href="/login" />} nativeButton={false}>
         <LogIn />
         Masuk
       </Button>
@@ -44,7 +44,7 @@ export function AccountMenu() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger render={<Button variant="outline" size="sm" className="gap-2 pl-1" />}>
+      <DropdownMenuTrigger render={<Button variant="outline" size="lg" className="gap-2 pl-2" />}>
         <Avatar className="size-5">
           <AvatarFallback className="text-xs">{initial}</AvatarFallback>
         </Avatar>

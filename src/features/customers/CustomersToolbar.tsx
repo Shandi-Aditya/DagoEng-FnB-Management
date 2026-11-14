@@ -35,7 +35,7 @@ export function CustomersToolbar({
       actions={
         <div className="flex items-center gap-2">
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" />}>
+            <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
               Ekspor
               <ChevronDown className="text-muted-foreground" />
             </DropdownMenuTrigger>
@@ -55,7 +55,7 @@ export function CustomersToolbar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button onClick={onOpenAddModal}>
+          <Button size="lg" onClick={onOpenAddModal}>
             <Plus />
             Tambah member
           </Button>

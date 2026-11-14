@@ -294,7 +294,7 @@ export function CoworkingReceiptModal({
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="lg"
               onClick={handlePrint}
               className="flex-1"
             >
@@ -304,7 +304,7 @@ export function CoworkingReceiptModal({
 
             <Button
               type="button"
-              size="sm"
+              size="lg"
               onClick={onClose}
               className="flex-1"
             >

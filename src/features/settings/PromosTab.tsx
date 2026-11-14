@@ -117,7 +117,7 @@ export function PromosTab(props: PromosTabProps) {
             ? "Kelola voucher diskon khusus untuk menu mitra Anda."
             : "Atur voucher dan promo untuk kasir F&B, portal pelanggan, dan co-working."}
         </p>
-        <Button type="button" size="sm" onClick={onAddPromo}>
+        <Button type="button" size="lg" onClick={onAddPromo}>
           <Plus />
           <span>Tambah promo</span>
         </Button>
@@ -547,10 +547,10 @@ export function PromosTab(props: PromosTabProps) {
           </div>
 
           <DialogFooter className="gap-2 pt-3">
-            <Button type="button" variant="outline" onClick={() => onProductModalOpenChange(false)}>
+            <Button type="button" variant="outline" size="lg" onClick={() => onProductModalOpenChange(false)}>
               Batal
             </Button>
-            <Button type="button" onClick={onSavePromoProducts}>
+            <Button type="button" size="lg" onClick={onSavePromoProducts}>
               Terapkan pilihan
             </Button>
           </DialogFooter>

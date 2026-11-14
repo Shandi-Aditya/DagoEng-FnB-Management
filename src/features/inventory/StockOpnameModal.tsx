@@ -226,10 +226,10 @@ export function StockOpnameModal({
           </div>
 
           <DialogFooter className="border-t pt-3">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" size="lg" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit">
+            <Button type="submit" size="lg">
               Simpan & Selaraskan Stok
             </Button>
           </DialogFooter>

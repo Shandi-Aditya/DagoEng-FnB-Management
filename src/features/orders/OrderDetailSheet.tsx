@@ -175,19 +175,20 @@ function OrderDetailBody({
 
       <SheetFooter className="flex-row flex-wrap border-t">
         {canPayThis ? (
-          <Button className="flex-1" onClick={() => onOpenPayment(selectedOrder)}>
+          <Button size="lg" className="flex-1" onClick={() => onOpenPayment(selectedOrder)}>
             <CreditCard />
             Bayar
           </Button>
         ) : null}
         {isPaid ? (
-          <Button variant="outline" onClick={() => onPrintReceipt(selectedOrder)}>
+          <Button variant="outline" size="lg" onClick={() => onPrintReceipt(selectedOrder)}>
             <Printer />
             Struk
           </Button>
         ) : null}
         <Button
           variant="outline"
+          size="lg"
           onClick={() => onPrintKitchenTicket(selectedOrder, isCancelled ? "CANCELLATION" : "REPRINT")}
         >
           <Printer />

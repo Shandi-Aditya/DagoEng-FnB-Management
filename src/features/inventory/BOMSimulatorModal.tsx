@@ -120,10 +120,10 @@ export function BOMSimulatorModal({
           ) : null}
 
           <DialogFooter className="border-t pt-3">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" size="lg" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit">
+            <Button type="submit" size="lg">
               Jalankan Simulasi
             </Button>
           </DialogFooter>

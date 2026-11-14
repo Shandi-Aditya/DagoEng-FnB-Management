@@ -320,7 +320,7 @@ export function ProductsCatalogTab({
               <span>Kategori menu ({categories.length})</span>
             </div>
             {onOpenAddCategory ? (
-              <Button type="button" size="sm" variant="outline" onClick={onOpenAddCategory}>
+              <Button type="button" size="lg" variant="outline" onClick={onOpenAddCategory}>
                 <Plus />
                 <span>Tambah kategori</span>
               </Button>

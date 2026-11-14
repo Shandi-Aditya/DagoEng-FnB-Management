@@ -345,10 +345,10 @@ export function PaymentModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-xl">
         {/* Header */}
         <DialogHeader className="border-b border-border bg-muted/30 p-4">
-          <div className="flex items-center justify-between pr-6">
+          <div className="flex items-center justify-between pr-10 sm:pr-12">
             <div className="space-y-0.5">
               <span className="text-xs text-muted-foreground">
                 {orderType === "DINE_IN" ? `Meja ${tableNumber}` : "Takeaway"}
@@ -377,10 +377,10 @@ export function PaymentModal({
             onValueChange={(val) => setActiveTab(val as POSPaymentMethod)}
             className="w-full"
           >
-            <TabsList aria-label="Metode pembayaran" className="w-full grid grid-cols-4">
+            <TabsList aria-label="Metode pembayaran" className="w-full grid grid-cols-4 h-10">
               <TabsTrigger value="QRIS" className="gap-1.5 text-xs">
                 <QrCode />
-                <span>QRIS dinamis</span>
+                <span>QRIS</span>
               </TabsTrigger>
               <TabsTrigger value="CASH" className="gap-1.5 text-xs">
                 <Banknote />
@@ -456,16 +456,17 @@ export function PaymentModal({
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 border-t border-warning/20 pt-2">
+                  <div className="grid grid-cols-1 gap-2 border-t border-warning/20 pt-2 sm:grid-cols-2">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       disabled={isSimulatingWebhook}
                       onClick={handleCheckGatewayStatus}
+                      className="w-full justify-center"
                     >
                       <RefreshCw className={cn("size-3.5", isSimulatingWebhook && "animate-spin")} />
-                      <span>{isSimulatingWebhook ? "Memeriksa status..." : "Cek status gateway"}</span>
+                      <span>{isSimulatingWebhook ? "Memeriksa..." : "Cek status gateway"}</span>
                     </Button>
 
                     <Button
@@ -473,10 +474,10 @@ export function PaymentModal({
                       variant="outline"
                       size="sm"
                       onClick={() => setShowSupervisorAuth((prev) => !prev)}
-                      className="ml-auto"
+                      className="w-full justify-center"
                     >
                       <Lock className="size-3.5" />
-                      <span>{showSupervisorAuth ? "Tutup form otorisasi" : "Otorisasi manual QRIS statis"}</span>
+                      <span>{showSupervisorAuth ? "Tutup otorisasi" : "Otorisasi manual PIN"}</span>
                     </Button>
                   </div>
                 </div>
@@ -867,13 +868,16 @@ export function PaymentModal({
           <Button
             type="button"
             variant="outline"
+            size="lg"
             onClick={onClose}
+            className="w-24 shrink-0 sm:w-28"
           >
             Batal
           </Button>
 
           <Button
             type="button"
+            size="lg"
             disabled={
               (activeTab === "CASH" && !isCashSufficient) ||
               (activeTab === "SPLIT" && !splitBalance.isValid) ||
@@ -881,22 +885,22 @@ export function PaymentModal({
               isQrisProcessing
             }
             onClick={handleCompletePayment}
-            className="flex-1"
+            className="flex-1 min-w-0"
           >
             {isQrisProcessing ? (
               <span>Memproses transaksi...</span>
             ) : activeTab === "QRIS" && !isQrisVerified ? (
-              <span className="flex items-center gap-2">
-                <Clock className="size-4 animate-spin text-warning" />
-                <span>Menunggu pembayaran tamu (QRIS) &bull; {formatCurrencyIDR(grandTotal)}</span>
+              <span className="flex items-center justify-center gap-2 truncate">
+                <Clock className="size-4 animate-spin text-warning shrink-0" />
+                <span className="truncate">Menunggu pembayaran QRIS</span>
               </span>
             ) : (
-              <span className="flex items-center gap-2">
-                <CheckCircle2 className="size-4" />
-                <span>
+              <span className="flex items-center justify-center gap-2 truncate">
+                <CheckCircle2 className="size-4 shrink-0" />
+                <span className="truncate">
                   {activeTab === "QRIS"
-                    ? `Selesaikan QRIS (${supervisorOverrideData ? "Otorisasi supervisor" : "Terverifikasi gateway"}) &bull; ${formatCurrencyIDR(grandTotal)}`
-                    : `Konfirmasi pembayaran (${activeTab}) &bull; ${formatCurrencyIDR(grandTotal)}`}
+                    ? "Selesaikan pembayaran QRIS"
+                    : `Konfirmasi pembayaran (${activeTab})`}
                 </span>
               </span>
             )}

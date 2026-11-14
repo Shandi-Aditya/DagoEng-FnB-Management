@@ -160,14 +160,14 @@ export function CommercialDetailModal({
 
         <DialogFooter className="flex-row items-center justify-between border-t pt-3 sm:justify-between">
           <Button
-            size="sm"
+            size="lg"
             variant="outline"
             onClick={() => onOpenChangeStatusModal(lease)}
           >
             Ubah status
           </Button>
           <Button
-            size="sm"
+            size="lg"
             variant="outline"
             onClick={onClose}
           >

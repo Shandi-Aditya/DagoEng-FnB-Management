@@ -178,16 +178,16 @@ export function NewMemberModal({
             </NativeSelect>
           </div>
 
-          <DialogFooter className="gap-2 border-t pt-2 sm:gap-0">
+          <DialogFooter className="border-t pt-3">
             <Button
               type="button"
               variant="outline"
-              size="sm"
+              size="lg"
               onClick={handleClose}
             >
               Batal
             </Button>
-            <Button type="submit" size="sm">
+            <Button type="submit" size="lg">
               Simpan member
             </Button>
           </DialogFooter>

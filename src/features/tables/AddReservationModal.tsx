@@ -242,10 +242,10 @@ export function AddReservationModal({
           </div>
 
           <DialogFooter className="border-t pt-3">
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" size="lg" onClick={onClose}>
               Batal
             </Button>
-            <Button type="submit" size="sm">
+            <Button type="submit" size="lg">
               Simpan reservasi
             </Button>
           </DialogFooter>

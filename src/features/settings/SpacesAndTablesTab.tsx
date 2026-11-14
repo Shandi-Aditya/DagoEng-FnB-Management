@@ -229,17 +229,17 @@ export function SpacesAndTablesTab(props: SpacesAndTablesTabProps) {
 
         <div>
           {subTab === "SPACES" ? (
-            <Button type="button" size="sm" onClick={onOpenAddSpace}>
+            <Button type="button" size="lg" onClick={onOpenAddSpace}>
               <Plus />
               <span>Tambah ruang</span>
             </Button>
           ) : subTab === "PLANS" ? (
-            <Button type="button" size="sm" onClick={onOpenAddPlan}>
+            <Button type="button" size="lg" onClick={onOpenAddPlan}>
               <Plus />
               <span>Tambah paket</span>
             </Button>
           ) : (
-            <Button type="button" size="sm" onClick={onOpenAddTable}>
+            <Button type="button" size="lg" onClick={onOpenAddTable}>
               <Plus />
               <span>Tambah meja</span>
             </Button>
@@ -556,10 +556,10 @@ export function SpacesAndTablesTab(props: SpacesAndTablesTabProps) {
                 </NativeSelect>
               </div>
               <DialogFooter className="gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => cfg.onOpenChange(false)}>
+                <Button type="button" variant="outline" size="lg" onClick={() => cfg.onOpenChange(false)}>
                   Batal
                 </Button>
-                <Button type="submit">Simpan</Button>
+                <Button type="submit" size="lg">Simpan</Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -617,10 +617,10 @@ export function SpacesAndTablesTab(props: SpacesAndTablesTabProps) {
                 />
               </div>
               <DialogFooter className="gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => cfg.onOpenChange(false)}>
+                <Button type="button" variant="outline" size="lg" onClick={() => cfg.onOpenChange(false)}>
                   Batal
                 </Button>
-                <Button type="submit">Simpan</Button>
+                <Button type="submit" size="lg">Simpan</Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -685,10 +685,10 @@ export function SpacesAndTablesTab(props: SpacesAndTablesTabProps) {
                 </NativeSelect>
               </div>
               <DialogFooter className="gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => cfg.onOpenChange(false)}>
+                <Button type="button" variant="outline" size="lg" onClick={() => cfg.onOpenChange(false)}>
                   Batal
                 </Button>
-                <Button type="submit">Simpan</Button>
+                <Button type="submit" size="lg">Simpan</Button>
               </DialogFooter>
             </form>
           </DialogContent>

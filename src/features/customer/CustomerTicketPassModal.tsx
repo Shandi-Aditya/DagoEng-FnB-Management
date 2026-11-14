@@ -148,12 +148,12 @@ export function CustomerTicketPassModal({
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0 pt-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="gap-2 pt-2">
+          <Button type="button" variant="outline" size="lg" onClick={() => onOpenChange(false)}>
             Tutup
           </Button>
           {isPaid ? (
-            <Button type="button" onClick={handleDownload} disabled={isDownloading}>
+            <Button type="button" size="lg" onClick={handleDownload} disabled={isDownloading}>
               <Download />
               <span>{isDownloading ? "Mengunduh…" : "Simpan gambar tiket"}</span>
             </Button>

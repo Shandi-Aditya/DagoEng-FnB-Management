@@ -223,11 +223,11 @@ function NextEventCard({ event, bookings, onOpenCheckIn, onSelectEvent }: NextEv
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button onClick={onOpenCheckIn}>
+          <Button size="lg" onClick={onOpenCheckIn}>
             <ScanLine />
             Mulai check-in
           </Button>
-          <Button variant="outline" onClick={() => onSelectEvent(event)}>
+          <Button size="lg" variant="outline" onClick={() => onSelectEvent(event)}>
             Lihat detail
           </Button>
         </div>

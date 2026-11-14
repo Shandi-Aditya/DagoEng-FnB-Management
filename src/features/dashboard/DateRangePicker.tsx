@@ -33,7 +33,7 @@ export function DateRangePicker() {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger render={<Button variant="outline" />}>
+      <PopoverTrigger render={<Button variant="outline" size="lg" />}>
         <Calendar />
         <span className="tabular-nums">{formattedRangeLabel}</span>
         <ChevronDown className="text-muted-foreground" />

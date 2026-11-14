@@ -134,7 +134,7 @@ export function InventoryOpnameTab({
         </NativeSelect>
         <div className="flex items-center gap-2 sm:ml-auto">
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" />}>
+            <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
               Ekspor
               <ChevronDown className="text-muted-foreground" />
             </DropdownMenuTrigger>
@@ -154,7 +154,7 @@ export function InventoryOpnameTab({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button onClick={onOpenOpnameModal}>Catat opname</Button>
+          <Button size="lg" onClick={onOpenOpnameModal}>Catat opname</Button>
         </div>
       </div>
 

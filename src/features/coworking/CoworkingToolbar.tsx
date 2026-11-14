@@ -57,7 +57,7 @@ export function CoworkingToolbar({
         actions={
           <div className="flex items-center gap-2">
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline" />}>
+              <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
                 Lainnya
                 <ChevronDown className="text-muted-foreground" />
               </DropdownMenuTrigger>
@@ -86,12 +86,12 @@ export function CoworkingToolbar({
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <Button variant="outline" onClick={onOpenNewMemberModal}>
+            <Button variant="outline" size="lg" onClick={onOpenNewMemberModal}>
               <UserPlus />
               Tambah member
             </Button>
 
-            <Button onClick={onOpenNewBookingModal}>
+            <Button size="lg" onClick={onOpenNewBookingModal}>
               <Plus />
               Buat booking
             </Button>

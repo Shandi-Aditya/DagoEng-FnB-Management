@@ -109,7 +109,7 @@ export function EventCard({ event, isPast }: EventCardProps) {
 
         <Button
           variant={isPast ? "outline" : "default"}
-          size="sm"
+          size="lg"
           render={<Link href={`/events/${event.id}`} />}
           nativeButton={false}
         >

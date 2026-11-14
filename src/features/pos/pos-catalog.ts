@@ -26,3 +26,24 @@ export function tenantClosedMessage(tenant: TenantOpenState): string {
 export function cartItemCount(items: readonly { quantity: number }[]): number {
   return items.reduce((sum, item) => sum + item.quantity, 0);
 }
+
+/**
+ * Calculates unit final price and total price for a product item
+ * with its selected variant, modifier options, and quantity.
+ */
+export function calculateItemFinalPrice(
+  basePrice: number,
+  variantAdjustment: number = 0,
+  modifiersTotal: number = 0,
+  quantity: number = 1
+): { unitFinalPrice: number; itemGrandTotal: number } {
+  const safeBase = Math.max(0, Number(basePrice) || 0);
+  const safeVariant = Number(variantAdjustment) || 0;
+  const safeModifiers = Math.max(0, Number(modifiersTotal) || 0);
+  const safeQty = Math.max(1, Number(quantity) || 1);
+
+  const unitFinalPrice = Math.max(0, safeBase + safeVariant + safeModifiers);
+  const itemGrandTotal = unitFinalPrice * safeQty;
+
+  return { unitFinalPrice, itemGrandTotal };
+}

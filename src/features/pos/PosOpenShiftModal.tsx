@@ -92,7 +92,7 @@ export function PosOpenShiftModal({
             />
 
             <div className="pt-1 space-y-1">
-              <span className="text-[11px] text-muted-foreground">Cepat</span>
+              <span className="text-xs text-muted-foreground">Cepat</span>
               <div className="grid grid-cols-4 gap-1.5">
                 {OPEN_SHIFT_PRESETS.map((amt) => (
                   <button
@@ -113,7 +113,7 @@ export function PosOpenShiftModal({
               </div>
             </div>
 
-            <p className="text-[11px] text-muted-foreground pt-0.5">
+            <p className="text-xs text-muted-foreground pt-0.5">
               Uang pecahan fisik di laci kasir untuk modal uang kembalian transaksi tunai.
             </p>
           </div>
@@ -122,12 +122,13 @@ export function PosOpenShiftModal({
             <Button
               type="button"
               variant="outline"
+              size="lg"
               onClick={onClose}
               disabled={isSubmitting}
             >
               Batal
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" size="lg" disabled={isSubmitting}>
               {isSubmitting ? (
                 <span>Membuka shift</span>
               ) : (

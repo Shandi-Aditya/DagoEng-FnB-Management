@@ -422,14 +422,15 @@ export function ReceiptModal({
           </div>
 
           {/* Modal Actions */}
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-850 flex flex-wrap items-center justify-between gap-2 print:hidden">
+          <div className="p-4 border-t border-border bg-card flex flex-wrap items-center justify-between gap-2 print:hidden">
             <Button
               type="button"
               variant="outline"
+              size="lg"
               onClick={handlePrint}
-              className="flex-1 min-w-[130px] text-xs font-bold space-x-1.5 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="flex-1 min-w-[130px]"
             >
-              <Printer className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+              <Printer className="size-4" />
               <span>Cetak Thermal</span>
             </Button>
 
@@ -437,11 +438,12 @@ export function ReceiptModal({
               <Button
                 type="button"
                 variant="outline"
+                size="lg"
                 onClick={onViewKitchenTicket}
-                className="flex-1 min-w-[130px] text-xs font-bold space-x-1.5 border-emerald-300 text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100"
+                className="flex-1 min-w-[130px]"
                 title="Buka Pratinjau & Cetak Nota Pesanan Dapur"
               >
-                <UtensilsCrossed className="w-4 h-4 text-emerald-600" />
+                <UtensilsCrossed className="size-4" />
                 <span>Nota Dapur</span>
               </Button>
             )}
@@ -450,6 +452,7 @@ export function ReceiptModal({
               <Button
                 type="button"
                 variant="outline"
+                size="lg"
                 onClick={() => {
                   const phone = receiptData.customerPhone ? receiptData.customerPhone.replace(/[^0-9]/g, "") : "";
                   const text = encodeURIComponent(
@@ -463,10 +466,10 @@ export function ReceiptModal({
                   );
                   window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
                 }}
-                className="flex-1 min-w-[130px] text-xs font-bold space-x-1.5 border-primary/30 text-primary bg-primary/10 hover:bg-primary/20 dark:bg-primary/20 dark:hover:bg-primary/30"
+                className="flex-1 min-w-[130px]"
                 title="Kirim e-Receipt via WhatsApp (Add-on Aktif)"
               >
-                <MessageSquare className="w-4 h-4 text-primary" />
+                <MessageSquare className="size-4" />
                 <span>Kirim WA</span>
               </Button>
             )}
@@ -474,8 +477,9 @@ export function ReceiptModal({
             {onNewTransaction ? (
               <Button
                 type="button"
+                size="lg"
                 onClick={onNewTransaction}
-                className="flex-1 min-w-[130px] text-xs font-bold space-x-1.5 bg-primary hover:bg-primary/90 text-white shadow-sm"
+                className="flex-1 min-w-[130px]"
               >
                 <RotateCcw className="size-4" />
                 <span>Pesanan baru</span>
@@ -484,8 +488,9 @@ export function ReceiptModal({
               <Button
                 type="button"
                 variant="outline"
+                size="lg"
                 onClick={onClose}
-                className="flex-1 min-w-[130px] text-xs font-medium"
+                className="flex-1 min-w-[130px]"
               >
                 <span>Tutup</span>
               </Button>

@@ -33,7 +33,7 @@ export function ActivityLogToolbar({
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" />}>
+            <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
               <Download />
               Ekspor
               <ChevronDown className="text-muted-foreground" />
@@ -54,7 +54,7 @@ export function ActivityLogToolbar({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button onClick={onOpenPDF}>
+          <Button size="lg" onClick={onOpenPDF}>
             <Printer />
             Cetak PDF
           </Button>
