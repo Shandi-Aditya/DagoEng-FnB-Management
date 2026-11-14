@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "node --experimental-require-module ./node_modules/next/dist/bin/next dev",
-    "build": "node ./node_modules/prisma/build/index.js generate && node --experimental-require-module ./node_modules/next/dist/bin/next build",
+    "dev": "node ./node_modules/next/dist/bin/next dev",
+    "build": "node ./node_modules/prisma/build/index.js generate && node ./node_modules/next/dist/bin/next build",
     "postinstall": "node ./node_modules/prisma/build/index.js generate",
-    "start": "node --experimental-require-module ./node_modules/next/dist/bin/next start",
+    "start": "node ./node_modules/next/dist/bin/next start",
     "test": "node ./node_modules/vitest/vitest.mjs run",
     "test:watch": "node ./node_modules/vitest/vitest.mjs",
     "type-check": "node ./node_modules/typescript/bin/tsc --noEmit",

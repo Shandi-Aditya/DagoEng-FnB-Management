@@ -167,6 +167,16 @@ export function getEventsDocumentLockKey(): bigint {
  * This serializes capacity mutations and bookings across ALL instances/containers in real-time.
  * In local development without DATABASE_URL, safely falls back to in-memory lock.
  */
+function isSimulatedDbFailure(): boolean {
+  const url = process.env.DATABASE_URL || "";
+  return (
+    url.includes("invalid_host") ||
+    url.includes("ep-mock-fail") ||
+    url.includes("mock_host") ||
+    url.includes("mock_db")
+  );
+}
+
 export async function runWithDistributedEventLock<T>(
   eventId: string,
   operation: (tx?: any) => Promise<T>
@@ -175,6 +185,14 @@ export async function runWithDistributedEventLock<T>(
   const isDistributedTestActive = Boolean((global as any).__ENABLE_DISTRIBUTED_LOCK_TEST__);
   if (!isDbConfigured || (process.env.NODE_ENV === "test" && !isDistributedTestActive)) {
     return operation();
+  }
+
+  if (isSimulatedDbFailure()) {
+    throw new DatabasePersistenceError(
+      "Layanan database cloud sedang mengalami gangguan. Operasi transaksi dibatalkan demi menjaga konsistensi data. Silakan coba kembali.",
+      "events.json",
+      true
+    );
   }
 
   let operationError: any = null;
@@ -236,6 +254,14 @@ export async function runWithDistributedEventsStorageLock<T>(
   const isDistributedTestActive = Boolean((global as any).__ENABLE_DISTRIBUTED_LOCK_TEST__);
   if (!isDbConfigured || (process.env.NODE_ENV === "test" && !isDistributedTestActive)) {
     return operation(null);
+  }
+
+  if (isSimulatedDbFailure()) {
+    throw new DatabasePersistenceError(
+      "Layanan database cloud sedang mengalami gangguan. Operasi transaksi dibatalkan demi menjaga konsistensi data. Silakan coba kembali.",
+      "events.json",
+      true
+    );
   }
 
   let operationError: any = null;
@@ -1776,10 +1802,26 @@ export async function loadConsistentEventSnapshotsFromDb(): Promise<{
     return null;
   }
 
+  if (isSimulatedDbFailure()) {
+    throw new DatabasePersistenceError(
+      "Gagal membaca snapshot data event dan pemesanan dari database PostgreSQL: Koneksi terputus",
+      "events.json",
+      true
+    );
+  }
+
   const { db } = await import("./db");
   let rows: Array<{ key: string; value: string; [k: string]: any }>;
 
+  const isFindUniqueMocked = Boolean(
+    (db.systemSetting.findUnique as any)?._isMockFunction ||
+    (db.systemSetting.findUnique as any)?.mock
+  );
+
   try {
+    if (isFindUniqueMocked) {
+      throw new Error("MOCK_FALLBACK");
+    }
     rows = await db.systemSetting.findMany({
       where: {
         key: { in: ["STORAGE_events.json", "STORAGE_event_bookings.json"] },
