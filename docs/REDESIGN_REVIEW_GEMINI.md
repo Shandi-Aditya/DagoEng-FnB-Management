@@ -143,7 +143,7 @@ Hapus override `h-8 text-xs` pada `Button`. Ukuran cukup lewat prop `size`.
 ### P4 — Modal POS dan Fase 7 (sesuai rencana awal)
 
 1. Modal POS & Transaksi (`PaymentModal`, `ModifierModal`, `ReceiptModal`, `KitchenOrderReceiptModal`, `DailyClosingPDFModal`, `CashDrawerShiftModal`, dan `PaymentWaitingModal` di `features/payment`) selesai di P4, seluruhnya dipindah ke `Dialog`/`AlertDialog` sungguhan. Struk dan nota dibuat sebagai benda nyata (`font-mono tabular-nums`, lebar 80mm). Test D1, C3, dan C4 tetap dijaga. Modal POS kini mencapai 0 temuan `lint:ui` di seluruh 26 file `features/pos` dan 0 temuan di `features/payment`.
-2. Fase 7 (`settings`, portal customer, portal event, `events/*`, `checkout-link-v2`, `waiter`): **pecah dulu tanpa ubahan visual** di satu commit, baru dimigrasi di commit berikutnya, sesuai rencana bagian 11.
+2. Fase 7 (`settings`, portal customer, portal event, `events/*`, `checkout-link-v2`, `waiter`): `settings`, `customer`, `events/*`, dan `checkout-link-v2` selesai dimigrasi ke komponen shadcn semantik (seluruhnya 0 temuan `lint:ui`, `tsc` 0, seluruh unit test lulus). Sisa `waiter` dan `events/checkin`.
 
 ## 5. Cara menjalankan scan yang dipakai di review ini
 
