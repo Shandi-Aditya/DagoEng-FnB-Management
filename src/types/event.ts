@@ -64,6 +64,7 @@ export interface CommunityEvent {
   // Metadata
   createdAt: string;
   updatedAt: string;
+  isTestData?: boolean; // Flag to identify and isolate mock/test events from public catalogs
 }
 
 export type RevenueSplitParty = "ORGANIZER" | "ADMIN" | "DAGO_ADMIN";
@@ -291,6 +292,7 @@ export interface EventBookingPayload {
   paymentMethod?: TicketPaymentMethod;
   destinationBankId?: string;
   honeypot?: string;
+  enforceOfficialBank?: boolean;
 }
 
 export interface EventOperationalStats {

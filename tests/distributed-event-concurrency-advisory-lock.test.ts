@@ -488,20 +488,30 @@ describe("TASK S-03 — Distributed Event Capacity & PostgreSQL Advisory Lock Co
     });
 
     it("11.2 Kegagalan penulisan file lokal pasca-commit tidak membatalkan atau melaporkan kegagalan booking", async () => {
-      // Buat objek circular yang gagal di-serialize oleh JSON.stringify di dalam syncBookingsToLocalDiskAndCache
-      const circularOrder: any = {
-        id: "bk-circular",
-        ticketCode: "DAGO-EVT-CIRC",
-        guestToken: "tok-circ",
-        eventId: eventIdA,
-        ticketCount: 1,
-      };
-      circularOrder.self = circularOrder; // circular reference
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        // Buat objek circular yang gagal di-serialize oleh JSON.stringify di dalam syncBookingsToLocalDiskAndCache
+        const circularOrder: any = {
+          id: "bk-circular",
+          ticketCode: "DAGO-EVT-CIRC",
+          guestToken: "tok-circ",
+          eventId: eventIdA,
+          ticketCount: 1,
+        };
+        circularOrder.self = circularOrder; // circular reference
 
-      // syncBookingsToLocalDiskAndCache harus menangkap error dan tidak melempar exception ke pemanggil
-      expect(() => {
-        syncBookingsToLocalDiskAndCache([circularOrder], Date.now() + 500000);
-      }).not.toThrow();
+        // syncBookingsToLocalDiskAndCache harus menangkap error dan tidak melempar exception ke pemanggil
+        expect(() => {
+          syncBookingsToLocalDiskAndCache([circularOrder], Date.now() + 500000);
+        }).not.toThrow();
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining("Non-fatal: Gagal memperbarui file booking lokal"),
+          expect.any(TypeError)
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
 
     it("11.3 Stale snapshot overwrite protection: Snapshot lama A tidak menimpa snapshot baru B", () => {

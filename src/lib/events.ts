@@ -62,6 +62,7 @@ import {
   type StorageSyncSnapshot,
 } from "@/lib/data-storage";
 import { appendAuditLog } from "@/lib/persistent-storage";
+export { appendAuditLog };
 import {
   ensureOrganizerActive,
   getOrganizerByEmail,
@@ -753,6 +754,26 @@ export function resolveDestinationBankAccount(
   }
 
   return null;
+}
+
+/**
+ * Helper to identify placeholder / demo bank accounts (Task S-01).
+ * Detects accounts with demo labels, placeholder account numbers (starting with 0000 or matching 000011223344),
+ * or account holder containing DEMO.
+ */
+export function isPlaceholderBankAccount(bank?: {
+  accountNumber?: string | null;
+  accountHolder?: string | null;
+  label?: string | null;
+} | null): boolean {
+  if (!bank) return false;
+  const num = (bank.accountNumber || "").replace(/[^0-9]/g, "");
+  const holder = (bank.accountHolder || "").toUpperCase();
+  const label = (bank.label || "").toUpperCase();
+  if (num.startsWith("0000") || holder.includes("DEMO") || holder.includes("PLACEHOLDER") || label.includes("DEMO")) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -3090,6 +3111,18 @@ export async function createEventBooking(
             "Metode pembayaran transfer bank belum dapat diproses karena tidak ada rekening pembayaran aktif yang tersedia pada sistem. Silakan hubungi admin platform."
           );
         }
+
+        // S-01 Guard: Fail-closed jika rekening pembayaran masih placeholder / demo
+        const isDemoAllowed =
+          process.env.ALLOW_DEMO_BANK === "true" ||
+          (process.env.NODE_ENV === "test" && process.env.ENFORCE_OFFICIAL_BANK !== "true" && !payload.enforceOfficialBank);
+
+        if (!isDemoAllowed && isPlaceholderBankAccount(resolvedBank)) {
+          throw new Error(
+            "PEMBAYARAN_TERKENDALA: Rekening bank penampung resmi Dago Creative Hub sedang dalam proses verifikasi pihak manajemen. Pemesanan tiket berbayar sementara belum dapat diproses."
+          );
+        }
+
         destinationBankSnapshot = resolvedBank;
       }
 

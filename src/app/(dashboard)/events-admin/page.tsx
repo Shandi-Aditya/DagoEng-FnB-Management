@@ -323,6 +323,31 @@ export default function AdminEventsPage() {
     }
   };
 
+  const handleDeleteEvent = async (event: CommunityEvent) => {
+    if (!window.confirm(`Hapus permanen event "${event.title}"? Tindakan ini tidak dapat dibatalkan.`)) {
+      return;
+    }
+    try {
+      setIsProcessingModeration(true);
+      const res = await fetch(`/api/events/${event.id}`, {
+        method: "DELETE",
+        headers: {
+          "If-Match": event.updatedAt || "",
+        },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menghapus event.");
+      }
+      setActionSuccessMessage(`Event "${event.title}" berhasil dihapus permanen.`);
+      await loadAdminEvents();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menghapus event.");
+    } finally {
+      setIsProcessingModeration(false);
+    }
+  };
+
   const handleConfirmRejectPayment = async () => {
     if (!rejectPaymentTarget || !rejectPaymentReason.trim()) {
       setActionErrorMessage("Alasan penolakan pembayaran wajib diisi.");
@@ -856,6 +881,7 @@ export default function AdminEventsPage() {
           setSelectedEventForAttendees(e);
           setIsAttendeesModalOpen(true);
         }}
+        onDelete={handleDeleteEvent}
         isProcessing={isProcessingModeration}
       />
 
