@@ -122,7 +122,9 @@ describe("Event Marketplace Revision, Negotiation & Payout Integrity Test Suite"
 
   it("4. Revisi proposal dan pengajuan ulang tidak menghilangkan data dan tidak membuat duplikat", async () => {
     // Put event B into REVISION_REQUESTED
-    await updateEventStatus(eventB.id, "REVISION_REQUESTED", "Mohon sertakan panduan membawa laptop dan kapasitas meja.");
+    await updateEventStatus(eventB.id, "REVISION_REQUESTED", {
+      revisionNotes: "Mohon sertakan panduan membawa laptop dan kapasitas meja.",
+    });
 
     // Resubmit event B
     const resubmitted = await organizerResubmitEvent(orgEmailB, eventB.id, {
@@ -479,9 +481,26 @@ describe("Event Marketplace Revision, Negotiation & Payout Integrity Test Suite"
   });
 
   it("11. Pihak yang mengusulkan bagi hasil dilarang menyetujui usulannya sendiri", async () => {
+    // Perform split proposal and self-approval rejection scenario BEFORE bookings are created
+    const subSelfAccept = await createEventSubmission({
+      organizerName: "Singaraja Indie Music",
+      organizerEmail: orgEmailA,
+      organizerPhone: "081299990001",
+      title: "Singaraja Acoustic Self Accept Guard",
+      category: "CREATIVE",
+      description: "Uji coba pembatasan persetujuan usulan sepihak.",
+      startDate: new Date(Date.now() + 86400000).toISOString(),
+      endDate: new Date(Date.now() + 93600000).toISOString(),
+      location: "Side Stage Dago Hub",
+      isPaid: true,
+      price: 50000,
+      posterUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4",
+    });
+    const eventSelfAccept = await updateEventStatus(subSelfAccept.id, "APPROVED");
+
     // Propose split by Organizer (85% / 15%)
     await proposeEventRevenueSplit(
-      eventA.id,
+      eventSelfAccept.id,
       "ORGANIZER",
       85,
       15,
@@ -492,7 +511,7 @@ describe("Event Marketplace Revision, Negotiation & Payout Integrity Test Suite"
     // Organizer trying to ACCEPT their own proposal must throw!
     await expect(
       respondToEventRevenueSplit(
-        eventA.id,
+        eventSelfAccept.id,
         "ACCEPT",
         "ORGANIZER",
         "Singaraja Indie Music",
@@ -556,7 +575,7 @@ describe("Event Marketplace Revision, Negotiation & Payout Integrity Test Suite"
     ).rejects.toThrow("Pengajuan pencairan ini telah selesai dibayarkan (PAID) dan tidak dapat diubah kembali.");
   });
 
-  it("13. Transaksi historis tidak berubah akibat persentase bagi hasil baru (immutability)", async () => {
+  it("13. Transaksi historis booking lama tetap utuh dan event lain dengan bagi hasil berbeda dihitung terpisah", async () => {
     const histEmail = `history-immutability-${Date.now()}@dagoeng.com`;
     const sub = await createEventSubmission({
       organizerName: "Immutability Lab",
@@ -588,10 +607,29 @@ describe("Event Marketplace Revision, Negotiation & Payout Integrity Test Suite"
     expect(oldBooking.organizerRevenueAmount).toBe(80000);
     expect(oldBooking.platformFeeAmount).toBe(20000);
 
-    // 2. Negotiate and accept new split: 90% organizer / 10% platform
-    await proposeEventRevenueSplit(event.id, "ORGANIZER", 90, 10, "Kenaikan performa", histEmail);
+    // Create second event for the organizer to negotiate 90/10 split BEFORE its first booking
+    const sub2 = await createEventSubmission({
+      organizerName: "Immutability Lab",
+      organizerEmail: histEmail,
+      organizerPhone: "081299990013",
+      title: "Historical Immutability Concert Season 2",
+      category: "CREATIVE",
+      description: "Season 2 dengan bagi hasil baru.",
+      startDate: new Date(Date.now() + 172800000).toISOString(),
+      endDate: new Date(Date.now() + 180000000).toISOString(),
+      location: "Main Hall Dago",
+      isPaid: true,
+      price: 100000,
+      posterUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4",
+      proposedOrganizerPercent: 80,
+      proposedPlatformPercent: 20,
+    });
+    const event2 = await updateEventStatus(sub2.id, "APPROVED");
+
+    // 2. Negotiate and accept new split: 90% organizer / 10% platform (performed before bookings on event2)
+    await proposeEventRevenueSplit(event2.id, "ORGANIZER", 90, 10, "Kenaikan performa", histEmail);
     const updatedSplit = await respondToEventRevenueSplit(
-      event.id,
+      event2.id,
       "ACCEPT",
       "DAGO_ADMIN",
       "Admin Dago Finance",
@@ -604,7 +642,7 @@ describe("Event Marketplace Revision, Negotiation & Payout Integrity Test Suite"
 
     // 3. New booking under 90% split (1 ticket = 100.000 -> organizer gets 90.000)
     const newBooking = await createEventBooking({
-      eventId: event.id,
+      eventId: event2.id,
       guestName: "New Era Attendee",
       guestEmail: `new-era-${Date.now()}@test.id`,
       guestPhone: "081234567821",

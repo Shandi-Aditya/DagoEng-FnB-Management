@@ -244,6 +244,10 @@ function LoginContent() {
       setErrorMessage("Nomor telepon/WhatsApp wajib diisi.");
       return;
     }
+    if (!regPassword || regPassword.trim().length < 6) {
+      setErrorMessage("Password minimal 6 karakter.");
+      return;
+    }
 
     setIsLoading(true);
     setErrorMessage(null);
@@ -261,7 +265,7 @@ function LoginContent() {
           name: regName.trim() || "Pelanggan Member",
           email: cleanEmail,
           phone: cleanPhone,
-          password: regPassword || "Password123!",
+          password: regPassword.trim(),
         }),
       });
 

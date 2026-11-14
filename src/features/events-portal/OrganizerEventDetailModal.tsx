@@ -32,6 +32,7 @@ import {
   formatDateSafe,
   getEffectiveStatus,
 } from "./events-portal-domain";
+import { organizerSharePercent } from "./events-portal-groups";
 
 export interface OrganizerEventDetailModalProps {
   event: CommunityEvent | null;
@@ -59,7 +60,8 @@ export function OrganizerEventDetailModal({
   const eventBookings = bookings.filter((b) => b.eventId === event.id);
   const paidBookings = eventBookings.filter((b) => b.paymentStatus === "PAID");
   const grossSales = paidBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
-  const organizerShare = Math.round(grossSales * 0.8);
+  const sharePercent = organizerSharePercent(event);
+  const organizerShare = Math.round(grossSales * (sharePercent / 100));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

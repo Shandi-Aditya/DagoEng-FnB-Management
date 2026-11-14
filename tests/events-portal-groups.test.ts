@@ -7,6 +7,7 @@ import {
   groupOrganizerEvents,
   organizerSharePercent,
 } from "@/features/events-portal/events-portal-groups";
+import { getEventEffectivePlatformFeePercent } from "@/lib/events";
 import type { CommunityEvent, EventTicketOrder, PayoutRecord } from "@/types/event";
 
 const NOW = new Date("2026-11-13T04:00:00.000Z");
@@ -126,18 +127,98 @@ describe("groupOrganizerEvents with lapsed submissions", () => {
   });
 });
 
-describe("organizerSharePercent", () => {
-  it("uses the event's agreed organizer share, then the platform override, then 80", () => {
-    expect(organizerSharePercent(event({ organizerFeePercent: 85 }))).toBe(85);
-    expect(organizerSharePercent(event({ customPlatformFeePercent: 10 }))).toBe(90);
-    expect(organizerSharePercent(event({}))).toBe(80);
+describe("organizerSharePercent SSOT & Strict Validation", () => {
+  it("resolves default fee 20% to organizer 80%", () => {
+    const e = event({});
+    expect(organizerSharePercent(e)).toBe(80);
+    expect(organizerSharePercent(e)).toBe(100 - getEventEffectivePlatformFeePercent(e));
+  });
+
+  it("resolves custom fee 0% to organizer 100%", () => {
+    const e = event({ customPlatformFeePercent: 0 });
+    expect(organizerSharePercent(e)).toBe(100);
+    expect(organizerSharePercent(e)).toBe(100 - getEventEffectivePlatformFeePercent(e));
+  });
+
+  it("resolves custom fee 10% to organizer 90%", () => {
+    const e = event({ customPlatformFeePercent: 10 });
+    expect(organizerSharePercent(e)).toBe(90);
+    expect(organizerSharePercent(e)).toBe(100 - getEventEffectivePlatformFeePercent(e));
+  });
+
+  it("resolves custom fee 50% to organizer 50%", () => {
+    const e = event({ customPlatformFeePercent: 50 });
+    expect(organizerSharePercent(e)).toBe(50);
+    expect(organizerSharePercent(e)).toBe(100 - getEventEffectivePlatformFeePercent(e));
+  });
+
+  it("strictly rejects decimal fee without rounding or clamping", () => {
+    const e1 = event({ customPlatformFeePercent: 10.5 });
+    expect(() => organizerSharePercent(e1)).toThrow(/tanpa pecahan desimal|tanpa desimal/);
+    expect(() => getEventEffectivePlatformFeePercent(e1)).toThrow(/tanpa pecahan desimal|tanpa desimal/);
+
+    const e2 = event({ customPlatformFeePercent: 0.1 });
+    expect(() => organizerSharePercent(e2)).toThrow(/tanpa pecahan desimal|tanpa desimal/);
+  });
+
+  it("strictly rejects NaN and Infinity fee", () => {
+    const eNaN = event({ customPlatformFeePercent: NaN });
+    expect(() => organizerSharePercent(eNaN)).toThrow(/angka yang valid/);
+    expect(() => getEventEffectivePlatformFeePercent(eNaN)).toThrow(/angka yang valid/);
+
+    const eInf = event({ customPlatformFeePercent: Infinity });
+    expect(() => organizerSharePercent(eInf)).toThrow(/angka yang valid/);
+  });
+
+  it("strictly rejects fee below 0% and above 50%", () => {
+    const eNegative = event({ customPlatformFeePercent: -5 });
+    expect(() => organizerSharePercent(eNegative)).toThrow(/0% hingga 50%/);
+    expect(() => getEventEffectivePlatformFeePercent(eNegative)).toThrow(/0% hingga 50%/);
+
+    const eTooHigh = event({ customPlatformFeePercent: 51 });
+    expect(() => organizerSharePercent(eTooHigh)).toThrow(/0% hingga 50%/);
+    expect(() => getEventEffectivePlatformFeePercent(eTooHigh)).toThrow(/0% hingga 50%/);
+  });
+
+  it("ensures legacy organizerFeePercent does NOT override backend default", () => {
+    // When customPlatformFeePercent is absent, backend default (20% fee -> 80% organizer) is strictly applied
+    // and legacy organizerFeePercent (e.g. 70 or 85) does not defeat backend default
+    const e = event({ customPlatformFeePercent: null, organizerFeePercent: 70 });
+    expect(organizerSharePercent(e)).toBe(80);
+    expect(organizerSharePercent(e)).toBe(100 - getEventEffectivePlatformFeePercent(e));
+  });
+
+  it("ensures legacy organizerFeePercent does NOT override customPlatformFeePercent", () => {
+    // customPlatformFeePercent is 10% (organizer 90%), even if legacy organizerFeePercent is 75%
+    const e = event({ customPlatformFeePercent: 10, organizerFeePercent: 75 });
+    expect(organizerSharePercent(e)).toBe(90);
+    expect(organizerSharePercent(e)).toBe(100 - getEventEffectivePlatformFeePercent(e));
+  });
+
+  it("frontend and backend produce identical results across all boundary matrix", () => {
+    const testCases = [
+      { custom: 0, expectedOrg: 100 },
+      { custom: 1, expectedOrg: 99 },
+      { custom: 20, expectedOrg: 80 },
+      { custom: 35, expectedOrg: 65 },
+      { custom: 50, expectedOrg: 50 },
+    ];
+
+    for (const tc of testCases) {
+      const e = event({ customPlatformFeePercent: tc.custom });
+      const fe = organizerSharePercent(e);
+      const be = 100 - getEventEffectivePlatformFeePercent(e);
+      expect(fe).toBe(tc.expectedOrg);
+      expect(be).toBe(tc.expectedOrg);
+      expect(fe).toBe(be);
+    }
   });
 });
 
 describe("eventBalances", () => {
   it("sums the organizer revenue actually recorded on paid tickets, minus committed payouts", () => {
     const events = [
-      event({ id: "a", organizerFeePercent: 85, payoutHistory: [payout({ amount: 20000, status: "PAID" }), payout({ id: "q", amount: 5000, status: "REQUESTED" }), payout({ id: "r", amount: 9999, status: "REJECTED" })] }),
+      event({ id: "a", customPlatformFeePercent: 15, organizerFeePercent: 85, payoutHistory: [payout({ amount: 20000, status: "PAID" }), payout({ id: "q", amount: 5000, status: "REQUESTED" }), payout({ id: "r", amount: 9999, status: "REJECTED" })] }),
       event({ id: "b", title: "Meetup" }),
     ];
     const bookings = [

@@ -131,20 +131,45 @@ export function EventEditModal({
                 id="editPrice"
                 type="number"
                 min={0}
+                step={1}
                 value={formData.price ?? 0}
-                onChange={(e) => onFormDataChange({ ...formData, price: Number(e.target.value), isPaid: Number(e.target.value) > 0 })}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    onFormDataChange({ ...formData, price: 0, isPaid: false });
+                    return;
+                  }
+                  if (raw.includes(".") || raw.includes(",")) return;
+                  const val = Number(raw);
+                  if (Number.isSafeInteger(val) && val >= 0) {
+                    onFormDataChange({ ...formData, price: val, isPaid: val > 0 });
+                  }
+                }}
                 required
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="editQuota">Kuota peserta</Label>
+              <Label htmlFor="editQuota">Kuota peserta (1–1.000)</Label>
               <Input
                 id="editQuota"
                 type="number"
                 min={1}
+                max={1000}
+                step={1}
                 value={formData.maxCapacity ?? 30}
-                onChange={(e) => onFormDataChange({ ...formData, maxCapacity: Number(e.target.value) })}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    onFormDataChange({ ...formData, maxCapacity: undefined });
+                    return;
+                  }
+                  if (raw.includes(".") || raw.includes(",")) return;
+                  const val = Number(raw);
+                  if (Number.isSafeInteger(val) && val >= 1 && val <= 1000) {
+                    onFormDataChange({ ...formData, maxCapacity: val });
+                  }
+                }}
                 required
               />
             </div>

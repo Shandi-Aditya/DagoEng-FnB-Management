@@ -37,11 +37,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!password || typeof password !== "string" || password.trim().length < 6) {
+      return NextResponse.json(
+        { success: false, error: "Password minimal 6 karakter." },
+        { status: 400 }
+      );
+    }
+
     const { user, isExisting } = await registerUnifiedUser({
       name: name.trim(),
       email: email.trim(),
       phone: phone.trim(),
-      password: password?.trim() || "Password123!",
+      password: password.trim(),
       role: "CUSTOMER",
     });
 

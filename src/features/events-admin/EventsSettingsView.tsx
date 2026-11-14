@@ -62,18 +62,31 @@ export function EventsSettingsView({
                   id="defaultPlatformFeePercent"
                   type="number"
                   min={0}
-                  max={100}
+                  max={50}
+                  step={1}
                   value={businessPolicy.defaultPlatformFeePercent ?? 20}
-                  onChange={(e) =>
-                    setBusinessPolicy({
-                      ...businessPolicy,
-                      defaultPlatformFeePercent: Number(e.target.value),
-                    })
-                  }
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setBusinessPolicy({
+                        ...businessPolicy,
+                        defaultPlatformFeePercent: "",
+                      });
+                      return;
+                    }
+                    if (raw.includes(".") || raw.includes(",")) return;
+                    const parsed = Number(raw);
+                    if (Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= 50) {
+                      setBusinessPolicy({
+                        ...businessPolicy,
+                        defaultPlatformFeePercent: parsed,
+                      });
+                    }
+                  }}
                   required
                 />
                 <span className="text-xs text-muted-foreground">
-                  Persentase default potongan bagi hasil dari penjualan tiket berbayar.
+                  Persentase default potongan bagi hasil dari penjualan tiket berbayar (0–50%).
                 </span>
               </div>
 

@@ -64,6 +64,7 @@ export interface CommunityEvent {
   // Metadata
   createdAt: string;
   updatedAt: string;
+  isTestData?: boolean; // Flag to identify and isolate mock/test events from public catalogs
 }
 
 export type RevenueSplitParty = "ORGANIZER" | "ADMIN" | "DAGO_ADMIN";
@@ -291,6 +292,7 @@ export interface EventBookingPayload {
   paymentMethod?: TicketPaymentMethod;
   destinationBankId?: string;
   honeypot?: string;
+  enforceOfficialBank?: boolean;
 }
 
 export interface EventOperationalStats {
@@ -314,6 +316,7 @@ export interface EventBankAccountHistoryEntry {
 }
 
 export interface EventRevenueSharingPolicy {
+  _revision?: number; // Monotonic integer revision counter for cloud & disk consistency
   defaultPlatformFeePercent: number; // default 20 (20% DAGO Platform)
   defaultOrganizerSharePercent: number; // default 80 (80% Penyelenggara)
   minPlatformFeePercent: number; // default 0
@@ -388,6 +391,7 @@ export const DEFAULT_EVENT_BANK_ACCOUNTS: EventBankAccount[] = [
 ];
 
 export const DEFAULT_EVENT_POLICY: EventRevenueSharingPolicy = {
+  _revision: 0,
   defaultPlatformFeePercent: 20,
   defaultOrganizerSharePercent: 80,
   minPlatformFeePercent: 0,

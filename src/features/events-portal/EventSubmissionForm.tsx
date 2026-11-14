@@ -14,6 +14,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE } from "@/lib/event-validation";
 
 import {
   EVENT_CATEGORIES,
@@ -49,6 +51,8 @@ interface EventSubmissionFormProps {
 
 /** One page, four cards and a summary: everything the hub needs to review an event. */
 export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, signedIn = false }: EventSubmissionFormProps) {
+  const { user } = useAuth();
+  const isCheckInStaff = isCheckInStaffRole(user?.role);
   const needsPassword = mode === "guest" && !signedIn;
   const [form, setForm] = useState<SubmissionForm>(() => emptySubmissionForm(organizer));
   const [errors, setErrors] = useState<SubmissionErrors>({});
@@ -75,6 +79,13 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setServerErrors([]);
+
+    if (isCheckInStaff) {
+      setServerErrors([CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE]);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     const found = validateSubmissionForm(form, { needsPassword });
     setErrors(found);
     if (Object.keys(found).length > 0) {
@@ -118,6 +129,13 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
       />
 
       <div className="flex min-w-0 flex-col gap-6">
+        {isCheckInStaff ? (
+          <Alert variant="destructive">
+            <AlertTitle>Akses Pembuatan Event Ditolak</AlertTitle>
+            <AlertDescription>{CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE}</AlertDescription>
+          </Alert>
+        ) : null}
+
         {serverErrors.length > 0 && (
           <Alert variant="destructive">
             <AlertTitle>Pengajuan belum terkirim</AlertTitle>
@@ -366,7 +384,7 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
           </CardContent>
         </Card>
         {errorCount > 0 && <p className="text-sm text-destructive">Masih ada {errorCount} isian yang perlu diperbaiki.</p>}
-        <Button type="submit" size="lg" disabled={isSubmitting}>
+        <Button type="submit" size="lg" disabled={isSubmitting || isCheckInStaff}>
           {isSubmitting ? <Spinner /> : null}
           {mode === "guest" ? "Daftar dan ajukan event" : "Ajukan event"}
         </Button>

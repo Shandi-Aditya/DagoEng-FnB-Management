@@ -153,7 +153,11 @@ export async function registerUnifiedUser(payload: RegisterUserPayload): Promise
     return { user: existing, isExisting: true };
   }
 
-  const rawPassword = payload.password && payload.password.trim() ? payload.password.trim() : "Password123!";
+  if (!payload.password || typeof payload.password !== "string" || payload.password.trim().length < 6) {
+    throw new Error("Password minimal 6 karakter.");
+  }
+
+  const rawPassword = payload.password.trim();
   const passwordHash = await bcrypt.hash(rawPassword, 10);
   const now = new Date().toISOString();
 
@@ -272,7 +276,7 @@ export async function verifyUnifiedUserPassword(
     return { success: false, user: null, error: "Akun tidak ditemukan." };
   }
 
-  const isMatch = (await bcrypt.compare(plainPassword, user.passwordHash)) || plainPassword === "Password123!" || plainPassword === "demo";
+  const isMatch = await bcrypt.compare(plainPassword, user.passwordHash);
   if (!isMatch) {
     return { success: false, user: null, error: "Password yang Anda masukkan salah." };
   }

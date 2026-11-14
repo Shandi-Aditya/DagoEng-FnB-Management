@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assertEventAdmin } from "@/lib/server-auth";
-import { syncStorageFromDb } from "@/lib/data-storage";
-import { getEventRevenuePolicy, updateEventRevenuePolicy } from "@/lib/events";
+import { syncStorageFromDb, persistStorageToDb, isReconciliationGateActive } from "@/lib/data-storage";
+import { getEventRevenuePolicy, updateEventRevenuePolicy, saveEventSettingsToDisk } from "@/lib/events";
 
 export const dynamic = "force-dynamic";
 
@@ -63,10 +63,27 @@ export async function PUT(req: NextRequest) {
     } = body;
 
     if (defaultPlatformFeePercent !== undefined && defaultPlatformFeePercent !== null) {
-      const fee = Number(defaultPlatformFeePercent);
-      if (isNaN(fee) || fee < 0 || fee > 100) {
+      // 1. RBAC Guard: Hanya SUPER_ADMIN atau OWNER dengan kewenangan tingkat PLATFORM atau ORGANIZATION yang berhak mengubah komisi platform default
+      const isPlatformSuperAdmin = auth.role === "SUPER_ADMIN";
+      const isPlatformOwner =
+        auth.role === "OWNER" &&
+        (auth.scopeLevel === "PLATFORM" || auth.scopeLevel === "ORGANIZATION");
+
+      if (!isPlatformSuperAdmin && !isPlatformOwner) {
         return NextResponse.json(
-          { success: false, error: "Persentase komisi platform harus berupa angka valid antara 0% dan 100%." },
+          {
+            success: false,
+            error:
+              "FORBIDDEN: Perubahan persentase komisi default platform hanya dapat dilakukan oleh SUPER_ADMIN atau OWNER pengelola platform. Pengguna tingkat tenant atau manajer operasional tidak berwenang.",
+          },
+          { status: 403 }
+        );
+      }
+
+      const fee = Number(defaultPlatformFeePercent);
+      if (isNaN(fee) || !Number.isInteger(fee) || fee < 0 || fee > 50) {
+        return NextResponse.json(
+          { success: false, error: "Persentase komisi platform harus berupa bilangan bulat antara 0% dan 50%." },
           { status: 400 }
         );
       }
@@ -82,6 +99,18 @@ export async function PUT(req: NextRequest) {
       }
     }
 
+    // Pastikan tidak ada rekonsiliasi yang sedang berlangsung sebelum mengubah memori atau disk
+    if (isReconciliationGateActive("event_settings.json")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Gagal memperbarui kebijakan event: Proses sinkronisasi database sedang berlangsung. Silakan coba beberapa saat lagi demi integritas data.",
+        },
+        { status: 503 }
+      );
+    }
+
+    const previousPolicy = getEventRevenuePolicy();
     const updated = updateEventRevenuePolicy(
       {
         defaultPlatformFeePercent: defaultPlatformFeePercent !== undefined ? Number(defaultPlatformFeePercent) : undefined,
@@ -98,6 +127,25 @@ export async function PUT(req: NextRequest) {
       },
       auth.name || "Admin Dago"
     );
+
+    // Persistensi wajib ke database PostgreSQL (Neon). Jika gagal, teruskan sebagai error dan rollback disk.
+    try {
+      await persistStorageToDb("event_settings.json", JSON.stringify(updated, null, 2));
+    } catch (dbErr: any) {
+      // Rollback file lokal ke state sebelum update agar disk dan PostgreSQL tidak mengalami divergensi
+      // Jangan menimpa disk jika rekonsiliasi database sedang berlangsung
+      if (!isReconciliationGateActive("event_settings.json")) {
+        saveEventSettingsToDisk(previousPolicy);
+      }
+      console.error("[settings] Gagal menyimpan ke PostgreSQL, rollback disk dijalankan:", dbErr?.message || dbErr);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Gagal mengamankan penyimpanan ke database cloud (PostgreSQL): ${dbErr?.message || "Koneksi database terputus"}. Perubahan dibatalkan demi integritas data.`,
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,

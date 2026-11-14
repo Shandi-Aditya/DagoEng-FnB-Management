@@ -1,4 +1,5 @@
 import { isPastUnapproved } from "@/features/events-admin/events-admin-domain";
+import { resolveOrganizerSharePercent } from "@/lib/event-validation";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 
 const DEFAULT_ORGANIZER_PERCENT = 80;
@@ -49,11 +50,15 @@ export function groupOrganizerEvents(events: readonly CommunityEvent[], now: Dat
   };
 }
 
-/** The organizer's share of ticket sales agreed for this event. */
-export function organizerSharePercent(event: CommunityEvent): number {
-  if (typeof event.organizerFeePercent === "number") return event.organizerFeePercent;
-  if (typeof event.customPlatformFeePercent === "number") return 100 - event.customPlatformFeePercent;
-  return DEFAULT_ORGANIZER_PERCENT;
+/** The organizer's share of ticket sales agreed for this event.
+ * Uses customPlatformFeePercent as the single source of truth (SSOT) from backend policy.
+ * Formula: 100 - effectivePlatformFeePercent (Strictly 50% - 100%).
+ */
+export function organizerSharePercent(
+  event?: Pick<CommunityEvent, "customPlatformFeePercent" | "organizerFeePercent"> | null,
+  defaultPlatformFeePercent?: number
+): number {
+  return resolveOrganizerSharePercent(event, defaultPlatformFeePercent);
 }
 
 export interface EventBalanceRow {

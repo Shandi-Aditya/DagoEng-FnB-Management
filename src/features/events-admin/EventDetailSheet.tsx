@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Phone,
   Ticket,
+  Trash2,
   UserCheck,
   XCircle,
 } from "lucide-react";
@@ -27,6 +28,7 @@ import {
 import { StatusBadge } from "@/components/app/status-badge";
 import type { CommunityEvent } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { organizerSharePercent } from "@/features/events-portal/events-portal-groups";
 import {
   eventCategoryLabel,
   eventStatusLabel,
@@ -46,6 +48,7 @@ export interface EventDetailSheetProps {
   onArchive: (event: CommunityEvent) => void;
   onEdit: (event: CommunityEvent) => void;
   onManageAttendees: (event: CommunityEvent) => void;
+  onDelete?: (event: CommunityEvent) => void;
   isProcessing?: boolean;
 }
 
@@ -59,6 +62,7 @@ export function EventDetailSheet({
   onArchive,
   onEdit,
   onManageAttendees,
+  onDelete,
   isProcessing,
 }: EventDetailSheetProps) {
   if (!event) return null;
@@ -192,7 +196,7 @@ export function EventDetailSheet({
               <div className="flex items-center justify-between">
                 <span className="font-medium text-foreground">Kesepakatan bagi hasil</span>
                 <Badge variant="outline">
-                  Platform {event.customPlatformFeePercent ?? 20}% : Mitra {event.organizerFeePercent ?? 80}%
+                  Platform {100 - organizerSharePercent(event)}% : Mitra {organizerSharePercent(event)}%
                 </Badge>
               </div>
               <p className="text-muted-foreground">
@@ -268,20 +272,38 @@ export function EventDetailSheet({
                 </Button>
               </div>
 
-              {effStatus === "APPROVED" ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    onOpenChange(false);
-                    onArchive(event);
-                  }}
-                  disabled={isProcessing}
-                >
-                  <Archive />
-                  <span>Arsipkan</span>
-                </Button>
-              ) : null}
+              <div className="flex gap-2">
+                {effStatus === "APPROVED" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      onOpenChange(false);
+                      onArchive(event);
+                    }}
+                    disabled={isProcessing}
+                  >
+                    <Archive />
+                    <span>Arsipkan</span>
+                  </Button>
+                ) : null}
+
+                {onDelete ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                    onClick={() => {
+                      onOpenChange(false);
+                      onDelete(event);
+                    }}
+                    disabled={isProcessing}
+                  >
+                    <Trash2 />
+                    <span>Hapus</span>
+                  </Button>
+                ) : null}
+              </div>
             </div>
           )}
         </SheetFooter>

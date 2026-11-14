@@ -132,15 +132,20 @@ export function OrganizerRevenueSplitDialog({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="font-medium text-foreground">Hak Komunitas (%)</label>
+                <label className="font-medium text-foreground">Hak Komunitas (%) (50–100%)</label>
                 <input
                   type="number"
-                  min={0}
+                  min={50}
                   max={100}
+                  step={1}
                   required
                   value={splitOrgPercent}
                   onChange={(e) => {
-                    const val = Math.min(100, Math.max(0, Number(e.target.value)));
+                    const raw = e.target.value;
+                    if (raw.includes(".") || raw.includes(",")) return;
+                    const num = Number(raw);
+                    if (!Number.isSafeInteger(num)) return;
+                    const val = Math.min(100, Math.max(50, num));
                     setSplitOrgPercent(val);
                     setSplitPlatPercent(100 - val);
                   }}
@@ -149,15 +154,20 @@ export function OrganizerRevenueSplitDialog({
               </div>
 
               <div className="space-y-1">
-                <label className="font-medium text-foreground">Bagi Hasil Dago Hub (%)</label>
+                <label className="font-medium text-foreground">Bagi Hasil Dago Hub (%) (0–50%)</label>
                 <input
                   type="number"
                   min={0}
-                  max={100}
+                  max={50}
+                  step={1}
                   required
                   value={splitPlatPercent}
                   onChange={(e) => {
-                    const val = Math.min(100, Math.max(0, Number(e.target.value)));
+                    const raw = e.target.value;
+                    if (raw.includes(".") || raw.includes(",")) return;
+                    const num = Number(raw);
+                    if (!Number.isSafeInteger(num)) return;
+                    const val = Math.min(50, Math.max(0, num));
                     setSplitPlatPercent(val);
                     setSplitOrgPercent(100 - val);
                   }}

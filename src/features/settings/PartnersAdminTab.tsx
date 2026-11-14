@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Calculator,
   Calendar,
+  ExternalLink,
   Eye,
   History,
   Key,
@@ -618,61 +620,48 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
       {partnerSubTab === "BAGI_HASIL_EVENTS" ? (
         <div className="flex flex-col gap-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Kebijakan komisi event</CardTitle>
-              <CardDescription>
-                Komisi standar untuk penjualan tiket event berbayar di katalog publik.
-              </CardDescription>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>Kebijakan komisi event (Template)</CardTitle>
+                <CardDescription>
+                  Komisi standar platform dikelola secara terpusat di Events Admin.
+                </CardDescription>
+              </div>
+              <Link
+                href="/events-admin?tab=SETTINGS"
+                className="inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+              >
+                <ExternalLink className="size-3.5" />
+                <span>Kelola kebijakan di Events Admin</span>
+              </Link>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="eventPlatformFee">Komisi Dago (%)</Label>
+                  <Label htmlFor="eventPlatformFee">Komisi standar Dago (%)</Label>
                   <Input
                     id="eventPlatformFee"
                     type="number"
-                    min={0}
-                    max={100}
+                    disabled
                     value={eventPlatformFee}
-                    onChange={(e) => {
-                      const val = parseFloat(e.target.value);
-                      onEventPlatformFeeChange(
-                        Number.isNaN(val) ? 0 : Math.max(0, Math.min(100, val)),
-                      );
-                    }}
-                    className="font-mono tabular-nums"
+                    className="font-mono tabular-nums bg-muted"
                   />
+                  <span className="text-xs text-muted-foreground">
+                    Diatur di halaman Events Admin &bull; Settings.
+                  </span>
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <Label>Bagian penyelenggara (%)</Label>
+                  <Label>Bagian standar penyelenggara (%)</Label>
                   <Input
                     type="number"
                     disabled
                     value={100 - eventPlatformFee}
-                    className="font-mono tabular-nums"
+                    className="font-mono tabular-nums bg-muted"
                   />
+                  <span className="text-xs text-muted-foreground">
+                    Dihitung otomatis: 100% - komisi platform.
+                  </span>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="eventPolicyDate">Berlaku mulai</Label>
-                  <Input
-                    id="eventPolicyDate"
-                    type="date"
-                    value={eventPolicyEffectiveDate.split("T")[0]}
-                    onChange={(e) =>
-                      onEventPolicyEffectiveDateChange(new Date(e.target.value).toISOString())
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="eventPolicyNotes">Catatan kebijakan</Label>
-                <Input
-                  id="eventPolicyNotes"
-                  type="text"
-                  value={eventPolicyNotes}
-                  onChange={(e) => onEventPolicyNotesChange(e.target.value)}
-                />
               </div>
 
               {eventPolicyFeedback ? (
@@ -680,17 +669,6 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
                   <AlertDescription>{eventPolicyFeedback}</AlertDescription>
                 </Alert>
               ) : null}
-
-              <div className="flex justify-end">
-                <Button
-                  type="button"
-                  onClick={onSaveEventRevenuePolicy}
-                  disabled={isSavingEventPolicy}
-                >
-                  <Save />
-                  <span>{isSavingEventPolicy ? "Menyimpan..." : "Simpan kebijakan"}</span>
-                </Button>
-              </div>
             </CardContent>
           </Card>
 

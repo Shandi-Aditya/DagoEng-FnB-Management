@@ -13,6 +13,10 @@ import {
   verifyUnifiedUserPassword,
   syncOrganizerCredentials,
 } from "@/lib/unified-account";
+import {
+  isCheckInStaffRole,
+  CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
+} from "@/lib/event-validation";
 import { getOrganizerByEmail, createOrganizer } from "@/lib/organizers";
 import { createOrganizerSession } from "@/lib/organizer-activation";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
@@ -97,6 +101,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 3b. Role Restriction Check: CHECKIN_STAFF is strictly forbidden from creating/submitting events
+    const normalizedEmail = (body.organizerEmail || "").trim().toLowerCase();
+    const existingAuth = await getRequestAuthUser(req);
+    if (existingAuth.isAuthenticated && isCheckInStaffRole(existingAuth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
+        },
+        { status: 403 }
+      );
+    }
+
+    const existingUser = findUnifiedUserByEmail(normalizedEmail);
+    if (existingUser && isCheckInStaffRole(existingUser.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
+        },
+        { status: 403 }
+      );
+    }
+
     // 4. Validate
     const validation = validateEventSubmission(body);
     if (!validation.valid) {
@@ -111,13 +139,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Decide whose account this submission belongs to before anything is stored.
-    const normalizedEmail = body.organizerEmail.trim().toLowerCase();
     const organizerName = body.organizerName.trim();
     const organizerPhone = body.organizerPhone.trim();
     const submittedPassword = body.password?.trim() || "";
 
-    const existingAuth = await getRequestAuthUser(req);
-    const existingUser = findUnifiedUserByEmail(normalizedEmail);
     const passwordMatches =
       Boolean(existingUser && submittedPassword) &&
       (await verifyUnifiedUserPassword(normalizedEmail, submittedPassword)).success;

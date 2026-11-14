@@ -144,12 +144,21 @@ export function validateSubmissionForm(form: SubmissionForm, options: { needsPas
     errors.endDate = "Waktu selesai tidak boleh sebelum waktu mulai.";
   }
   if (form.location.trim().length < 3) errors.location = "Isi lokasi event.";
-  if (!(form.maxCapacity > 0)) errors.maxCapacity = "Kapasitas harus lebih dari 0.";
+  const capacityNum = Number(form.maxCapacity);
+  if (!Number.isSafeInteger(capacityNum) || capacityNum < 1 || capacityNum > 1000) {
+    errors.maxCapacity = "Kapasitas harus berupa bilangan bulat antara 1 dan 1.000 peserta.";
+  }
   if (form.isPaid) {
-    if (!(form.price > 0)) errors.price = "Harga tiket harus lebih dari Rp 0.";
-    if (form.proposedOrganizerPercent < 0 || form.proposedOrganizerPercent > 100) {
-      errors.proposedOrganizerPercent = "Isi antara 0 dan 100.";
+    const priceNum = Number(form.price);
+    if (!Number.isSafeInteger(priceNum) || priceNum <= 0) {
+      errors.price = "Harga tiket harus berupa bilangan bulat rupiah lebih dari Rp 0.";
     }
+    const orgShareNum = Number(form.proposedOrganizerPercent);
+    if (!Number.isSafeInteger(orgShareNum) || orgShareNum < 50 || orgShareNum > 100) {
+      errors.proposedOrganizerPercent = "Hak komunitas harus berupa bilangan bulat antara 50% dan 100% (komisi platform maksimal 50%).";
+    }
+  } else if (Number(form.price) !== 0) {
+    errors.price = "Harga tiket harus Rp 0 untuk event gratis.";
   }
   return errors;
 }
