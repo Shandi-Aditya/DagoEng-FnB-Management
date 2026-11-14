@@ -47,7 +47,7 @@ export function EventPaymentGuideDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-6">
+      <DialogContent data-unit="event" className="max-w-md max-h-[90vh] overflow-y-auto p-6">
         <DialogHeader>
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="text-base font-medium">
@@ -129,7 +129,7 @@ export function EventPaymentGuideDialog({
             {ticket.guestToken && (
               <Button
                 variant="default"
-                size="sm"
+                size="lg"
                 render={<Link href={`/events/tickets/${ticket.guestToken}`} />}
                 nativeButton={false}
                 className="w-full"
@@ -141,7 +141,7 @@ export function EventPaymentGuideDialog({
 
             <Button
               variant="outline"
-              size="sm"
+              size="lg"
               onClick={onViewTicket}
               className="w-full"
             >
@@ -154,7 +154,7 @@ export function EventPaymentGuideDialog({
         <DialogFooter className="pt-2">
           <Button
             variant="outline"
-            size="sm"
+            size="lg"
             onClick={() => onOpenChange(false)}
           >
             Tutup
