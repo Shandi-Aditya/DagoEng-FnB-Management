@@ -14,6 +14,7 @@ import {
   bookingCheckInStatusLabel,
   bookingPaymentStatusLabel,
   emptyCoworkingMessage,
+  isSpaceAvailableNow,
 } from "@/features/coworking/coworking-domain";
 import type {
   CoworkingSpaceItem,
@@ -254,6 +255,25 @@ describe("coworking-domain", () => {
     expect(filterCoworkingBookings(mockBookings, "ALL", "private pod")).toHaveLength(1);
     expect(filterCoworkingBookings(mockBookings, "RESERVED", "budi")).toHaveLength(0);
     expect(mockBookings).toHaveLength(2);
+  });
+
+  it("identifies space availability accurately considering status and active sessions", () => {
+    const availableSpace: CoworkingSpaceItem = { ...mockSpaces[0], status: "AVAILABLE" };
+    const occupiedSpace: CoworkingSpaceItem = { ...mockSpaces[1], status: "OCCUPIED" };
+    const spaceWithPhantomSession: CoworkingSpaceItem = {
+      ...mockSpaces[0],
+      status: "AVAILABLE",
+      currentSession: {
+        guestName: "Active Guest",
+        checkInTime: "11:00 WITA",
+        endTime: "13:00 WITA",
+        bookingCode: "CWK-999",
+      },
+    };
+
+    expect(isSpaceAvailableNow(availableSpace)).toBe(true);
+    expect(isSpaceAvailableNow(occupiedSpace)).toBe(false);
+    expect(isSpaceAvailableNow(spaceWithPhantomSession)).toBe(false);
   });
 });
 

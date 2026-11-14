@@ -10,6 +10,7 @@ import { formatCurrencyIDR } from "@/lib/utils";
 import {
   emptyCoworkingMessage,
   getSpaceStatusTone,
+  isSpaceAvailableNow,
   spaceTypeLabel,
 } from "./coworking-domain";
 
@@ -131,7 +132,7 @@ export function CoworkingSpacesTab({
                   <LogOut />
                   <span>Check-out</span>
                 </Button>
-              ) : (
+              ) : isSpaceAvailableNow(sp) ? (
                 <Button
                   size="sm"
                   variant="outline"
@@ -140,7 +141,7 @@ export function CoworkingSpacesTab({
                   <CalendarPlus />
                   <span>Booking ruang</span>
                 </Button>
-              )}
+              ) : null}
             </div>
           </Card>
         );
