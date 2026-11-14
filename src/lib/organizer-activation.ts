@@ -531,7 +531,7 @@ export async function verifyOrganizerCredentials(
       };
     }
   } else if (dbUser && dbUser.passwordHash) {
-    const match = (await bcrypt.compare(password, dbUser.passwordHash)) || password === "Password123!" || password === "demo";
+    const match = await bcrypt.compare(password, dbUser.passwordHash);
     if (match) {
       if (!dbUser.isActive) {
         return {
