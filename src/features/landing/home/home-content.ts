@@ -15,6 +15,10 @@ export const HOURS = "Buka setiap hari, 08.00 sampai 22.00 WITA";
 export const ADDRESS_SHORT = "Jl. Teleng No. 1, Banyuasri";
 export const ADDRESS = CONTACT.address;
 export const EMAIL = CONTACT.email;
+export const INSTAGRAM = {
+  handle: CONTACT.instagram.label,
+  url: CONTACT.instagram.href,
+};
 export const MAP_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CONTACT.address)}`;
 
 export const WORKSPACES: readonly { name: string; line: string; price: string }[] = [
@@ -42,7 +46,13 @@ export const WORK_FEATURES: readonly string[] = [
   "Pesan dari ponsel",
 ];
 
-export const FOOD_FEATURES: readonly string[] = ["Menu QR", "Pesan dari meja", "Empat dapur mitra", "Struk digital", "Poin member"];
+export const FOOD_FEATURES: readonly string[] = [
+  "Sistem POS",
+  "Menu digital",
+  "4 mitra aktif",
+  "Struk digital",
+  "Poin member",
+];
 
 export const EVENT_FEATURES: readonly string[] = ["Workshop", "Meetup", "Tiket online", "Check-in QR", "Ajukan event"];
 
@@ -89,4 +99,14 @@ export const FOOD_PHOTO: LibraryPhoto = {
   alt: "Espresso mengalir dari mesin ke dua gelas",
   wanted: "Bar Kopi Senja atau satu hidangan dari dapur mitra, difoto dekat",
   credit: { author: "Shixart1985", href: "https://commons.wikimedia.org/wiki/File:Espresso_coffee_pouring_from_retro_espresso_machine.jpg", license: "CC BY 2.0" },
+};
+
+export const EVENT_PHOTO: LibraryPhoto = {
+  src: "/images/events/sunny-go-happy-hours.jpg",
+  srcSet: "/images/events/sunny-go-happy-hours.jpg",
+  width: 1200,
+  height: 800,
+  alt: "Peserta event komunitas di Dago Creative Hub",
+  wanted: "Suasana workshop atau kegiatan komunitas di Dago Creative Hub",
+  credit: { author: "Dago Creative Hub", href: "", license: "Dokumentasi internal" },
 };
