@@ -67,7 +67,7 @@ export function InventoryRecipesTab({ recipes, onOpenRecipeModal }: InventoryRec
               </ul>
             </CardContent>
             <CardFooter>
-              <Button size="sm" variant="outline" className="w-full" onClick={() => onOpenRecipeModal(recipe)}>
+              <Button size="lg" variant="outline" className="w-full" onClick={() => onOpenRecipeModal(recipe)}>
                 Atur resep
               </Button>
             </CardFooter>
