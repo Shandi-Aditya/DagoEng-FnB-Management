@@ -27,8 +27,6 @@ import {
   EMAIL,
   EVENT_FEATURES,
   FOOD_FEATURES,
-  FOOD_PHOTO,
-  HERO_PHOTO,
   HOURS,
   KITCHENS,
   MAP_URL,
@@ -403,32 +401,39 @@ const FOOTER_COLUMNS: readonly {
 ];
 
 function Footer() {
-  const photos = [HERO_PHOTO, FOOD_PHOTO];
   return (
-    <footer className="border-t">
+    <footer className="relative overflow-hidden border-t bg-muted/20 text-foreground pt-14 pb-4 sm:pt-20 sm:pb-8">
+      {/* 1. Multi-Column Navigation */}
       <div
-        className={`${SECTION} grid gap-10 py-14 md:grid-cols-[2fr_1fr_1fr_1fr]`}
+        className={`${SECTION} grid gap-10 pb-12 sm:pb-16 md:grid-cols-[2fr_1fr_1fr_1fr]`}
       >
-        <div className="flex flex-col gap-3">
-          <Link href="/" className="flex items-center gap-2 font-medium">
-            <Image src="/logo-dagoeng.svg" alt="" width={20} height={26} />
+        <div className="flex flex-col gap-4">
+          <Link href="/" className="flex items-center gap-2.5 font-semibold text-lg tracking-tight">
+            <Image src="/logo-dagoeng.svg" alt="DagoEng Logo" width={22} height={28} />
             Dago Creative Hub
           </Link>
-          <p className="max-w-xs text-sm text-muted-foreground">{ADDRESS}</p>
+          <p className="max-w-xs text-sm text-muted-foreground leading-relaxed">
+            {ADDRESS}
+          </p>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Clock className="size-3.5 text-unit-coworking" />
+            <span>{HOURS}</span>
+          </div>
         </div>
+
         {FOOTER_COLUMNS.map((column) => (
           <nav
             key={column.title}
             aria-labelledby={`foot-${column.title}`}
             className="flex flex-col gap-3"
           >
-            <h2 id={`foot-${column.title}`} className="text-sm font-medium">
+            <h2 id={`foot-${column.title}`} className="text-sm font-semibold text-foreground">
               {column.title}
             </h2>
-            <ul className="flex flex-col gap-2 text-sm text-muted-foreground">
+            <ul className="flex flex-col gap-2.5 text-sm text-muted-foreground">
               {column.links.map((link) => (
                 <li key={link.href}>
-                  <Link href={link.href} className="hover:text-foreground">
+                  <Link href={link.href} className="transition-colors hover:text-foreground">
                     {link.label}
                   </Link>
                 </li>
@@ -437,32 +442,27 @@ function Footer() {
           </nav>
         ))}
       </div>
+
+      {/* 2. Divider */}
+      <div className={`${SECTION}`}>
+        <div className="border-t border-border/60" />
+      </div>
+
+      {/* 3. Bottom Copyright */}
       <div
-        className={`${SECTION} flex flex-col gap-2 border-t py-6 text-xs text-muted-foreground sm:flex-row sm:justify-between`}
+        className={`${SECTION} flex flex-col items-center justify-between gap-3 py-6 text-xs text-muted-foreground sm:flex-row`}
       >
-        <p>© 2026 Dago Creative Hub</p>
-        <p>
-          Foto:{" "}
-          {photos.map((photo, index) => (
-            <span key={photo.wanted}>
-              {photo.credit.href ? (
-                <a
-                  href={photo.credit.href}
-                  className="underline underline-offset-2"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  {photo.credit.author}
-                </a>
-              ) : (
-                <span>{photo.credit.author}</span>
-              )}{" "}
-              ({photo.credit.license}
-              {photo.credit.license.startsWith("CC") ? ", Wikimedia Commons" : ""})
-              {index < photos.length - 1 ? ", " : ""}
-            </span>
-          ))}
-        </p>
+        <p>© 2026 Dago Creative Hub. Seluruh hak cipta dilindungi.</p>
+      </div>
+
+      {/* 4. Giant Monumental Wordmark Watermark at the Bottom */}
+      <div
+        className="relative -mb-6 sm:-mb-10 md:-mb-16 flex select-none justify-center overflow-hidden pointer-events-none"
+        aria-hidden="true"
+      >
+        <span className="text-[17vw] font-semibold tracking-tighter leading-none text-foreground/[0.04] dark:text-foreground/[0.05] whitespace-nowrap">
+          DAGOENG
+        </span>
       </div>
     </footer>
   );
