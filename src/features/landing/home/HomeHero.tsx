@@ -13,6 +13,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
+import { AmbientHeroBackdrop } from "./AmbientCanvas";
 import {
   EventsPanel,
   FoodPanel,
@@ -91,7 +92,7 @@ function Hero3dBadge({ src, alt, unit, tilt }: Hero3dBadgeProps) {
     : "rotateX(12deg) rotateY(18deg) rotateZ(-15deg)";
 
   return (
-    <span className="inline-block [perspective:500px] shrink-0 align-middle">
+    <span className="inline-block [perspective:500px] shrink-0 align-middle ml-1.5 sm:ml-2.5 mr-0.5 sm:mr-1 -translate-y-0.5 sm:-translate-y-1">
       <span
         className={cn(
           // lint-ui-ignore
@@ -134,8 +135,8 @@ export function HomeHero() {
       <div
         className={`flex max-w-4xl flex-col items-center gap-6 text-center ${ENTER}`}
       >
-        <h1 className="text-4xl font-medium tracking-tight text-balance text-center sm:text-6xl">
-          <span className="inline-flex items-center gap-2 align-middle">
+        <h1 className="text-4xl font-medium tracking-tight text-balance text-center sm:text-6xl leading-[1.2] sm:leading-[1.2]">
+          <span className="whitespace-nowrap">
             <span className="text-unit-coworking">Kerja</span>
             <Hero3dBadge
               src="/kerjahero.svg"
@@ -144,7 +145,7 @@ export function HomeHero() {
               tilt="right"
             />
           </span>{" "}
-          <span className="inline-flex items-center gap-2 align-middle">
+          <span className="whitespace-nowrap">
             <span className="text-unit-fnb">makan</span>
             <Hero3dBadge
               src="/makanhero.svg"
@@ -154,7 +155,7 @@ export function HomeHero() {
             />
           </span>{" "}
           <span>dan ikuti </span>
-          <span className="inline-flex items-center gap-2 align-middle">
+          <span className="whitespace-nowrap">
             <span className="text-unit-event">kegiatan</span>
             <Hero3dBadge
               src="/kegiatanhero.svg"
@@ -166,8 +167,7 @@ export function HomeHero() {
           <span>di satu tempat</span>
         </h1>
         <p className="max-w-xl text-base text-pretty text-muted-foreground sm:text-lg">
-          Ruang kerja per jam, empat dapur mitra, dan event komunitas di
-          Singaraja.
+          Ruang kerja per jam, 4 mitra kuliner, dan event komunitas di Singaraja.
         </p>
         <div className="flex flex-col items-center gap-3 sm:flex-row">
           <Button
@@ -191,7 +191,7 @@ export function HomeHero() {
       <Tabs
         value={showcase}
         onValueChange={(value) => setShowcase(value as ShowcaseId)}
-        className={`w-full items-center gap-4 ${ENTER} delay-200`}
+        className={`w-full flex flex-col items-center gap-6 ${ENTER} delay-200`}
       >
         <TabsList className="h-auto flex-wrap justify-center gap-2 bg-transparent p-0">
           {SHOWCASE_TABS.map((tab) => (
@@ -201,18 +201,30 @@ export function HomeHero() {
             </TabsTrigger>
           ))}
         </TabsList>
-        <TabsContent value="work" className={`w-full ${SWAP}`}>
-          <WorkspacePanel priority className={STAGE} />
-        </TabsContent>
-        <TabsContent value="food" className={`w-full ${SWAP}`}>
-          <FoodPanel className={STAGE} />
-        </TabsContent>
-        <TabsContent value="events" className={`w-full ${SWAP}`}>
-          <EventsPanel className={STAGE} />
-        </TabsContent>
-        <TabsContent value="partners" className={`w-full ${SWAP}`}>
-          <PartnerPanel className={STAGE} />
-        </TabsContent>
+
+        {/* Ambient Gradient Canvas Frame with organic aurora shapes & unit-specific palette */}
+        <div className="relative w-full rounded-t-2xl sm:rounded-t-3xl rounded-b-none pt-5 px-5 pb-0 sm:pt-10 sm:px-10 sm:pb-0 lg:pt-14 lg:px-14 lg:pb-0 overflow-hidden">
+          <AmbientHeroBackdrop showcase={showcase} />
+
+          {/* Bottom dissolve overlay to page background for the ambient gradient sides */}
+          <div
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-36 sm:h-52 bg-gradient-to-t from-background from-15% via-background/80 via-55% to-transparent z-10"
+            aria-hidden="true"
+          />
+
+          <TabsContent value="work" className={`relative z-10 w-full m-0 ${SWAP}`}>
+            <WorkspacePanel priority withBottomDissolve className={STAGE} />
+          </TabsContent>
+          <TabsContent value="food" className={`relative z-10 w-full m-0 ${SWAP}`}>
+            <FoodPanel withBottomDissolve className={STAGE} />
+          </TabsContent>
+          <TabsContent value="events" className={`relative z-10 w-full m-0 ${SWAP}`}>
+            <EventsPanel withBottomDissolve noPhoto className={STAGE} />
+          </TabsContent>
+          <TabsContent value="partners" className={`relative z-10 w-full m-0 ${SWAP}`}>
+            <PartnerPanel withBottomDissolve className={STAGE} />
+          </TabsContent>
+        </div>
       </Tabs>
     </section>
   );

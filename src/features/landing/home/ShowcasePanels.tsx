@@ -14,7 +14,7 @@ import { useUpcomingEvents } from "@/features/landing/use-upcoming-events";
 import { cn } from "@/lib/utils";
 
 import { BrandRings } from "./BrandRings";
-import { FOOD_PHOTO, HERO_PHOTO, KITCHENS, PARTNER_ROLES, SAMPLE_PRICES, WORKSPACES, type LibraryPhoto } from "./home-content";
+import { EVENT_PHOTO, FOOD_PHOTO, HERO_PHOTO, KITCHENS, PARTNER_ROLES, SAMPLE_PRICES, WORKSPACES, type LibraryPhoto } from "./home-content";
 
 type StageTint = "event" | "loyalty";
 
@@ -30,6 +30,7 @@ interface PhotoStageProps {
   tint?: StageTint;
   sizes: string;
   priority?: boolean;
+  withBottomDissolve?: boolean;
   className?: string;
   children: React.ReactNode;
 }
@@ -39,65 +40,161 @@ interface PhotoStageProps {
  * Without a photo the stage takes a unit tint and the DagoEng letters, and the card sits in the middle.
  * The photo is a stand-in: data-slot and data-alt name what the hub's own picture should show.
  */
-export function PhotoStage({ photo, tint = "event", sizes, priority, className, children }: PhotoStageProps) {
+export function PhotoStage({
+  photo,
+  tint = "event",
+  sizes,
+  priority,
+  withBottomDissolve = false,
+  className,
+  children,
+}: PhotoStageProps) {
   return (
     <div
-      className={cn("relative isolate overflow-hidden rounded-2xl p-4 sm:p-8", photo ? "bg-muted" : TINT_CLASS[tint], className)}
+      className={cn(
+        "relative isolate overflow-hidden bg-background",
+        withBottomDissolve
+          ? "rounded-t-xl sm:rounded-t-2xl rounded-b-none p-3.5 sm:p-6 pb-8 sm:pb-12"
+          : "rounded-xl sm:rounded-2xl p-3.5 sm:p-6",
+        photo ? "bg-muted" : TINT_CLASS[tint],
+        className,
+      )}
       data-slot={photo ? "photo-stage" : undefined}
       data-alt={photo?.wanted}
     >
       {photo ? (
-        <Image src={photo.src} alt={photo.alt} fill sizes={sizes} priority={priority} className="-z-10 object-cover saturate-75" />
+        <Image
+          src={photo.src}
+          alt={photo.alt}
+          fill
+          sizes={sizes}
+          priority={priority}
+          className="-z-20 object-cover saturate-85"
+        />
       ) : (
         <>
-          <BrandRings className="absolute -top-16 -left-20 -z-10 h-[85%] opacity-30" />
-          <BrandRings className="absolute -right-16 -bottom-24 -z-10 hidden h-[70%] rotate-180 opacity-20 sm:block" />
+          <BrandRings className="absolute -top-16 -left-20 -z-20 h-[85%] opacity-30" />
+          <BrandRings className="absolute -right-16 -bottom-24 -z-20 hidden h-[70%] rotate-180 opacity-20 sm:block" />
         </>
       )}
-      <div className={cn("flex h-full", photo ? "items-end justify-end" : "items-center justify-center")}>{children}</div>
+
+      {/* Bottom dissolve overlay: active only when withBottomDissolve is requested (e.g. Hero showcase) */}
+      {withBottomDissolve && (
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-36 sm:h-52 bg-gradient-to-t from-background from-15% via-background/80 via-55% to-transparent -z-10"
+          aria-hidden="true"
+        />
+      )}
+
+      <div className={cn("relative z-10 flex h-full", photo ? "items-end justify-end" : "items-center justify-center")}>
+        {children}
+      </div>
     </div>
   );
 }
 
-function PriceList({ items }: { items: readonly { name: string; price: string }[] }) {
+function PriceList({
+  items,
+  compact = false,
+}: {
+  items: readonly { name: string; price: string }[];
+  compact?: boolean;
+}) {
   return (
-    <ul className="flex flex-col divide-y">
+    <ul className="flex flex-col divide-y divide-border/60">
       {items.map((item) => (
-        <li key={item.name} className="flex items-center justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
-          <span className="text-sm font-medium">{item.name}</span>
-          <span className="font-mono text-sm tabular-nums">{item.price}</span>
+        <li
+          key={item.name}
+          className={cn(
+            "flex items-center justify-between gap-3 first:pt-0 last:pb-0",
+            compact ? "py-1.5" : "py-2.5",
+          )}
+        >
+          <span className={cn("font-medium", compact ? "text-xs" : "text-sm")}>{item.name}</span>
+          <span className={cn("font-mono tabular-nums", compact ? "text-xs" : "text-sm")}>{item.price}</span>
         </li>
       ))}
     </ul>
   );
 }
 
-export function WorkspacePanel({ priority, className }: { priority?: boolean; className?: string }) {
+export function WorkspacePanel({
+  priority,
+  className,
+  compact = false,
+  withBottomDissolve,
+}: {
+  priority?: boolean;
+  className?: string;
+  compact?: boolean;
+  withBottomDissolve?: boolean;
+}) {
   return (
-    <PhotoStage photo={HERO_PHOTO} sizes="(min-width: 64rem) 1100px, 100vw" priority={priority} className={className}>
-      <Card className="w-full max-w-sm shadow-lg">
-        <CardHeader>
-          <CardTitle>Tarif ruang kerja</CardTitle>
-          <CardDescription>Per jam, dipesan dari ponsel</CardDescription>
+    <PhotoStage
+      photo={HERO_PHOTO}
+      sizes="(min-width: 64rem) 1100px, 100vw"
+      priority={priority}
+      withBottomDissolve={withBottomDissolve}
+      className={className}
+    >
+      <Card
+        className={cn(
+          "rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md",
+          compact
+            ? "w-full max-w-[17.5rem] sm:max-w-[19rem] py-2.5 px-3.5 gap-2"
+            : "w-full max-w-sm py-3 px-4 gap-2.5",
+        )}
+      >
+        <CardHeader className="p-0 gap-0.5">
+          <CardTitle className={cn(compact ? "text-sm font-semibold" : "text-base font-semibold")}>
+            Tarif ruang kerja
+          </CardTitle>
+          <CardDescription className="text-xs">
+            Per jam, dipesan dari ponsel
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <PriceList items={WORKSPACES} />
+        <CardContent className="p-0">
+          <PriceList items={WORKSPACES} compact={compact} />
         </CardContent>
       </Card>
     </PhotoStage>
   );
 }
 
-export function FoodPanel({ className }: { className?: string }) {
+export function FoodPanel({
+  className,
+  compact = false,
+  withBottomDissolve,
+}: {
+  className?: string;
+  compact?: boolean;
+  withBottomDissolve?: boolean;
+}) {
   return (
-    <PhotoStage photo={FOOD_PHOTO} sizes="(min-width: 64rem) 1100px, 100vw" className={className}>
-      <Card className="w-full max-w-sm shadow-lg">
-        <CardHeader>
-          <CardTitle>Empat dapur, satu meja</CardTitle>
-          <CardDescription>{KITCHENS.join(", ")}</CardDescription>
+    <PhotoStage
+      photo={FOOD_PHOTO}
+      sizes="(min-width: 64rem) 1100px, 100vw"
+      withBottomDissolve={withBottomDissolve}
+      className={className}
+    >
+      <Card
+        className={cn(
+          "rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md",
+          compact
+            ? "w-full max-w-[17.5rem] sm:max-w-[19rem] py-2.5 px-3.5 gap-2"
+            : "w-full max-w-sm py-3 px-4 gap-2.5",
+        )}
+      >
+        <CardHeader className="p-0 gap-0.5">
+          <CardTitle className={cn(compact ? "text-sm font-semibold" : "text-base font-semibold")}>
+            Menu mitra POS
+          </CardTitle>
+          <CardDescription className="truncate text-xs">
+            Pesan online, masuk ke kasir
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <PriceList items={SAMPLE_PRICES} />
+        <CardContent className="p-0">
+          <PriceList items={SAMPLE_PRICES} compact={compact} />
         </CardContent>
       </Card>
     </PhotoStage>
@@ -157,28 +254,64 @@ function EventList() {
   );
 }
 
-export function EventsPanel({ className }: { className?: string }) {
+export function EventsPanel({
+  className,
+  noPhoto = false,
+  withBottomDissolve,
+}: {
+  className?: string;
+  noPhoto?: boolean;
+  withBottomDissolve?: boolean;
+}) {
+  const card = (
+    <Card className="w-full max-w-xl rounded-2xl border border-border/60 bg-background/95 shadow-xl backdrop-blur-md">
+      <CardHeader>
+        <CardTitle>Event berikutnya</CardTitle>
+        <CardDescription>Langsung dari jadwal Dago Creative Hub</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <EventList />
+        <Button variant="outline" size="lg" render={<Link href="/events" />} nativeButton={false}>
+          Semua event
+        </Button>
+      </CardContent>
+    </Card>
+  );
+
+  if (noPhoto) {
+    return (
+      <div className={cn("relative flex items-center justify-center p-3 sm:p-6", className)}>
+        {card}
+      </div>
+    );
+  }
+
   return (
-    <PhotoStage sizes="100vw" className={className}>
-      <Card className="w-full max-w-xl shadow-lg">
-        <CardHeader>
-          <CardTitle>Event berikutnya</CardTitle>
-          <CardDescription>Langsung dari jadwal Dago Creative Hub</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <EventList />
-          <Button variant="outline" size="lg" render={<Link href="/events" />} nativeButton={false}>
-            Semua event
-          </Button>
-        </CardContent>
-      </Card>
+    <PhotoStage
+      photo={EVENT_PHOTO}
+      sizes="100vw"
+      withBottomDissolve={withBottomDissolve}
+      className={className}
+    >
+      {card}
     </PhotoStage>
   );
 }
 
-export function PartnerPanel({ className }: { className?: string }) {
+export function PartnerPanel({
+  className,
+  withBottomDissolve,
+}: {
+  className?: string;
+  withBottomDissolve?: boolean;
+}) {
   return (
-    <PhotoStage tint="loyalty" sizes="100vw" className={className}>
+    <PhotoStage
+      tint="loyalty"
+      sizes="100vw"
+      withBottomDissolve={withBottomDissolve}
+      className={className}
+    >
       <Card className="w-full max-w-xl shadow-lg">
         <CardHeader>
           <CardTitle>Satu sistem untuk semua yang bekerja di sini</CardTitle>

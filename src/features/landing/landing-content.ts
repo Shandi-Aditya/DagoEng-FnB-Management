@@ -88,7 +88,7 @@ export const CONTACT = {
   hours: "Setiap hari, 08:00–22:00 WITA",
   phone: "+62 811-2233-4455",
   email: "info@dagoeng.com",
-  instagram: { label: "@dagocreativehub", href: "https://instagram.com" },
+  instagram: { label: "@dagocreativehub", href: "https://www.instagram.com/dagocreativehub/" },
 } as const;
 
 export const FOOTER_LINKS: readonly { label: string; href: string }[] = [

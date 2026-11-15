@@ -28,12 +28,14 @@ import {
   EVENT_FEATURES,
   FOOD_FEATURES,
   HOURS,
+  INSTAGRAM,
   KITCHENS,
   MAP_URL,
   PARTNER_ROLES,
   WORK_FEATURES,
   type PartnerRoleId,
 } from "./home-content";
+import { AmbientUnitFrame, type UnitTheme } from "./AmbientCanvas";
 import { BrandRings } from "./BrandRings";
 import { HomeHero } from "./HomeHero";
 import { HomeNav } from "./HomeNav";
@@ -63,7 +65,7 @@ const SUMMARY: readonly {
     icon: <UtensilsCrossed />,
     tile: "bg-unit-fnb/15 text-unit-fnb",
     title: "Makan dan minum",
-    line: "Pesan dari meja lewat QR, langsung ke empat dapur mitra.",
+    line: "Pesan menu dari 4 mitra yang menggunakan sistem POS kami.",
   },
   {
     href: "#event",
@@ -140,7 +142,7 @@ function KitchenStrip() {
             id="kitchens-title"
             className="text-center text-sm text-muted-foreground"
           >
-            Empat dapur mitra memasak di Dago Creative Hub setiap hari
+            Empat mitra aktif menggunakan layanan POS di sistem ini
           </h2>
         </Reveal>
         <Reveal delay={100}>
@@ -166,6 +168,7 @@ function KitchenStrip() {
 
 interface FeatureSplitProps {
   id: string;
+  unit: UnitTheme;
   title: string;
   line: string;
   features: readonly string[];
@@ -175,6 +178,7 @@ interface FeatureSplitProps {
 
 function FeatureSplit({
   id,
+  unit,
   title,
   line,
   features,
@@ -210,7 +214,11 @@ function FeatureSplit({
           {action.label}
         </Button>
       </Reveal>
-      <Reveal delay={150}>{children}</Reveal>
+      <Reveal delay={150} className="relative isolate">
+        <AmbientUnitFrame unit={unit}>
+          {children}
+        </AmbientUnitFrame>
+      </Reveal>
     </section>
   );
 }
@@ -268,6 +276,26 @@ function PartnerRoles() {
   );
 }
 
+function InstagramIcon({ className = "size-4" }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  );
+}
+
 function Visit() {
   const facts: readonly {
     icon: React.ReactNode;
@@ -304,6 +332,20 @@ function Visit() {
         </a>
       ),
     },
+    {
+      icon: <InstagramIcon />,
+      title: "Instagram",
+      body: (
+        <a
+          href={INSTAGRAM.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-foreground underline underline-offset-4"
+        >
+          {INSTAGRAM.handle}
+        </a>
+      ),
+    },
   ];
 
   return (
@@ -320,7 +362,7 @@ function Visit() {
           Mampir ke Dago Creative Hub
         </h2>
       </Reveal>
-      <div className="grid w-full gap-8 md:grid-cols-3">
+      <div className="grid w-full gap-8 sm:grid-cols-2 lg:grid-cols-4">
         {facts.map((fact, index) => (
           <Reveal
             key={fact.title}
@@ -479,6 +521,7 @@ export function HomeLanding() {
         <KitchenStrip />
         <FeatureSplit
           id="kerja"
+          unit="work"
           title="Kerja nyaman, bayar per jam"
           line="Pilih ruang, pesan jamnya dari ponsel, lalu datang. Internet fiber dan air minum gratis di semua ruang."
           features={WORK_FEATURES}
@@ -487,25 +530,27 @@ export function HomeLanding() {
             label: "Pesan ruang kerja",
           }}
         >
-          <WorkspacePanel className={SPLIT_STAGE} />
+          <WorkspacePanel className={SPLIT_STAGE} compact />
         </FeatureSplit>
         <FeatureSplit
           id="makan"
-          title="Pesan dari meja, langsung ke dapur"
-          line="Pindai QR di meja, pilih dari empat dapur mitra, dan pesanan masuk ke dapur yang memasaknya."
+          unit="food"
+          title="Satu sistem POS untuk 4 mitra"
+          line="Empat mitra mengelola kasir dan menu di sistem ini. Pesan langsung, transaksi tercatat otomatis."
           features={FOOD_FEATURES}
           action={{ href: "/customer?tab=MENU", label: "Lihat menu" }}
         >
-          <FoodPanel className={SPLIT_STAGE} />
+          <FoodPanel className={SPLIT_STAGE} compact />
         </FeatureSplit>
         <FeatureSplit
           id="event"
+          unit="events"
           title="Ikut event, atau buat sendiri"
           line="Komunitas sekitar mengadakan workshop dan meetup di sini. Tiket dibeli online, check-in pakai QR."
           features={EVENT_FEATURES}
           action={{ href: "/events", label: "Lihat event" }}
         >
-          <EventsPanel className={SPLIT_STAGE} />
+          <EventsPanel className={SPLIT_STAGE} noPhoto />
         </FeatureSplit>
         <PartnerRoles />
         <Visit />
