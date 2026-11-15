@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Sparkles, Crown, Zap } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export type ProBadgeVariant = "pro" | "addon" | "enterprise";
 export type ProBadgeSize = "xs" | "sm" | "md";
@@ -18,37 +19,37 @@ export interface ProFeatureBadgeProps {
 
 const VARIANT_STYLES: Record<ProBadgeVariant, { container: string; icon: string }> = {
   pro: {
-    container: "bg-purple-50 text-purple-700 border-purple-200/90 hover:bg-purple-100/70",
-    icon: "text-purple-600",
+    container: "bg-warning/10 text-warning border-warning/20",
+    icon: "text-warning",
   },
   addon: {
-    container: "bg-amber-50 text-amber-800 border-amber-200/90 hover:bg-amber-100/70",
-    icon: "text-amber-700",
+    container: "bg-primary/10 text-primary border-primary/20",
+    icon: "text-primary",
   },
   enterprise: {
-    container: "bg-indigo-50 text-indigo-700 border-indigo-200/90 hover:bg-indigo-100/70",
-    icon: "text-indigo-600",
+    container: "bg-info/10 text-info border-info/20",
+    icon: "text-info",
   },
 };
 
 const SIZE_STYLES: Record<ProBadgeSize, { badge: string; icon: string }> = {
   xs: {
-    badge: "text-[9px] px-1.5 py-0.5 tracking-wider font-bold rounded-md",
-    icon: "w-2.5 h-2.5",
+    badge: "text-xs px-2 py-0.5 font-medium rounded-md",
+    icon: "size-3",
   },
   sm: {
-    badge: "text-[10px] px-2 py-0.5 tracking-wider font-bold rounded-lg",
-    icon: "w-3 h-3",
+    badge: "text-xs px-2.5 py-0.5 font-medium rounded-md",
+    icon: "size-3.5",
   },
   md: {
-    badge: "text-xs px-2.5 py-1 tracking-wider font-bold rounded-lg",
-    icon: "w-3.5 h-3.5",
+    badge: "text-xs px-3 py-1 font-medium rounded-lg",
+    icon: "size-4",
   },
 };
 
 /**
- * Reusable elegant badge for SaaS PRO / ADD-ON / ENTERPRISE features.
- * Designed with soft pastel palettes that remain non-intrusive in operational screens.
+ * Reusable badge for SaaS PRO / ADD-ON / ENTERPRISE features.
+ * Designed with semantic tokens that align with the design system.
  */
 export function ProFeatureBadge({
   label = "PRO",
@@ -59,31 +60,31 @@ export function ProFeatureBadge({
   onClick,
   title = "Fitur konsep premium SaaS DagoEng",
 }: ProFeatureBadgeProps) {
-  const styles = VARIANT_STYLES[variant];
-  const sizeStyles = SIZE_STYLES[size];
+  const styles = VARIANT_STYLES[variant] || VARIANT_STYLES.addon;
+  const sizeStyles = SIZE_STYLES[size] || SIZE_STYLES.xs;
 
-  const content = (
+  return (
     <span
       title={title}
       onClick={onClick}
-      className={`inline-flex items-center space-x-1 border transition-colors select-none ${
-        styles.container
-      } ${sizeStyles.badge} ${
-        onClick ? "cursor-pointer hover:shadow-2xs active:scale-95" : "cursor-default"
-      } ${className}`}
+      className={cn(
+        "inline-flex items-center gap-1.5 border select-none transition-colors",
+        styles.container,
+        sizeStyles.badge,
+        onClick && "cursor-pointer hover:bg-muted/80",
+        className
+      )}
     >
       {icon && (
         variant === "enterprise" ? (
-          <Crown className={`${sizeStyles.icon} ${styles.icon} shrink-0`} />
+          <Crown className={cn(sizeStyles.icon, styles.icon, "shrink-0")} />
         ) : variant === "addon" ? (
-          <Zap className={`${sizeStyles.icon} ${styles.icon} shrink-0`} />
+          <Zap className={cn(sizeStyles.icon, styles.icon, "shrink-0")} />
         ) : (
-          <Sparkles className={`${sizeStyles.icon} ${styles.icon} shrink-0`} />
+          <Sparkles className={cn(sizeStyles.icon, styles.icon, "shrink-0")} />
         )
       )}
-      <span className="uppercase">{label}</span>
+      <span>{label}</span>
     </span>
   );
-
-  return content;
 }

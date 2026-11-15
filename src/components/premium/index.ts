@@ -1,3 +1,4 @@
+export * from "./premium-domain";
 export { ProFeatureBadge } from "./ProFeatureBadge";
 export type { ProFeatureBadgeProps, ProBadgeVariant, ProBadgeSize } from "./ProFeatureBadge";
 
