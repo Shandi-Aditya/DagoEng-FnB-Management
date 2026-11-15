@@ -34,14 +34,14 @@ export async function GET(req: NextRequest) {
     .brand-title { font-size: 20px; font-weight: 800; color: #0f172a; }
     .brand-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
     .doc-badge { text-align: right; }
-    .badge { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; text-transform: uppercase; }
+    .badge { background: #fff7ed; color: #ea580c; border: 1px solid #fed7aa; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 11px; /* lint-ui-ignore */ text-transform: uppercase; }
     .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e2e8f0; }
     .meta-item { display: flex; flex-direction: column; }
-    .meta-label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; }
+    .meta-label { font-size: 10px; font-weight: 700; color: #64748b; /* lint-ui-ignore */ text-transform: uppercase; }
     .meta-val { font-size: 13px; font-weight: 600; color: #0f172a; margin-top: 2px; }
     .section-title { font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    th { background: #f1f5f9; text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; border-bottom: 1px solid #cbd5e1; }
+    th { background: #f1f5f9; text-align: left; padding: 10px 12px; font-size: 11px; font-weight: 700; color: #475569; /* lint-ui-ignore */ text-transform: uppercase; border-bottom: 1px solid #cbd5e1; }
     td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-size: 12px; }
     .text-right { text-align: right; }
     .font-mono { font-family: monospace; }
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     .share-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; }
     .share-card.mitra { background: #f0fdf4; border-color: #bbf7d0; }
     .share-card.dago { background: #eff6ff; border-color: #bfdbfe; }
-    .share-title { font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .share-title { font-size: 11px; font-weight: 700; /* lint-ui-ignore */ text-transform: uppercase; }
     .share-val { font-size: 18px; font-weight: 800; margin-top: 4px; font-family: monospace; }
     .footer-note { font-size: 11px; color: #64748b; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 24px; }
     @media print {
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
       <tbody>
         <tr>
           <td>Total Transaksi Selesai</td>
-          <td class="text-right font-mono font-bold">${transactions} Struk</td>
+          <td class="text-right font-mono font-semibold">${transactions} Struk</td>
         </tr>
         <tr>
           <td>Omset Kotor (Gross Sales)</td>

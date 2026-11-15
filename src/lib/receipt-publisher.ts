@@ -29,7 +29,7 @@ export const DEMO_OUTLETS: OutletItem[] = [
     address: "Jl. Teuku Umar No. 88, Denpasar",
     phone: "(0361) 889900",
     status: "COMING_SOON",
-    badgeLabel: "⏳ Segera Hadir (Ekspansi)",
+    badgeLabel: "Segera hadir (ekspansi)",
     isComingSoon: true,
   },
   {
@@ -39,7 +39,7 @@ export const DEMO_OUTLETS: OutletItem[] = [
     address: "Jl. Raya Ubud No. 12, Ubud",
     phone: "(0361) 776655",
     status: "COMING_SOON",
-    badgeLabel: "⏳ Segera Hadir (Ekspansi)",
+    badgeLabel: "Segera hadir (ekspansi)",
     isComingSoon: true,
   },
 ];

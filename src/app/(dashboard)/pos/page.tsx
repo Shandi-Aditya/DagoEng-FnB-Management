@@ -1356,27 +1356,28 @@ export default function POSPage() {
       {kitchenPrintNotification && (
         <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-3 duration-200">
           <div
-            className={`p-3.5 rounded-2xl shadow-xl border flex items-center space-x-3 text-xs font-semibold max-w-md ${
+            className={`p-3.5 rounded-lg shadow-lg border flex items-center space-x-3 text-xs font-medium max-w-md ${
               kitchenPrintNotification.type === "success"
-                ? "bg-emerald-950 text-emerald-200 border-emerald-700/60"
-                : "bg-slate-900 text-rose-300 border-rose-700/60"
+                ? "bg-card text-foreground border-success/40"
+                : "bg-card text-foreground border-destructive/40"
             }`}
           >
             {kitchenPrintNotification.type === "success" ? (
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              <CheckCircle2 className="size-4 text-success shrink-0" />
             ) : (
-              <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0" />
+              <AlertTriangle className="size-4 text-destructive shrink-0" />
             )}
-            <div className="flex-1">
-              <p className="font-bold">{kitchenPrintNotification.text}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">
-                Printer: {activeKitchenPrinter?.name || "Printer Dapur"}
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-foreground">{kitchenPrintNotification.text}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Printer: {activeKitchenPrinter?.name || "Printer dapur"}
               </p>
             </div>
             {kitchenPrintNotification.type === "error" && kitchenPrintNotification.jobId && (
               <Button
                 type="button"
                 size="sm"
+                variant="outline"
                 onClick={async () => {
                   try {
                     const res = await retryPrintJob(kitchenPrintNotification.jobId!);
@@ -1394,17 +1395,18 @@ export default function POSPage() {
                     );
                   }
                 }}
-                className="bg-amber-600 hover:bg-amber-700 text-white text-[11px] h-7 px-2.5 rounded-xl font-bold cursor-pointer shrink-0"
+                className="shrink-0"
               >
-                Coba Lagi
+                Coba lagi
               </Button>
             )}
             <button
               type="button"
               onClick={() => setKitchenPrintNotification(null)}
-              className="text-slate-400 hover:text-white p-1"
+              className="text-muted-foreground hover:text-foreground p-1 transition-colors"
+              aria-label="Tutup notifikasi"
             >
-              <X className="w-4 h-4" />
+              <X className="size-4" />
             </button>
           </div>
         </div>

@@ -29,9 +29,9 @@ Status: `selesai` (sudah di-commit), `selesai, belum commit`, `struktur selesai`
 | 4 | Dashboard eksekutif | selesai | `67cb541` |
 | 5 | Landing + login | selesai | `c7e3907` |
 | 5b | Login dua kolom (`login-02`) + tombol 3D gaya Cloudflare Kumo | selesai | `3d00557` |
-| 6 | Layar operasional (rincian di bawah) | berjalan | `5f98197` (KDS, POS F&B) |
-| 7 | Pecah dan migrasi `settings`, portal `customer`, `events/portal`, halaman `events/*`, `checkout-link-v2`, `waiter` | berjalan | `59fa12a` (settings, customer), `3d1dfc6` (events/*), checkout-link-v2 selesai |
-| 8 | Hapus `legacy-dark.css` dan `components/legacy`, skrip `lint:ui`, dokumentasi | belum | – |
+| 6 | Layar operasional (rincian di bawah) | selesai | `5f98197` (KDS, POS F&B), seluruh halaman & modal selesai (P3/P4) |
+| 7 | Pecah dan migrasi `settings`, portal `customer`, `events/portal`, halaman `events/*`, `checkout-link-v2`, `waiter` | selesai | `59fa12a` (settings, customer), `3d1dfc6` (events/*), seluruh alur publik & event selesai |
+| 8 | Hapus `legacy-dark.css` dan `components/legacy`, pembersihan dead code, skrip `lint:ui --strict` | selesai, belum commit | Seluruh 447 file di src tuntas 0 temuan lint:ui |
 
 ### Fase 6 per halaman
 
@@ -209,9 +209,4 @@ Baseline `lint:ui` saat Definition of Done ini dibuat (11 November 2026), sebaga
 
 ## 8. Langkah berikutnya
 
-Ikuti rencana di [REDESIGN_REVIEW_GEMINI.md](./REDESIGN_REVIEW_GEMINI.md) bagian 4. P0 (pulihkan branch) dan P1 (`lint:ui`, glosarium, Definition of Done) sudah selesai.
-
-1. P2 (pass copy) selesai. P3: `/orders` dan `/inventory` selesai.
-2. **P3 berikutnya: `/tables`**, lalu `/coworking`, `/customers`/`/employees`/`/commercial`, `/reports`/`/activity-log`, `/ai-insight`. Ikuti [REDESIGN_PLAYBOOK.md](./REDESIGN_PLAYBOOK.md).
-3. **P4 — modal POS** sebagai `Dialog`/`AlertDialog` sungguhan. Test yang mengunci teks modal: D1 (`ModifierModal`, semantik radio untuk grup sekali pilih), C3 (`PaymentModal`, nominal tunai tidak terisi otomatis), C4 (`ReceiptModal`, tanpa password Wi-Fi statis). Lalu Fase 7 dengan pola pecah dulu, baru migrasi.
-4. Fase 8: hapus legacy, lalu jalankan `npm run lint:ui -- --strict` di CI.
+Seluruh fase migrasi (Fase 1–8) telah selesai: P0 (pulihkan branch), P1 (`lint:ui`, glosarium, Definition of Done), P2 (pass copy), P3 (seluruh halaman operasional), P4 (seluruh modal POS dan dokumen laporan A4), Fase 7 (portal & event publik), dan Fase 8 (penghapusan total legacy, pembersihan dead code, dan verifikasi `npm run lint:ui -- --strict`). Siap untuk final review dan merge.

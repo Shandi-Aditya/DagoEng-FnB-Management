@@ -1,7 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "./legacy-dark.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -89,14 +88,6 @@
   --color-info-light: color-mix(in oklch, var(--info) 12%, var(--background));
   --color-success-light: color-mix(in oklch, var(--success) 12%, var(--background));
   --color-warning-light: color-mix(in oklch, var(--warning) 12%, var(--background));
-  --color-brand-sage: #3b7a57;
-  --color-brand-sageBright: #52b788;
-  --color-brand-sageHover: #2e6144;
-  --color-brand-olive: #556b2f;
-  --color-brand-green: #059669;
-  --color-brand-orange: var(--primary);
-  --color-brand-cyan: var(--primary);
-  --color-brand-yellow: var(--primary);
 
   --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
   --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.04), 0 1px 2px 0 rgb(0 0 0 / 0.02);
