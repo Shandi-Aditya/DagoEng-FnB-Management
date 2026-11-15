@@ -1,19 +1,28 @@
 "use client";
 
-import React, { useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import Image from "next/image";
-import { formatCurrencyIDR } from "@/lib/utils";
-import { CommercialLease } from "@/types/commercial";
-import {
-  X,
-  Printer,
-  ShieldCheck,
-  FileText,
-  Building2,
-  DollarSign,
-  Calendar,
-} from "lucide-react";
+import { Building2, FileText, Printer } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { StatusBadge } from "@/components/app/status-badge";
+import {
+  buildCommercialReportDocNumber,
+  buildCommercialReportSignatories,
+  computeCommercialReportPdfMetrics,
+  formatCommercialLeaseStatusLabel,
+  formatCommercialLeaseStatusTone,
+  formatCommercialReportPrintDate,
+} from "@/features/commercial/commercial-report-pdf-domain";
+import { formatCurrencyIDR } from "@/lib/utils";
+import type { CommercialLease } from "@/types/commercial";
 
 interface CommercialReportPDFModalProps {
   isOpen: boolean;
@@ -28,202 +37,328 @@ export function CommercialReportPDFModal({
   leases,
   outletName,
 }: CommercialReportPDFModalProps) {
-  const printContentRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const now = useMemo(() => new Date(), [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!isOpen) return null;
-
-  const totalAnnualValue = leases.reduce((sum, l) => sum + (l.monthlyRent * 12 || 0), 0);
-  const activeLeases = leases.filter((l) => l.status === "ACTIVE").length;
-  const totalDepositHeld = leases.reduce((sum, l) => sum + (l.depositAmount || 0), 0);
-  const totalPaidRevenue = leases.reduce(
-    (sum, l) => sum + l.paymentHistory.reduce((pSum, p) => pSum + (p.amount || 0), 0),
-    0
+  const metrics = useMemo(() => computeCommercialReportPdfMetrics(leases), [leases]);
+  const docNumber = useMemo(
+    () => buildCommercialReportDocNumber(now, leases.length),
+    [now, leases.length]
   );
+  const signatories = useMemo(
+    () => buildCommercialReportSignatories(outletName),
+    [outletName]
+  );
+  const printDate = useMemo(() => formatCommercialReportPrintDate(now), [now]);
 
-  const reportNumber = `COMM-REP-${new Date().getFullYear()}${(new Date().getMonth() + 1)
-    .toString()
-    .padStart(2, "0")}${new Date().getDate().toString().padStart(2, "0")}-${Math.floor(
-    100 + Math.random() * 900
-  )}`;
+  useEffect(() => {
+    if (isOpen) {
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = 0;
+        }
+      });
+    }
+  }, [isOpen]);
 
   const handlePrint = () => {
-    window.print();
+    const reportElement = document.getElementById("commercial-report-printable");
+    if (!reportElement) return;
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.left = "-9999px";
+    iframe.style.top = "0";
+    iframe.style.width = "210mm";
+    iframe.style.height = "297mm";
+    iframe.style.border = "none";
+    iframe.style.visibility = "hidden";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      return;
+    }
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html lang="id">
+        <head>
+          <meta charset="utf-8" />
+          <base href="${window.location.origin}/" />
+          <title>${docNumber}</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 8mm 10mm;
+            }
+            * {
+              box-sizing: border-box;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              color: #0f172a;
+              background: #ffffff;
+              font-size: 11px;
+              line-height: 1.4;
+            }
+            .font-mono {
+              font-family: 'DM Mono', monospace !important;
+            }
+            .tabular-nums {
+              font-variant-numeric: tabular-nums;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              table-layout: fixed;
+            }
+            th, td {
+              word-break: break-word;
+              overflow-wrap: break-word;
+            }
+            thead {
+              display: table-header-group !important;
+            }
+            tr {
+              break-inside: avoid !important;
+            }
+            .no-break {
+              break-inside: avoid !important;
+            }
+          </style>
+        </head>
+        <body>
+          ${reportElement.innerHTML}
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Gagal mencetak dokumen komersial:", err);
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 1000);
+      }
+    }, 400);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/80 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
-        {/* Header Control */}
-        <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold">
-              <FileText className="w-4 h-4" />
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="w-full sm:max-w-5xl md:max-w-6xl lg:max-w-7xl max-h-[88vh] h-[88vh] flex flex-col p-0 gap-0 overflow-hidden"
+      >
+        {/* Header Modal */}
+        <DialogHeader className="p-4 px-6 border-b border-border shrink-0 flex flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="size-9 rounded-lg border border-border bg-muted/30 flex items-center justify-center shrink-0">
+              <FileText className="size-4 text-foreground" />
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                <span>Dokumen PDF Laporan Kontrak Sewa Komersial & Tenant</span>
-                <span className="text-[10px] bg-purple-500/30 text-purple-300 px-2 py-0.5 rounded-full font-mono border border-purple-400/30">
-                  CONFIDENTIAL
-                </span>
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Laporan resmi manajemen lot sewa komersial, revenue sewa, dan status deposit DagoEng
-              </p>
+            <div className="min-w-0">
+              <DialogTitle className="text-sm font-medium text-foreground truncate">
+                Pratinjau laporan sewa komersial dan tenant
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground truncate">
+                Rekapitulasi kontrak lot tenant, realisasi sewa, dan status deposit
+              </DialogDescription>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Button
-              size="sm"
-              onClick={handlePrint}
-              className="bg-brand-orange hover:bg-orange-600 text-white text-xs font-bold space-x-1.5 shadow-sm"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Cetak / Simpan PDF</span>
-            </Button>
-            <button
+              type="button"
+              variant="outline"
+              size="lg"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             >
-              <X className="w-5 h-5" />
-            </button>
+              Tutup
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="lg"
+              onClick={handlePrint}
+            >
+              <Printer className="size-4" />
+              <span>Cetak laporan</span>
+            </Button>
           </div>
-        </div>
+        </DialogHeader>
 
-        {/* Printable Canvas */}
-        <div className="p-8 overflow-y-auto flex-1 bg-slate-100/60 print:p-0 print:bg-white">
+        {/* Scrollable Container */}
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-4 sm:p-6 bg-muted/20 flex flex-col items-center min-w-0"
+        >
           <div
-            ref={printContentRef}
-            className="max-w-3xl mx-auto bg-white p-8 rounded-xl shadow-sm border border-slate-200 text-slate-900 print:border-0 print:shadow-none print:p-0"
+            id="commercial-report-printable"
+            className="w-full max-w-5xl min-w-0 bg-card p-6 sm:p-8 rounded-lg border border-border shadow-xs text-card-foreground"
           >
-            {/* Letterhead */}
-            <div className="flex items-start justify-between border-b-2 border-slate-900 pb-5">
-              <div className="flex items-center space-x-3.5">
-                <Image
-                  src="/icons/icon-192x192.png"
-                  alt="Dago Creative Hub"
-                  width={56}
-                  height={56}
-                  className="rounded-xl shadow-xs"
-                />
-                <div>
-                  <h1 className="text-xl font-black tracking-tight text-slate-950 uppercase">
-                    DAGO CREATIVE HUB
+            {/* Kop Surat Dokumen */}
+            <div className="flex items-start justify-between pb-5 border-b border-border gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="size-12 relative shrink-0">
+                  <Image
+                    src="/logo-dago.png"
+                    alt="Logo DagoEng"
+                    width={48}
+                    height={48}
+                    className="object-contain"
+                  />
+                </div>
+                <div className="min-w-0">
+                  <h1 className="text-base font-semibold text-foreground tracking-tight">
+                    DagoEng Creative Hub
                   </h1>
-                  <p className="text-xs text-slate-600 font-medium">
-                    Commercial Property & Retail Lot Management Division
+                  <p className="text-xs text-muted-foreground">
+                    Divisi Pengelolaan Properti Komersial & Ruang Usaha Tenant
                   </p>
-                  <p className="text-[10px] text-slate-500">
-                    Jl. Dago No. 128, Bandung • Singaraja & Jimbaran Outlets
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Outlet: {outletName || "Semua outlet"} • Administrasi kontrak sewa
                   </p>
                 </div>
               </div>
-              <div className="text-right">
-                <span className="inline-block px-2.5 py-1 rounded bg-purple-100 text-purple-800 text-[10px] font-mono font-bold tracking-wider uppercase mb-1">
-                  LAPORAN KOMERSIAL
+
+              <div className="text-right shrink-0">
+                <span className="text-xs text-muted-foreground block">
+                  Nomor dokumen
                 </span>
-                <p className="text-xs font-mono font-semibold text-slate-700">{reportNumber}</p>
-                <p className="text-[10px] text-slate-500">
-                  Tanggal: {new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
-                </p>
+                <span className="text-xs font-mono font-medium text-foreground block">
+                  {docNumber}
+                </span>
+                <span className="text-xs text-muted-foreground block mt-0.5">
+                  Tanggal: {printDate}
+                </span>
               </div>
             </div>
 
-            {/* Metadata Summary Box */}
-            <div className="my-5 p-4 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div>
-                <span className="text-[10px] font-semibold text-slate-500 block uppercase">Outlet Unit</span>
-                <span className="font-bold text-slate-900">{outletName || "Semua Outlet"}</span>
+            {/* Judul Laporan */}
+            <div className="text-center py-4 border-b border-border">
+              <h2 className="text-sm font-semibold text-foreground">
+                Laporan Kontrak Sewa Tenant dan Okupansi Lot Komersial
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Rekapitulasi masa berlaku sewa, realisasi pendapatan lot, dan saldo deposit jaminan
+              </p>
+            </div>
+
+            {/* Ringkasan Eksekutif KPI */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-5">
+              <div className="p-3 bg-muted/30 rounded-lg border border-border text-center">
+                <span className="text-xs text-muted-foreground block">
+                  Kontrak aktif & okupansi
+                </span>
+                <span className="text-sm font-mono font-semibold text-foreground mt-0.5 block tabular-nums">
+                  {metrics.activeLeases} / {metrics.totalLeases} lot ({metrics.occupancyRatePercent}%)
+                </span>
               </div>
-              <div>
-                <span className="text-[10px] font-semibold text-slate-500 block uppercase">Kontrak Aktif</span>
-                <span className="font-bold text-emerald-600 font-mono">{activeLeases} / {leases.length} Lot</span>
+              <div className="p-3 bg-muted/30 rounded-lg border border-border text-center">
+                <span className="text-xs text-muted-foreground block">
+                  Total nilai sewa tahunan
+                </span>
+                <span className="text-sm font-mono font-semibold text-foreground mt-0.5 block tabular-nums">
+                  {formatCurrencyIDR(metrics.totalAnnualValue)}
+                </span>
               </div>
-              <div>
-                <span className="text-[10px] font-semibold text-slate-500 block uppercase">Total Nilai Sewa/Thn</span>
-                <span className="font-bold text-purple-700 font-mono">{formatCurrencyIDR(totalAnnualValue)}</span>
+              <div className="p-3 bg-muted/30 rounded-lg border border-border text-center">
+                <span className="text-xs text-muted-foreground block">
+                  Realisasi penerimaan sewa
+                </span>
+                <span className="text-sm font-mono font-semibold text-foreground mt-0.5 block tabular-nums">
+                  {formatCurrencyIDR(metrics.totalPaidRevenue)}
+                </span>
               </div>
-              <div>
-                <span className="text-[10px] font-semibold text-slate-500 block uppercase">Deposit Tertahan</span>
-                <span className="font-bold text-slate-800 font-mono">{formatCurrencyIDR(totalDepositHeld)}</span>
+              <div className="p-3 bg-muted/30 rounded-lg border border-border text-center">
+                <span className="text-xs text-muted-foreground block">
+                  Total deposit tertahan
+                </span>
+                <span className="text-sm font-mono font-semibold text-foreground mt-0.5 block tabular-nums">
+                  {formatCurrencyIDR(metrics.totalDepositHeld)}
+                </span>
               </div>
             </div>
 
-            {/* Key Metrics Cards */}
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-lg text-center">
-                <p className="text-[10px] font-bold text-purple-900 uppercase">Realisasi Penerimaan</p>
-                <p className="text-base font-black text-purple-700 font-mono mt-0.5">
-                  {formatCurrencyIDR(totalPaidRevenue)}
-                </p>
-              </div>
-              <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg text-center">
-                <p className="text-[10px] font-bold text-emerald-900 uppercase">Tingkat Okupansi Tenant</p>
-                <p className="text-base font-black text-emerald-700 font-mono mt-0.5">
-                  {leases.length > 0 ? Math.round((activeLeases / leases.length) * 100) : 0}%
-                </p>
-              </div>
-              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-lg text-center">
-                <p className="text-[10px] font-bold text-blue-900 uppercase">Rata-rata Sewa/Bulan</p>
-                <p className="text-base font-black text-blue-700 font-mono mt-0.5">
-                  {leases.length > 0 ? formatCurrencyIDR(Math.round(totalAnnualValue / 12 / leases.length)) : "Rp 0"}
-                </p>
-              </div>
-            </div>
-
-            {/* Leases Table */}
-            <div className="mb-6">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2.5 pb-1 border-b border-slate-200">
-                Daftar Rincian Kontrak Tenant & Komersial
-              </h4>
-              <table className="w-full text-[11px] text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 text-slate-700 border-b border-slate-300 font-bold">
-                    <th className="p-2">No. Kontrak</th>
-                    <th className="p-2">Tenant / Brand</th>
-                    <th className="p-2">Lot & Luas</th>
-                    <th className="p-2">Periode Sewa</th>
-                    <th className="p-2 text-right">Biaya Sewa/Bln</th>
-                    <th className="p-2 text-center">Status</th>
+            {/* Tabel Data Kontrak Sewa */}
+            <div className="border border-border rounded-lg overflow-x-auto my-4 w-full">
+              <table className="w-full text-left text-xs table-fixed min-w-[760px] sm:min-w-0">
+                <colgroup>
+                  <col style={{ width: "15%" }} />
+                  <col style={{ width: "21%" }} />
+                  <col style={{ width: "16%" }} />
+                  <col style={{ width: "18%" }} />
+                  <col style={{ width: "16%" }} />
+                  <col style={{ width: "14%" }} />
+                </colgroup>
+                <thead className="bg-muted/40 border-b border-border text-foreground font-medium">
+                  <tr>
+                    <th className="p-2.5">No. kontrak</th>
+                    <th className="p-2.5">Tenant / brand</th>
+                    <th className="p-2.5">Unit lot & luas</th>
+                    <th className="p-2.5">Periode sewa</th>
+                    <th className="p-2.5 text-right">Biaya sewa / bln</th>
+                    <th className="p-2.5 text-center">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 text-slate-700">
+                <tbody className="divide-y divide-border text-muted-foreground">
                   {leases.map((l) => (
-                    <tr key={l.id} className="hover:bg-slate-50/50">
-                      <td className="p-2 font-mono font-semibold text-slate-900">{l.leaseNumber}</td>
-                      <td className="p-2">
-                        <div className="font-bold text-slate-900">{l.tenantName}</div>
-                        <div className="text-[10px] text-slate-500">{l.tenantContact}</div>
+                    <tr key={l.id} className="hover:bg-muted/20">
+                      <td className="p-2.5 font-mono text-xs text-foreground font-medium break-words">
+                        {l.leaseNumber}
                       </td>
-                      <td className="p-2">
-                        <span className="font-semibold text-slate-800">{l.unitCode}</span>
-                        <span className="text-[10px] text-slate-500 block">({l.areaSquareMeters} m²)</span>
+                      <td className="p-2.5 break-words">
+                        <span className="text-foreground font-medium block">
+                          {l.tenantName}
+                        </span>
+                        <span className="text-muted-foreground text-xs block">
+                          {l.tenantContact}
+                        </span>
                       </td>
-                      <td className="p-2 text-[10px] font-mono">
+                      <td className="p-2.5 break-words">
+                        <span className="text-foreground font-medium block">
+                          {l.unitCode}
+                        </span>
+                        <span className="text-muted-foreground text-xs block">
+                          {l.areaSquareMeters} m²
+                        </span>
+                      </td>
+                      <td className="p-2.5 font-mono text-xs text-foreground break-words">
                         {l.startDate} s/d {l.endDate}
                       </td>
-                      <td className="p-2 text-right font-mono font-bold text-slate-900">
+                      <td className="p-2.5 text-right font-mono tabular-nums text-foreground font-medium">
                         {formatCurrencyIDR(l.monthlyRent)}
                       </td>
-                      <td className="p-2 text-center">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            l.status === "ACTIVE"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : l.status === "EXPIRING_SOON"
-                              ? "bg-amber-100 text-amber-800"
-                              : "bg-slate-100 text-slate-800"
-                          }`}
+                      <td className="p-2.5 text-center">
+                        <StatusBadge
+                          status={formatCommercialLeaseStatusTone(l.status)}
+                          className="max-w-full inline-flex align-middle text-xs"
                         >
-                          {l.status}
-                        </span>
+                          {formatCommercialLeaseStatusLabel(l.status)}
+                        </StatusBadge>
                       </td>
                     </tr>
                   ))}
                   {leases.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="text-center py-6 text-slate-400">
-                        Belum ada data kontrak komersial terdaftar
+                      <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                        Belum ada data kontrak komersial yang terdaftar untuk dicetak.
                       </td>
                     </tr>
                   )}
@@ -231,30 +366,43 @@ export function CommercialReportPDFModal({
               </table>
             </div>
 
-            {/* Official Footer Certification & Digital Stamp */}
-            <div className="pt-6 border-t border-slate-200 mt-6 grid grid-cols-2 gap-6 text-xs">
-              <div className="p-3 rounded-lg bg-purple-50/60 border border-purple-200 text-[10px] text-purple-900 flex items-start space-x-2">
-                <ShieldCheck className="w-4 h-4 text-purple-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold">Verifikasi Legalitas & Keabsahan Dokumen</p>
-                  <p className="text-slate-600 mt-0.5">
-                    Laporan ini dihasilkan secara otomatis oleh DagoEng ERP Multi-Outlet Management System. Data sewa, deposit, dan tagihan telah diverifikasi secara digital.
-                  </p>
-                </div>
+            {/* Lembar Otorisasi & Tanda Tangan */}
+            <div className="mt-8 pt-5 border-t border-border no-break">
+              <div className="grid grid-cols-3 gap-6 text-center text-xs">
+                {signatories.map((sig, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <span className="text-muted-foreground block">
+                      {sig.role}
+                    </span>
+                    <span className="text-muted-foreground text-xs block">
+                      {sig.department}
+                    </span>
+                    <div className="h-14" />
+                    <span className="font-mono text-xs text-foreground block font-medium">
+                      ( ........................................ )
+                    </span>
+                    <span className="text-muted-foreground text-xs block">
+                      {sig.outlet}
+                    </span>
+                  </div>
+                ))}
               </div>
 
-              <div className="text-right flex flex-col justify-end">
-                <p className="text-[10px] text-slate-500">Mengetahui & Menyetujui,</p>
-                <p className="text-xs font-bold text-slate-900 mt-1">Commercial & Property Director</p>
-                <div className="h-10"></div>
-                <p className="text-[10px] font-mono font-bold text-slate-700 underline uppercase">
-                  ( Manajemen Dago Creative Hub )
-                </p>
+              <div className="mt-6 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Building2 className="size-3.5 text-muted-foreground" />
+                  <span>
+                    Dokumen sewa komersial resmi DagoEng Property Management
+                  </span>
+                </div>
+                <span className="font-mono tabular-nums">
+                  Halaman 1 dari 1 • Dicetak pada {printDate}
+                </span>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,15 +1,24 @@
 "use client";
 
-import React, { useState } from "react";
-import { Sparkles, ArrowRight, CheckCircle2, X } from "lucide-react";
+import { useState } from "react";
+import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
-  CardDescription,
-  CardContent,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface AIInsightCardProps {
   insightTitle: string;
@@ -41,15 +50,15 @@ export function AIInsightCard({
   return (
     <>
       <Card className="shadow-xs">
-        <CardHeader className="pb-3 border-b">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-foreground">
-              <div className="p-1 rounded-md bg-primary/10 text-primary">
-                <Sparkles className="size-4" />
+        <CardHeader className="pb-3 border-b border-border">
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2 text-foreground">
+              <div className="size-6 rounded-md bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <Sparkles className="size-3.5" />
               </div>
-              <span>Insight Bisnis AI</span>
+              <span>Insight bisnis</span>
             </CardTitle>
-            <span className="text-[10px] font-medium bg-primary text-primary-foreground px-2.5 py-0.5 rounded-full">
+            <span className="text-xs font-medium text-muted-foreground border border-border bg-muted/30 px-2 py-0.5 rounded-md shrink-0">
               Berbasis data
             </span>
           </div>
@@ -59,38 +68,38 @@ export function AIInsightCard({
         </CardHeader>
 
         <CardContent className="pt-3.5 space-y-3 text-xs">
-          {/* INSIGHT */}
+          {/* Temuan */}
           <div className="flex items-start gap-2">
-            <span className="font-semibold min-w-[100px] text-[11px] text-primary">
+            <span className="font-medium min-w-[96px] text-xs text-primary shrink-0">
               Temuan
             </span>
             <p className="text-foreground leading-relaxed">{insight}</p>
           </div>
 
-          {/* EVIDENCE */}
+          {/* Bukti data */}
           <div className="flex items-start gap-2">
-            <span className="font-semibold min-w-[100px] text-[11px] text-info">
+            <span className="font-medium min-w-[96px] text-xs text-info shrink-0">
               Bukti data
             </span>
             <p className="text-muted-foreground leading-relaxed">{evidence}</p>
           </div>
 
-          {/* RECOMMENDATION */}
+          {/* Rekomendasi */}
           <div className="flex items-start gap-2">
-            <span className="font-semibold min-w-[100px] text-[11px] text-success">
+            <span className="font-medium min-w-[96px] text-xs text-success shrink-0">
               Rekomendasi
             </span>
             <p className="text-foreground leading-relaxed">{recommendation}</p>
           </div>
 
-          {/* ACTION BUTTON */}
+          {/* Tombol aksi */}
           {actionText && (
             <div className="pt-2 flex items-center justify-end">
               <Button
                 type="button"
-                size="sm"
+                variant="default"
+                size="default"
                 onClick={handleActionClick}
-                className="text-xs h-8 gap-1.5 font-medium"
               >
                 <span>{actionText}</span>
                 <ArrowRight className="size-3.5" />
@@ -100,48 +109,50 @@ export function AIInsightCard({
         </CardContent>
       </Card>
 
-      {/* Action Execution Feedback Modal */}
-      {isSuccessModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-card rounded-2xl shadow-xl w-full max-w-md p-5 border space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="size-5 text-success" />
-                <h4 className="text-sm font-semibold text-foreground">Aksi AI dijalankan</h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsSuccessModalOpen(false)}
-                className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
-              >
-                <X className="size-4" />
-              </button>
+      {/* Action Execution Feedback Dialog */}
+      <Dialog open={isSuccessModalOpen} onOpenChange={setIsSuccessModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="size-4 text-success shrink-0" />
+              <DialogTitle className="text-base font-medium text-foreground">
+                Aksi rekomendasi disiapkan
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Draft tindakan operasional telah dibuat untuk ditindaklanjuti.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 text-xs text-muted-foreground py-2">
+            <div className="space-y-1">
+              <span className="text-muted-foreground block">Aksi terpilih</span>
+              <span className="text-foreground font-medium block">
+                {actionText}
+              </span>
             </div>
 
-            <div className="space-y-2 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">
-                Aksi: <span className="text-primary">{actionText}</span>
-              </p>
-              <p className="bg-muted/50 p-3 rounded-xl border">
-                {recommendation}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                Draft telah disiapkan dan data rekomendasi disinkronkan ke sistem operasional.
-              </p>
+            <div className="p-3 rounded-lg border border-border bg-muted/20 text-foreground leading-relaxed">
+              {recommendation}
             </div>
 
-            <div className="flex justify-end pt-2">
-              <Button
-                size="sm"
-                onClick={() => setIsSuccessModalOpen(false)}
-                className="text-xs"
-              >
-                Tutup
-              </Button>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Draft telah disiapkan dan parameter rekomendasi disinkronkan ke modul terkait.
+            </p>
           </div>
-        </div>
-      )}
+
+          <DialogFooter className="border-t border-border pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={() => setIsSuccessModalOpen(false)}
+            >
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
@@ -72,14 +72,145 @@ export function DailyClosingPDFModal({
   managerPhone,
 }: DailyClosingPDFModalProps) {
   const [isGatewaySending, setIsGatewaySending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = 0;
+        }
+      });
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // Print the report using native window.print().
-  // The @media print CSS below hides everything except #closing-pdf-report
-  // so the printed output is identical to the modal view.
+  // Print the report using an isolated A4 iframe engine.
+  // This avoids host scroll-lock, 100vh wrapper blank page 1 bugs,
+  // and host dark-mode color pollution.
   const handlePrintPDF = () => {
-    window.print();
+    const reportElement = document.getElementById("closing-pdf-report");
+    if (!reportElement) return;
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.left = "-9999px";
+    iframe.style.top = "0";
+    iframe.style.width = "210mm";
+    iframe.style.height = "297mm";
+    iframe.style.border = "none";
+    iframe.style.visibility = "hidden";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      window.print();
+      return;
+    }
+
+    const styles = Array.from(document.querySelectorAll("link[rel='stylesheet'], style"))
+      .map((el) => el.outerHTML)
+      .join("\n");
+
+    const htmlClass = document.documentElement.className;
+
+    doc.open();
+    doc.write(`<!DOCTYPE html>
+<html lang="id" class="${htmlClass}">
+<head>
+  <meta charset="utf-8" />
+  <base href="${window.location.origin}/" />
+  <title>Dokumen Closing Harian - ${reportData.outletName} (${reportData.reportNumber})</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet" />
+  ${styles}
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm 10mm;
+    }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      box-sizing: border-box !important;
+    }
+    :root {
+      --background: oklch(1 0 0) !important;
+      --foreground: oklch(0.145 0 0) !important;
+      --card: oklch(1 0 0) !important;
+      --card-foreground: oklch(0.145 0 0) !important;
+      --popover: oklch(1 0 0) !important;
+      --popover-foreground: oklch(0.145 0 0) !important;
+      --primary: oklch(0.488 0.243 264.376) !important;
+      --primary-foreground: oklch(0.97 0.014 254.604) !important;
+      --muted: oklch(0.97 0 0) !important;
+      --muted-foreground: oklch(0.556 0 0) !important;
+      --border: oklch(0.922 0 0) !important;
+      --info: oklch(0.5 0.134 242.749) !important;
+      --info-foreground: oklch(0.977 0.013 236.62) !important;
+      --warning: oklch(0.555 0.163 48.998) !important;
+      --warning-foreground: oklch(0.987 0.022 95.277) !important;
+      --success: oklch(0.527 0.154 150.069) !important;
+      --success-foreground: oklch(0.982 0.018 155.826) !important;
+    }
+    html, body {
+      background: #ffffff !important;
+      color: #0f172a !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      height: auto !important;
+      min-height: 0 !important;
+      overflow: visible !important;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    }
+    .font-mono, td.font-mono, th.font-mono, [class*="font-mono"] {
+      font-family: 'DM Mono', monospace !important;
+    }
+    body > *,
+    #closing-pdf-report {
+      display: block !important;
+      visibility: visible !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent !important;
+    }
+    thead {
+      display: table-header-group !important;
+    }
+    tr {
+      break-inside: avoid !important;
+    }
+    .no-break {
+      break-inside: avoid !important;
+    }
+  </style>
+</head>
+<body>
+  ${reportElement.outerHTML}
+</body>
+</html>`);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Gagal mencetak dokumen closing:", err);
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 1000);
+      }
+    }, 400);
   };
 
   // Dispatch to WhatsApp Gateway / Direct WA fallback
@@ -103,161 +234,62 @@ export function DailyClosingPDFModal({
   };
 
   return (
-    <>
-      {/* Global Print Style overrides to ensure exact 1-page A4 print */}
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 10mm 12mm;
-          }
-
-          /* Force light mode color variables so dark-mode users print in light */
-          :root {
-            --background: oklch(1 0 0) !important;
-            --foreground: oklch(0.145 0 0) !important;
-            --card: oklch(1 0 0) !important;
-            --card-foreground: oklch(0.145 0 0) !important;
-            --popover: oklch(1 0 0) !important;
-            --popover-foreground: oklch(0.145 0 0) !important;
-            --primary: oklch(0.488 0.243 264.376) !important;
-            --primary-foreground: oklch(0.97 0.014 254.604) !important;
-            --muted: oklch(0.97 0 0) !important;
-            --muted-foreground: oklch(0.556 0 0) !important;
-            --border: oklch(0.922 0 0) !important;
-            --info: oklch(0.5 0.134 242.749) !important;
-            --info-foreground: oklch(0.977 0.013 236.62) !important;
-            --warning: oklch(0.555 0.163 48.998) !important;
-            --warning-foreground: oklch(0.987 0.022 95.277) !important;
-            --success: oklch(0.527 0.154 150.069) !important;
-            --success-foreground: oklch(0.982 0.018 155.826) !important;
-          }
-
-          /* Hide everything on the page by default */
-          html, body {
-            background: white !important;
-            height: auto !important;
-            overflow: visible !important;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-
-          /* Make ONLY #closing-pdf-report and its children visible */
-          #closing-pdf-report,
-          #closing-pdf-report * {
-            visibility: visible !important;
-          }
-
-          /* Remove dialog fixed positioning and chrome */
-          [data-slot="dialog-overlay"],
-          [data-slot="dialog-close"],
-          [data-slot="dialog-header"],
-          .print\\:hidden {
-            display: none !important;
-          }
-
-          [data-slot="dialog-content"] {
-            position: static !important;
-            transform: none !important;
-            translate: none !important;
-            inset: auto !important;
-            width: auto !important;
-            max-width: none !important;
-            max-height: none !important;
-            height: auto !important;
-            overflow: visible !important;
-            box-shadow: none !important;
-            border: none !important;
-            outline: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            background: transparent !important;
-            animation: none !important;
-            opacity: 1 !important;
-          }
-
-          /* The scroll wrapper */
-          [data-slot="dialog-content"] > div {
-            overflow: visible !important;
-            max-height: none !important;
-            height: auto !important;
-            padding: 0 !important;
-            background: transparent !important;
-          }
-
-          /* The report: pull it to page origin, full width */
-          #closing-pdf-report {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 20px !important;
-            box-shadow: none !important;
-            border: none !important;
-            background: white !important;
-            z-index: 99999 !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-        }
-      `}</style>
-
-      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="w-full sm:max-w-3xl md:max-w-4xl gap-0 p-0 overflow-hidden flex flex-col h-[92vh] max-h-[92vh]">
-          {/* Top Control Bar (Hidden when printing) */}
-          <DialogHeader className="px-5 sm:px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-muted/40 shrink-0 print:hidden pr-14 sm:pr-16">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <FileText className="size-4" />
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="text-sm font-medium text-foreground truncate">
-                  Dokumen resmi closing harian
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground truncate">
-                  No. dokumen: <span className="font-mono">{reportData.reportNumber}</span>
-                </DialogDescription>
-              </div>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="w-full sm:max-w-4xl md:max-w-5xl max-h-[88vh] h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+        {/* Top Control Bar */}
+        <DialogHeader className="px-5 sm:px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-muted/40 shrink-0 pr-14 sm:pr-16">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <FileText className="size-4" />
             </div>
-
-            <div className="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:items-center shrink-0">
-              <Button
-                type="button"
-                size="lg"
-                onClick={handlePrintPDF}
-                className="w-full sm:w-auto"
-                title="Cetak langsung atau simpan sebagai PDF dari browser"
-              >
-                <Printer className="size-4" />
-                <span>Cetak PDF</span>
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="lg"
-                onClick={handleDispatchWAGateway}
-                disabled={isGatewaySending}
-                className="w-full sm:w-auto"
-                title="Kirim ringkasan laporan ke WhatsApp manajer"
-              >
-                <Send className="size-4" />
-                <span>
-                  {isGatewaySending ? "Membuka WA..." : "Kirim WA"}
-                </span>
-              </Button>
+            <div className="min-w-0">
+              <DialogTitle className="text-sm font-medium text-foreground truncate">
+                Dokumen resmi closing harian
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground truncate">
+                No. dokumen: <span className="font-mono">{reportData.reportNumber}</span>
+              </DialogDescription>
             </div>
-          </DialogHeader>
+          </div>
 
-          {/* Printable PDF Document Sheet (Optimized 1-Page A4) */}
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-3 sm:p-6 pb-12 sm:pb-16 bg-muted/20 flex flex-col items-center min-w-0 print:p-0 print:bg-white print:overflow-visible print:max-h-none">
-            <div
-              id="closing-pdf-report"
-              className="w-full max-w-[760px] min-w-0 bg-card p-5 sm:p-8 rounded-lg shadow-xs border border-border text-card-foreground space-y-5 print:shadow-none print:border-none print:p-0 print:space-y-3 print:mb-0 print:max-w-none"
+          <div className="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:items-center shrink-0">
+            <Button
+              type="button"
+              size="lg"
+              onClick={handlePrintPDF}
+              className="w-full sm:w-auto"
+              title="Cetak langsung atau simpan sebagai PDF dari browser"
             >
+              <Printer className="size-4" />
+              <span>Cetak PDF</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={handleDispatchWAGateway}
+              disabled={isGatewaySending}
+              className="w-full sm:w-auto"
+              title="Kirim ringkasan laporan ke WhatsApp manajer"
+            >
+              <Send className="size-4" />
+              <span>
+                {isGatewaySending ? "Membuka WA..." : "Kirim WA"}
+              </span>
+            </Button>
+          </div>
+        </DialogHeader>
+
+        {/* Printable PDF Document Sheet (Optimized 1-Page A4) */}
+        <div
+          ref={scrollRef}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-3 sm:p-6 pb-12 sm:pb-16 bg-muted/20 flex flex-col items-center min-w-0"
+        >
+          <div
+            id="closing-pdf-report"
+            className="w-full max-w-[760px] min-w-0 bg-card p-5 sm:p-8 rounded-lg shadow-xs border border-border text-card-foreground space-y-5"
+          >
               {/* Header: Brand & Document Identity */}
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border-b-2 border-border pb-4">
                 <div className="space-y-1">
@@ -505,10 +537,9 @@ export function DailyClosingPDFModal({
               </div>
             </div>
             {/* Bottom scroll buffer so Section 4 is never cropped */}
-            <div className="h-8 shrink-0 print:hidden" />
+            <div className="h-6 shrink-0" />
           </div>
         </DialogContent>
-      </Dialog>
-    </>
+    </Dialog>
   );
 }
