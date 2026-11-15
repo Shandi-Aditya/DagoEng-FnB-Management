@@ -2,8 +2,10 @@
 
 import { Calendar, Search } from "lucide-react";
 
+import { buttonVariants } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 export const COWORKING_TYPE_FILTERS = [
   { key: "ALL", label: "Semua tipe" },
@@ -64,17 +66,17 @@ export function CoworkingToolbar({
         </Tabs>
       </div>
 
-      <div className="flex items-center gap-2 rounded-md border border-input bg-input/20 px-2.5 py-1 text-xs">
-        <Calendar className="size-3.5 text-muted-foreground shrink-0" />
+      <label className={cn(buttonVariants({ variant: "outline", size: "lg" }), "cursor-pointer")}>
+        <Calendar className="size-4 text-muted-foreground shrink-0" />
         <input
           type="date"
           value={date}
           min={minDate}
           onChange={(e) => onDateChange(e.target.value)}
-          className="bg-transparent text-xs font-medium text-foreground outline-none"
+          className="bg-transparent text-xs font-medium text-foreground outline-none cursor-pointer"
           aria-label="Pilih tanggal operasional"
         />
-      </div>
+      </label>
     </div>
   );
 }

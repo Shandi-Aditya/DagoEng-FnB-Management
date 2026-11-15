@@ -117,12 +117,12 @@ export function CoworkingBookingPanel({
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 text-xs text-card-foreground shadow-xs">
       {/* Panel header */}
-      <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
-        <div className="space-y-0.5">
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
+        <div className="space-y-0.5 min-w-0">
           <span className="text-xs text-muted-foreground">
             {spaceTypeLabel(selectedSpace.type)}
           </span>
-          <h4 className="text-sm font-medium text-foreground">
+          <h4 className="text-sm font-medium text-foreground truncate">
             {selectedSpace.name}
           </h4>
           <p className="font-mono text-xs tabular-nums text-foreground">
@@ -140,6 +140,7 @@ export function CoworkingBookingPanel({
           variant="outline"
           size="sm"
           onClick={onClosePanel}
+          className="shrink-0"
         >
           <X className="size-3.5" />
           <span>Ganti ruang</span>
