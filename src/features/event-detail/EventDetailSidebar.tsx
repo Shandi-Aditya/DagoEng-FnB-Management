@@ -76,7 +76,7 @@ export function EventDetailSidebar({
             {/* Progress Bar */}
             <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${
+                className={`h-full rounded-full transition-[width] ${
                   isSoldOut
                     ? "bg-destructive"
                     : occupancyRate >= 80
@@ -102,16 +102,17 @@ export function EventDetailSidebar({
         {/* Action Button */}
         <div>
           {isPast ? (
-            <Button disabled variant="outline" className="w-full">
+            <Button disabled variant="outline" size="lg" className="w-full">
               Event telah selesai
             </Button>
           ) : isSoldOut ? (
-            <Button disabled variant="outline" className="w-full text-destructive">
+            <Button disabled variant="outline" size="lg" className="w-full text-destructive">
               Tiket habis terjual
             </Button>
           ) : (
             <Button
               variant="default"
+              size="lg"
               onClick={onOpenBooking}
               className="w-full"
             >
@@ -157,7 +158,7 @@ export function EventDetailSidebar({
         </p>
         <Button
           variant="outline"
-          size="sm"
+          size="lg"
           render={<Link href="/events/portal" />}
           nativeButton={false}
           className="w-full"

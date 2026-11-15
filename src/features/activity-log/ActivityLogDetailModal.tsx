@@ -178,7 +178,7 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
                 <Lock className="size-3.5" aria-hidden />
                 Tidak bisa diubah
               </span>
-              <Button size="sm" variant="outline" onClick={onClose}>
+              <Button size="lg" variant="outline" onClick={onClose}>
                 Tutup
               </Button>
             </SheetFooter>

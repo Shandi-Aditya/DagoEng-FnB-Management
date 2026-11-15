@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { spaceTypeLabel } from "@/features/pos/pos-coworking";
 import type { CoworkingSpaceItem } from "@/types/coworking";
 import { formatCurrencyIDR } from "@/lib/utils";
 
@@ -37,7 +38,7 @@ export function CoworkingPhotoModal({
       <DialogContent className="max-w-md gap-4 p-5">
         <DialogHeader>
           <span className="text-xs text-muted-foreground">
-            {space.type.replace("_", " ").toLowerCase()}
+            {spaceTypeLabel(space.type)}
           </span>
           <DialogTitle className="text-base font-medium">
             {space.name}
@@ -103,11 +104,12 @@ export function CoworkingPhotoModal({
           </div>
 
           <DialogFooter className="gap-2 sm:space-x-0">
-            <Button type="button" variant="outline" onClick={onClose}>
+            <Button type="button" variant="outline" size="lg" onClick={onClose}>
               Tutup
             </Button>
             <Button
               type="button"
+              size="lg"
               onClick={() => {
                 onSelectSpace(space.id);
                 onClose();

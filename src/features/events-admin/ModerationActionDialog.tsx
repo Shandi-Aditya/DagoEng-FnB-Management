@@ -88,10 +88,11 @@ export function ModerationActionDialog({
           </div>
         )}
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="border-t pt-3">
           <Button
             type="button"
             variant="outline"
+            size="lg"
             onClick={() => onOpenChange(false)}
             disabled={isProcessing}
           >
@@ -99,6 +100,7 @@ export function ModerationActionDialog({
           </Button>
           <Button
             type="button"
+            size="lg"
             variant={isReject ? "destructive" : isApprove ? "default" : "outline"}
             onClick={onConfirm}
             disabled={((isRevision || isReject) && !notes.trim()) || isProcessing}

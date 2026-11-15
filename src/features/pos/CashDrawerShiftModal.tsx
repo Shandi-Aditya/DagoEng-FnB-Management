@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { X, CheckCircle2 } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,7 +14,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { ProFeatureBadge } from "@/components/premium";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 
 interface CashDrawerShiftModalProps {
   isOpen: boolean;
@@ -233,9 +237,9 @@ _Sent via POS DagoEng Platform_`;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && !isClosing && onClose()}>
-      <DialogContent className="max-w-md gap-0 p-0 overflow-hidden flex flex-col">
+      <DialogContent className="flex max-h-[90vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         {/* Header */}
-        <DialogHeader className="px-6 py-4 border-b border-border bg-muted/30">
+        <DialogHeader className="border-b border-border bg-muted/30 px-6 py-4">
           <DialogTitle className="text-sm font-medium text-foreground">
             Tutup sesi kasir
           </DialogTitle>
@@ -245,80 +249,88 @@ _Sent via POS DagoEng Platform_`;
         </DialogHeader>
 
         {/* Content Body */}
-        <div className="p-6 space-y-4 text-xs">
+        <div className="space-y-4 p-6 text-xs text-foreground">
           {/* Warning Banner */}
-          <div className="p-3.5 bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 rounded-xl text-[11px] leading-relaxed text-amber-900 dark:text-amber-200">
-            <span>Pastikan semua transaksi sudah selesai. </span>
-            <span className="text-red-600 dark:text-red-400 font-semibold">
-              Anda tidak akan bisa mengubah transaksi yang sudah dicatat setelah menutup cashier session.
-            </span>
-          </div>
+          <Alert className="border-warning/40 bg-warning/10 text-xs">
+            <AlertTriangle className="size-4 text-warning shrink-0" />
+            <AlertDescription className="text-foreground">
+              Pastikan semua transaksi sudah selesai. Anda tidak dapat mengubah transaksi yang sudah dicatat setelah menutup sesi kasir.
+            </AlertDescription>
+          </Alert>
 
           {/* Form Fields */}
-          <div className="space-y-3.5 pt-1">
+          <div className="space-y-3 pt-1">
             {/* Cashier Name Confirmation */}
             <div className="space-y-1.5">
-              <label className="text-[11px] text-slate-600 dark:text-slate-400 font-medium block">
-                Tolong masukkan nama Anda (<span className="text-brand-sage dark:text-brand-sageBright font-bold">kasir</span>) sebagai konfirmasi
-              </label>
-              <input
+              <Label htmlFor="close-cashier-name" className="text-xs font-medium text-foreground">
+                Konfirmasi nama kasir
+              </Label>
+              <Input
+                id="close-cashier-name"
                 type="text"
                 value={confirmCashierName}
                 onChange={(e) => setConfirmCashierName(e.target.value)}
-                placeholder="Konfirmasi nama kasir yang menutup sesi"
+                placeholder="Nama kasir yang menutup sesi"
                 disabled={isClosing}
-                className="w-full px-3.5 py-2 text-xs border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
               />
             </div>
 
             {/* Cash in Drawer */}
             <div className="space-y-1.5">
-              <label className="text-[11px] text-slate-600 dark:text-slate-400 font-medium block">
-                (Uang Tunai di Laci)
-              </label>
+              <Label htmlFor="close-cash-drawer" className="text-xs font-medium text-foreground">
+                Uang tunai fisik di laci
+              </Label>
               <div className="relative">
-                <span className="absolute left-3.5 top-2 text-xs text-slate-400 font-mono">Rp.</span>
-                <input
+                <span className="absolute left-3 top-2.5 font-mono text-xs text-muted-foreground">
+                  Rp
+                </span>
+                <Input
+                  id="close-cash-drawer"
                   type="text"
                   value={cashInputDisplay}
                   onChange={handleCashInputChange}
                   placeholder="0"
                   disabled={isClosing}
-                  className="w-full pl-10 pr-3.5 py-2 text-xs font-mono border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xs"
+                  className="pl-9 font-mono tabular-nums"
                 />
               </div>
             </div>
           </div>
 
           {/* Server Timestamp */}
-          <div className="pt-2 text-center text-slate-500 dark:text-slate-400 text-[11px] space-y-0.5">
+          <div className="space-y-0.5 pt-1 text-center text-xs text-muted-foreground">
             <p>
               Kasir ditutup pada{" "}
-              <strong className="text-slate-800 dark:text-slate-200 font-bold">{currentTimeStr || "Waktu Server"}</strong>
+              <strong className="font-mono font-medium text-foreground tabular-nums">
+                {currentTimeStr || "Waktu server"}
+              </strong>
             </p>
-            <p className="text-[10px] text-slate-400 dark:text-slate-500">Waktu Server</p>
+            <p className="text-xs text-muted-foreground/70">Waktu server</p>
           </div>
 
           {/* Confirm Button */}
-          <div className="pt-2">
+          <div className="space-y-2 pt-2">
             <Button
               type="button"
+              size="lg"
               disabled={isClosing || !confirmCashierName.trim()}
               onClick={handleConfirmCloseSession}
-              className="w-full text-xs font-medium"
+              className="w-full"
             >
               {isClosing ? (
-                <>
-                  <div className="size-3.5 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-1.5" />
+                <span className="flex items-center justify-center gap-2">
+                  <Spinner className="size-4" />
                   <span>Menutup sesi dan mengirim laporan...</span>
-                </>
+                </span>
               ) : (
                 <span>Konfirmasi tutup sesi</span>
               )}
             </Button>
-            <div className="flex items-center justify-center space-x-1.5 text-[10px] text-muted-foreground pt-1.5">
-              <span>Auto-dispatch WhatsApp closing:</span>
-              <ProFeatureBadge label="ADD-ON" variant="addon" size="xs" />
+            <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+              <span>Laporan otomatis via WhatsApp:</span>
+              <Badge variant="outline" className="font-mono text-xs">
+                ADD-ON
+              </Badge>
             </div>
           </div>
         </div>

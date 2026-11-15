@@ -1057,12 +1057,12 @@ export default function SettingsPage() {
         }
         actions={
           isTenantOwner && tenantActiveTab === "PRODUCTS" ? (
-            <Button size="sm" onClick={handleOpenAddProduct}>
+            <Button size="lg" onClick={handleOpenAddProduct}>
               <Plus />
               <span>Tambah menu</span>
             </Button>
           ) : !isTenantOwner && selectedAdminTab === "PRODUCTS" ? (
-            <Button size="sm" onClick={handleOpenAddProduct}>
+            <Button size="lg" onClick={handleOpenAddProduct}>
               <Plus />
               <span>Tambah menu</span>
             </Button>

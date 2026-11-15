@@ -7,6 +7,7 @@ import {
   getTierTone,
   buildCustomerExportData,
   emptyCustomerMessage,
+  isEligibleForTierPromotion,
 } from "@/features/customers/customers-domain";
 import type { LoyaltyMember } from "@/types/loyalty";
 
@@ -153,6 +154,16 @@ describe("customers-domain", () => {
     const searched = emptyCustomerMessage(true, "budi");
     expect(searched.title).toBe("Tidak ada member yang cocok");
     expect(searched.description).toContain("budi");
+  });
+
+  it("checks whether a member is eligible for an automatic tier promotion", () => {
+    expect(isEligibleForTierPromotion("Bronze", 499)).toBe(false);
+    expect(isEligibleForTierPromotion("Bronze", 500)).toBe(true);
+    expect(isEligibleForTierPromotion("Silver", 1499)).toBe(false);
+    expect(isEligibleForTierPromotion("Silver", 1500)).toBe(true);
+    expect(isEligibleForTierPromotion("Gold", 2999)).toBe(false);
+    expect(isEligibleForTierPromotion("Gold", 3000)).toBe(true);
+    expect(isEligibleForTierPromotion("Platinum", 5000)).toBe(false);
   });
 });
 

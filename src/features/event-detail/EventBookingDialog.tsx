@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AlertCircle, Ticket } from "lucide-react";
+import { AlertCircle, Minus, Plus, Ticket } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -52,7 +52,7 @@ export function EventBookingDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto p-6">
+      <DialogContent data-unit="event" className="max-w-md max-h-[90vh] overflow-y-auto p-6">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <Ticket className="size-5 text-primary" />
@@ -143,29 +143,28 @@ export function EventBookingDialog({
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="icon-lg"
                 onClick={() => setForm((prev) => ({ ...prev, ticketCount: Math.max(1, prev.ticketCount - 1) }))}
                 disabled={form.ticketCount <= 1}
-                aria-label="Kurangi tiket"
+                aria-label="Kurangi jumlah tiket"
               >
-                -
+                <Minus />
               </Button>
-              <span className="w-8 text-center font-mono font-medium text-xs">
+              <span className="w-5 text-center font-mono font-medium text-sm tabular-nums text-foreground">
                 {form.ticketCount}
               </span>
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
+                size="icon-lg"
                 onClick={() => setForm((prev) => ({ ...prev, ticketCount: Math.min(effectiveMaxTickets, prev.ticketCount + 1) }))}
                 disabled={form.ticketCount >= effectiveMaxTickets}
-                aria-label="Tambah tiket"
+                aria-label="Tambah jumlah tiket"
               >
-                +
+                <Plus />
               </Button>
             </div>
           </div>
@@ -183,12 +182,12 @@ export function EventBookingDialog({
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
+                size="lg"
                 onClick={() => onOpenChange(false)}
               >
                 Batal
               </Button>
-              <Button type="submit" size="sm" disabled={isSubmitting}>
+              <Button type="submit" size="lg" disabled={isSubmitting}>
                 {isSubmitting
                   ? "Memproses..."
                   : event.isPaid

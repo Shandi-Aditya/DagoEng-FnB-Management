@@ -130,16 +130,17 @@ export function BankModal({
             <span>Jadikan sebagai rekening pembayaran utama</span>
           </label>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-3">
+          <DialogFooter className="border-t pt-3">
             <Button
               type="button"
               variant="outline"
+              size="lg"
               onClick={() => onOpenChange(false)}
               disabled={isSaving}
             >
               Batal
             </Button>
-            <Button type="submit" disabled={isSaving}>
+            <Button type="submit" size="lg" disabled={isSaving}>
               {isSaving ? "Menyimpan…" : isEdit ? "Perbarui rekening" : "Simpan rekening"}
             </Button>
           </DialogFooter>

@@ -1,23 +1,38 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { formatCurrencyIDR } from "@/lib/utils";
-import { RecipeBOM, IngredientItem } from "@/types/inventory";
-import { MasterProduct } from "@/types/product";
+import type { RecipeBOM, IngredientItem } from "@/types/inventory";
+import type { MasterProduct } from "@/types/product";
 import {
-  X,
   Sparkles,
   Plus,
   Trash2,
-  Utensils,
-  Calculator,
   CheckCircle2,
-  Info,
-  DollarSign,
-  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { StatusBadge } from "@/components/app/status-badge";
 import { ProFeatureBadge } from "@/components/premium";
+import {
+  calculateRecipeCOGS,
+  calculateGrossProfit,
+  calculateGrossMargin,
+  getMarginStatusTone,
+  calculateLineCostEstimate,
+  generateSuggestedIngredients,
+  type RecipeIngredientLine,
+} from "./bom-recipe-domain";
 
 interface BOMRecipeModalProps {
   isOpen: boolean;
@@ -26,14 +41,6 @@ interface BOMRecipeModalProps {
   ingredients: IngredientItem[];
   onSaveRecipe: (recipe: RecipeBOM) => void;
   initialRecipe?: RecipeBOM | null;
-}
-
-interface IngredientLine {
-  ingredientId: string;
-  ingredientName: string;
-  quantityRequired: number;
-  unit: string;
-  costEstimate: number;
 }
 
 export function BOMRecipeModal({
@@ -45,28 +52,41 @@ export function BOMRecipeModal({
   initialRecipe,
 }: BOMRecipeModalProps) {
   const [selectedProductId, setSelectedProductId] = useState<string>(
-    initialRecipe?.menuId || products[0]?.id || "prod-101"
+    initialRecipe?.menuId || products[0]?.id || ""
   );
   const [sellingPrice, setSellingPrice] = useState<number>(
     initialRecipe?.sellingPrice || 25000
   );
-  const [recipeLines, setRecipeLines] = useState<IngredientLine[]>(
-    initialRecipe?.ingredients || [
-      {
-        ingredientId: ingredients[0]?.id || "ing-1",
-        ingredientName: ingredients[0]?.name || "Biji Kopi Arabica Blend",
-        quantityRequired: 18,
-        unit: "gram",
-        costEstimate: 4500,
-      },
-    ]
+  const [recipeLines, setRecipeLines] = useState<RecipeIngredientLine[]>(
+    initialRecipe?.ingredients || []
   );
-  const [isAIGenerating, setIsAIGenerating] = useState<boolean>(false);
-  const [aiNotice, setAiNotice] = useState<string>("");
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (initialRecipe) {
+      setSelectedProductId(initialRecipe.menuId);
+      setSellingPrice(initialRecipe.sellingPrice);
+      setRecipeLines(initialRecipe.ingredients);
+    } else if (products.length > 0) {
+      setSelectedProductId(products[0].id);
+      setSellingPrice(products[0].basePrice || 25000);
+      if (ingredients.length > 0) {
+        setRecipeLines([
+          {
+            ingredientId: ingredients[0].id,
+            ingredientName: ingredients[0].name,
+            quantityRequired: 18,
+            unit: ingredients[0].unit,
+            costEstimate: calculateLineCostEstimate(ingredients[0], 18),
+          },
+        ]);
+      } else {
+        setRecipeLines([]);
+      }
+    }
+  }, [initialRecipe, products, ingredients, isOpen]);
 
-  const currentProduct = products.find((p) => p.id === selectedProductId) || products[0];
+  const currentProduct =
+    products.find((p) => p.id === selectedProductId) || products[0];
 
   const handleProductChange = (prodId: string) => {
     setSelectedProductId(prodId);
@@ -86,7 +106,7 @@ export function BOMRecipeModal({
         ingredientName: defaultIng.name,
         quantityRequired: 10,
         unit: defaultIng.unit,
-        costEstimate: Math.round(defaultIng.costPerUnit * 0.1),
+        costEstimate: calculateLineCostEstimate(defaultIng, 10),
       },
     ]);
   };
@@ -100,13 +120,13 @@ export function BOMRecipeModal({
     if (!targetIng) return;
     setRecipeLines((prev) => {
       const next = [...prev];
-      const quantityRequired = next[index].quantityRequired || 10;
+      const quantityRequired = next[index]?.quantityRequired || 10;
       next[index] = {
         ingredientId: targetIng.id,
         ingredientName: targetIng.name,
         quantityRequired,
         unit: targetIng.unit,
-        costEstimate: Math.round(targetIng.costPerUnit * (quantityRequired / 100)),
+        costEstimate: calculateLineCostEstimate(targetIng, quantityRequired),
       };
       return next;
     });
@@ -115,60 +135,33 @@ export function BOMRecipeModal({
   const handleAmountChange = (index: number, quantityRequired: number) => {
     setRecipeLines((prev) => {
       const next = [...prev];
-      const targetIng = ingredients.find((i) => i.id === next[index].ingredientId);
-      const unitCost = targetIng ? targetIng.costPerUnit : 100;
+      const targetIng = ingredients.find(
+        (i) => i.id === next[index]?.ingredientId
+      );
       next[index] = {
         ...next[index],
         quantityRequired,
-        costEstimate: Math.max(100, Math.round(unitCost * (quantityRequired / 50))),
+        costEstimate: calculateLineCostEstimate(targetIng, quantityRequired),
       };
       return next;
     });
   };
 
-  // AI Recipe Auto Generator
-  const handleAIGenerate = () => {
-    setIsAIGenerating(true);
-    setAiNotice("Sedang menganalisis nama menu, kategori F&B, dan rasio bahan baku optimal...");
-
-    setTimeout(() => {
-      const prodName = currentProduct?.name?.toLowerCase() || "";
-      let generated: IngredientLine[] = [];
-
-      if (prodName.includes("kopi") || prodName.includes("coffee") || prodName.includes("espresso")) {
-        generated = [
-          { ingredientId: "ing-1", ingredientName: "Biji Kopi Arabica Blend", quantityRequired: 18, unit: "gram", costEstimate: 4500 },
-          { ingredientId: "ing-2", ingredientName: "Fresh Milk UHT Barista", quantityRequired: 150, unit: "ml", costEstimate: 3600 },
-          { ingredientId: "ing-3", ingredientName: "Gula Aren Organik Cair", quantityRequired: 20, unit: "ml", costEstimate: 1200 },
-        ];
-      } else if (prodName.includes("tea") || prodName.includes("teh") || prodName.includes("peach")) {
-        generated = [
-          { ingredientId: "ing-4", ingredientName: "Daun Teh Artisan Peach", quantityRequired: 10, unit: "gram", costEstimate: 3500 },
-          { ingredientId: "ing-5", ingredientName: "Simple Syrup Premium", quantityRequired: 25, unit: "ml", costEstimate: 800 },
-        ];
-      } else if (prodName.includes("beef") || prodName.includes("wagyu") || prodName.includes("bowl")) {
-        generated = [
-          { ingredientId: "ing-6", ingredientName: "Daging Sapi Wagyu Slice", quantityRequired: 100, unit: "gram", costEstimate: 24000 },
-          { ingredientId: "ing-7", ingredientName: "Beras Organik Bali", quantityRequired: 150, unit: "gram", costEstimate: 3000 },
-          { ingredientId: "ing-8", ingredientName: "Saus Teriyaki House Blend", quantityRequired: 30, unit: "ml", costEstimate: 2500 },
-        ];
-      } else {
-        generated = [
-          { ingredientId: ingredients[0]?.id || "ing-1", ingredientName: ingredients[0]?.name || "Bahan Baku Utama", quantityRequired: 50, unit: ingredients[0]?.unit || "gram", costEstimate: 5000 },
-          { ingredientId: ingredients[1]?.id || "ing-2", ingredientName: ingredients[1]?.name || "Bahan Pelengkap", quantityRequired: 20, unit: ingredients[1]?.unit || "ml", costEstimate: 2000 },
-        ];
-      }
-
-      setRecipeLines(generated);
-      setIsAIGenerating(false);
-      setAiNotice(`AI Berhasil menyusun ${generated.length} takaran bahan baku presisi untuk "${currentProduct?.name}"!`);
-      setTimeout(() => setAiNotice(""), 5000);
-    }, 600);
+  const handleApplySuggestions = () => {
+    if (!currentProduct) return;
+    const suggested = generateSuggestedIngredients(
+      currentProduct.name,
+      ingredients
+    );
+    if (suggested.length > 0) {
+      setRecipeLines(suggested);
+    }
   };
 
-  const totalCOGS = recipeLines.reduce((sum, line) => sum + (line.costEstimate || 0), 0);
-  const grossProfit = Math.max(0, sellingPrice - totalCOGS);
-  const grossMarginPercent = sellingPrice > 0 ? ((grossProfit / sellingPrice) * 100).toFixed(1) : "0";
+  const totalCOGS = calculateRecipeCOGS(recipeLines);
+  const grossProfit = calculateGrossProfit(sellingPrice, totalCOGS);
+  const grossMarginPercent = calculateGrossMargin(sellingPrice, totalCOGS);
+  const marginTone = getMarginStatusTone(grossMarginPercent);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,7 +173,7 @@ export function BOMRecipeModal({
       category: currentProduct.category,
       sellingPrice,
       totalCOGS,
-      grossMarginPercent: Number(grossMarginPercent),
+      grossMarginPercent,
       ingredients: recipeLines,
     };
 
@@ -189,199 +182,208 @@ export function BOMRecipeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/70 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100">
-        {/* Header */}
-        <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
-              <Utensils className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                <span>Formulasi Resep BOM & Kalkulasi COGS</span>
-                <ProFeatureBadge label="ADD-ON" variant="addon" size="xs" />
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Hubungkan menu katalog dengan bahan baku gudang untuk auto-deduction
-              </p>
-            </div>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-4 border-b">
+          <div className="flex items-center gap-2">
+            <DialogTitle className="text-base font-semibold">
+              Resep Menu
+            </DialogTitle>
+            <ProFeatureBadge label="ADD-ON" variant="addon" size="xs" />
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Tentukan takaran bahan baku gudang untuk menghitung HPP otomatis saat penjualan.
+          </DialogDescription>
+        </DialogHeader>
 
-        {/* Body */}
-        <form onSubmit={handleSave} className="p-6 overflow-y-auto space-y-4 flex-1 text-xs">
-          {/* AI Banner / Notice */}
-          {aiNotice && (
-            <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-800 dark:text-emerald-300 font-bold flex items-center space-x-2 animate-in fade-in">
-              <Sparkles className="w-4 h-4 text-brand-sage dark:text-brand-sageBright shrink-0" />
-              <span>{aiNotice}</span>
-            </div>
-          )}
+        <form onSubmit={handleSave} className="flex-1 flex flex-col min-h-0">
+          <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            {/* Menu Selection & Selling Price */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-muted/40 rounded-lg border">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-foreground">
+                  Pilih menu
+                </Label>
+                <NativeSelect
+                  value={selectedProductId}
+                  onChange={(e) => handleProductChange(e.target.value)}
+                >
+                  {products.map((p) => (
+                    <NativeSelectOption key={p.id} value={p.id}>
+                      {p.name} ({p.category})
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </div>
 
-          {/* Menu Selection & Selling Price */}
-          <div className="grid grid-cols-2 gap-3 p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800">
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700 dark:text-slate-300 block">Pilih Menu Produk:</label>
-              <select
-                value={selectedProductId}
-                onChange={(e) => handleProductChange(e.target.value)}
-                className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-semibold text-slate-800 dark:text-slate-200 outline-hidden"
-              >
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.category})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1">
-              <label className="font-bold text-slate-700 dark:text-slate-300 block">Harga Jual Menu (Rp):</label>
-              <input
-                type="number"
-                value={sellingPrice}
-                onChange={(e) => setSellingPrice(Number(e.target.value))}
-                className="w-full p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-mono font-bold text-slate-900 dark:text-slate-100 outline-hidden"
-                placeholder="25000"
-                required
-              />
-            </div>
-          </div>
-
-          {/* AI Assistant Button */}
-          <div className="flex items-center justify-between p-3 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl border border-emerald-200/80 dark:border-emerald-800/50">
-            <div className="flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-brand-sage dark:text-brand-sageBright" />
-              <div>
-                <span className="font-bold text-slate-900 dark:text-slate-100 block">AI Smart Recipe Assistant</span>
-                <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                  Generate formula takaran bahan baku & estimasi HPP otomatis berdasarkan nama menu
-                </span>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-foreground">
+                  Harga jual (Rp)
+                </Label>
+                <Input
+                  type="number"
+                  value={sellingPrice}
+                  onChange={(e) => setSellingPrice(Number(e.target.value))}
+                  placeholder="25000"
+                  required
+                  min={0}
+                  className="font-mono tabular-nums"
+                />
               </div>
             </div>
+
+            {/* Smart Recipe Suggestion */}
+            <div className="flex items-center justify-between gap-3 p-3 bg-muted/30 rounded-lg border">
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-foreground">
+                  Saran komposisi bahan
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  Isi otomatis takaran awal dari bahan baku yang tersedia di gudang.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleApplySuggestions}
+                className="shrink-0 gap-1.5"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                <span>Saran resep</span>
+              </Button>
+            </div>
+
+            {/* Ingredient Lines */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-medium text-foreground">
+                  Komposisi bahan baku ({recipeLines.length})
+                </Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddLine}
+                  className="gap-1"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Tambah bahan</span>
+                </Button>
+              </div>
+
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {recipeLines.map((line, idx) => (
+                  <div
+                    key={idx}
+                    className="p-2.5 bg-background rounded-lg border flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <NativeSelect
+                        value={line.ingredientId}
+                        onChange={(e) =>
+                          handleIngredientChange(idx, e.target.value)
+                        }
+                      >
+                        {ingredients.map((ing) => (
+                          <NativeSelectOption key={ing.id} value={ing.id}>
+                            {ing.name} ({ing.unit}) — Rp{" "}
+                            {ing.costPerUnit.toLocaleString()}/{ing.unit}
+                          </NativeSelectOption>
+                        ))}
+                      </NativeSelect>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="w-24">
+                        <Input
+                          type="number"
+                          value={line.quantityRequired}
+                          onChange={(e) =>
+                            handleAmountChange(idx, Number(e.target.value))
+                          }
+                          placeholder="Takaran"
+                          min={0}
+                          className="text-center font-mono tabular-nums text-xs"
+                        />
+                      </div>
+
+                      <div className="w-28 text-right pr-1">
+                        <span className="font-mono text-xs tabular-nums font-medium text-foreground block">
+                          {formatCurrencyIDR(line.costEstimate)}
+                        </span>
+                        <span className="text-xs text-muted-foreground block">
+                          Est. HPP
+                        </span>
+                      </div>
+
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleRemoveLine(idx)}
+                        className="text-muted-foreground hover:text-destructive shrink-0"
+                        title="Hapus baris bahan"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* COGS & Margin Summary */}
+            <div className="p-3.5 bg-muted/40 rounded-lg border grid grid-cols-3 gap-3 text-center">
+              <div>
+                <span className="text-xs text-muted-foreground block">
+                  Total HPP
+                </span>
+                <span className="text-sm font-semibold font-mono tabular-nums text-foreground">
+                  {formatCurrencyIDR(totalCOGS)}
+                </span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block">
+                  Laba kotor
+                </span>
+                <span className="text-sm font-semibold font-mono tabular-nums text-foreground">
+                  {formatCurrencyIDR(grossProfit)}
+                </span>
+              </div>
+              <div>
+                <span className="text-xs text-muted-foreground block mb-0.5">
+                  Margin
+                </span>
+                <StatusBadge status={marginTone}>
+                  {grossMarginPercent}%
+                </StatusBadge>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer Actions with size="lg" */}
+          <DialogFooter className="p-4 border-t bg-muted/20 flex flex-col-reverse sm:flex-row items-center justify-end gap-2">
             <Button
               type="button"
-              size="sm"
-              disabled={isAIGenerating}
-              onClick={handleAIGenerate}
-              className="text-xs bg-brand-sage hover:bg-[#2E6044] text-white font-bold space-x-1.5 shadow-xs"
+              variant="outline"
+              size="lg"
+              onClick={onClose}
+              className="w-full sm:w-auto"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{isAIGenerating ? "Memproses..." : "AI Generate"}</span>
-            </Button>
-          </div>
-
-          {/* Ingredient Lines */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider text-[11px] flex items-center space-x-1.5">
-                <Layers className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright" />
-                <span>Komposisi Bahan Baku (BOM Ingredients):</span>
-              </label>
-              <button
-                type="button"
-                onClick={handleAddLine}
-                className="text-xs text-brand-sage dark:text-brand-sageBright hover:underline font-bold flex items-center space-x-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Tambah Bahan</span>
-              </button>
-            </div>
-
-            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-              {recipeLines.map((line, idx) => (
-                <div
-                  key={idx}
-                  className="p-2.5 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center space-x-2"
-                >
-                  <div className="flex-1">
-                    <select
-                      value={line.ingredientId}
-                      onChange={(e) => handleIngredientChange(idx, e.target.value)}
-                      className="w-full p-1.5 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg font-medium text-slate-800 dark:text-slate-100"
-                    >
-                      {ingredients.map((ing) => (
-                        <option key={ing.id} value={ing.id}>
-                          {ing.name} ({ing.unit}) — Rp {ing.costPerUnit.toLocaleString()}/{ing.unit}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="w-24">
-                    <input
-                      type="number"
-                      value={line.quantityRequired}
-                      onChange={(e) => handleAmountChange(idx, Number(e.target.value))}
-                      placeholder="Takaran"
-                      className="w-full p-1.5 text-xs text-center border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 rounded-lg font-mono font-bold"
-                    />
-                  </div>
-
-                  <div className="w-24 text-right">
-                    <span className="font-mono font-bold text-slate-800 dark:text-slate-100 text-xs block">
-                      {formatCurrencyIDR(line.costEstimate)}
-                    </span>
-                    <span className="text-[10px] text-slate-400">Est. HPP</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveLine(idx)}
-                    className="p-1 text-slate-400 hover:text-rose-500 rounded"
-                    title="Hapus baris"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* COGS & Margin Summary */}
-          <div className="p-3.5 bg-slate-900 text-white rounded-xl grid grid-cols-3 gap-3 text-center">
-            <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Total HPP / COGS</span>
-              <span className="text-sm font-black font-mono text-slate-100">
-                {formatCurrencyIDR(totalCOGS)}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Laba Kotor (Gross Profit)</span>
-              <span className="text-sm font-black font-mono text-emerald-400">
-                {formatCurrencyIDR(grossProfit)}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-400 font-bold uppercase block">Gross Margin</span>
-              <span className="text-sm font-black font-mono text-emerald-400">
-                {grossMarginPercent}%
-              </span>
-            </div>
-          </div>
-
-          {/* Footer Actions */}
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
-            <Button type="button" variant="outline" onClick={onClose} className="text-xs font-semibold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300">
               Batal
             </Button>
             <Button
               type="submit"
-              className="flex-1 text-xs font-bold bg-brand-sage hover:bg-[#2E6044] text-white shadow-sm"
+              size="lg"
+              className="w-full sm:w-auto gap-1.5"
             >
-              <CheckCircle2 className="w-4 h-4 mr-1.5" />
-              <span>Simpan Formula Resep BOM</span>
+              <CheckCircle2 className="h-4 w-4" />
+              <span>Simpan resep</span>
             </Button>
-          </div>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

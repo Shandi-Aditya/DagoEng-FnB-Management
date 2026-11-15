@@ -145,6 +145,13 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER", "WAITER"],
   },
   {
+    name: "Lantai Pramusaji",
+    href: "/waiter",
+    icon: "UtensilsCrossed",
+    module: "FNB",
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "WAITER"],
+  },
+  {
     name: "Kitchen KDS",
     href: "/kitchen",
     icon: "UtensilsCrossed",

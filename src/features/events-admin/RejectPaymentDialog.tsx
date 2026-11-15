@@ -74,15 +74,17 @@ export function RejectPaymentDialog({
           </label>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="border-t pt-3">
           <Button
             variant="outline"
+            size="lg"
             onClick={() => onOpenChange(false)}
             disabled={isProcessing}
           >
             Batal
           </Button>
           <Button
+            size="lg"
             variant="destructive"
             onClick={onConfirmReject}
             disabled={!reason.trim() || isProcessing}

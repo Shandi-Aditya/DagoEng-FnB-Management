@@ -212,6 +212,7 @@ export function EventDetailSheet({
             <div className="flex flex-col sm:flex-row gap-2 w-full">
               <Button
                 variant="default"
+                size="lg"
                 className="flex-1"
                 onClick={() => {
                   onOpenChange(false);
@@ -224,6 +225,7 @@ export function EventDetailSheet({
               </Button>
               <Button
                 variant="outline"
+                size="lg"
                 onClick={() => {
                   onOpenChange(false);
                   onRequestRevision(event);
@@ -235,6 +237,7 @@ export function EventDetailSheet({
               </Button>
               <Button
                 variant="destructive"
+                size="lg"
                 onClick={() => {
                   onOpenChange(false);
                   onReject(event);
@@ -250,7 +253,7 @@ export function EventDetailSheet({
               <div className="flex gap-2">
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="lg"
                   onClick={() => {
                     onOpenChange(false);
                     onManageAttendees(event);
@@ -261,7 +264,7 @@ export function EventDetailSheet({
                 </Button>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="lg"
                   onClick={() => {
                     onOpenChange(false);
                     onEdit(event);
@@ -276,7 +279,7 @@ export function EventDetailSheet({
                 {effStatus === "APPROVED" ? (
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="lg"
                     onClick={() => {
                       onOpenChange(false);
                       onArchive(event);
@@ -291,7 +294,7 @@ export function EventDetailSheet({
                 {onDelete ? (
                   <Button
                     variant="outline"
-                    size="sm"
+                    size="lg"
                     className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
                     onClick={() => {
                       onOpenChange(false);

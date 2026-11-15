@@ -93,7 +93,7 @@ export function PosVoucherModal({
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button type="button" variant="outline" size="lg" onClick={onClose}>
             Tutup
           </Button>
         </DialogFooter>

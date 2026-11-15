@@ -83,10 +83,10 @@ export function KitchenTicketCard({ order, items, queueNumber, now, column, onAd
       </CardContent>
 
       <CardFooter className="gap-1.5">
-        <Button variant="outline" size="icon" onClick={onReprint} aria-label="Cetak ulang tiket dapur" title="Cetak ulang tiket dapur">
+        <Button variant="outline" size="icon-lg" onClick={onReprint} aria-label="Cetak ulang tiket dapur" title="Cetak ulang tiket dapur">
           <Printer />
         </Button>
-        <Button className="flex-1" onClick={onAdvance}>
+        <Button size="lg" className="flex-1" onClick={onAdvance}>
           {column.nextLabel}
         </Button>
       </CardFooter>

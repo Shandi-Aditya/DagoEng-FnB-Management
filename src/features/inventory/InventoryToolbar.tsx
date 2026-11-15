@@ -47,7 +47,7 @@ export function InventoryToolbar({
         actions={
           <>
             <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline" />}>
+              <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
                 Lainnya
                 <ChevronDown className="text-muted-foreground" />
               </DropdownMenuTrigger>
@@ -75,7 +75,7 @@ export function InventoryToolbar({
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button onClick={onOpenCreatePO}>
+            <Button size="lg" onClick={onOpenCreatePO}>
               <Plus />
               Buat PO
             </Button>

@@ -38,7 +38,7 @@ export function EventCard({ event, isPast }: EventCardProps) {
               alt={event.title}
               fill
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              className="object-cover"
               unoptimized
             />
           ) : (
@@ -109,7 +109,7 @@ export function EventCard({ event, isPast }: EventCardProps) {
 
         <Button
           variant={isPast ? "outline" : "default"}
-          size="sm"
+          size="lg"
           render={<Link href={`/events/${event.id}`} />}
           nativeButton={false}
         >

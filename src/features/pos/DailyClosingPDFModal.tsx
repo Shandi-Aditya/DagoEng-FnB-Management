@@ -1,15 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
-  X,
   Printer,
-  CheckCircle2,
   ShieldCheck,
-  Building,
-  Store,
   QrCode,
   Send,
   FileText,
@@ -22,6 +18,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { StatusBadge } from "@/components/app";
+import { notify } from "@/components/app";
+import {
+  buildClosingWhatsAppMessage,
+  formatClosingTaxStatus,
+} from "@/features/pos/pos-closing-report";
 
 export interface ClosingReportData {
   reportNumber: string;
@@ -70,161 +72,229 @@ export function DailyClosingPDFModal({
   managerPhone,
 }: DailyClosingPDFModalProps) {
   const [isGatewaySending, setIsGatewaySending] = useState(false);
-  const [gatewayStatus, setGatewayStatus] = useState<"IDLE" | "SENT">("IDLE");
-  const [toastMessage, setToastMessage] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      requestAnimationFrame(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = 0;
+        }
+      });
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // Direct Browser Print / Save as PDF Dialog
+  // Print the report using an isolated A4 iframe engine.
+  // This avoids host scroll-lock, 100vh wrapper blank page 1 bugs,
+  // and host dark-mode color pollution.
   const handlePrintPDF = () => {
-    window.print();
+    const reportElement = document.getElementById("closing-pdf-report");
+    if (!reportElement) return;
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.left = "-9999px";
+    iframe.style.top = "0";
+    iframe.style.width = "210mm";
+    iframe.style.height = "297mm";
+    iframe.style.border = "none";
+    iframe.style.visibility = "hidden";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      window.print();
+      return;
+    }
+
+    const styles = Array.from(document.querySelectorAll("link[rel='stylesheet'], style"))
+      .map((el) => el.outerHTML)
+      .join("\n");
+
+    const htmlClass = document.documentElement.className;
+
+    doc.open();
+    doc.write(`<!DOCTYPE html>
+<html lang="id" class="${htmlClass}">
+<head>
+  <meta charset="utf-8" />
+  <base href="${window.location.origin}/" />
+  <title>Dokumen Closing Harian - ${reportData.outletName} (${reportData.reportNumber})</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet" />
+  ${styles}
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm 10mm;
+    }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      box-sizing: border-box !important;
+    }
+    :root {
+      --background: oklch(1 0 0) !important;
+      --foreground: oklch(0.145 0 0) !important;
+      --card: oklch(1 0 0) !important;
+      --card-foreground: oklch(0.145 0 0) !important;
+      --popover: oklch(1 0 0) !important;
+      --popover-foreground: oklch(0.145 0 0) !important;
+      --primary: oklch(0.488 0.243 264.376) !important;
+      --primary-foreground: oklch(0.97 0.014 254.604) !important;
+      --muted: oklch(0.97 0 0) !important;
+      --muted-foreground: oklch(0.556 0 0) !important;
+      --border: oklch(0.922 0 0) !important;
+      --info: oklch(0.5 0.134 242.749) !important;
+      --info-foreground: oklch(0.977 0.013 236.62) !important;
+      --warning: oklch(0.555 0.163 48.998) !important;
+      --warning-foreground: oklch(0.987 0.022 95.277) !important;
+      --success: oklch(0.527 0.154 150.069) !important;
+      --success-foreground: oklch(0.982 0.018 155.826) !important;
+    }
+    html, body {
+      background: #ffffff !important;
+      color: #0f172a !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      height: auto !important;
+      min-height: 0 !important;
+      overflow: visible !important;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    }
+    .font-mono, td.font-mono, th.font-mono, [class*="font-mono"] {
+      font-family: 'DM Mono', monospace !important;
+    }
+    body > *,
+    #closing-pdf-report {
+      display: block !important;
+      visibility: visible !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      box-shadow: none !important;
+      background: transparent !important;
+    }
+    thead {
+      display: table-header-group !important;
+    }
+    tr {
+      break-inside: avoid !important;
+    }
+    .no-break {
+      break-inside: avoid !important;
+    }
+  </style>
+</head>
+<body>
+  ${reportElement.outerHTML}
+</body>
+</html>`);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Gagal mencetak dokumen closing:", err);
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 1000);
+      }
+    }, 400);
   };
 
-  // Dispatch to WhatsApp Gateway
+  // Dispatch to WhatsApp Gateway / Direct WA fallback
   const handleDispatchWAGateway = () => {
     setIsGatewaySending(true);
-    setTimeout(() => {
-      setIsGatewaySending(false);
-      setGatewayStatus("SENT");
-      setToastMessage(
-        `Laporan PDF & Ringkasan Keuangan berhasil dikirim via WA Gateway ke ${managerPhone}!`
+    try {
+      const { url } = buildClosingWhatsAppMessage(reportData, managerPhone);
+      window.open(url, "_blank");
+      notify.success(
+        "Laporan closing terkirim",
+        `Ringkasan closing berhasil diteruskan ke WhatsApp ${managerPhone}.`
       );
-
-      // Open Direct WhatsApp fallback
-      const text = encodeURIComponent(`*LAPORAN RESMI CLOSING KEUANGAN - DAGOENG F&B*
-----------------------------------------
-No. Dokumen: *${reportData.reportNumber}*
-Outlet: *${reportData.outletName}*
-Waktu: ${reportData.closingDateTime} (Shift: ${reportData.shiftName})
-Kasir: ${reportData.cashierName}
-
-*RINGKASAN KEUANGAN:*
-• Total Transaksi: ${reportData.totalTransactionsCount} Struk
-• Omset Kotor: ${formatCurrencyIDR(reportData.totalGrossSales)}
-• Pajak PB1/PPN (${reportData.isTaxEnabled ? `${reportData.taxRatePercent}%` : "Non-Aktif"}): ${formatCurrencyIDR(reportData.totalTax)}
-• *Omset Bersih:* *${formatCurrencyIDR(reportData.totalNetSales)}*
-
-*METODE PEMBAYARAN:*
-• QRIS Dinamis: ${formatCurrencyIDR(reportData.qrisSales)}
-• Kas Tunai: ${formatCurrencyIDR(reportData.totalCashSales)}
-• Kartu EDC: ${formatCurrencyIDR(reportData.edcSales)}
-
-*BAGI HASIL REVENUE SHARE:*
-• Hak Tenant (${reportData.tenantSharePercent}%): *${formatCurrencyIDR(reportData.tenantTotalShare)}*
-• Hak Dago Hub (${reportData.dagoSharePercent}%): *${formatCurrencyIDR(reportData.dagoTotalShare)}*
-
-*STATUS VALIDASI:*
-• Dokumen Tersertifikasi Digital (Hash: ${reportData.verificationHash.slice(0, 10)}...)
-• Sah tanpa tanda tangan fisik.
-----------------------------------------
-_DagoEng Creative Hub - Financial Automated System_`);
-
-      const cleanPhone = managerPhone.replace(/\D/g, "");
-      const waUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${text}`;
-      window.open(waUrl, "_blank");
-
-      setTimeout(() => setToastMessage(""), 5000);
-    }, 1000);
+    } catch {
+      notify.error(
+        "Gagal membuka WhatsApp",
+        "Periksa kembali nomor telepon manajer atau konfigurasi browser."
+      );
+    } finally {
+      setIsGatewaySending(false);
+    }
   };
 
   return (
-    <>
-      {/* Global Print Style overrides to ensure exact 1-page A4 print */}
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: A4 portrait;
-            margin: 6mm 10mm;
-          }
-          body * {
-            visibility: hidden;
-          }
-          #closing-pdf-report,
-          #closing-pdf-report * {
-            visibility: visible;
-          }
-          #closing-pdf-report {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            box-shadow: none !important;
-            border: none !important;
-            page-break-after: avoid !important;
-            page-break-inside: avoid !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-        }
-      `}</style>
-
-      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="max-w-4xl gap-0 p-0 overflow-hidden flex flex-col max-h-[92vh]">
-          {/* Top Control Bar (Hidden when printing) */}
-          <DialogHeader className="px-6 py-3.5 border-b border-border flex flex-row items-center justify-between bg-muted/40 print:hidden pr-10">
-            <div className="flex items-center gap-2.5">
-              <FileText className="size-5 text-primary" />
-              <div>
-                <DialogTitle className="text-sm font-medium text-foreground">
-                  Dokumen resmi laporan closing harian
-                </DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
-                  No. dokumen: <span className="font-mono">{reportData.reportNumber}</span>
-                </DialogDescription>
-              </div>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="w-full sm:max-w-4xl md:max-w-5xl max-h-[88vh] h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+        {/* Top Control Bar */}
+        <DialogHeader className="px-5 sm:px-6 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-muted/40 shrink-0 pr-14 sm:pr-16">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <FileText className="size-4" />
             </div>
-
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                onClick={handlePrintPDF}
-                className="text-xs font-medium"
-              >
-                <Printer className="size-3.5 mr-1" />
-                <span>Cetak / simpan PDF</span>
-              </Button>
-
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleDispatchWAGateway}
-                disabled={isGatewaySending}
-                className="text-xs font-medium"
-              >
-                <Send className="size-3.5 mr-1" />
-                <span>
-                  {isGatewaySending
-                    ? "Mengirim ke WA..."
-                    : gatewayStatus === "SENT"
-                    ? "Kirim ulang ke WA"
-                    : "Kirim ke WA gateway"}
-                </span>
-              </Button>
+            <div className="min-w-0">
+              <DialogTitle className="text-sm font-medium text-foreground truncate">
+                Dokumen resmi closing harian
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground truncate">
+                No. dokumen: <span className="font-mono">{reportData.reportNumber}</span>
+              </DialogDescription>
             </div>
-          </DialogHeader>
+          </div>
 
-          {/* Notification Toast */}
-          {toastMessage && (
-            <div className="p-3 bg-emerald-50 border-b border-emerald-200 text-xs font-bold text-emerald-900 flex items-center space-x-2 px-6 print:hidden">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{toastMessage}</span>
-            </div>
-          )}
-
-          {/* Printable PDF Document Sheet (Optimized 1-Page A4) */}
-          <div className="overflow-y-auto p-6 flex-1 bg-slate-100 flex justify-center print:p-0 print:bg-white">
-            <div
-              id="closing-pdf-report"
-              className="w-full max-w-[760px] bg-white p-6 rounded-xl shadow-sm border border-slate-200 font-sans text-slate-900 space-y-3.5 print:shadow-none print:border-none print:p-0 print:space-y-2.5"
+          <div className="grid grid-cols-2 gap-2 w-full sm:w-auto sm:flex sm:items-center shrink-0">
+            <Button
+              type="button"
+              size="lg"
+              onClick={handlePrintPDF}
+              className="w-full sm:w-auto"
+              title="Cetak langsung atau simpan sebagai PDF dari browser"
             >
+              <Printer className="size-4" />
+              <span>Cetak PDF</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={handleDispatchWAGateway}
+              disabled={isGatewaySending}
+              className="w-full sm:w-auto"
+              title="Kirim ringkasan laporan ke WhatsApp manajer"
+            >
+              <Send className="size-4" />
+              <span>
+                {isGatewaySending ? "Membuka WA..." : "Kirim WA"}
+              </span>
+            </Button>
+          </div>
+        </DialogHeader>
+
+        {/* Printable PDF Document Sheet (Optimized 1-Page A4) */}
+        <div
+          ref={scrollRef}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-3 sm:p-6 pb-12 sm:pb-16 bg-muted/20 flex flex-col items-center min-w-0"
+        >
+          <div
+            id="closing-pdf-report"
+            className="w-full max-w-[760px] min-w-0 bg-card p-5 sm:p-8 rounded-lg shadow-xs border border-border text-card-foreground space-y-5"
+          >
               {/* Header: Brand & Document Identity */}
-              <div className="flex items-start justify-between border-b-2 border-slate-900 pb-2.5">
-                <div className="space-y-0.5">
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-10 relative shrink-0">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border-b-2 border-border pb-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5">
+                    <div className="size-8 relative shrink-0">
                       <Image
                         src="/logo-dago.png"
                         alt="DagoEng"
@@ -234,84 +304,94 @@ _DagoEng Creative Hub - Financial Automated System_`);
                       />
                     </div>
                     <div>
-                      <h1 className="font-extrabold text-base tracking-tight text-slate-900 leading-none">
-                        DAGOENG <span className="text-brand-sage dark:text-brand-sageBright">CREATIVE HUB</span>
+                      <h1 className="font-semibold text-base tracking-tight text-foreground leading-none">
+                        DAGOENG CREATIVE HUB
                       </h1>
-                      <p className="text-[9px] text-slate-400 font-medium">
-                        Multi-Business F&B Management & Platform Ecosystem
+                      <p className="text-xs text-muted-foreground font-medium pt-1">
+                        Manajemen F&B multi-unit dan ekosistem platform
                       </p>
                     </div>
                   </div>
-                  <p className="text-[11px] text-slate-600 font-medium pt-0.5">
-                    Tenant: <strong>{reportData.outletName}</strong> • {reportData.outletAddress}
+                  <p className="text-xs text-muted-foreground font-medium pt-1">
+                    Tenant: <strong className="text-foreground">{reportData.outletName}</strong> • {reportData.outletAddress}
                   </p>
-                  <p className="text-[10px] text-slate-400">Kontak: {reportData.outletPhone}</p>
+                  <p className="text-xs text-muted-foreground">Kontak: {reportData.outletPhone}</p>
                 </div>
 
-                <div className="text-right space-y-0.5">
-                  <span className="px-2 py-0.5 rounded bg-slate-900 text-white font-mono text-[9px] font-bold uppercase tracking-wider inline-block">
-                    REKAPITULASI RESMI
-                  </span>
-                  <h2 className="font-bold text-xs text-slate-900 pt-0.5">LAPORAN CLOSING HARIAN</h2>
-                  <p className="font-mono text-[11px] font-bold text-brand-sage dark:text-brand-sageBright">{reportData.reportNumber}</p>
-                  <p className="text-[10px] text-slate-500">{reportData.closingDateTime}</p>
+                <div className="text-left sm:text-right space-y-1 shrink-0">
+                  <div>
+                    <StatusBadge status="neutral">
+                      Rekapitulasi resmi
+                    </StatusBadge>
+                  </div>
+                  <h2 className="font-medium text-xs text-foreground pt-0.5">
+                    Laporan closing harian
+                  </h2>
+                  <p className="font-mono text-xs font-medium text-primary">
+                    {reportData.reportNumber}
+                  </p>
+                  <p className="text-xs text-muted-foreground font-mono tabular-nums">
+                    {reportData.closingDateTime}
+                  </p>
                 </div>
               </div>
 
               {/* Meta Information Bar */}
-              <div className="grid grid-cols-4 gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200 text-[11px]">
-                <div>
-                  <span className="text-[9px] text-slate-400 font-bold uppercase block">Shift / Sesi:</span>
-                  <span className="font-bold text-slate-800">{reportData.shiftName}</span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-muted/40 p-3 sm:p-3.5 rounded-lg border border-border text-xs">
+                <div className="space-y-0.5">
+                  <span className="text-xs text-muted-foreground block">Shift / sesi:</span>
+                  <span className="font-medium text-foreground">{reportData.shiftName}</span>
                 </div>
-                <div>
-                  <span className="text-[9px] text-slate-400 font-bold uppercase block">Kasir Bertugas:</span>
-                  <span className="font-bold text-slate-800">{reportData.cashierName}</span>
+                <div className="space-y-0.5">
+                  <span className="text-xs text-muted-foreground block">Kasir bertugas:</span>
+                  <span className="font-medium text-foreground">{reportData.cashierName}</span>
                 </div>
-                <div>
-                  <span className="text-[9px] text-slate-400 font-bold uppercase block">Volume Penjualan:</span>
-                  <span className="font-bold text-slate-800">{reportData.totalTransactionsCount} Transaksi</span>
+                <div className="space-y-0.5">
+                  <span className="text-xs text-muted-foreground block">Volume penjualan:</span>
+                  <span className="font-medium font-mono tabular-nums text-foreground">
+                    {reportData.totalTransactionsCount} transaksi
+                  </span>
                 </div>
-                <div>
-                  <span className="text-[9px] text-slate-400 font-bold uppercase block">Status Pajak:</span>
-                  <span className="font-bold text-emerald-700">
-                    {reportData.isTaxEnabled ? `PB1 ${reportData.taxRatePercent}% (Aktif)` : "Non-Aktif (0%)"}
+                <div className="space-y-0.5">
+                  <span className="text-xs text-muted-foreground block">Status pajak:</span>
+                  <span className="font-medium text-foreground">
+                    {formatClosingTaxStatus(reportData.isTaxEnabled, reportData.taxRatePercent)}
                   </span>
                 </div>
               </div>
 
               {/* Section 1: Ringkasan Penjualan & Pajak */}
-              <div className="space-y-1">
-                <h3 className="text-[11px] font-bold text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-0.5">
-                  1. Ringkasan Pendapatan & Rincian Pajak (PB1 / PPN)
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-foreground border-b border-border pb-1.5">
+                  1. Ringkasan pendapatan dan rincian pajak (PB1 / PPN)
                 </h3>
-                <table className="w-full text-[11px] text-left">
-                  <tbody className="divide-y divide-slate-100">
-                    <tr className="hover:bg-slate-50">
-                      <td className="py-1 text-slate-600">Total Penjualan Kotor (Gross Sales)</td>
-                      <td className="py-1 text-right font-mono font-semibold text-slate-800">
+                <table className="w-full text-xs text-left">
+                  <tbody className="divide-y divide-border">
+                    <tr>
+                      <td className="py-2 text-muted-foreground">Total penjualan kotor</td>
+                      <td className="py-2 text-right font-mono tabular-nums font-medium text-foreground">
                         {formatCurrencyIDR(reportData.totalGrossSales)}
                       </td>
                     </tr>
                     {reportData.totalDiscounts > 0 && (
-                      <tr className="hover:bg-slate-50 text-emerald-700">
-                        <td className="py-1">Total Potongan Promo & Diskon Voucher</td>
-                        <td className="py-1 text-right font-mono font-semibold">
+                      <tr className="text-success">
+                        <td className="py-2">Total potongan promo dan diskon voucher</td>
+                        <td className="py-2 text-right font-mono tabular-nums font-medium">
                           -{formatCurrencyIDR(reportData.totalDiscounts)}
                         </td>
                       </tr>
                     )}
-                    <tr className="hover:bg-slate-50">
-                      <td className="py-1 text-slate-600">
-                        Pajak Restoran ({reportData.isTaxEnabled ? `PB1 ${reportData.taxRatePercent}%` : "Non-Aktif"})
+                    <tr>
+                      <td className="py-2 text-muted-foreground">
+                        Pajak restoran ({reportData.isTaxEnabled ? `PB1 ${reportData.taxRatePercent}%` : "Nonaktif"})
                       </td>
-                      <td className="py-1 text-right font-mono font-semibold text-slate-800">
+                      <td className="py-2 text-right font-mono tabular-nums font-medium text-foreground">
                         {formatCurrencyIDR(reportData.totalTax)}
                       </td>
                     </tr>
-                    <tr className="bg-slate-50 font-bold text-slate-900 border-t border-slate-300">
-                      <td className="py-1.5">TOTAL OMSET BERSIH (NET REVENUE)</td>
-                      <td className="py-1.5 text-right font-mono text-xs text-brand-sage dark:text-brand-sageBright">
+                    <tr className="bg-muted/40 font-semibold text-foreground border-t border-border">
+                      <td className="py-2.5 px-2">Total omzet bersih</td>
+                      <td className="py-2.5 px-2 text-right font-mono tabular-nums text-sm text-primary">
                         {formatCurrencyIDR(reportData.totalNetSales)}
                       </td>
                     </tr>
@@ -320,65 +400,72 @@ _DagoEng Creative Hub - Financial Automated System_`);
               </div>
 
               {/* Section 2: Rekonsiliasi Metode Pembayaran */}
-              <div className="space-y-1">
-                <h3 className="text-[11px] font-bold text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-0.5">
-                  2. Rekonsiliasi Metode Pembayaran (Cash vs Non-Cash)
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-foreground border-b border-border pb-1.5">
+                  2. Rekonsiliasi metode pembayaran (tunai dan non-tunai)
                 </h3>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="p-2 rounded-lg border border-slate-200 bg-slate-50 space-y-0.5">
-                    <span className="text-[9px] text-slate-500 font-bold uppercase block">Kas Tunai (Laci)</span>
-                    <p className="text-xs font-bold font-mono text-slate-900">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                    <span className="text-xs text-muted-foreground block">Kas tunai (laci kasir)</span>
+                    <p className="text-sm font-semibold font-mono tabular-nums text-foreground">
                       {formatCurrencyIDR(reportData.totalCashSales)}
                     </p>
-                    <span className="text-[9px] text-slate-400 block">Uang fisik kasir</span>
+                    <span className="text-xs text-muted-foreground block">Uang fisik kasir</span>
                   </div>
 
-                  <div className="p-2 rounded-lg border border-blue-200 bg-blue-50/40 space-y-0.5">
-                    <span className="text-[9px] text-blue-600 font-bold uppercase block">QRIS Dinamis</span>
-                    <p className="text-xs font-bold font-mono text-blue-800">
+                  <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                    <span className="text-xs text-muted-foreground block">QRIS dinamis</span>
+                    <p className="text-sm font-semibold font-mono tabular-nums text-foreground">
                       {formatCurrencyIDR(reportData.qrisSales)}
                     </p>
-                    <span className="text-[9px] text-blue-500 block">Settlement Digital</span>
+                    <span className="text-xs text-muted-foreground block">Settlement digital</span>
                   </div>
 
-                  <div className="p-2 rounded-lg border border-slate-200 bg-slate-50 space-y-0.5">
-                    <span className="text-[9px] text-slate-500 font-bold uppercase block">Kartu EDC</span>
-                    <p className="text-xs font-bold font-mono text-slate-900">
+                  <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                    <span className="text-xs text-muted-foreground block">Kartu EDC</span>
+                    <p className="text-sm font-semibold font-mono tabular-nums text-foreground">
                       {formatCurrencyIDR(reportData.edcSales)}
                     </p>
-                    <span className="text-[9px] text-slate-400 block">Debit / Kredit EDC</span>
+                    <span className="text-xs text-muted-foreground block">Debit / kredit EDC</span>
                   </div>
                 </div>
               </div>
 
-              {/* Section 3: Split Bagi Hasil (Revenue Sharing Split) */}
-              <div className="space-y-1">
-                <h3 className="text-[11px] font-bold text-slate-900 uppercase tracking-wider border-b border-slate-200 pb-0.5">
-                  3. Alokasi Bagi Hasil Pendapatan (Revenue Sharing Split)
+              {/* Section 3: Split Bagi Hasil */}
+              <div className="space-y-2 min-w-0">
+                <h3 className="text-xs font-semibold text-foreground border-b border-border pb-1.5">
+                  3. Alokasi bagi hasil pendapatan
                 </h3>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
                   {/* Tenant Share */}
-                  <div className="p-2.5 rounded-lg border border-amber-200 bg-amber-50/40 space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-[11px] text-amber-950">
-                        Hak Pemilik Usaha / Tenant ({reportData.tenantSharePercent}%)
+                  <div className="p-3 sm:p-3.5 rounded-lg border border-border bg-muted/20 space-y-2.5 min-w-0 overflow-hidden">
+                    <div className="flex items-center justify-between gap-2 min-w-0">
+                      <span
+                        className="font-semibold text-xs text-foreground truncate"
+                        title={`Hak pemilik usaha / tenant (${reportData.tenantSharePercent}%)`}
+                      >
+                        Hak pemilik usaha / tenant ({reportData.tenantSharePercent}%)
                       </span>
-                      <span className="text-[9px] font-bold bg-amber-200 text-amber-900 px-1 py-0.2 rounded">
-                        Tenant Share
-                      </span>
+                      <StatusBadge status="warning" className="shrink-0">
+                        Tenant
+                      </StatusBadge>
                     </div>
-                    <div className="space-y-0.5 text-[10px] text-amber-900">
-                      <div className="flex justify-between">
-                        <span>• Bagian QRIS Digital:</span>
-                        <span className="font-mono font-medium">{formatCurrencyIDR(reportData.tenantQrisShare)}</span>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between items-center gap-2 min-w-0 text-muted-foreground">
+                        <span className="truncate">• Bagian QRIS digital:</span>
+                        <span className="font-mono tabular-nums font-medium text-foreground shrink-0">
+                          {formatCurrencyIDR(reportData.tenantQrisShare)}
+                        </span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>• Bagian Kas Tunai:</span>
-                        <span className="font-mono font-medium">{formatCurrencyIDR(reportData.tenantCashShare)}</span>
+                      <div className="flex justify-between items-center gap-2 min-w-0 text-muted-foreground">
+                        <span className="truncate">• Bagian kas tunai:</span>
+                        <span className="font-mono tabular-nums font-medium text-foreground shrink-0">
+                          {formatCurrencyIDR(reportData.tenantCashShare)}
+                        </span>
                       </div>
-                      <div className="flex justify-between font-bold border-t border-amber-200 pt-0.5 text-slate-900 text-[11px]">
-                        <span>Total Bersih Tenant:</span>
-                        <span className="font-mono text-emerald-700">
+                      <div className="flex justify-between items-center gap-2 min-w-0 font-semibold border-t border-border pt-1.5 text-foreground text-xs">
+                        <span className="truncate">Total bersih tenant:</span>
+                        <span className="font-mono tabular-nums text-sm text-primary shrink-0">
                           {formatCurrencyIDR(reportData.tenantTotalShare)}
                         </span>
                       </div>
@@ -386,27 +473,34 @@ _DagoEng Creative Hub - Financial Automated System_`);
                   </div>
 
                   {/* Dago Hub Share */}
-                  <div className="p-2.5 rounded-lg border border-blue-200 bg-blue-50/40 space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-[11px] text-blue-950">
-                        Hak Pengelola Dago Hub ({reportData.dagoSharePercent}%)
+                  <div className="p-3 sm:p-3.5 rounded-lg border border-border bg-muted/20 space-y-2.5 min-w-0 overflow-hidden">
+                    <div className="flex items-center justify-between gap-2 min-w-0">
+                      <span
+                        className="font-semibold text-xs text-foreground truncate"
+                        title={`Hak pengelola Dago Hub (${reportData.dagoSharePercent}%)`}
+                      >
+                        Hak pengelola Dago Hub ({reportData.dagoSharePercent}%)
                       </span>
-                      <span className="text-[9px] font-bold bg-blue-200 text-blue-900 px-1 py-0.2 rounded">
-                        Platform Fee
-                      </span>
+                      <StatusBadge status="info" className="shrink-0">
+                        Platform
+                      </StatusBadge>
                     </div>
-                    <div className="space-y-0.5 text-[10px] text-blue-900">
-                      <div className="flex justify-between">
-                        <span>• Bagian QRIS Digital:</span>
-                        <span className="font-mono font-medium">{formatCurrencyIDR(reportData.dagoQrisShare)}</span>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between items-center gap-2 min-w-0 text-muted-foreground">
+                        <span className="truncate">• Bagian QRIS digital:</span>
+                        <span className="font-mono tabular-nums font-medium text-foreground shrink-0">
+                          {formatCurrencyIDR(reportData.dagoQrisShare)}
+                        </span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>• Bagian Kas Tunai:</span>
-                        <span className="font-mono font-medium">{formatCurrencyIDR(reportData.dagoCashShare)}</span>
+                      <div className="flex justify-between items-center gap-2 min-w-0 text-muted-foreground">
+                        <span className="truncate">• Bagian kas tunai:</span>
+                        <span className="font-mono tabular-nums font-medium text-foreground shrink-0">
+                          {formatCurrencyIDR(reportData.dagoCashShare)}
+                        </span>
                       </div>
-                      <div className="flex justify-between font-bold border-t border-blue-200 pt-0.5 text-slate-900 text-[11px]">
-                        <span>Total Bersih Dago Hub:</span>
-                        <span className="font-mono text-blue-700">
+                      <div className="flex justify-between items-center gap-2 min-w-0 font-semibold border-t border-border pt-1.5 text-foreground text-xs">
+                        <span className="truncate">Total bersih Dago Hub:</span>
+                        <span className="font-mono tabular-nums text-sm text-primary shrink-0">
                           {formatCurrencyIDR(reportData.dagoTotalShare)}
                         </span>
                       </div>
@@ -415,36 +509,37 @@ _DagoEng Creative Hub - Financial Automated System_`);
                 </div>
               </div>
 
-              {/* Section 4: Digital Certification Stamp (No Physical Signature Required) */}
-              <div className="pt-2 border-t border-dashed border-slate-300 flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-9 h-9 bg-emerald-100 text-emerald-800 rounded-lg flex items-center justify-center border border-emerald-300">
-                    <ShieldCheck className="w-5 h-5 text-emerald-600" />
+              {/* Section 4: Digital Certification Stamp */}
+              <div className="pt-3 border-t border-dashed border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-border shrink-0">
+                    <ShieldCheck className="size-5" />
                   </div>
-                  <div className="text-[10px] space-y-0.5">
-                    <p className="font-extrabold text-slate-900 uppercase">
-                      TERSERTIFIKASI DIGITAL (E-VERIFIED)
+                  <div className="text-xs space-y-0.5 min-w-0">
+                    <p className="font-semibold text-foreground truncate">
+                      Tersertifikasi digital
                     </p>
-                    <p className="text-[9px] text-slate-500 max-w-sm leading-tight">
-                      Laporan diterbitkan otomatis oleh DagoEng Platform. Sah secara hukum & finansial tanpa memerlukan tanda tangan fisik basah.
+                    <p className="text-xs text-muted-foreground max-w-md leading-relaxed">
+                      Laporan diterbitkan otomatis oleh sistem DagoEng. Sah secara hukum dan finansial tanpa memerlukan tanda tangan fisik basah.
                     </p>
-                    <p className="text-[8px] font-mono text-slate-400">
-                      Audit Hash: {reportData.verificationHash}
+                    <p className="text-xs font-mono text-muted-foreground pt-0.5 break-all">
+                      Audit hash: {reportData.verificationHash}
                     </p>
                   </div>
                 </div>
 
-                <div className="text-right space-y-0.5 font-mono text-[9px] text-slate-400">
-                  <div className="w-11 h-11 border border-slate-300 rounded p-0.5 flex items-center justify-center ml-auto bg-white">
-                    <QrCode className="w-9 h-9 text-slate-800" />
+                <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-1 font-mono text-xs text-muted-foreground shrink-0">
+                  <div className="size-11 border border-border rounded p-1 flex items-center justify-center bg-card">
+                    <QrCode className="size-8 text-foreground" />
                   </div>
-                  <span>Scan Validasi</span>
+                  <span>Scan validasi</span>
                 </div>
               </div>
             </div>
+            {/* Bottom scroll buffer so Section 4 is never cropped */}
+            <div className="h-6 shrink-0" />
           </div>
         </DialogContent>
-      </Dialog>
-    </>
+    </Dialog>
   );
 }

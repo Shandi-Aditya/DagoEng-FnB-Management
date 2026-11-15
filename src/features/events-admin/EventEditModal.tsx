@@ -199,16 +199,17 @@ export function EventEditModal({
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="border-t pt-3">
           <Button
             type="button"
             variant="outline"
+            size="lg"
             onClick={() => onOpenChange(false)}
             disabled={isSaving}
           >
             Batal
           </Button>
-          <Button type="button" onClick={onSave} disabled={isSaving}>
+          <Button type="button" size="lg" onClick={onSave} disabled={isSaving}>
             {isSaving ? "Menyimpan…" : "Simpan perubahan"}
           </Button>
         </DialogFooter>

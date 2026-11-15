@@ -257,10 +257,10 @@ export function ProductModals(props: ProductModalsProps) {
           <form onSubmit={onSaveNewProduct}>
             {renderFormFields(false)}
             <DialogFooter className="gap-2 pt-3">
-              <Button type="button" variant="outline" onClick={() => onAddOpenChange(false)}>
+              <Button type="button" variant="outline" size="lg" onClick={() => onAddOpenChange(false)}>
                 Batal
               </Button>
-              <Button type="submit">Simpan menu</Button>
+              <Button type="submit" size="lg">Simpan menu</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -280,17 +280,17 @@ export function ProductModals(props: ProductModalsProps) {
                 <Button
                   type="button"
                   variant="destructive"
-                  size="sm"
+                  size="lg"
                   onClick={() => onRequestDeleteFromEdit(editingProduct)}
                 >
                   <Trash2 />
                   <span>Hapus</span>
                 </Button>
                 <div className="flex items-center gap-2">
-                  <Button type="button" variant="outline" onClick={() => onEditOpenChange(false)}>
+                  <Button type="button" variant="outline" size="lg" onClick={() => onEditOpenChange(false)}>
                     Batal
                   </Button>
-                  <Button type="submit">Simpan perubahan</Button>
+                  <Button type="submit" size="lg">Simpan perubahan</Button>
                 </div>
               </DialogFooter>
             </form>
@@ -333,10 +333,10 @@ export function ProductModals(props: ProductModalsProps) {
               />
             </div>
             <DialogFooter className="gap-2">
-              <Button type="button" variant="outline" onClick={() => onAddCategoryOpenChange(false)}>
+              <Button type="button" variant="outline" size="lg" onClick={() => onAddCategoryOpenChange(false)}>
                 Batal
               </Button>
-              <Button type="submit">Simpan</Button>
+              <Button type="submit" size="lg">Simpan</Button>
             </DialogFooter>
           </form>
         </DialogContent>

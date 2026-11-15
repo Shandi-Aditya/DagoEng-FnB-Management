@@ -208,7 +208,7 @@ function FeatureSplit({
             </li>
           ))}
         </ul>
-        <Button render={<Link href={action.href} />} nativeButton={false}>
+        <Button size="lg" render={<Link href={action.href} />} nativeButton={false}>
           {action.label}
         </Button>
       </Reveal>
@@ -236,10 +236,11 @@ function PartnerRoles() {
           yang sama, jadi pesanan dan penjualan tidak dicatat dua kali.
         </p>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button render={<Link href="/login" />} nativeButton={false}>
+          <Button size="lg" render={<Link href="/login" />} nativeButton={false}>
             Masuk sebagai mitra
           </Button>
           <Button
+            size="lg"
             variant="outline"
             render={<Link href="/events/portal" />}
             nativeButton={false}

@@ -71,7 +71,7 @@ export function EventTicketPassDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[92vh] overflow-y-auto p-6">
+      <DialogContent data-unit="event" className="max-w-md max-h-[92vh] overflow-y-auto p-6">
         <DialogHeader>
           <div className="flex items-center justify-between gap-2">
             <DialogTitle className="text-base font-medium">
@@ -91,7 +91,7 @@ export function EventTicketPassDialog({
           <div className="rounded-lg border bg-muted/20 p-4 text-center space-y-1">
             <span className="text-xs text-muted-foreground block">Kode booking tiket</span>
             <div className="flex items-center justify-center gap-2">
-              <span className="font-mono text-2xl font-medium text-foreground tracking-wider">
+              <span className="font-mono text-2xl font-medium text-foreground">
                 {ticket.ticketCode}
               </span>
               <button
@@ -188,7 +188,7 @@ export function EventTicketPassDialog({
           {ticket.guestToken && (
             <Button
               variant="outline"
-              size="sm"
+              size="lg"
               render={<Link href={`/events/tickets/${ticket.guestToken}`} />}
               nativeButton={false}
               className="w-full"
@@ -203,7 +203,7 @@ export function EventTicketPassDialog({
           {isPaid && (
             <Button
               variant="outline"
-              size="sm"
+              size="lg"
               onClick={handleDownload}
               disabled={isDownloading}
               className="flex-1"
@@ -214,7 +214,7 @@ export function EventTicketPassDialog({
           )}
 
           <Button
-            size="sm"
+            size="lg"
             onClick={onDone}
             className="flex-1"
           >

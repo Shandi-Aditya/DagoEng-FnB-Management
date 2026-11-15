@@ -61,7 +61,7 @@ export function EventShareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md p-6">
+      <DialogContent data-unit="event" className="max-w-md p-6">
         <DialogHeader>
           <DialogTitle className="text-base font-medium">
             Bagikan Acara Ini
@@ -99,7 +99,7 @@ export function EventShareDialog({
           {typeof navigator !== "undefined" && typeof navigator.share === "function" && (
             <Button
               variant="outline"
-              size="sm"
+              size="lg"
               onClick={handleNativeShare}
               className="w-full"
             >
@@ -137,7 +137,7 @@ export function EventShareDialog({
         <DialogFooter className="pt-2">
           <Button
             variant="outline"
-            size="sm"
+            size="lg"
             onClick={() => onOpenChange(false)}
           >
             Tutup

@@ -39,16 +39,16 @@ export function PosToolbar({ mode, onModeChange, cartCount, activeShift, onOpenS
 
       {activeShift ? (
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="hidden h-6 gap-1.5 sm:inline-flex">
+          <Badge variant="outline" className="hidden h-8 gap-1.5 px-2.5 sm:inline-flex">
             <span className="size-1.5 rounded-full bg-success" aria-hidden />
             {activeShift.shiftName} · {activeShift.assignedCashierName}
           </Badge>
-          <Button variant="ghost" size="sm" onClick={onCloseShift}>
+          <Button variant="outline" size="lg" onClick={onCloseShift}>
             Tutup shift
           </Button>
         </div>
       ) : (
-        <Button size="sm" onClick={onOpenShift}>
+        <Button size="lg" onClick={onOpenShift}>
           <Clock />
           Buka shift
         </Button>

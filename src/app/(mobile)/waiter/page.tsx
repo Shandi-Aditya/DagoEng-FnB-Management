@@ -1,44 +1,50 @@
 "use client";
 
-import React, { useState } from "react";
-import Link from "next/link";
-import { useTables, TableItem } from "@/contexts/TableContext";
+import React, { useState, useMemo } from "react";
+import { UtensilsCrossed } from "lucide-react";
+import { useTables, type TableItem } from "@/contexts/TableContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { useOutlet } from "@/contexts/OutletContext";
-import { formatCurrencyIDR } from "@/lib/utils";
+import { EmptyState } from "@/components/app/empty-state";
+import { ConfirmDialog } from "@/components/app/confirm-dialog";
+import { UnitScope } from "@/components/app/unit-scope";
+import { Button } from "@/components/ui/button";
+
 import {
-  Grid,
-  Plus,
-  Users,
-  UtensilsCrossed,
-  CheckCircle2,
-  RotateCcw,
-  Store,
-  Clock,
-  Receipt,
-  Sparkles,
-  ArrowLeft,
-  ChevronDown,
-  Flame,
-  Check,
-} from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
-import { Badge } from "@/components/legacy/ui/badge";
-import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
+  calculateWaiterFloorSummary,
+  findActiveOrderForTable,
+} from "@/features/waiter/waiter-domain";
+import { WaiterHeader } from "@/features/waiter/WaiterHeader";
+import { WaiterSummaryBar } from "@/features/waiter/WaiterSummaryBar";
+import { WaiterAreaTabs } from "@/features/waiter/WaiterAreaTabs";
+import { WaiterTableCard } from "@/features/waiter/WaiterTableCard";
 
 export default function WaiterMobilePage() {
   const { activeOutlet, activeOutletId } = useOutlet();
-  const { areas, filteredAreas, updateTableStatus, releaseTableToAvailable } = useTables();
-  const { orders, advanceOrderStatus } = useOrders();
+  const { areas, updateTableStatus, releaseTableToAvailable } = useTables();
+  const { orders } = useOrders();
+
   const [filterArea, setFilterArea] = useState<string>("ALL");
+  const [tableToReset, setTableToReset] = useState<TableItem | null>(null);
 
   // Filter tables strictly for active outlet
-  const currentOutletAreas = areas.filter((a) => a.outletId === (activeOutletId || "outlet-sgr"));
-  const allOutletTables = currentOutletAreas.flatMap((a) => a.tables);
+  const currentOutletAreas = useMemo(() => {
+    return areas.filter((a) => a.outletId === (activeOutletId || "outlet-sgr"));
+  }, [areas, activeOutletId]);
 
-  const displayedTables = currentOutletAreas
-    .filter((a) => filterArea === "ALL" || a.id === filterArea)
-    .flatMap((a) => a.tables);
+  const allOutletTables = useMemo(() => {
+    return currentOutletAreas.flatMap((a) => a.tables);
+  }, [currentOutletAreas]);
+
+  const displayedTables = useMemo(() => {
+    return currentOutletAreas
+      .filter((a) => filterArea === "ALL" || a.id === filterArea)
+      .flatMap((a) => a.tables);
+  }, [currentOutletAreas, filterArea]);
+
+  const floorSummary = useMemo(() => {
+    return calculateWaiterFloorSummary(allOutletTables);
+  }, [allOutletTables]);
 
   const handleToggleTableAction = (table: TableItem) => {
     if (table.status === "OCCUPIED") {
@@ -58,213 +64,88 @@ export default function WaiterMobilePage() {
     }
   };
 
-  const handleForceReset = (tableId: string) => {
-    releaseTableToAvailable(tableId);
+  const handleConfirmForceReset = () => {
+    if (tableToReset) {
+      releaseTableToAvailable(tableToReset.id);
+      setTableToReset(null);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 max-w-lg mx-auto flex flex-col justify-between border-x border-slate-200 dark:border-slate-800 shadow-xl font-sans transition-colors duration-200">
-      <div>
-        {/* Sticky Header */}
-        <div className="p-4 bg-slate-900 text-white sticky top-0 z-30 flex items-center justify-between shadow-md">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl bg-primary text-white flex items-center justify-center font-bold">
-              <UtensilsCrossed className="w-4 h-4" />
-            </div>
-            <div>
-              <h1 className="font-bold text-xs leading-none text-white flex items-center space-x-1.5">
-                <span>Pramusaji / Waiter Floor</span>
-                <span className="text-[9px] bg-primary/30 text-emerald-300 border border-primary/40 px-1.5 py-0.2 rounded font-mono">
-                  LIVE
-                </span>
-              </h1>
-              <p className="text-[10px] text-slate-400 mt-0.5 flex items-center space-x-1">
-                <Store className="w-3.5 h-3.5 text-primary" />
-                <span>Outlet: <strong>{activeOutlet?.name || "Singaraja"}</strong></span>
-              </p>
-            </div>
-          </div>
+    <div
+      data-unit="fnb"
+      className="min-h-screen bg-background text-foreground flex flex-col justify-between font-sans"
+    >
+      <UnitScope unit="fnb" />
+      <div className="flex-1 flex flex-col">
+        {/* 1. Sticky Mobile & Tablet Header */}
+        <WaiterHeader outletName={activeOutlet?.name || "Singaraja"} />
 
-          <div className="flex items-center space-x-2">
-            <ThemeToggle />
-            <Link
-              href="/dashboard"
-              className="text-[11px] text-slate-300 hover:text-white font-semibold flex items-center space-x-1 bg-slate-800 px-2.5 py-1.5 rounded-lg border border-slate-700"
-            >
-              <ArrowLeft className="w-3 h-3" />
-              <span>Dashboard</span>
-            </Link>
-          </div>
-        </div>
+        {/* 2. Responsive Content Container */}
+        <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col">
+          {/* Floor Occupancy & Status Summary */}
+          <WaiterSummaryBar summary={floorSummary} />
 
-        {/* Filter Area Tabs */}
-        <div className="p-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center space-x-1.5 overflow-x-auto text-xs font-semibold">
-          <button
-            onClick={() => setFilterArea("ALL")}
-            className={`px-3 py-1 rounded-lg transition-colors whitespace-nowrap ${
-              filterArea === "ALL"
-                ? "bg-primary text-white shadow-xs font-bold"
-                : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
-            }`}
-          >
-            Semua Area ({allOutletTables.length})
-          </button>
-          {currentOutletAreas.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => setFilterArea(a.id)}
-              className={`px-3 py-1 rounded-lg transition-colors whitespace-nowrap ${
-                filterArea === a.id
-                  ? "bg-primary text-white shadow-xs font-bold"
-                  : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
-              }`}
-            >
-              {a.name} ({a.tables.length})
-            </button>
-          ))}
-        </div>
+          {/* Filter Area Tabs */}
+          <WaiterAreaTabs
+            areas={currentOutletAreas}
+            selectedArea={filterArea}
+            onSelectArea={setFilterArea}
+            totalTablesCount={allOutletTables.length}
+          />
 
-        {/* Floor Tables Grid */}
-        <div className="p-4 space-y-3">
-          <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-            <span>Denah Meja Outlet Terhubung</span>
-            <span className="text-[11px] font-bold text-slate-700">
-              {allOutletTables.filter((t) => t.status === "OCCUPIED").length} Meja Terisi
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {displayedTables.map((t) => {
-              const isOccupied = t.status === "OCCUPIED";
-              const isReserved = t.status === "RESERVED";
-              const isBilling = t.status === "BILLING";
-              const isCleaning = t.status === "CLEANING";
-              const isAvailable = t.status === "AVAILABLE";
-
-              // Find active order attached to this table
-              const activeOrder = orders.find(
-                (o) =>
-                  (o.tableNumber === t.number || o.tableNumber === t.id) &&
-                  o.outletId === (activeOutletId || "outlet-sgr") &&
-                  o.status !== "COMPLETED" &&
-                  o.status !== "CANCELLED"
-              );
-
-              const badgeColor = isOccupied
-                ? "bg-rose-500 text-white"
-                : isReserved
-                ? "bg-amber-500 text-white"
-                : isBilling
-                ? "bg-blue-600 text-white animate-pulse"
-                : isCleaning
-                ? "bg-purple-600 text-white"
-                : "bg-emerald-100 text-emerald-800 border border-emerald-300";
-
-              return (
-                <div
-                  key={t.id}
-                  className={`p-3.5 rounded-2xl border text-xs flex flex-col justify-between space-y-2.5 transition-all shadow-xs ${
-                    isOccupied
-                      ? "bg-white border-rose-200"
-                      : isBilling
-                      ? "bg-blue-50/50 border-blue-300 ring-1 ring-blue-400"
-                      : isReserved
-                      ? "bg-amber-50/40 border-amber-300"
-                      : isCleaning
-                      ? "bg-purple-50/40 border-purple-300"
-                      : "bg-white border-slate-200"
-                  }`}
-                >
-                  {/* Card Header */}
-                  <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-                    <div className="flex items-center space-x-2">
-                      <span className="font-black text-sm text-slate-900">{t.number}</span>
-                      <span className="text-[10px] text-slate-400 font-semibold">
-                        ({t.cap} Pax)
-                      </span>
-                    </div>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${badgeColor}`}>
-                      {isBilling ? "Tagihan (Bill)" : t.status}
-                    </span>
-                  </div>
-
-                  {/* Customer & Bill Info */}
-                  <div className="space-y-1">
-                    {t.customer ? (
-                      <p className="font-bold text-slate-800 text-xs truncate">
-                        Pelanggan: {t.customer}
-                      </p>
-                    ) : (
-                      <p className="text-slate-400 text-[11px] italic">Meja kosong / belum ada tamu</p>
-                    )}
-
-                    {t.total && (
-                      <p className="text-brand-orange font-black text-xs">
-                        Tagihan: {t.total}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Ordered Items Breakdown (What is ordered & preparation status) */}
-                  {activeOrder && activeOrder.items.length > 0 && (
-                    <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 space-y-1 text-[11px]">
-                      <div className="flex items-center justify-between font-bold text-slate-700 text-[10px] pb-1 border-b border-slate-200/60">
-                        <span>Pesanan Menu ({activeOrder.items.length} item):</span>
-                        <span className={`font-mono ${activeOrder.status === "READY" ? "text-emerald-600 font-bold" : "text-slate-500"}`}>
-                          {activeOrder.status === "COOKING" ? "Dimasak" : activeOrder.status === "READY" ? "Siap Saji" : "Antre"}
-                        </span>
-                      </div>
-                      <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
-                        {activeOrder.items.map((it, idx) => (
-                          <div key={idx} className="flex justify-between text-slate-800 font-medium">
-                            <span className="truncate">{it.quantity}x {it.productName}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action Buttons */}
-                  <div className="pt-1.5 space-y-1.5">
-                    <Button
-                      size="sm"
-                      onClick={() => handleToggleTableAction(t)}
-                      className={`w-full h-8 text-xs font-bold justify-center shadow-xs ${
-                        isOccupied
-                          ? "bg-blue-600 hover:bg-blue-700 text-white"
-                          : isBilling
-                          ? "bg-purple-600 hover:bg-purple-700 text-white"
-                          : isCleaning
-                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                          : isReserved
-                          ? "bg-amber-600 hover:bg-amber-700 text-white"
-                          : "bg-brand-orange hover:bg-orange-600 text-white"
-                      }`}
-                    >
-                      {isOccupied && "Minta Bill / Tagihan"}
-                      {isBilling && "Tamu Bayar -> Bersihkan Meja"}
-                      {isCleaning && "Selesai Bersihkan (Reset Meja)"}
-                      {isReserved && "Dudukkan Tamu Reservasi"}
-                      {isAvailable && "+ Dudukkan Tamu Baru"}
+          {/* Floor Tables Grid: 1 col on mobile, 2 cols on small tablet, 3 on tablet, 4 on wide tablet */}
+          <main className="flex-1 p-4 sm:p-6">
+            {displayedTables.length === 0 ? (
+              <EmptyState
+                className="border py-12"
+                icon={<UtensilsCrossed className="size-8 text-muted-foreground" />}
+                title="Tidak ada meja di area ini"
+                description="Pilih area lain atau tampilkan seluruh area meja outlet."
+                action={
+                  filterArea !== "ALL" ? (
+                    <Button variant="outline" size="lg" onClick={() => setFilterArea("ALL")}>
+                      Tampilkan semua area
                     </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                {displayedTables.map((t) => {
+                  const activeOrder = findActiveOrderForTable(
+                    orders,
+                    t.number,
+                    t.id,
+                    activeOutletId || "outlet-sgr"
+                  );
 
-                    {/* Secondary Quick Reset Button if needed */}
-                    {!isAvailable && (
-                      <button
-                        onClick={() => handleForceReset(t.id)}
-                        className="w-full text-[10px] text-slate-400 hover:text-red-600 font-semibold py-0.5 transition-colors flex items-center justify-center space-x-1"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Paksa Kosongkan / Reset Rp 0</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  return (
+                    <WaiterTableCard
+                      key={t.id}
+                      table={t}
+                      activeOrder={activeOrder}
+                      onAction={handleToggleTableAction}
+                      onRequestForceReset={(table) => setTableToReset(table)}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </main>
         </div>
       </div>
+
+      {/* 5. Safe Reset Confirmation Dialog */}
+      <ConfirmDialog
+        open={Boolean(tableToReset)}
+        onOpenChange={(open) => !open && setTableToReset(null)}
+        title="Kosongkan Meja"
+        description={`Apakah Anda yakin ingin mengosongkan ${tableToReset?.number}? Data tamu dan rincian tagihan akan di-reset ke status tersedia.`}
+        confirmLabel="Kosongkan meja"
+        destructive
+        onConfirm={handleConfirmForceReset}
+      />
     </div>
   );
 }

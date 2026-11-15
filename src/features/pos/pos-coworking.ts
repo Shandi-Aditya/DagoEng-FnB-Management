@@ -112,3 +112,38 @@ export function checkSlotAvailability({
 
   return { isAvailable: true };
 }
+
+const SPACE_TYPE_LABELS: Record<string, string> = {
+  HOT_DESK: "Hot desk",
+  DEDICATED_DESK: "Dedicated desk",
+  MEETING_ROOM: "Meeting room",
+  PRIVATE_POD: "Private pod",
+};
+
+/** Convert space type enum to human-friendly sentence-case Indonesian label. */
+export function spaceTypeLabel(type?: string): string {
+  if (!type) return "—";
+  if (SPACE_TYPE_LABELS[type]) return SPACE_TYPE_LABELS[type];
+  const cleaned = type.replace(/_/g, " ").toLowerCase();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
+/** Format duration in hours for display. 8 hours is labeled full day. */
+export function formatCoworkingDuration(hours: number): string {
+  if (hours === 8) return "Seharian (8 jam)";
+  return `${hours} jam`;
+}
+
+/** Standardized empty state message for co-working room catalogue. */
+export function coworkingEmptyStateMessage(hasFilter: boolean): { title: string; description: string } {
+  if (hasFilter) {
+    return {
+      title: "Ruang kerja tidak ditemukan",
+      description: "Ubah kata kunci pencarian atau pilih filter tipe ruang lain.",
+    };
+  }
+  return {
+    title: "Belum ada ruang kerja",
+    description: "Ruang kerja aktif akan muncul di sini.",
+  };
+}

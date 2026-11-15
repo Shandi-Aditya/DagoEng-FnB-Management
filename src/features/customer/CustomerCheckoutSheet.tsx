@@ -300,6 +300,7 @@ export function CustomerCheckoutSheet({
         <SheetFooter className="mt-auto border-t pt-4">
           <Button
             type="button"
+            size="lg"
             className="w-full"
             disabled={cart.length === 0 || (isDineIn && !selectedTableNumber) || isSubmitting}
             onClick={onSubmitOrder}

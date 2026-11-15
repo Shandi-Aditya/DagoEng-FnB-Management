@@ -214,3 +214,15 @@ export function emptyReservationsMessage(
   return EMPTY_RESERVATION_COPY[queueKey];
 }
 
+/**
+ * Validates whether a table is ready to accept a reservation of a given party size.
+ * A table must be in AVAILABLE status and its capacity must be >= requiredPax.
+ */
+export function isTableAvailableForPax(
+  table: TableItem,
+  requiredPax: number
+): boolean {
+  if (table.status !== "AVAILABLE") return false;
+  return table.cap >= requiredPax;
+}
+

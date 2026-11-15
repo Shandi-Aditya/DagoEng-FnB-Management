@@ -125,7 +125,7 @@ export function EmployeeDetailModal({
 
         <DialogFooter className="flex-row items-center justify-between border-t pt-3 sm:justify-between">
           <Button
-            size="sm"
+            size="lg"
             variant="outline"
             onClick={() => {
               onClose();
@@ -135,7 +135,7 @@ export function EmployeeDetailModal({
             Edit profil
           </Button>
           <Button
-            size="sm"
+            size="lg"
             variant="outline"
             onClick={onClose}
           >

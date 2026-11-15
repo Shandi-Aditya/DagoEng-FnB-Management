@@ -42,11 +42,11 @@ export function DeleteEmployeeDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <DialogFooter className="gap-2 border-t pt-2 sm:gap-0">
+        <DialogFooter className="border-t pt-3">
           <Button
             type="button"
             variant="outline"
-            size="sm"
+            size="lg"
             onClick={onClose}
           >
             Batal
@@ -54,7 +54,7 @@ export function DeleteEmployeeDialog({
           <Button
             type="button"
             variant="destructive"
-            size="sm"
+            size="lg"
             onClick={onConfirm}
           >
             Hapus staf

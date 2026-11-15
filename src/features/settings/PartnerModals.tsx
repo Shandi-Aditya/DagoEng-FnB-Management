@@ -175,10 +175,10 @@ export function PartnerModals(props: PartnerModalsProps) {
             </div>
 
             <DialogFooter className="gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => onAddTenantOpenChange(false)}>
+              <Button type="button" variant="outline" size="lg" onClick={() => onAddTenantOpenChange(false)}>
                 Batal
               </Button>
-              <Button type="submit">Simpan mitra</Button>
+              <Button type="submit" size="lg">Simpan mitra</Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -281,10 +281,10 @@ export function PartnerModals(props: PartnerModalsProps) {
             </div>
 
             <DialogFooter className="gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => onAddOrgOpenChange(false)}>
+              <Button type="button" variant="outline" size="lg" onClick={() => onAddOrgOpenChange(false)}>
                 Batal
               </Button>
-              <Button type="submit" disabled={isSubmittingOrg}>
+              <Button type="submit" size="lg" disabled={isSubmittingOrg}>
                 {isSubmittingOrg ? "Menyimpan..." : "Simpan penyelenggara"}
               </Button>
             </DialogFooter>
@@ -320,12 +320,13 @@ export function PartnerModals(props: PartnerModalsProps) {
             </div>
           ) : null}
           <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={onCloseActivationModal}>
+            <Button type="button" variant="outline" size="lg" onClick={onCloseActivationModal}>
               Tutup
             </Button>
             {activationModalData ? (
               <Button
                 type="button"
+                size="lg"
                 onClick={() => onCopyActivationLink(activationModalData.activationUrl)}
               >
                 {copiedLink ? <Check /> : <Copy />}

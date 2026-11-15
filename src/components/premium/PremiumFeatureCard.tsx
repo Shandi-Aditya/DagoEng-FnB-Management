@@ -1,9 +1,11 @@
 "use client";
 
 import React from "react";
-import { CheckCircle2, ChevronRight, Sparkles } from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
+import { CheckCircle2, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ProFeatureBadge, ProBadgeVariant } from "./ProFeatureBadge";
+import { formatFeatureBenefits } from "./premium-domain";
+import { cn } from "@/lib/utils";
 
 export interface PremiumFeatureCardProps {
   title: string;
@@ -30,36 +32,48 @@ export function PremiumFeatureCard({
   actionLabel = "Pelajari Fitur",
   className = "",
 }: PremiumFeatureCardProps) {
+  const formattedBenefits = formatFeatureBenefits(benefits, 3);
+
   return (
     <div
-      className={`p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all flex flex-col justify-between space-y-4 ${className}`}
+      className={cn(
+        "p-4 sm:p-5 rounded-2xl bg-card border border-border shadow-2xs hover:border-border/80 flex flex-col justify-between space-y-4",
+        className
+      )}
     >
       <div className="space-y-3">
         {/* Header row */}
         <div className="flex items-start justify-between gap-2.5">
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center gap-2.5">
             {icon && (
-              <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 border border-purple-100 flex items-center justify-center shrink-0">
+              <div className="size-9 rounded-xl bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0">
                 {icon}
               </div>
             )}
             <div>
-              <h4 className="font-bold text-sm text-slate-900 leading-tight">{title}</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5">Status: <span className="text-slate-600 font-semibold">{status}</span></p>
+              <h4 className="font-semibold text-sm text-foreground leading-tight">
+                {title}
+              </h4>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                <span>Status: </span>
+                <span className="text-foreground font-medium">{status}</span>
+              </p>
             </div>
           </div>
           <ProFeatureBadge label={badgeLabel} variant={badgeVariant} size="xs" />
         </div>
 
         {/* Description */}
-        <p className="text-xs text-slate-600 leading-relaxed">{description}</p>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {description}
+        </p>
 
         {/* Benefits list */}
-        {benefits.length > 0 && (
+        {formattedBenefits.length > 0 && (
           <div className="pt-1 space-y-1.5">
-            {benefits.slice(0, 3).map((benefit, idx) => (
-              <div key={idx} className="flex items-start space-x-1.5 text-[11px] text-slate-600">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+            {formattedBenefits.map((benefit, idx) => (
+              <div key={idx} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                <CheckCircle2 className="size-3.5 text-primary shrink-0 mt-0.5" />
                 <span className="line-clamp-1">{benefit}</span>
               </div>
             ))}
@@ -68,8 +82,8 @@ export function PremiumFeatureCard({
       </div>
 
       {/* Footer / Action */}
-      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+      <div className="pt-2 border-t border-border flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">
           Rancangan SaaS
         </span>
         {onLearnMore && (
@@ -78,10 +92,10 @@ export function PremiumFeatureCard({
             size="sm"
             variant="ghost"
             onClick={onLearnMore}
-            className="text-xs font-bold text-purple-700 hover:text-purple-800 hover:bg-purple-50 h-8 px-2.5 space-x-1 rounded-lg"
+            className="gap-1"
           >
             <span>{actionLabel}</span>
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="size-3.5" />
           </Button>
         )}
       </div>

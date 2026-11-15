@@ -48,15 +48,28 @@ interface InventoryStockTabProps {
 function StockLevel({ item }: { item: IngredientItem }) {
   const ratio = item.min > 0 ? item.stockNumber / (item.min * 2) : 1;
   const percent = Math.max(4, Math.min(100, Math.round(ratio * 100)));
+  const isOutOfStock = item.stockNumber <= 0;
+  const isLowStock = !isOutOfStock && item.stockNumber <= item.min;
+
   return (
     <div className="flex flex-col gap-1">
       <span>
         <span className="font-mono tabular-nums">{item.stockNumber}</span>{" "}
         <span className="text-xs text-muted-foreground">{item.unit}</span>
       </span>
-      <span className="h-1 w-20 overflow-hidden rounded-full bg-muted" aria-hidden>
+      <span
+        className="h-1 w-20 overflow-hidden rounded-full bg-muted-foreground/35"
+        aria-hidden
+      >
         <span
-          className={cn("block h-full", item.stockNumber <= item.min ? "bg-warning" : "bg-muted-foreground/60", item.stockNumber <= 0 && "bg-destructive")}
+          className={cn(
+            "block h-full transition-[width]",
+            isOutOfStock
+              ? "bg-destructive"
+              : isLowStock
+                ? "bg-warning"
+                : "bg-primary"
+          )}
           style={{ width: `${percent}%` }}
         />
       </span>

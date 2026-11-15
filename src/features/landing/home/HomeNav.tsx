@@ -82,6 +82,7 @@ export function HomeNav({
           {action}
           <Button
             variant="ghost"
+            size="lg"
             render={<Link href={account.href} />}
             nativeButton={false}
           >
@@ -89,6 +90,7 @@ export function HomeNav({
           </Button>
           {showCta ? (
             <Button
+              size="lg"
               className="hidden sm:inline-flex"
               render={<Link href={cta.href} />}
               nativeButton={false}

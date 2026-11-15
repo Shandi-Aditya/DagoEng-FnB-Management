@@ -115,13 +115,13 @@ export function CoworkingReceiptModal({
           </DialogHeader>
 
           {/* Scrollable Receipt Body */}
-          <div className="p-6 overflow-y-auto flex-1 bg-slate-100/50 flex justify-center">
+          <div className="p-6 overflow-y-auto flex-1 bg-muted/30 flex justify-center">
             <div
               id="coworking-thermal-receipt"
-              className="w-full max-w-[340px] bg-white p-5 rounded-lg shadow-sm border border-slate-200 font-mono text-slate-900 text-xs space-y-4 print:w-full print:shadow-none print:border-none"
+              className="w-full max-w-[340px] bg-card p-5 rounded-lg border border-border font-mono text-foreground text-xs space-y-4 print:w-full print:shadow-none print:border-none"
             >
               {/* Brand & Outlet Header */}
-              <div className="text-center space-y-1.5 border-b border-dashed border-slate-300 pb-3">
+              <div className="text-center space-y-1.5 border-b border-dashed border-border pb-3">
                 <div className="w-8 h-10 relative mx-auto mb-1">
                   <Image
                     src="/logo-dago.png"
@@ -131,171 +131,172 @@ export function CoworkingReceiptModal({
                     className="object-contain mx-auto"
                   />
                 </div>
-                <h2 className="font-black text-sm tracking-wider uppercase text-slate-900">
-                  DAGO CREATIVE HUB
+                <h2 className="font-semibold text-sm text-foreground">
+                  Dago Creative Hub
                 </h2>
-                <p className="font-bold text-[11px] text-blue-700 uppercase tracking-wide">
-                  CO-WORKING & MEETING SPACES
+                <p className="font-medium text-xs text-primary">
+                  Ruang kerja dan meeting
                 </p>
-                <p className="font-bold text-xs text-slate-700">
+                <p className="text-xs text-muted-foreground">
                   Outlet: {receiptData.outletName}
                 </p>
                 {receiptData.outletAddress && (
-                  <p className="text-[10px] text-slate-500 leading-tight">
+                  <p className="text-xs text-muted-foreground leading-tight">
                     {receiptData.outletAddress}
                   </p>
                 )}
                 {receiptData.outletPhone && (
-                  <p className="text-[10px] text-slate-500">Telp: {receiptData.outletPhone}</p>
+                  <p className="text-xs text-muted-foreground">Telp: {receiptData.outletPhone}</p>
                 )}
               </div>
 
               {/* Booking Transaction Meta */}
-              <div className="text-[11px] space-y-1 border-b border-dashed border-slate-300 pb-2">
+              <div className="text-xs space-y-1 border-b border-dashed border-border pb-2">
                 <div className="flex justify-between">
-                  <span>No. Booking:</span>
-                  <span className="font-bold text-blue-700">{receiptData.bookingCode}</span>
+                  <span className="text-muted-foreground">No. booking:</span>
+                  <span className="font-medium text-primary">{receiptData.bookingCode}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Waktu Transaksi:</span>
+                  <span className="text-muted-foreground">Waktu transaksi:</span>
                   <span>{receiptData.transactionDate}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Tamu / Customer:</span>
-                  <span className="font-bold">{receiptData.guestName}</span>
+                  <span className="text-muted-foreground">Tamu:</span>
+                  <span className="font-medium">{receiptData.guestName}</span>
                 </div>
                 {receiptData.guestPhone && (
                   <div className="flex justify-between">
-                    <span>No. Kontak:</span>
+                    <span className="text-muted-foreground">No. kontak:</span>
                     <span>{receiptData.guestPhone}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span>Tipe Penggunaan:</span>
-                  <span className="font-bold">
+                  <span className="text-muted-foreground">Tipe penggunaan:</span>
+                  <span className="font-medium">
                     {receiptData.company && receiptData.company !== "Personal" && receiptData.company !== "Member Dago"
-                      ? `Group / Company (${receiptData.company})`
+                      ? `Perusahaan (${receiptData.company})`
                       : "Personal"}
                   </span>
                 </div>
               </div>
 
               {/* Workspace Booking Details */}
-              <div className="space-y-1.5 border-b border-dashed border-slate-300 pb-3 text-xs">
-                <div className="flex items-center justify-between font-bold text-slate-900">
+              <div className="space-y-1.5 border-b border-dashed border-border pb-3 text-xs">
+                <div className="flex items-center justify-between font-medium text-foreground">
                   <span className="flex items-center space-x-1">
-                    <Laptop className="w-3.5 h-3.5 text-blue-600 inline mr-1" />
+                    <Laptop className="size-3.5 text-primary inline mr-1" />
                     <span>{receiptData.spaceName}</span>
                   </span>
-                  <span>{receiptData.spaceType}</span>
+                  <span className="text-muted-foreground">{receiptData.spaceType}</span>
                 </div>
 
-                <div className="text-[11px] bg-slate-50 p-2 rounded border border-slate-100 space-y-1">
+                <div className="text-xs bg-muted/40 p-2.5 rounded-lg border border-border space-y-1">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Tanggal Sesi:</span>
-                    <span className="font-bold text-slate-800">
+                    <span className="text-muted-foreground">Tanggal sesi:</span>
+                    <span className="font-medium text-foreground">
                       {receiptData.endDate && receiptData.endDate !== receiptData.bookingDate
                         ? `${receiptData.bookingDate} s/d ${receiptData.endDate}`
                         : receiptData.bookingDate}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Waktu / Jam:</span>
-                    <span className="font-bold text-slate-800">
+                    <span className="text-muted-foreground">Waktu:</span>
+                    <span className="font-medium text-foreground">
                       {receiptData.startTime} s/d {receiptData.endTime} WITA
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Total Durasi:</span>
-                    <span className="font-bold text-slate-800">
-                      {receiptData.duration} {receiptData.bookingType === "HOURLY" ? "Jam" : "Hari"}
+                    <span className="text-muted-foreground">Total durasi:</span>
+                    <span className="font-medium text-foreground">
+                      {receiptData.duration} {receiptData.bookingType === "HOURLY" ? "jam" : "hari"}
                     </span>
                   </div>
                 </div>
 
                 {receiptData.notes && (
-                  <p className="text-[10px] italic text-slate-500 pt-0.5">
+                  <p className="text-xs italic text-muted-foreground pt-0.5">
                     *Catatan: {receiptData.notes}
                   </p>
                 )}
               </div>
 
               {/* Price & Financial Breakdown */}
-              <div className="space-y-1 text-xs border-b border-dashed border-slate-300 pb-2">
+              <div className="space-y-1 text-xs border-b border-dashed border-border pb-2">
                 <div className="flex justify-between">
-                  <span>Tarif Sewa Ruang:</span>
-                  <span>{formatCurrencyIDR(receiptData.basePrice)}</span>
+                  <span className="text-muted-foreground">Tarif sewa ruang:</span>
+                  <span className="tabular-nums">{formatCurrencyIDR(receiptData.basePrice)}</span>
                 </div>
 
                 {receiptData.discount !== undefined && receiptData.discount > 0 && (
-                  <div className="flex justify-between text-emerald-600 font-semibold">
+                  <div className="flex justify-between text-success font-medium">
                     <span>
                       Diskon {receiptData.promoTitle ? `(${receiptData.promoTitle})` : ""}:
                     </span>
-                    <span>-{formatCurrencyIDR(receiptData.discount)}</span>
+                    <span className="tabular-nums">-{formatCurrencyIDR(receiptData.discount)}</span>
                   </div>
                 )}
 
                 {receiptData.tax !== undefined && receiptData.tax > 0 ? (
                   <div className="flex justify-between">
-                    <span>
+                    <span className="text-muted-foreground">
                       Pajak ({receiptData.taxType || "PPN"}
                       {receiptData.taxRatePercent !== undefined ? ` ${receiptData.taxRatePercent}%` : ""}):
                     </span>
-                    <span>{formatCurrencyIDR(receiptData.tax)}</span>
+                    <span className="tabular-nums">{formatCurrencyIDR(receiptData.tax)}</span>
                   </div>
                 ) : (
-                  <div className="flex justify-between text-slate-500">
-                    <span>Pajak (Bebas PB1 / Non-Pajak):</span>
-                    <span>Rp 0</span>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Pajak (bebas PB1 / non-pajak):</span>
+                    <span className="tabular-nums">Rp 0</span>
                   </div>
                 )}
 
                 {receiptData.serviceCharge !== undefined && receiptData.serviceCharge > 0 && (
                   <div className="flex justify-between">
-                    <span>Service Charge:</span>
-                    <span>{formatCurrencyIDR(receiptData.serviceCharge)}</span>
+                    <span className="text-muted-foreground">Biaya layanan:</span>
+                    <span className="tabular-nums">{formatCurrencyIDR(receiptData.serviceCharge)}</span>
                   </div>
                 )}
 
-                <div className="flex justify-between font-black text-sm pt-1 border-t border-slate-200">
-                  <span>TOTAL BIAYA:</span>
-                  <span>{formatCurrencyIDR(receiptData.totalAmount)}</span>
+                <div className="flex justify-between font-semibold text-sm pt-1 border-t border-border text-foreground">
+                  <span>Total biaya:</span>
+                  <span className="tabular-nums">{formatCurrencyIDR(receiptData.totalAmount)}</span>
                 </div>
               </div>
 
               {/* Payment Status */}
-              <div className="space-y-1 text-xs border-b border-dashed border-slate-300 pb-2">
+              <div className="space-y-1 text-xs border-b border-dashed border-border pb-2">
                 <div className="flex justify-between">
-                  <span>Metode Pembayaran:</span>
-                  <span className="font-bold">{receiptData.paymentMethod}</span>
+                  <span className="text-muted-foreground">Metode pembayaran:</span>
+                  <span className="font-medium text-foreground">{receiptData.paymentMethod}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Status Pembayaran:</span>
-                  <span className="font-bold text-emerald-600 uppercase">
+                  <span className="text-muted-foreground">Status pembayaran:</span>
+                  <span className="font-medium text-success">
                     {receiptData.paymentStatus}
                   </span>
                 </div>
               </div>
 
               {/* Amenities & Footer */}
-              <div className="text-center text-[10px] text-slate-500 space-y-1 pt-1">
-                <p className="font-bold text-slate-700">Fasilitas Termasuk:</p>
-                <p>High-Speed Wi-Fi • Free Flow Mineral Water • Power Outlet</p>
-                <p className="text-[9px] text-slate-400 pt-1">
-                  Powered by DagoEng Co-Working Management
+              <div className="text-center text-xs text-muted-foreground space-y-1 pt-1">
+                <p className="font-medium text-foreground">Fasilitas termasuk:</p>
+                <p>Koneksi internet cepat &bull; Air mineral &bull; Stopkontak</p>
+                <p className="text-xs text-muted-foreground/70 pt-1">
+                  Dago Creative Hub Co-Working
                 </p>
               </div>
             </div>
           </div>
 
           {/* Modal Actions */}
-          <div className="p-4 border-t border-slate-100 bg-white flex items-center justify-between gap-2 print:hidden">
+          <div className="p-4 border-t border-border bg-card flex items-center justify-between gap-2 print:hidden">
             <Button
               type="button"
               variant="outline"
+              size="lg"
               onClick={handlePrint}
-              className="flex-1 text-xs font-medium"
+              className="flex-1"
             >
               <Printer className="size-4" />
               <span>Cetak nota thermal</span>
@@ -303,8 +304,9 @@ export function CoworkingReceiptModal({
 
             <Button
               type="button"
+              size="lg"
               onClick={onClose}
-              className="flex-1 text-xs font-medium"
+              className="flex-1"
             >
               <span>Tutup</span>
             </Button>

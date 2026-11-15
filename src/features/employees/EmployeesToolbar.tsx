@@ -48,7 +48,7 @@ export function EmployeesToolbar({
       actions={
         <div className="flex items-center gap-2">
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" />}>
+            <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
               Lainnya
               <ChevronDown className="text-muted-foreground" />
             </DropdownMenuTrigger>
@@ -71,6 +71,7 @@ export function EmployeesToolbar({
           {!hasActiveShift && (
             <Button
               variant="outline"
+              size="lg"
               onClick={onOpenShiftModal}
             >
               <Clock />
@@ -78,7 +79,7 @@ export function EmployeesToolbar({
             </Button>
           )}
 
-          <Button onClick={onOpenAddModal}>
+          <Button size="lg" onClick={onOpenAddModal}>
             <Plus />
             Tambah staf
           </Button>

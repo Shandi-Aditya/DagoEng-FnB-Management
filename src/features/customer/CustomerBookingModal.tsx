@@ -323,10 +323,10 @@ export function CustomerBookingModal({
           </div>
 
           <DialogFooter className="gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" size="lg" onClick={() => onOpenChange(false)}>
               Batal
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" size="lg" disabled={isSubmitting}>
               {isSubmitting ? "Memproses..." : `Konfirmasi sewa (${formatCurrencyIDR(finalCost)})`}
             </Button>
           </DialogFooter>

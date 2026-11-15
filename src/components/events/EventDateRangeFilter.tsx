@@ -304,7 +304,7 @@ export function EventDateRangeFilter({
   return (
     <div className={cn("inline-flex items-center gap-1.5", className)}>
       <Popover open={isOpen} onOpenChange={setIsOpen}>
-        <PopoverTrigger render={<Button variant="outline" size="sm" className="gap-1.5" />}>
+        <PopoverTrigger render={<Button variant="outline" size="lg" className="gap-1.5" />}>
           <Calendar />
           <span className="truncate max-w-[160px] font-normal">{activeLabel}</span>
           <ChevronDown className="text-muted-foreground" />

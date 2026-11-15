@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, Coffee, Minus, Plus } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import {
 import { FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
+
+import { calculateItemFinalPrice } from "./pos-catalog";
 import type { POSCartItem, POSModifierOption, POSProductItem, POSVariantOption } from "./types";
 
 interface ModifierModalProps {
@@ -52,15 +54,18 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
     }
   }, [product]);
 
-  if (!product) return null;
-
   const variantAdjustment = Number(selectedVariant?.priceAdjustment) || 0;
   const modifiersTotal = selectedModifiers.reduce(
     (sum, mod) => sum + (Number(mod.price) || Number((mod as any).priceAdjustment) || 0),
     0
   );
-  const unitFinalPrice = (Number(product.basePrice) || 0) + variantAdjustment + modifiersTotal;
-  const itemGrandTotal = unitFinalPrice * (Number(quantity) || 1);
+
+  const { unitFinalPrice, itemGrandTotal } = useMemo(() => {
+    if (!product) return { unitFinalPrice: 0, itemGrandTotal: 0 };
+    return calculateItemFinalPrice(product.basePrice, variantAdjustment, modifiersTotal, quantity);
+  }, [product, variantAdjustment, modifiersTotal, quantity]);
+
+  if (!product) return null;
 
   const handleToggleModifier = (groupMax: number, isGroupReq: boolean, opt: POSModifierOption) => {
     const isAlreadySelected = selectedModifiers.some((m) => m.name === opt.name);
@@ -105,9 +110,10 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-lg gap-4 p-5 max-h-[90vh] flex flex-col overflow-hidden">
-        <DialogHeader className="border-b border-border pb-3">
-          <div className="flex items-center gap-2.5">
+      <DialogContent className="flex max-h-[85vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        {/* Header */}
+        <DialogHeader className="shrink-0 border-b border-border bg-muted/20 p-4">
+          <div className="flex items-center gap-2.5 pr-8">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Coffee className="size-4" />
             </div>
@@ -122,7 +128,8 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
           </div>
         </DialogHeader>
 
-        <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+        {/* Scrollable Body */}
+        <div className="flex-1 space-y-4 overflow-y-auto p-5 text-xs text-foreground">
           {/* Base price & description */}
           <div className="flex items-baseline justify-between border-b border-border pb-3">
             <span className="text-xs text-muted-foreground">
@@ -133,7 +140,7 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
             </span>
           </div>
           {product.description && (
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <p className="text-xs leading-relaxed text-muted-foreground">
               {product.description}
             </p>
           )}
@@ -145,13 +152,15 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
                 <FieldLabel>Pilih ukuran atau varian</FieldLabel>
                 <StatusBadge status="neutral">Wajib 1 pilihan</StatusBadge>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {product.variants.map((v, i) => {
                   const isSelected = selectedVariant?.name === v.name;
                   return (
                     <button
                       key={i}
                       type="button"
+                      role="radio"
+                      aria-checked={isSelected}
                       onClick={() => setSelectedVariant(v)}
                       className={cn(
                         "flex items-center justify-between rounded-lg border p-2.5 text-left transition-colors touch-manipulation",
@@ -160,7 +169,21 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
                           : "border-border bg-card hover:bg-accent/40 text-foreground"
                       )}
                     >
-                      <span className="text-xs font-medium">{v.name}</span>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={cn(
+                            "flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors",
+                            isSelected
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-input bg-background"
+                          )}
+                        >
+                          {isSelected && (
+                            <div className="size-1.5 shrink-0 rounded-full bg-primary-foreground" />
+                          )}
+                        </div>
+                        <span className="text-xs font-medium">{v.name}</span>
+                      </div>
                       <span className="font-mono text-xs tabular-nums text-muted-foreground">
                         {v.priceAdjustment > 0 ? `+${formatCurrencyIDR(v.priceAdjustment)}` : "Termasuk"}
                       </span>
@@ -184,7 +207,7 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
               <div
                 role={group.maxSelect === 1 ? "radiogroup" : "group"}
                 aria-label={group.name}
-                className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
               >
                 {group.options.map((opt, optIdx) => {
                   const isChecked = selectedModifiers.some((m) => m.name === opt.name);
@@ -209,7 +232,7 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
                       <div className="flex items-center gap-2">
                         <div
                           className={cn(
-                            "flex size-4 items-center justify-center border text-[10px]",
+                            "flex size-4 shrink-0 items-center justify-center border transition-colors",
                             group.maxSelect === 1 ? "rounded-full" : "rounded",
                             isChecked
                               ? "border-primary bg-primary text-primary-foreground"
@@ -218,7 +241,7 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
                         >
                           {isChecked && (
                             group.maxSelect === 1 ? (
-                              <div className="size-1.5 rounded-full bg-primary-foreground" />
+                              <div className="size-1.5 shrink-0 rounded-full bg-primary-foreground" />
                             ) : (
                               <Check className="size-3" />
                             )
@@ -248,33 +271,37 @@ export function ModifierModal({ product, isOpen, onClose, onAddToCart }: Modifie
         </div>
 
         {/* Footer */}
-        <DialogFooter className="flex-row items-center justify-between gap-3 border-t border-border pt-3 sm:space-x-0">
-          <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
+        <DialogFooter className="flex-row items-center justify-between gap-3 border-t border-border bg-muted/20 p-4 shrink-0 sm:space-x-0">
+          <div className="flex items-center gap-2">
             <Button
               type="button"
-              variant="ghost"
-              size="icon-xs"
+              variant="outline"
+              size="icon-lg"
+              disabled={quantity <= 1}
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+              aria-label="Kurangi jumlah"
             >
-              <Minus className="size-3.5" />
+              <Minus />
             </Button>
-            <span className="w-8 text-center font-mono text-xs font-medium tabular-nums text-foreground">
+            <span className="w-6 text-center font-mono text-sm font-medium tabular-nums text-foreground">
               {quantity}
             </span>
             <Button
               type="button"
-              variant="ghost"
-              size="icon-xs"
+              variant="default"
+              size="icon-lg"
               onClick={() => setQuantity((q) => q + 1)}
+              aria-label="Tambah jumlah"
             >
-              <Plus className="size-3.5" />
+              <Plus />
             </Button>
           </div>
 
           <Button
             type="button"
+            size="lg"
             onClick={handleConfirmAdd}
-            className="flex-1 text-xs font-medium"
+            className="flex-1"
           >
             <span>Tambahkan ke keranjang</span>
             <span className="font-mono tabular-nums opacity-90">

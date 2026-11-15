@@ -1,38 +1,46 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ShieldCheck,
   Lock,
   Eye,
   EyeOff,
-  CheckCircle2,
-  AlertTriangle,
-  ArrowRight,
-  Sparkles,
-  Calendar,
-  Mail,
-  User,
-  Clock,
-  LogIn,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  InputGroup,
+  InputGroupInput,
+  InputGroupAddon,
+  InputGroupButton,
+} from "@/components/ui/input-group";
+import { UnitScope } from "@/components/app/unit-scope";
+import { StatusBadge } from "@/components/app/status-badge";
+import {
+  ActivationHeader,
+  ActivationLoadingState,
+  ActivationOrganizerCard,
+  ActivationSuccessView,
+  ActivationInvalidTokenView,
+  validatePasswordInput,
+  getActivationErrorMessage,
+  type OrganizerSummaryInfo,
+} from "@/features/events-activate";
 
 function ActivationFormContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const token = searchParams.get("token") || "";
 
   const [isLoading, setIsLoading] = useState(true);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [organizerInfo, setOrganizerInfo] = useState<{
-    name: string;
-    category: string;
-    contactPerson: string;
-    email: string;
-  } | null>(null);
+  const [organizerInfo, setOrganizerInfo] = useState<OrganizerSummaryInfo | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
 
   const [password, setPassword] = useState("");
@@ -49,6 +57,18 @@ function ActivationFormContent() {
     if (!token) {
       setIsLoading(false);
       setValidationError("Tautan aktivasi tidak valid. Parameter token tidak ditemukan pada URL.");
+      return;
+    }
+
+    if (process.env.NODE_ENV !== "production" && token === "preview") {
+      setOrganizerInfo({
+        name: "Komunitas Barista Dago",
+        contactPerson: "Budi Santoso",
+        email: "mitra.barista@dagoeng.com",
+      });
+      setExpiresAt(new Date(Date.now() + 48 * 3600 * 1000).toISOString());
+      setValidationError(null);
+      setIsLoading(false);
       return;
     }
 
@@ -77,13 +97,18 @@ function ActivationFormContent() {
     e.preventDefault();
     setFormError(null);
 
-    if (password.length < 8) {
-      setFormError("Password wajib memiliki minimal 8 karakter.");
+    const validation = validatePasswordInput(password, confirmPassword);
+    if (!validation.valid) {
+      setFormError(validation.error || "Password tidak memenuhi syarat.");
       return;
     }
 
-    if (password !== confirmPassword) {
-      setFormError("Konfirmasi password tidak cocok dengan password baru.");
+    if (process.env.NODE_ENV !== "production" && token === "preview") {
+      setIsSubmitting(true);
+      setTimeout(() => {
+        setIsSubmitting(false);
+        setIsSuccess(true);
+      }, 500);
       return;
     }
 
@@ -113,275 +138,182 @@ function ActivationFormContent() {
 
   // 1. Loading State
   if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 space-y-4">
-        <div className="w-10 h-10 border-4 border-brand-sage border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
-          Memvalidasi token aktivasi akun Anda...
-        </p>
-      </div>
-    );
+    return <ActivationLoadingState />;
   }
 
   // 2. Success State
   if (isSuccess) {
     return (
-      <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800/60 rounded-3xl p-8 sm:p-10 shadow-xl max-w-lg mx-auto text-center animate-in fade-in zoom-in-95 duration-300">
-        <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-950/70 text-brand-sage dark:text-brand-sageBright rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
-          <CheckCircle2 className="w-10 h-10" />
-        </div>
-
-        <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 mb-3">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>Aktivasi Berhasil</span>
-        </span>
-
-        <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 mb-2">
-          Selamat Datang di DAGO!
-        </h2>
-        <p className="text-sm text-slate-600 dark:text-slate-300 mb-6">
-          Akun penyelenggara Anda ({organizerInfo?.name}) telah aktif. Kredensial telah diamankan dan Anda dapat langsung masuk ke portal.
-        </p>
-
-        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 mb-6 text-left border border-slate-200 dark:border-slate-800">
-          <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Email Login Terdaftar:</div>
-          <div className="font-mono text-sm font-bold text-slate-900 dark:text-slate-100 break-all">
-            {organizerInfo?.email}
-          </div>
-        </div>
-
-        <Link href="/login" className="block">
-          <Button
-            type="button"
-            className="w-full bg-brand-sage hover:bg-[#2D5F43] text-white font-bold h-12 rounded-xl text-sm shadow-md shadow-emerald-900/10 transition-all flex items-center justify-center space-x-2"
-          >
-            <span>Masuk ke Halaman Login</span>
-            <ArrowRight className="w-4 h-4 ml-1" />
-          </Button>
-        </Link>
-      </div>
+      <ActivationSuccessView
+        organizerName={organizerInfo?.name}
+        email={organizerInfo?.email}
+      />
     );
   }
 
   // 3. Invalid or Expired Token State
   if (validationError) {
     return (
-      <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/60 rounded-3xl p-8 sm:p-10 shadow-xl max-w-lg mx-auto text-center">
-        <div className="w-16 h-16 bg-rose-100 dark:bg-rose-950/70 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
-          <AlertTriangle className="w-9 h-9" />
-        </div>
-
-        <span className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800 mb-3">
-          Tautan Tidak Berlaku
-        </span>
-
-        <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 mb-3">
-          Tidak Dapat Mengaktifkan Akun
-        </h2>
-
-        <p className="text-sm text-slate-600 dark:text-slate-300 mb-6 leading-relaxed">
-          {validationError}
-        </p>
-
-        <div className="flex flex-col sm:flex-row gap-3">
-          <Link href="/login" className="flex-1">
-            <Button
-              variant="outline"
-              className="w-full h-11 rounded-xl text-xs font-bold border-slate-300 dark:border-slate-700"
-            >
-              <LogIn className="w-4 h-4 mr-1.5" />
-              <span>Ke Halaman Login</span>
-            </Button>
-          </Link>
-          <Link href="/events" className="flex-1">
-            <Button
-              className="w-full h-11 rounded-xl text-xs font-bold bg-brand-sage hover:bg-[#2D5F43] text-white"
-            >
-              <Calendar className="w-4 h-4 mr-1.5" />
-              <span>Jelajahi Event</span>
-            </Button>
-          </Link>
-        </div>
-      </div>
+      <ActivationInvalidTokenView
+        validationError={getActivationErrorMessage(validationError)}
+      />
     );
   }
 
   // 4. Form State (Valid Token)
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-10 shadow-xl max-w-lg mx-auto">
-      {/* Header Info */}
-      <div className="text-center mb-6">
-        <div className="w-14 h-14 bg-emerald-100 dark:bg-emerald-950/70 text-brand-sage dark:text-brand-sageBright rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-inner">
-          <ShieldCheck className="w-8 h-8" />
-        </div>
-        <span className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 mb-2">
-          Aktivasi Akun Penyelenggara
-        </span>
-        <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100">
-          Buat Password Anda
-        </h1>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-          Daftarkan password mandiri untuk mengakses Portal Penyelenggara Event DAGO.
-        </p>
-      </div>
-
-      {/* Organizer Summary Card */}
-      {organizerInfo && (
-        <div className="bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/80 dark:border-emerald-800/40 rounded-2xl p-4 mb-6 space-y-2 text-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500 dark:text-slate-400 flex items-center space-x-1.5">
-              <Calendar className="w-3.5 h-3.5 text-brand-sage" />
-              <span>Komunitas:</span>
-            </span>
-            <span className="font-bold text-slate-900 dark:text-slate-100">
-              {organizerInfo.name}
-            </span>
+    <Card className="max-w-md w-full mx-auto border-border shadow-xs">
+      <CardContent className="p-6 sm:p-8 space-y-6">
+        {/* Header Info */}
+        <div className="text-center space-y-2">
+          <div className="size-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto shadow-2xs">
+            <ShieldCheck className="size-6" />
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500 dark:text-slate-400 flex items-center space-x-1.5">
-              <User className="w-3.5 h-3.5 text-brand-sage" />
-              <span>Penanggung Jawab:</span>
-            </span>
-            <span className="font-semibold text-slate-800 dark:text-slate-200">
-              {organizerInfo.contactPerson}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-slate-500 dark:text-slate-400 flex items-center space-x-1.5">
-              <Mail className="w-3.5 h-3.5 text-brand-sage" />
-              <span>Email Akun:</span>
-            </span>
-            <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
-              {organizerInfo.email}
-            </span>
-          </div>
-          {expiresAt && (
-            <div className="flex items-center justify-between pt-1 border-t border-emerald-200/60 dark:border-emerald-800/30 text-[10px] text-slate-400">
-              <span className="flex items-center space-x-1">
-                <Clock className="w-3 h-3 text-amber-500" />
-                <span>Masa Berlaku Tautan:</span>
-              </span>
-              <span>48 Jam sejak penerbitan</span>
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Error Alert */}
-      {formError && (
-        <div className="mb-4 p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-start space-x-2.5">
-          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{formError}</span>
-        </div>
-      )}
+          <StatusBadge status="neutral" className="mx-auto">
+            Aktivasi Akun Penyelenggara
+          </StatusBadge>
 
-      {/* Password Creation Form */}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
-          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-            Password Baru *
-          </label>
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Minimal 8 karakter"
-              required
-              minLength={8}
-              className="w-full px-3.5 py-2.5 pr-10 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-slate-100"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          <div className="space-y-1">
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-foreground">
+              Buat Password Anda
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Daftarkan password mandiri untuk mengakses Portal Penyelenggara Event DAGO.
+            </p>
+          </div>
+        </div>
+
+        {/* Organizer Summary Card */}
+        {organizerInfo && (
+          <ActivationOrganizerCard
+            organizer={organizerInfo}
+            expiresAt={expiresAt}
+          />
+        )}
+
+        {/* Error Alert */}
+        {formError && (
+          <Alert variant="destructive">
+            <AlertCircle className="size-4" />
+            <AlertDescription className="text-xs">
+              {formError}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Password Creation Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="activatePassword" className="text-xs">
+              Password Baru *
+            </Label>
+            <InputGroup>
+              <InputGroupInput
+                id="activatePassword"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Minimal 8 karakter"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                className="text-xs"
+              />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  size="icon-xs"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                >
+                  {showPassword ? <EyeOff /> : <Eye />}
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
+            <p className="text-xs text-muted-foreground">
+              Gunakan minimal 8 karakter dengan kombinasi huruf dan angka.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="activateConfirmPassword" className="text-xs">
+              Konfirmasi Password *
+            </Label>
+            <InputGroup>
+              <InputGroupInput
+                id="activateConfirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Ketik ulang password"
+                required
+                minLength={8}
+                autoComplete="new-password"
+                className="text-xs"
+              />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  size="icon-xs"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  aria-label={showConfirmPassword ? "Sembunyikan password" : "Tampilkan password"}
+                >
+                  {showConfirmPassword ? <EyeOff /> : <Eye />}
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
+          </div>
+
+          <div className="pt-2">
+            <Button
+              type="submit"
+              size="lg"
+              disabled={isSubmitting || password.length < 8}
+              className="w-full gap-2"
             >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+              {isSubmitting ? (
+                <>
+                  <RefreshCw className="size-4 animate-spin" />
+                  <span>Mengaktifkan Akun...</span>
+                </>
+              ) : (
+                <>
+                  <Lock className="size-4" />
+                  <span>Aktifkan Akun & Buat Password</span>
+                </>
+              )}
+            </Button>
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Gunakan minimal 8 karakter dengan kombinasi huruf dan angka.
+        </form>
+
+        <div className="pt-3 border-t border-border text-center">
+          <p className="text-xs text-muted-foreground">
+            Sudah memiliki password?{" "}
+            <Link href="/login" className="font-medium text-primary hover:underline">
+              Masuk di sini
+            </Link>
           </p>
         </div>
-
-        <div>
-          <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-            Konfirmasi Password *
-          </label>
-          <div className="relative">
-            <input
-              type={showConfirmPassword ? "text" : "password"}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Ketik ulang password"
-              required
-              minLength={8}
-              className="w-full px-3.5 py-2.5 pr-10 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57] text-slate-900 dark:text-slate-100"
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-            >
-              {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
-        <div className="pt-2">
-          <Button
-            type="submit"
-            disabled={isSubmitting || password.length < 8}
-            className="w-full bg-brand-sage hover:bg-[#2D5F43] disabled:opacity-50 text-white font-bold h-11 rounded-xl text-sm shadow-md shadow-emerald-900/10 transition-all flex items-center justify-center space-x-2"
-          >
-            {isSubmitting ? (
-              <span>Mengaktifkan Akun...</span>
-            ) : (
-              <>
-                <Lock className="w-4 h-4 mr-1.5" />
-                <span>Aktifkan Akun & Buat Password</span>
-              </>
-            )}
-          </Button>
-        </div>
-      </form>
-
-      <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-800 text-center">
-        <p className="text-[11px] text-slate-400">
-          Sudah memiliki password?{" "}
-          <Link href="/login" className="font-bold text-brand-sage hover:underline">
-            Masuk di sini
-          </Link>
-        </p>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
 export default function ActivateOrganizerPage() {
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col justify-center py-12 px-4 sm:px-6 lg:px-8">
-      {/* Brand Header */}
-      <div className="sm:mx-auto sm:w-full sm:max-w-md text-center mb-8">
-        <Link href="/" className="inline-flex items-center space-x-2.5">
-          <div className="w-10 h-10 rounded-2xl bg-linear-to-tr from-[#3B7A57] to-[#52B788] flex items-center justify-center shadow-lg shadow-emerald-900/20 text-white font-black text-xl">
-            D
-          </div>
-          <span className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
-            DAGO<span className="text-brand-sage">.hub</span>
-          </span>
-        </Link>
-      </div>
+    <div
+      data-unit="event"
+      className="min-h-screen bg-background text-foreground flex flex-col justify-center py-10 px-4 sm:px-6 lg:px-8 space-y-6"
+    >
+      <UnitScope unit="event" />
 
-      <Suspense
-        fallback={
-          <div className="flex justify-center items-center py-20">
-            <div className="w-10 h-10 border-4 border-brand-sage border-t-transparent rounded-full animate-spin" />
-          </div>
-        }
-      >
-        <ActivationFormContent />
-      </Suspense>
+      {/* Brand Header */}
+      <ActivationHeader />
+
+      <main className="w-full">
+        <Suspense fallback={<ActivationLoadingState />}>
+          <ActivationFormContent />
+        </Suspense>
+      </main>
     </div>
   );
 }

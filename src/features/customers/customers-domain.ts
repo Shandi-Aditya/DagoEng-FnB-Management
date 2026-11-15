@@ -146,3 +146,22 @@ export function emptyCustomerMessage(
   };
 }
 
+const TIER_RANK: Record<LoyaltyTier, number> = {
+  Bronze: 0,
+  Silver: 1,
+  Gold: 2,
+  Platinum: 3,
+};
+
+/**
+ * Validates whether a member has accumulated enough points to qualify
+ * for a higher loyalty tier than their current tier.
+ */
+export function isEligibleForTierPromotion(
+  currentTier: LoyaltyTier,
+  points: number
+): boolean {
+  const calculatedTier = calculateTierFromPoints(points);
+  return TIER_RANK[calculatedTier] > TIER_RANK[currentTier];
+}
+

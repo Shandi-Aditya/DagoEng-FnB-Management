@@ -4,6 +4,7 @@ import { Check, Eye } from "lucide-react";
 
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
+import { spaceTypeLabel } from "@/features/pos/pos-coworking";
 import type { CoworkingSpaceItem } from "@/types/coworking";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 
@@ -13,21 +14,6 @@ interface CoworkingRoomCardProps {
   isSelected: boolean;
   onSelect: () => void;
   onPreviewPhoto?: () => void;
-}
-
-function formatSpaceType(type: string): string {
-  switch (type) {
-    case "HOT_DESK":
-      return "Hot desk";
-    case "DEDICATED_DESK":
-      return "Dedicated desk";
-    case "MEETING_ROOM":
-      return "Meeting room";
-    case "PRIVATE_POD":
-      return "Private pod";
-    default:
-      return type.replace("_", " ").toLowerCase();
-  }
 }
 
 /** Room card tile in the co-working booking grid. Real interactive button. */
@@ -53,7 +39,7 @@ export function CoworkingRoomCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <span className="block text-xs text-muted-foreground">
-            {formatSpaceType(space.type)}
+            {spaceTypeLabel(space.type)}
           </span>
           <h4 className="truncate text-sm font-medium text-foreground">
             {space.name}
@@ -77,7 +63,7 @@ export function CoworkingRoomCard({
             <Button
               type="button"
               variant="ghost"
-              size="icon-xs"
+              size="icon-sm"
               onClick={(e) => {
                 e.stopPropagation();
                 onPreviewPhoto();

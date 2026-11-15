@@ -23,7 +23,7 @@ const NAV_GROUP_DEFINITIONS: readonly NavGroupDefinition[] = [
     id: "fnb",
     label: "F&B",
     unit: "fnb",
-    hrefs: ["/pos", "/orders", "/tables", "/kitchen", "/inventory", "/customers", "/customer"],
+    hrefs: ["/pos", "/orders", "/tables", "/waiter", "/kitchen", "/inventory", "/customers", "/customer"],
   },
   { id: "space", label: "Ruang & tenant", unit: "coworking", hrefs: ["/coworking", "/commercial"] },
   { id: "event", label: "Event", unit: "event", hrefs: ["/events-admin", "/events/checkin"] },

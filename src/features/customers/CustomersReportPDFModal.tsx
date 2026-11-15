@@ -1,18 +1,28 @@
 "use client";
 
-import React, { useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import Image from "next/image";
-import { formatCurrencyIDR } from "@/lib/utils";
-import { LoyaltyMember } from "@/types/loyalty";
-import {
-  X,
-  Printer,
-  ShieldCheck,
-  FileText,
-  Crown,
-  Users,
-} from "lucide-react";
+import { FileText, Printer, Users } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { StatusBadge } from "@/components/app/status-badge";
+import {
+  buildCustomersReportDocNumber,
+  buildCustomersReportSignatories,
+  computeCustomersReportPdfMetrics,
+  formatCustomerTierLabel,
+  formatCustomerTierTone,
+  formatCustomersReportPrintDate,
+} from "@/features/customers/customers-report-pdf-domain";
+import { formatCurrencyIDR } from "@/lib/utils";
+import type { LoyaltyMember } from "@/types/loyalty";
 
 interface CustomersReportPDFModalProps {
   isOpen: boolean;
@@ -27,222 +37,362 @@ export function CustomersReportPDFModal({
   members,
   outletName,
 }: CustomersReportPDFModalProps) {
-  const printContentRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const now = useMemo(() => new Date(), [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!isOpen) return null;
+  const metrics = useMemo(() => computeCustomersReportPdfMetrics(members), [members]);
+  const docNumber = useMemo(
+    () => buildCustomersReportDocNumber(now, members.length),
+    [now, members.length]
+  );
+  const signatories = useMemo(
+    () => buildCustomersReportSignatories(outletName),
+    [outletName]
+  );
+  const printDate = useMemo(() => formatCustomersReportPrintDate(now), [now]);
 
-  const totalPoints = members.reduce((sum, m) => sum + (m.points || 0), 0);
-  const totalSpend = members.reduce((sum, m) => sum + (m.totalSpend || 0), 0);
-  const platinumCount = members.filter((m) => m.tier === "Platinum").length;
-  const goldCount = members.filter((m) => m.tier === "Gold").length;
-
-  const reportNumber = `CRM-REP-${new Date().getFullYear()}${(new Date().getMonth() + 1)
-    .toString()
-    .padStart(2, "0")}${new Date().getDate().toString().padStart(2, "0")}-${Math.floor(
-    100 + Math.random() * 900
-  )}`;
+  useEffect(() => {
+    if (isOpen) {
+      requestAnimationFrame(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = 0;
+        }
+      });
+    }
+  }, [isOpen]);
 
   const handlePrint = () => {
-    window.print();
+    const reportElement = document.getElementById("customers-report-printable");
+    if (!reportElement) return;
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.left = "-9999px";
+    iframe.style.top = "0";
+    iframe.style.width = "210mm";
+    iframe.style.height = "297mm";
+    iframe.style.border = "none";
+    iframe.style.visibility = "hidden";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      document.body.removeChild(iframe);
+      return;
+    }
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html lang="id">
+        <head>
+          <meta charset="utf-8" />
+          <base href="${window.location.origin}/" />
+          <title>${docNumber}</title>
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 8mm 10mm;
+            }
+            * {
+              box-sizing: border-box;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+              font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+              color: #0f172a;
+              background: #ffffff;
+              font-size: 11px;
+              line-height: 1.4;
+            }
+            .font-mono {
+              font-family: 'DM Mono', monospace !important;
+            }
+            .tabular-nums {
+              font-variant-numeric: tabular-nums;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              table-layout: fixed;
+            }
+            th, td {
+              word-break: break-word;
+              overflow-wrap: break-word;
+            }
+            thead {
+              display: table-header-group !important;
+            }
+            tr {
+              break-inside: avoid !important;
+            }
+            .no-break {
+              break-inside: avoid !important;
+            }
+          </style>
+        </head>
+        <body>
+          ${reportElement.innerHTML}
+        </body>
+      </html>
+    `);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } catch (err) {
+        console.error("Gagal mencetak dokumen CRM:", err);
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 1000);
+      }
+    }, 400);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/80 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white dark:bg-[#1E293B] rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200 dark:border-slate-800">
-        {/* Header Control */}
-        <div className="px-6 py-3.5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-lg bg-brand-sage/20 text-brand-sageBright flex items-center justify-center font-bold">
-              <FileText className="w-4 h-4" />
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="w-full sm:max-w-5xl md:max-w-6xl lg:max-w-7xl max-h-[88vh] h-[88vh] flex flex-col p-0 gap-0 overflow-hidden"
+      >
+        {/* Header Modal */}
+        <DialogHeader className="p-4 px-6 border-b border-border shrink-0 flex flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="size-9 rounded-lg border border-border bg-muted/30 flex items-center justify-center shrink-0">
+              <FileText className="size-4 text-foreground" />
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                <span>Dokumen PDF Laporan Pelanggan & Loyalty CRM</span>
-                <span className="text-[10px] bg-brand-sage text-white px-2 py-0.5 rounded-full font-mono">
-                  RESMI
-                </span>
-              </h3>
-              <p className="text-[11px] text-slate-400">
-                Data Anggota Loyalty, Poin, & Riwayat Nilai Belanja
-              </p>
+            <div className="min-w-0">
+              <DialogTitle className="text-sm font-medium text-foreground truncate">
+                Pratinjau laporan CRM dan loyalty
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground truncate">
+                Rekapitulasi anggota aktif, saldo poin reward, dan akumulasi nilai belanja
+              </DialogDescription>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Button
-              size="sm"
-              onClick={handlePrint}
-              className="text-xs bg-brand-sage hover:bg-[#2e6245] text-white font-bold space-x-1.5 shadow-sm"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>Cetak / Simpan PDF</span>
-            </Button>
-            <button
+              type="button"
+              variant="outline"
+              size="lg"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             >
-              <X className="w-4 h-4" />
-            </button>
+              Tutup
+            </Button>
+            <Button
+              type="button"
+              variant="default"
+              size="lg"
+              onClick={handlePrint}
+            >
+              <Printer className="size-4" />
+              <span>Cetak laporan</span>
+            </Button>
           </div>
-        </div>
+        </DialogHeader>
 
-        {/* Paper Canvas */}
-        <div className="p-6 sm:p-8 overflow-y-auto flex-1 bg-slate-100/70 dark:bg-slate-900/60">
+        {/* Scrollable Container */}
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-4 sm:p-6 bg-muted/20 flex flex-col items-center min-w-0"
+        >
           <div
-            ref={printContentRef}
-            className="max-w-3xl mx-auto bg-white dark:bg-[#1E293B] p-8 rounded-xl shadow-md border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 print:m-0 print:p-0 print:shadow-none print:border-none"
+            id="customers-report-printable"
+            className="w-full max-w-5xl min-w-0 bg-card p-6 sm:p-8 rounded-lg border border-border shadow-xs text-card-foreground"
           >
-            {/* Header */}
-            <div className="flex items-start justify-between pb-6 border-b-2 border-slate-900 dark:border-slate-700">
-              <div className="flex items-center space-x-3.5">
-                <div className="w-12 h-14 relative shrink-0">
+            {/* Kop Surat Dokumen */}
+            <div className="flex items-start justify-between pb-5 border-b border-border gap-4">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="size-12 relative shrink-0">
                   <Image
                     src="/logo-dago.png"
-                    alt="Logo"
+                    alt="Logo DagoEng"
                     width={48}
-                    height={56}
+                    height={48}
                     className="object-contain"
                   />
                 </div>
-                <div>
-                  <h1 className="text-lg font-black text-slate-950 dark:text-white tracking-tight">
-                    DAGOENG CREATIVE HUB
+                <div className="min-w-0">
+                  <h1 className="text-base font-semibold text-foreground tracking-tight">
+                    DagoEng Creative Hub
                   </h1>
-                  <p className="text-xs font-semibold text-brand-sage dark:text-brand-sageBright">
-                    Customer Relationship Management & Loyalty Platform
+                  <p className="text-xs text-muted-foreground">
+                    Divisi Pengelolaan Hubungan Pelanggan & Program Loyalitas
                   </p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Outlet: {outletName} • Master Database CRM
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Outlet: {outletName || "Semua outlet"} • Database master CRM
                   </p>
                 </div>
               </div>
 
-              <div className="text-right">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">
-                  Nomor Laporan
+              <div className="text-right shrink-0">
+                <span className="text-xs text-muted-foreground block">
+                  Nomor dokumen
                 </span>
-                <span className="text-xs font-mono font-bold text-slate-900 dark:text-slate-100">{reportNumber}</span>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
-                  Per Tanggal: {new Date().toLocaleDateString("id-ID", { dateStyle: "long" })}
+                <span className="text-xs font-mono font-medium text-foreground block">
+                  {docNumber}
+                </span>
+                <span className="text-xs text-muted-foreground block mt-0.5">
+                  Tanggal: {printDate}
                 </span>
               </div>
             </div>
 
-            {/* Title */}
-            <div className="text-center py-4 border-b border-slate-100 dark:border-slate-800">
-              <h2 className="text-base font-black text-slate-900 dark:text-slate-100 tracking-wide uppercase">
-                Laporan Data Member, Tier Loyalty & Akumulasi Belanja
+            {/* Judul Laporan */}
+            <div className="text-center py-4 border-b border-border">
+              <h2 className="text-sm font-semibold text-foreground">
+                Laporan Data Member, Tier Loyalty, dan Akumulasi Belanja
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Ringkasan anggota terdaftar, saldo poin reward, dan segmentasi nilai tamu
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Ringkasan anggota terdaftar, saldo poin reward, dan distribusi segmentasi tamu
               </p>
             </div>
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-4 gap-3 my-5">
-              <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800/50 text-center">
-                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase block">
-                  Total Member
+            {/* Ringkasan Eksekutif KPI */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-5">
+              <div className="p-3 bg-muted/30 rounded-lg border border-border text-center">
+                <span className="text-xs text-muted-foreground block">
+                  Total member
                 </span>
-                <span className="text-sm font-black text-emerald-900 dark:text-emerald-200 font-mono">
-                  {members.length} Orang
-                </span>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
-                <span className="text-[10px] text-slate-600 dark:text-slate-400 font-bold uppercase block">
-                  Platinum Member
-                </span>
-                <span className="text-sm font-black text-slate-900 dark:text-slate-100 font-mono">
-                  {platinumCount} VIP
+                <span className="text-sm font-mono font-semibold text-foreground mt-0.5 block tabular-nums">
+                  {metrics.totalMembers} orang
                 </span>
               </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
-                <span className="text-[10px] text-slate-600 dark:text-slate-400 font-bold uppercase block">
-                  Gold Member
+              <div className="p-3 bg-muted/30 rounded-lg border border-border text-center">
+                <span className="text-xs text-muted-foreground block">
+                  Member VIP (Tier tinggi)
                 </span>
-                <span className="text-sm font-black text-slate-900 dark:text-slate-100 font-mono">
-                  {goldCount} Member
+                <span className="text-sm font-mono font-semibold text-foreground mt-0.5 block tabular-nums">
+                  {metrics.vipCount} orang
                 </span>
               </div>
-              <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-xl border border-emerald-200 dark:border-emerald-800/50 text-center">
-                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase block">
-                  Total Belanja CRM
+              <div className="p-3 bg-muted/30 rounded-lg border border-border text-center">
+                <span className="text-xs text-muted-foreground block">
+                  Total saldo poin reward
                 </span>
-                <span className="text-sm font-black text-emerald-900 dark:text-emerald-200 font-mono">
-                  {formatCurrencyIDR(totalSpend)}
+                <span className="text-sm font-mono font-semibold text-foreground mt-0.5 block tabular-nums">
+                  {metrics.totalPoints.toLocaleString("id-ID")} poin
+                </span>
+              </div>
+              <div className="p-3 bg-muted/30 rounded-lg border border-border text-center">
+                <span className="text-xs text-muted-foreground block">
+                  Total belanja CRM
+                </span>
+                <span className="text-sm font-mono font-semibold text-foreground mt-0.5 block tabular-nums">
+                  {formatCurrencyIDR(metrics.totalSpend)}
                 </span>
               </div>
             </div>
 
-            {/* Table */}
-            <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden my-4 text-xs">
-              <table className="w-full text-left">
-                <thead className="bg-slate-900 text-white text-[11px] font-bold uppercase">
+            {/* Tabel Data Anggota */}
+            <div className="border border-border rounded-lg overflow-x-auto my-4 w-full">
+              <table className="w-full text-left text-xs table-fixed min-w-[760px] sm:min-w-0">
+                <colgroup>
+                  <col style={{ width: "16%" }} />
+                  <col style={{ width: "22%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "20%" }} />
+                  <col style={{ width: "14%" }} />
+                </colgroup>
+                <thead className="bg-muted/40 border-b border-border text-foreground font-medium">
                   <tr>
-                    <th className="p-2.5">Nama Tamu</th>
-                    <th className="p-2.5">No. Kontak</th>
+                    <th className="p-2.5">No. kontak</th>
+                    <th className="p-2.5">Nama pelanggan</th>
                     <th className="p-2.5 text-center">Tier</th>
-                    <th className="p-2.5 text-right">Saldo Poin</th>
-                    <th className="p-2.5 text-right">Total Belanja (Rp)</th>
+                    <th className="p-2.5 text-right">Saldo poin</th>
+                    <th className="p-2.5 text-right">Total belanja</th>
                     <th className="p-2.5 text-center">Kunjungan</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+                <tbody className="divide-y divide-border text-muted-foreground">
                   {members.map((m) => (
-                    <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="p-2.5 font-bold text-slate-900 dark:text-slate-100">{m.name}</td>
-                      <td className="p-2.5 font-mono text-slate-600 dark:text-slate-400">{m.phone}</td>
+                    <tr key={m.id} className="hover:bg-muted/20">
+                      <td className="p-2.5 font-mono text-xs text-foreground break-words">
+                        {m.phone || "—"}
+                      </td>
+                      <td className="p-2.5 text-foreground font-medium break-words">
+                        {m.name}
+                      </td>
                       <td className="p-2.5 text-center">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                            m.tier === "Platinum"
-                              ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300"
-                              : m.tier === "Gold"
-                              ? "bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200"
-                              : m.tier === "Silver"
-                              ? "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
-                          }`}
+                        <StatusBadge
+                          status={formatCustomerTierTone(m.tier)}
+                          className="max-w-full inline-flex align-middle text-xs"
                         >
-                          {m.tier}
-                        </span>
+                          {formatCustomerTierLabel(m.tier)}
+                        </StatusBadge>
                       </td>
-                      <td className="p-2.5 text-right font-mono font-bold text-primary dark:text-primary-light">
-                        {m.points} Pts
+                      <td className="p-2.5 text-right font-mono tabular-nums text-foreground">
+                        {(m.points || 0).toLocaleString("id-ID")} poin
                       </td>
-                      <td className="p-2.5 text-right font-mono font-bold text-slate-900 dark:text-slate-100">
-                        {formatCurrencyIDR(m.totalSpend)}
+                      <td className="p-2.5 text-right font-mono tabular-nums text-foreground font-medium">
+                        {formatCurrencyIDR(m.totalSpend || 0)}
                       </td>
-                      <td className="p-2.5 text-center font-medium text-slate-600 dark:text-slate-400">
-                        {m.totalVisits}x
+                      <td className="p-2.5 text-center font-mono tabular-nums">
+                        {m.totalVisits || 0}×
                       </td>
                     </tr>
                   ))}
+                  {members.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                        Tidak ada data anggota loyalty yang tersedia untuk dicetak.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
 
-            {/* Certification */}
-            <div className="mt-8 pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-              <div className="flex items-center space-x-2">
-                <ShieldCheck className="w-5 h-5 text-brand-sage dark:text-brand-sageBright" />
-                <div>
-                  <p className="font-bold text-slate-800 dark:text-slate-200">Laporan Resmi CRM & Loyalty</p>
-                  <p className="text-[10px] text-slate-400">
-                    Terverifikasi digital dari transaksi POS Kasir & Self-Order QR.
-                  </p>
-                </div>
+            {/* Lembar Otorisasi & Tanda Tangan */}
+            <div className="mt-8 pt-5 border-t border-border no-break">
+              <div className="grid grid-cols-3 gap-6 text-center text-xs">
+                {signatories.map((sig, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <span className="text-muted-foreground block">
+                      {sig.role}
+                    </span>
+                    <span className="text-muted-foreground text-xs block">
+                      {sig.department}
+                    </span>
+                    <div className="h-14" />
+                    <span className="font-mono text-xs text-foreground block font-medium">
+                      ( ........................................ )
+                    </span>
+                    <span className="text-muted-foreground text-xs block">
+                      {sig.outlet}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <div className="text-right text-[11px]">
-                <p className="font-bold text-slate-800 dark:text-slate-200">DagoEng Customer Ops</p>
-                <p className="text-slate-400 font-mono">
-                  SHA256: {Date.now()}-CRM-STAMP-OK
-                </p>
+
+              <div className="mt-6 pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <Users className="size-3.5 text-muted-foreground" />
+                  <span>
+                    Dokumen CRM & Loyalty resmi DagoEng Management System
+                  </span>
+                </div>
+                <span className="font-mono tabular-nums">
+                  Halaman 1 dari 1 • Dicetak pada {printDate}
+                </span>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

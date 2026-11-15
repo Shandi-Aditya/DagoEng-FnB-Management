@@ -359,3 +359,11 @@ export function emptyCoworkingMessage(
   return hasFilter ? item.filtered : item.empty;
 }
 
+/**
+ * Validates whether a coworking space/desk is currently available for new walk-in or booking.
+ * Returns true only if status is AVAILABLE and no active session is attached.
+ */
+export function isSpaceAvailableNow(space: CoworkingSpaceItem): boolean {
+  return space.status === "AVAILABLE" && !space.currentSession;
+}
+

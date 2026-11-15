@@ -11,6 +11,7 @@ import {
   auditActionLabel,
   filterReportRows,
   isNumericReportCell,
+  calculateReportSummaryMetrics,
 } from "@/features/reports/reports-domain";
 import { OrderRecord } from "@/types/order";
 import { MasterProduct } from "@/types/product";
@@ -453,6 +454,24 @@ describe("reports-domain", () => {
     expect(isNumericReportCell("-Rp 5.000")).toBe(true);
     expect(isNumericReportCell("72.0%")).toBe(true);
     expect(isNumericReportCell("Budi Santoso")).toBe(false);
+  });
+
+  it("calculates summary metrics aggregating count and amounts from numeric cells", () => {
+    const rows: (string | number)[][] = [
+      ["ORD-001", "Budi", "Rp 50.000", "Rp 5.000"],
+      ["ORD-002", "Siti", "Rp 30.000", "Rp 3.000"],
+      ["ORD-003", "Andi", "-", "0"],
+    ];
+
+    const metrics = calculateReportSummaryMetrics(rows, 2);
+    expect(metrics.count).toBe(3);
+    expect(metrics.totalAmount).toBe(80000);
+    expect(metrics.formattedTotal).toBe("Rp 80.000");
+
+    const emptyMetrics = calculateReportSummaryMetrics([], 2);
+    expect(emptyMetrics.count).toBe(0);
+    expect(emptyMetrics.totalAmount).toBe(0);
+    expect(emptyMetrics.formattedTotal).toBe("Rp 0");
   });
 });
 

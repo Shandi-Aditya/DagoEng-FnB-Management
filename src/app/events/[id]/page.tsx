@@ -267,7 +267,7 @@ export default function EventDetailPage() {
             title="Event tidak tersedia"
             description={error || "Acara ini mungkin belum dipublikasikan atau telah dihapus."}
             action={
-              <Button variant="outline" size="sm" render={<Link href="/events" />}>
+              <Button variant="outline" size="lg" render={<Link href="/events" />}>
                 <ArrowLeft />
                 <span>Kembali ke katalog event</span>
               </Button>
@@ -458,7 +458,7 @@ export default function EventDetailPage() {
                 </div>
               </div>
 
-              <Button variant="outline" size="sm" render={<Link href="/events" />}>
+              <Button variant="outline" size="lg" render={<Link href="/events" />}>
                 <span>Lihat event lainnya</span>
               </Button>
             </Card>
@@ -489,7 +489,7 @@ export default function EventDetailPage() {
           </div>
 
           <Button
-            size="sm"
+            size="lg"
             onClick={() => {
               setBookingError(null);
               setIsBookingModalOpen(true);

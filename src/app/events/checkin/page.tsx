@@ -1,44 +1,31 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  Calendar,
-  Clock,
-  MapPin,
-  Search,
-  CheckCircle2,
-  AlertCircle,
-  Users,
-  Ticket,
-  ArrowLeft,
-  RefreshCw,
-  QrCode,
-  Camera,
-  UserCheck,
-  Building,
-  RotateCcw,
-  Sparkles,
-  ShieldCheck,
-  Check,
-  X,
-  TrendingUp,
-  LogOut,
-  Filter,
-  ScanLine,
-} from "lucide-react";
-import { Button } from "@/components/legacy/ui/button";
-import { Card } from "@/components/legacy/ui/card";
-import { Badge } from "@/components/legacy/ui/badge";
-import { ThemeToggle } from "@/components/legacy/ui/ThemeToggle";
+import { Calendar, ShieldAlert } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/app/empty-state";
+import { UnitScope } from "@/components/app/unit-scope";
+import { notify } from "@/components/app/notify";
 import { useAuth } from "@/contexts/AuthContext";
-import { CommunityEvent, EventTicketOrder, AttendeeCheckInStatus } from "@/types/event";
-import { EventSearchInput } from "@/components/events/EventSearchInput";
-import { formatCurrencyIDR, normalizeIndonesianPhone } from "@/lib/utils";
+import type { CommunityEvent, EventTicketOrder, AttendeeCheckInStatus } from "@/types/event";
 import { canAccessEventCheckIn, getRoleSlug } from "@/lib/rbac";
-import { EventCheckInQRScannerModal } from "./EventCheckInQRScannerModal";
-import { QRCodeSVG } from "qrcode.react";
+import {
+  CheckInHeader,
+  CheckInActionToolbar,
+  CheckInStatsBar,
+  CheckInTabs,
+  CheckInAttendeeCard,
+  CheckInAttendeesTable,
+  EventCheckInScannerDialog,
+  EventCheckInQRDialog,
+  EventGroupCheckInDialog,
+  parseTicketScanCode,
+  validateTicketCheckIn,
+  calculateCheckInStats,
+  filterCheckInTickets,
+} from "@/features/events-checkin";
 
 export default function EventCheckInDashboardPage() {
   const router = useRouter();
@@ -50,14 +37,13 @@ export default function EventCheckInDashboardPage() {
   const [activeTab, setActiveTab] = useState<"UNCHECKED" | "CHECKED" | "ALL">("UNCHECKED");
   const [quickBarcodeInput, setQuickBarcodeInput] = useState("");
   const [isQuickScanning, setIsQuickScanning] = useState(false);
-  const barcodeInputRef = React.useRef<HTMLInputElement>(null);
-  const lastScanRef = React.useRef<{ code: string; timestamp: number } | null>(null);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [viewQRBooking, setViewQRBooking] = useState<EventTicketOrder | null>(null);
   const [groupCheckInBooking, setGroupCheckInBooking] = useState<EventTicketOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessingId, setIsProcessingId] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
+  const lastScanRef = useRef<{ code: string; timestamp: number } | null>(null);
 
   const isAuthorized = canAccessEventCheckIn(user);
   const roleSlug = getRoleSlug(user);
@@ -67,7 +53,7 @@ export default function EventCheckInDashboardPage() {
       (user?.scopeLevel === "ORGANIZATION" || user?.scopeLevel === "PLATFORM"));
   const isEventStaff = Boolean(user?.permissions?.includes("events:checkin"));
 
-  // Load events and bookings in parallel
+  // Load events and bookings concurrently
   const loadData = async () => {
     if (!canAccessEventCheckIn(user)) {
       setIsLoading(false);
@@ -75,9 +61,7 @@ export default function EventCheckInDashboardPage() {
     }
 
     setIsLoading(true);
-    setStatusMessage(null);
     try {
-      // 1. Fetch public/admin approved events and bookings concurrently
       const [evtRes, bRes] = await Promise.all([
         fetch("/api/events"),
         fetch("/api/events/bookings"),
@@ -88,33 +72,34 @@ export default function EventCheckInDashboardPage() {
       const allBookings: EventTicketOrder[] = bJson.success && Array.isArray(bJson.data) ? bJson.data : [];
       setBookings(allBookings);
 
-      // Determine accessible events based on user persona / role:
-      // - Hub Admin & Event Staff: all approved venue events
-      // - Community Organizer: strictly their own community events
       const userEmail = (user?.email || "").toLowerCase();
-
-      const accessibleEvents = (isHubAdmin || isEventStaff)
-        ? allEvents.filter((e) => e.status === "APPROVED")
-        : allEvents.filter(
-            (e) => e.status === "APPROVED" && (e.organizerEmail || "").toLowerCase() === userEmail
-          );
+      const accessibleEvents =
+        isHubAdmin || isEventStaff
+          ? allEvents.filter((e) => e.status === "APPROVED")
+          : allEvents.filter(
+              (e) => e.status === "APPROVED" && (e.organizerEmail || "").toLowerCase() === userEmail
+            );
 
       setEvents(accessibleEvents);
 
-      // Prioritize selecting an event that ACTUALLY HAS registered attendee bookings
+      // Prioritize selecting an event that has registered attendee bookings or is currently ongoing
       if (accessibleEvents.length > 0 && !selectedEventId) {
         const now = Date.now();
-        const eventWithBookings = accessibleEvents.find((e) => {
-          const hasBookings = allBookings.some((b) => b.eventId === e.id);
-          const s = new Date(e.startDate).getTime();
-          const end = new Date(e.endDate).getTime();
-          return hasBookings && s <= now && end >= now;
-        }) || accessibleEvents.find((e) => allBookings.some((b) => b.eventId === e.id)) || accessibleEvents[0];
+        const eventWithBookings =
+          accessibleEvents.find((e) => {
+            const hasBookings = allBookings.some((b) => b.eventId === e.id);
+            const s = new Date(e.startDate).getTime();
+            const end = new Date(e.endDate).getTime();
+            return hasBookings && s <= now && end >= now;
+          }) ||
+          accessibleEvents.find((e) => allBookings.some((b) => b.eventId === e.id)) ||
+          accessibleEvents[0];
 
         setSelectedEventId(eventWithBookings.id);
       }
-    } catch (err: any) {
-      setStatusMessage({ type: "error", text: err.message || "Gagal memuat data check-in event." });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Gagal memuat data check-in event.";
+      notify.error("Gagal memuat data", msg);
     } finally {
       setIsLoading(false);
     }
@@ -124,111 +109,26 @@ export default function EventCheckInDashboardPage() {
     loadData();
   }, [user]);
 
-  // Current selected event object
+  // Selected event object
   const selectedEvent = useMemo(() => {
     if (!selectedEventId) return null;
     return events.find((e) => e.id === selectedEventId) || null;
   }, [events, selectedEventId]);
 
-  // Event category breakdown: Ongoing, Upcoming, Past
-  const eventSections = useMemo(() => {
-    const now = Date.now();
-    const ongoing: CommunityEvent[] = [];
-    const upcoming: CommunityEvent[] = [];
-    const past: CommunityEvent[] = [];
-
-    events.forEach((e) => {
-      const startMs = new Date(e.startDate).getTime();
-      const endMs = new Date(e.endDate).getTime();
-
-      if (startMs <= now && endMs >= now) {
-        ongoing.push(e);
-      } else if (startMs > now) {
-        upcoming.push(e);
-      } else {
-        past.push(e);
-      }
-    });
-
-    return { ongoing, upcoming, past };
-  }, [events]);
-
-  // Ticket count map per event
-  const ticketsCountByEvent = useMemo(() => {
-    const counts: Record<string, number> = {};
-    bookings.forEach((b) => {
-      counts[b.eventId] = (counts[b.eventId] || 0) + (b.ticketCount || 1);
-    });
-    return counts;
-  }, [bookings]);
-
-  // Filter events strictly for active / ongoing / upcoming operational events
-  const filteredEventsList = useMemo(() => {
-    const now = Date.now();
-    const activeOrUpcoming = events.filter((e) => {
-      const endMs = e.endDate ? new Date(e.endDate).getTime() : new Date(e.startDate).getTime();
-      return endMs >= now || isNaN(endMs);
-    });
-    return activeOrUpcoming.length > 0 ? activeOrUpcoming : events;
-  }, [events]);
-
-  // Filtered tickets strictly restricted to the selected event (1 booking per item)
+  // Tickets for selected event
   const eventTickets = useMemo(() => {
     if (!selectedEventId) return [];
     return bookings.filter((b) => b.eventId === selectedEventId);
   }, [bookings, selectedEventId]);
 
-  // Real-time Event Attendance Statistics
+  // Calculated attendance stats
   const stats = useMemo(() => {
-    // Total tickets count (sum of all ticketCount / seats)
-    const totalTickets = eventTickets.reduce((acc, b) => acc + (b.ticketCount || 1), 0);
-    // Total checked-in pax
-    const checkedInCount = eventTickets.reduce((acc, b) => {
-      if (typeof b.checkedInQty === "number") return acc + b.checkedInQty;
-      return b.checkInStatus === "CHECKED_IN" ? acc + (b.ticketCount || 1) : acc;
-    }, 0);
-    const remainingCount = Math.max(0, totalTickets - checkedInCount);
-    const percentage = totalTickets > 0 ? Math.round((checkedInCount / totalTickets) * 100) : 0;
-
-    // Booking order level counts for Tabs:
-    const uncheckedOrders = eventTickets.filter((b) => b.checkInStatus !== "CHECKED_IN").length;
-    const checkedOrders = eventTickets.filter((b) => b.checkInStatus === "CHECKED_IN").length;
-    const totalOrders = eventTickets.length;
-
-    return {
-      totalTickets,
-      checkedInCount,
-      remainingCount,
-      percentage,
-      uncheckedOrders,
-      checkedOrders,
-      totalOrders,
-    };
+    return calculateCheckInStats(eventTickets);
   }, [eventTickets]);
 
-  // Filtered tickets taking Active Tab and Search query into account (1 row per booking/order)
+  // Filtered tickets
   const filteredTickets = useMemo(() => {
-    let list = eventTickets;
-    if (activeTab === "UNCHECKED") {
-      list = list.filter((b) => b.checkInStatus !== "CHECKED_IN");
-    } else if (activeTab === "CHECKED") {
-      list = list.filter((b) => b.checkInStatus === "CHECKED_IN");
-    }
-
-    const q = ticketSearch.trim().toLowerCase();
-    if (!q) return list;
-
-    const normQ = normalizeIndonesianPhone(q);
-    return list.filter((b) => {
-      const matchCode = (b.ticketCode || "").toLowerCase().includes(q);
-      const matchName = (b.guestName || "").toLowerCase().includes(q);
-      const matchEmail = (b.guestEmail || "").toLowerCase().includes(q);
-      const matchPhone =
-        (b.guestPhone || "").toLowerCase().includes(q) ||
-        (normQ.length >= 4 && normalizeIndonesianPhone(b.guestPhone || "").includes(normQ));
-      const matchInst = (b.institution || "").toLowerCase().includes(q);
-      return matchCode || matchName || matchEmail || matchPhone || matchInst;
-    });
+    return filterCheckInTickets(eventTickets, activeTab, ticketSearch);
   }, [eventTickets, activeTab, ticketSearch]);
 
   // Server-side Check-In Handler
@@ -244,7 +144,6 @@ export default function EventCheckInDashboardPage() {
     }
   ) => {
     setIsProcessingId(booking.id);
-    setStatusMessage(null);
 
     try {
       const res = await fetch(`/api/events/bookings/${booking.id}`, {
@@ -267,7 +166,6 @@ export default function EventCheckInDashboardPage() {
 
       const updated = json.data as EventTicketOrder;
 
-      // Update local state with updated booking
       setBookings((prev) =>
         prev.map((b) => (b.id === booking.id ? { ...b, ...updated } : b))
       );
@@ -277,85 +175,64 @@ export default function EventCheckInDashboardPage() {
         (updated.checkInStatus === "CHECKED_IN" ? updated.ticketCount : 0);
       const isComplete = count >= updated.ticketCount;
 
-      setStatusMessage({
-        type: "success",
-        text:
-          newStatus === "REGISTERED" || options?.reset
-            ? `Status kehadiran [${booking.ticketCode}] (${booking.guestName}) berhasil direset ke 0.`
-            : options?.seatNumber !== undefined
-            ? `Tiket #${options.seatNumber} [${options.ticketCode || booking.ticketCode}] (${booking.guestName}): Berhasil check-in! (${count}/${updated.ticketCount} hadir)`
-            : updated.ticketCount > 1
-            ? `Tiket grup [${booking.ticketCode}] (${booking.guestName}): ${count}/${updated.ticketCount} tiket hadir ${
-                isComplete
-                  ? "(Lengkap 🎉)"
-                  : `(Sisa ${updated.ticketCount - count} teman dapat menyusul)`
-              }`
-            : `Tiket [${booking.ticketCode}] (${booking.guestName}) berhasil check-in!`,
-      });
-    } catch (err: any) {
-      setStatusMessage({ type: "error", text: err.message || "Gagal memproses check-in." });
+      if (newStatus === "REGISTERED" || options?.reset) {
+        notify.success(
+          "Status kehadiran direset",
+          `Tiket ${booking.ticketCode} (${booking.guestName}) kembali ke status belum hadir.`
+        );
+      } else if (options?.seatNumber !== undefined) {
+        notify.success(
+          "Check-in dicatat",
+          `Tiket #${options.seatNumber} [${options.ticketCode || booking.ticketCode}] (${booking.guestName}): ${count}/${updated.ticketCount} hadir.`
+        );
+      } else if (updated.ticketCount > 1) {
+        notify.success(
+          "Check-in rombongan dicatat",
+          `Tiket [${booking.ticketCode}] (${booking.guestName}): ${count}/${updated.ticketCount} hadir ${
+            isComplete ? "(lengkap)" : `(sisa ${updated.ticketCount - count} tiket)`
+          }.`
+        );
+      } else {
+        notify.success(
+          "Check-in dicatat",
+          `Tiket [${booking.ticketCode}] atas nama ${booking.guestName} berhasil dicatat.`
+        );
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Gagal memproses check-in.";
+      notify.error("Gagal memproses check-in", msg);
     } finally {
       setIsProcessingId(null);
     }
   };
 
-  // Quick Barcode Gun / Manual Input Check-in Submission (BUG 1 & BUG 2 Protected)
+  // Hardware scanner gun or manual Enter submission
   const handleQuickBarcodeSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isQuickScanning) return;
 
     const rawInput = quickBarcodeInput.trim();
-    // Immediately clear input buffer so fast consecutive scans cannot concatenate strings
     setQuickBarcodeInput("");
 
-    if (!rawInput) {
-      barcodeInputRef.current?.focus();
-      return;
-    }
+    if (!rawInput) return;
 
-    // Flexible QR parser: extracts ticket code whether scanner sends raw code, JSON payload, or ticket URL
-    let parsedCode = rawInput;
-    if (parsedCode.startsWith("{") && parsedCode.endsWith("}")) {
-      try {
-        const obj = JSON.parse(parsedCode);
-        if (obj.ticketCode) parsedCode = String(obj.ticketCode).trim();
-      } catch {}
-    }
-    if (parsedCode.includes('"ticketCode"')) {
-      const match = parsedCode.match(/"ticketCode"\s*:\s*"([^"]+)"/);
-      if (match && match[1]) parsedCode = match[1].trim();
-    }
-    if (parsedCode.startsWith("DAGO-CHECKIN:")) {
-      const parts = parsedCode.split(":");
-      if (parts[1]) parsedCode = parts[1].trim();
-    }
-    const matchUrl = parsedCode.match(/DAGO-EVT-[A-Z0-9-]+/i);
-    if (matchUrl) {
-      parsedCode = matchUrl[0];
-    }
-    const cleanCode = parsedCode.trim().toUpperCase();
+    const { cleanCode, baseCode, seatNumber } = parseTicketScanCode(rawInput);
+    if (!cleanCode) return;
 
-    // Hardware Scanner deduplication guard against duplicate Enter/Tab events fired within 1200ms
+    // Deduplication guard against rapid multi-scan events
     const now = Date.now();
     if (
       lastScanRef.current &&
       lastScanRef.current.code === cleanCode &&
       now - lastScanRef.current.timestamp < 1200
     ) {
-      barcodeInputRef.current?.focus();
       return;
     }
     lastScanRef.current = { code: cleanCode, timestamp: now };
 
     setIsQuickScanning(true);
-    setStatusMessage(null);
 
     try {
-      // Support both sub-ticket code (DAGO-EVT-96354-01) or base ticket code (DAGO-EVT-96354)
-      const matchSeat = cleanCode.match(/^(DAGO-EVT-[A-Z0-9]+)-0*(\d+)$/i);
-      const baseCode = matchSeat ? matchSeat[1] : cleanCode;
-      const requestedSeat = matchSeat ? parseInt(matchSeat[2], 10) : undefined;
-
       const booking = eventTickets.find((b) => {
         const bCode = (b.ticketCode || "").trim().toUpperCase();
         const bId = (b.id || "").trim().toUpperCase();
@@ -365,1252 +242,219 @@ export default function EventCheckInDashboardPage() {
         );
       });
 
-      if (!booking) {
-        const anyBooking = bookings.find((b) => {
-          const bCode = (b.ticketCode || "").trim().toUpperCase();
-          const bId = (b.id || "").trim().toUpperCase();
-          return (
-            (bCode && (bCode === cleanCode || bCode === baseCode)) ||
-            (bId && (bId === cleanCode || bId === baseCode))
-          );
-        });
-        if (anyBooking) {
-          setStatusMessage({
-            type: "error",
-            text: `Tiket [${cleanCode}] (${anyBooking.guestName}) terdaftar pada "${anyBooking.eventTitle || "event lain"}", bukan event ini!`,
-          });
-        } else {
-          setStatusMessage({
-            type: "error",
-            text: `Tiket dengan kode [${cleanCode}] tidak ditemukan pada sistem data pemesanan.`,
-          });
-        }
+      const validation = validateTicketCheckIn(
+        booking || null,
+        selectedEventId,
+        seatNumber
+      );
+
+      if (!validation.valid) {
+        notify.error("Pemeriksaan tiket gagal", validation.message || "Tiket tidak valid.");
         return;
       }
 
-      if (booking.paymentStatus !== "PAID") {
-        setStatusMessage({
-          type: "error",
-          text: `Tiket [${cleanCode}] (${booking.guestName}) belum berstatus Lunas (Status: ${booking.paymentStatus}).`,
-        });
-        return;
-      }
+      if (!booking) return;
 
-      const ticketCount = booking.ticketCount || 1;
-      const currentCheckedSeats: number[] = Array.isArray(booking.checkedInSeats)
-        ? [...booking.checkedInSeats]
-        : Array.from({ length: booking.checkedInQty || 0 }, (_, i) => i + 1);
-
-      // Check if specific sub-ticket code has already checked in
-      if (requestedSeat !== undefined) {
-        if (requestedSeat < 1 || requestedSeat > ticketCount) {
-          setStatusMessage({
-            type: "error",
-            text: `Nomor tiket #${requestedSeat} tidak valid untuk pemesanan ini (total ${ticketCount} tiket).`,
-          });
-          return;
-        }
-
-        if (currentCheckedSeats.includes(requestedSeat)) {
-          const priorTime = booking.seatCheckInTimes?.[String(requestedSeat)] || booking.checkInTime;
-          const timeFormatted = priorTime
-            ? new Date(priorTime).toLocaleTimeString("id-ID", {
-                hour: "2-digit",
-                minute: "2-digit",
-                timeZone: "Asia/Makassar",
-              }) + " WITA"
-            : "";
-          setStatusMessage({
-            type: "error",
-            text: `Tiket #${requestedSeat} [${cleanCode}] (${booking.guestName}) sudah digunakan untuk check-in sebelumnya${timeFormatted ? ` (check-in pada pukul ${timeFormatted})` : ""}!`,
-          });
-          return;
-        }
-
-        const isComplete = currentCheckedSeats.length + 1 >= ticketCount;
-        await handleCheckIn(booking, isComplete ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN", {
-          ticketCode: cleanCode,
-          seatNumber: requestedSeat,
-          incrementQty: 1,
-        });
-      } else {
-        if (currentCheckedSeats.length >= ticketCount) {
-          const timeStr = booking.checkInTime
-            ? new Date(booking.checkInTime).toLocaleTimeString("id-ID", {
-                hour: "2-digit",
-                minute: "2-digit",
-                timeZone: "Asia/Makassar",
-              }) + " WITA"
-            : "sebelumnya";
-          setStatusMessage({
-            type: "error",
-            text: `Peringatan: Seluruh ${ticketCount} tiket [${cleanCode}] atas nama ${booking.guestName} sudah selesai check-in sebelumnya (${timeStr})!`,
-          });
-          return;
-        }
-
-        if (ticketCount > 1) {
-          const isComplete = currentCheckedSeats.length + 1 >= ticketCount;
-          await handleCheckIn(booking, isComplete ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN", {
-            incrementQty: 1,
-          });
-        } else {
-          await handleCheckIn(booking, "CHECKED_IN", { ticketCode: cleanCode });
-        }
-      }
+      const targetStatus = validation.targetStatus || "CHECKED_IN";
+      await handleCheckIn(booking, targetStatus, {
+        ticketCode: cleanCode,
+        seatNumber,
+        incrementQty: 1,
+      });
     } finally {
       setIsQuickScanning(false);
       setQuickBarcodeInput("");
-      setTimeout(() => {
-        barcodeInputRef.current?.focus();
-      }, 50);
     }
   };
 
-  // Handle Logout & return to login
+  // Logout handler
   const handleOfficerLogout = async () => {
     await logout();
     router.push("/login");
   };
 
+  // Unauthorized access guard
   if (!isLoading && !isAuthorized) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full text-center p-8 border-red-200 dark:border-red-900/40 shadow-xl bg-white dark:bg-[#1E293B] rounded-3xl">
-          <div className="w-14 h-14 bg-red-100 dark:bg-red-950/60 rounded-2xl flex items-center justify-center mx-auto mb-5 text-red-600 dark:text-red-400">
-            <AlertCircle className="w-7 h-7" />
-          </div>
-          <h2 className="text-xl font-bold tracking-tight mb-2 text-slate-900 dark:text-white">
-            Akses Terbatas: Check-in Event
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mb-6 leading-relaxed">
-            Akun Anda ({user?.email || "Tamu"}) tidak memiliki otorisasi petugas lapangan atau penugasan event untuk melakukan check-in peserta.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button asChild variant="outline" size="sm" className="rounded-xl text-xs font-semibold">
-              <Link href="/">Kembali ke Beranda</Link>
-            </Button>
-            <Button asChild size="sm" className="rounded-xl text-xs font-bold bg-brand-sage hover:bg-[#2E6044] text-white">
-              <Link href={roleSlug === "CUSTOMER" ? "/customer" : "/dashboard"}>
-                Ke Workspace Saya
-              </Link>
-            </Button>
-          </div>
-        </Card>
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4">
+        <EmptyState
+          icon={<ShieldAlert />}
+          title="Akses terbatas"
+          description={`Akun Anda (${user?.email || "Tamu"}) tidak memiliki otorisasi petugas lapangan untuk check-in event.`}
+          action={
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="default"
+                render={<Link href="/" />}
+                nativeButton={false}
+              >
+                <span>Beranda</span>
+              </Button>
+              <Button
+                size="default"
+                render={<Link href={roleSlug === "CUSTOMER" ? "/customer" : "/dashboard"} />}
+                nativeButton={false}
+              >
+                <span>Workspace</span>
+              </Button>
+            </div>
+          }
+          className="max-w-md border"
+        />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-[#F8FAFC] dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex flex-col justify-between transition-colors duration-200">
-      {/* 1. DEDICATED FIELD OFFICER TOP NAVBAR */}
-      <header className="sticky top-0 z-40 bg-white/95 dark:bg-[#0B0F17]/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-2xs w-full max-w-full">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 sm:py-0 sm:h-16 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-4 w-full">
-          {/* Top Line on Mobile: Brand on Left, Actions on Right */}
-          <div className="flex items-center justify-between sm:justify-start space-x-3 w-full sm:w-auto">
-            <div className="flex items-center space-x-2.5 min-w-0">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-brand-sage/10 dark:bg-brand-sageBright/20 text-brand-sage dark:text-brand-sageBright flex items-center justify-center font-black text-sm shrink-0 shadow-2xs">
-                <QrCode className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center space-x-1.5 sm:space-x-2">
-                  <span className="text-sm font-black text-slate-900 dark:text-white tracking-tight truncate">
-                    DagoEng Event Desk
-                  </span>
-                  <span className="text-[9px] sm:text-[10px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage dark:text-brand-sageBright border border-emerald-200 dark:border-emerald-800 shrink-0">
-                    Check-In
-                  </span>
-                </div>
-                {/* Desktop Officer Badge */}
-                <p className="hidden sm:flex text-[11px] text-slate-500 dark:text-slate-400 items-center space-x-1.5 mt-0.5">
-                  <span>Petugas:</span>
-                  <strong className="text-slate-800 dark:text-slate-200 truncate max-w-[140px] md:max-w-none">
-                    {user?.name || "Petugas Lapangan"}
-                  </strong>
-                  <span className="text-slate-300 dark:text-slate-600">•</span>
-                  <span className="font-mono text-[10px] text-slate-400 truncate max-w-[160px]">{user?.email}</span>
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 shrink-0">
-                    {user?.email === "eventstaff@dagoeng.com"
-                      ? "Petugas Lapangan Resmi"
-                      : isHubAdmin
-                      ? "Supervisor / Hub Admin"
-                      : "Penyelenggara"}
-                  </span>
-                </p>
-              </div>
-            </div>
+    <div data-unit="event" className="min-h-screen bg-background text-foreground flex flex-col justify-between">
+      <UnitScope unit="event" />
 
-            {/* Mobile Actions in Header Top Row */}
-            <div className="flex sm:hidden items-center space-x-1.5 shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={loadData}
-                disabled={isLoading}
-                className="h-8 w-8 p-0 rounded-xl border-slate-200 dark:border-slate-800"
-                title="Segarkan data tiket"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-              </Button>
+      {/* Header */}
+      <CheckInHeader
+        officerName={user?.name}
+        officerEmail={user?.email}
+        isHubAdmin={isHubAdmin}
+        isLoading={isLoading}
+        onRefresh={loadData}
+        onLogout={handleOfficerLogout}
+      />
 
-              <ThemeToggle variant="compact" />
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 w-full flex-1">
+        {events.length === 0 && !isLoading ? (
+          <EmptyState
+            icon={<Calendar />}
+            title="Belum ada event aktif"
+            description="Tidak ada event aktif yang disetujui untuk meja registrasi lapangan saat ini."
+            className="border"
+          />
+        ) : selectedEvent ? (
+          <div className="space-y-6">
+            {/* Toolbar Action Banner */}
+            <CheckInActionToolbar
+              event={selectedEvent}
+              events={events}
+              selectedEventId={selectedEventId}
+              onSelectEvent={(id) => setSelectedEventId(id)}
+              barcodeInput={quickBarcodeInput}
+              onChangeBarcodeInput={setQuickBarcodeInput}
+              onSubmitBarcode={handleQuickBarcodeSubmit}
+              isQuickScanning={isQuickScanning}
+              onOpenScanner={() => setIsScannerOpen(true)}
+            />
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handleOfficerLogout}
-                className="h-8 w-8 p-0 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl"
-                title="Keluar dari sesi petugas"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          </div>
+            {/* Attendance KPI Stats */}
+            <CheckInStatsBar stats={stats} />
 
-          {/* Mobile Sub-Row: Officer Details */}
-          <div className="flex sm:hidden items-center justify-between text-[11px] px-2.5 py-1.5 rounded-xl bg-slate-100/70 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-700/50 text-slate-600 dark:text-slate-300">
-            <div className="flex items-center space-x-1.5 truncate">
-              <span className="text-slate-400">Petugas:</span>
-              <strong className="text-slate-800 dark:text-slate-100 truncate max-w-[180px]">
-                {user?.name || "Petugas Lapangan"}
-              </strong>
-            </div>
-            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-brand-sage dark:text-brand-sageBright border border-emerald-200 dark:border-emerald-800 shrink-0">
-              {user?.email === "eventstaff@dagoeng.com"
-                ? "Petugas Lapangan"
-                : isHubAdmin
-                ? "Admin Hub"
-                : "Penyelenggara"}
-            </span>
-          </div>
+            {/* Tabs & Search */}
+            <CheckInTabs
+              activeTab={activeTab}
+              onChangeTab={setActiveTab}
+              searchQuery={ticketSearch}
+              onChangeSearchQuery={setTicketSearch}
+              stats={stats}
+            />
 
-          {/* Desktop Actions */}
-          <div className="hidden sm:flex items-center space-x-2">
-            {isHubAdmin && (
-              <Link href="/dashboard" className="hidden md:inline-flex">
-                <Button variant="ghost" size="sm" className="h-8 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 cursor-pointer">
-                  <ArrowLeft className="w-3.5 h-3.5 mr-1" />
-                  Dashboard
-                </Button>
-              </Link>
-            )}
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={loadData}
-              disabled={isLoading}
-              className="h-8 text-xs font-semibold rounded-xl border-slate-200 dark:border-slate-800"
-              title="Segarkan data tiket"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isLoading ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Segarkan</span>
-            </Button>
-
-            <ThemeToggle variant="pill" />
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleOfficerLogout}
-              className="h-8 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl"
-              title="Keluar dari sesi petugas"
-            >
-              <LogOut className="w-3.5 h-3.5 mr-1" />
-              <span className="hidden sm:inline">Keluar</span>
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6 flex-1 w-full max-w-full min-w-0">
-        {/* Global Feedback Alert */}
-        {statusMessage && (
-          <div
-            className={`p-3.5 rounded-2xl border text-xs font-medium flex items-center justify-between shadow-xs animate-in slide-in-from-top-2 ${
-              statusMessage.type === "success"
-                ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
-                : "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200"
-            }`}
-          >
-            <div className="flex items-center space-x-2">
-              {statusMessage.type === "success" ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-              )}
-              <span>{statusMessage.text}</span>
-            </div>
-            <button
-              onClick={() => setStatusMessage(null)}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-
-        {/* Empty State: No Accessible Events */}
-        {events.length === 0 && !isLoading && (
-          <Card className="border border-slate-200 dark:border-slate-800 shadow-sm text-center py-16 px-4 rounded-3xl bg-white dark:bg-[#1E293B]">
-            <Building className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-            <h2 className="text-base font-bold text-slate-800 dark:text-slate-200">
-              Belum Ada Event Aktif yang Ditugaskan
-            </h2>
-            <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-4 leading-relaxed">
-              Akun Anda belum memiliki event aktif yang disetujui kurator untuk operasional check-in. Hubungi Admin Hub atau koordinator acara untuk penugasan meja registrasi.
-            </p>
-            <Link href="/events">
-              <Button size="sm" variant="outline" className="text-xs font-semibold rounded-xl">
-                Lihat Kalender Event Publik
-              </Button>
-            </Link>
-          </Card>
-        )}
-
-        {events.length > 0 && (
-          <div className="space-y-4 sm:space-y-6 w-full max-w-full min-w-0">
-            {/* Event Selector Card */}
-            <Card className="p-3.5 sm:p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-2xl sm:rounded-3xl shadow-xs w-full max-w-full min-w-0">
-              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4 w-full min-w-0">
-                <div className="space-y-1 min-w-0">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center space-x-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
-                    <span>Pilih Event Operasional:</span>
-                  </label>
-                  <p className="text-[11px] text-slate-400">
-                    Pilih event yang sedang berlangsung untuk membuka meja registrasi dan memindai tiket peserta.
-                  </p>
-                </div>
-
-                <div className="w-full md:w-96 min-w-0">
-                  <EventSearchInput
-                    events={filteredEventsList}
-                    selectedEventId={selectedEventId}
-                    onSelectEvent={(id) => setSelectedEventId(id)}
-                    placeholder="Pilih atau cari event..."
-                    allowAllOption={false}
-                    maxResults={6}
+            {/* Mobile Cards (sm:hidden) */}
+            <div className="block sm:hidden space-y-3">
+              {filteredTickets.length > 0 ? (
+                filteredTickets.map((ticket) => (
+                  <CheckInAttendeeCard
+                    key={ticket.id}
+                    ticket={ticket}
+                    isProcessing={isProcessingId === ticket.id}
+                    onCheckIn={(t) => {
+                      if ((t.ticketCount || 1) > 1) {
+                        setGroupCheckInBooking(t);
+                      } else {
+                        handleCheckIn(t, "CHECKED_IN");
+                      }
+                    }}
+                    onReset={(t) => handleCheckIn(t, "REGISTERED", { reset: true })}
+                    onViewQR={(t) => setViewQRBooking(t)}
                   />
-                </div>
-              </div>
-            </Card>
-
-            {/* Selected Event Context */}
-            {selectedEvent && (
-              <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 w-full max-w-full min-w-0">
-                {/* 2. DEDICATED QR SCANNER ACTION HERO BANNER */}
-                <Card className="p-4 sm:p-6 border border-emerald-500/30 bg-linear-to-br from-slate-900 via-[#0F2317] to-slate-900 text-white rounded-2xl sm:rounded-3xl shadow-lg relative overflow-hidden w-full max-w-full min-w-0">
-                  <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 sm:gap-6 w-full min-w-0">
-                    <div className="space-y-2 max-w-xl w-full min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge className="bg-brand-sage text-white font-bold text-[10px] px-2.5 py-0.5 rounded-full border-none shrink-0">
-                          {selectedEvent.category}
-                        </Badge>
-                        <span className="text-xs text-slate-300 font-medium truncate">
-                          Penyelenggara: <strong className="text-white">{selectedEvent.organizerName}</strong>
-                        </span>
-                      </div>
-                      <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight leading-snug wrap-break-word">
-                        {selectedEvent.title}
-                      </h2>
-                      <div className="flex flex-wrap items-center gap-2.5 sm:gap-4 text-xs text-slate-300">
-                        <span className="flex items-center space-x-1.5 shrink-0">
-                          <Calendar className="w-3.5 h-3.5 text-brand-sageBright shrink-0" />
-                          <span>
-                            {new Date(selectedEvent.startDate).toLocaleDateString("id-ID", {
-                              weekday: "short",
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })}
-                          </span>
-                        </span>
-                        <span className="flex items-center space-x-1.5 shrink-0">
-                          <Clock className="w-3.5 h-3.5 text-brand-sageBright shrink-0" />
-                          <span>
-                            {new Date(selectedEvent.startDate).toLocaleTimeString("id-ID", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}{" "}
-                            WITA
-                          </span>
-                        </span>
-                        <span className="flex items-center space-x-1.5 truncate max-w-full">
-                          <MapPin className="w-3.5 h-3.5 text-brand-sageBright shrink-0" />
-                          <span className="truncate">{selectedEvent.location}</span>
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Prominent QR Camera Scanner Button & Barcode Gun Input */}
-                    <div className="w-full lg:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 shrink-0">
-                      <Button
-                        type="button"
-                        onClick={() => setIsScannerOpen(true)}
-                        className="w-full sm:w-auto bg-brand-sage hover:bg-[#2E6044] text-white font-black text-xs sm:text-sm px-5 sm:px-6 py-4 sm:py-5 rounded-2xl shadow-lg shadow-[#3B7A57]/30 flex items-center justify-center space-x-2.5 cursor-pointer transition-all hover:scale-[1.02] active:scale-95"
-                      >
-                        <Camera className="w-5 h-5 text-white shrink-0" />
-                        <span>Buka Kamera Scanner QR</span>
-                      </Button>
-
-                      {/* Fast Barcode Gun Form */}
-                      <form onSubmit={handleQuickBarcodeSubmit} className="w-full sm:w-auto flex items-center gap-2 bg-slate-900/90 dark:bg-slate-950/90 backdrop-blur-md px-3 py-1.5 rounded-2xl border border-emerald-500/40 shadow-sm ring-1 ring-emerald-500/20 min-w-0">
-                        <ScanLine className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <input
-                          ref={barcodeInputRef}
-                          type="text"
-                          value={quickBarcodeInput}
-                          onChange={(e) => setQuickBarcodeInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === "Tab") {
-                              e.preventDefault();
-                              handleQuickBarcodeSubmit();
-                            }
-                          }}
-                          placeholder={isQuickScanning ? "Memvalidasi tiket..." : "Ketik / Scan Barcode..."}
-                          disabled={isQuickScanning}
-                          className="flex-1 sm:w-56 min-w-0 px-1 py-1 text-xs font-mono font-bold bg-transparent border-none text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-0 shadow-none disabled:opacity-60"
-                        />
-                        <Button
-                          type="submit"
-                          size="sm"
-                          disabled={!quickBarcodeInput.trim() || isQuickScanning}
-                          className="shrink-0 bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl px-3 h-8 cursor-pointer shadow-xs disabled:opacity-40"
-                        >
-                          {isQuickScanning ? (
-                            <span className="flex items-center space-x-1">
-                              <RefreshCw className="w-3 h-3 animate-spin" />
-                              <span>Validasi...</span>
-                            </span>
-                          ) : (
-                            "Check-in"
-                          )}
-                        </Button>
-                      </form>
-                    </div>
-                  </div>
-                </Card>
-
-                {/* 3. KPI ATTENDANCE METRICS */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 w-full max-w-full min-w-0">
-                  <Card className="p-3.5 sm:p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-2xl sm:rounded-3xl shadow-xs min-w-0">
-                    <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center space-x-1 truncate">
-                      <Ticket className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
-                      <span className="truncate">Total Tiket</span>
-                    </p>
-                    <p className="text-xl sm:text-3xl font-black text-slate-900 dark:text-white mt-1">
-                      {stats.totalTickets}
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5 truncate">Semua pemesanan tiket</p>
-                  </Card>
-
-                  <Card className="p-3.5 sm:p-5 border border-emerald-500/20 bg-emerald-50/50 dark:bg-emerald-950/20 rounded-2xl sm:rounded-3xl shadow-xs min-w-0">
-                    <p className="text-[10px] sm:text-[11px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider flex items-center space-x-1 truncate">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span className="truncate">Sudah Check-In</span>
-                    </p>
-                    <p className="text-xl sm:text-3xl font-black text-emerald-700 dark:text-emerald-400 mt-1">
-                      {stats.checkedInCount}
-                    </p>
-                    <p className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70 mt-0.5 truncate">Telah berada di lokasi</p>
-                  </Card>
-
-                  <Card className="p-3.5 sm:p-5 border border-amber-500/20 bg-amber-50/50 dark:bg-amber-950/20 rounded-2xl sm:rounded-3xl shadow-xs min-w-0">
-                    <p className="text-[10px] sm:text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider flex items-center space-x-1 truncate">
-                      <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                      <span className="truncate">Belum Hadir</span>
-                    </p>
-                    <p className="text-xl sm:text-3xl font-black text-amber-700 dark:text-amber-400 mt-1">
-                      {stats.remainingCount}
-                    </p>
-                    <p className="text-[10px] text-amber-600/70 dark:text-amber-400/70 mt-0.5 truncate">Menunggu verifikasi</p>
-                  </Card>
-
-                  <Card className="p-3.5 sm:p-5 border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-2xl sm:rounded-3xl shadow-xs min-w-0">
-                    <p className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center space-x-1 truncate">
-                      <TrendingUp className="w-3.5 h-3.5 text-brand-sage dark:text-brand-sageBright shrink-0" />
-                      <span className="truncate">Kehadiran</span>
-                    </p>
-                    <div className="flex items-baseline space-x-1.5 mt-1">
-                      <p className="text-xl sm:text-3xl font-black text-brand-sage dark:text-brand-sageBright">
-                        {stats.percentage}%
-                      </p>
-                      <span className="text-[10px] text-slate-400">attendance</span>
-                    </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full mt-2.5 overflow-hidden">
-                      <div
-                        className="bg-brand-sage dark:bg-brand-sageBright h-full transition-all duration-300"
-                        style={{ width: `${Math.min(100, stats.percentage)}%` }}
-                      />
-                    </div>
-                  </Card>
-                </div>
-
-                {/* 4. ATTENDEES TABLE WITH FAST FILTER TABS */}
-                <Card className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1E293B] rounded-2xl sm:rounded-3xl shadow-xs overflow-hidden w-full max-w-full min-w-0">
-                  <div className="p-3.5 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 sm:gap-4 w-full min-w-0">
-                    {/* Filter Tabs */}
-                    <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-2xl w-full md:w-auto border border-slate-200/50 dark:border-slate-700/50 overflow-x-auto no-scrollbar">
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("UNCHECKED")}
-                        className={`flex-1 sm:flex-none whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
-                          activeTab === "UNCHECKED"
-                            ? "bg-white dark:bg-slate-700 text-amber-700 dark:text-amber-200 shadow-xs border border-amber-300/30 dark:border-amber-700/50"
-                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                        }`}
-                      >
-                        Belum Hadir ({stats.uncheckedOrders})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("CHECKED")}
-                        className={`flex-1 sm:flex-none whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
-                          activeTab === "CHECKED"
-                            ? "bg-white dark:bg-slate-700 text-emerald-700 dark:text-emerald-200 shadow-xs border border-emerald-300/30 dark:border-emerald-700/50"
-                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                        }`}
-                      >
-                        Sudah Hadir ({stats.checkedOrders})
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("ALL")}
-                        className={`flex-1 sm:flex-none whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-bold transition-all cursor-pointer ${
-                          activeTab === "ALL"
-                            ? "bg-white dark:bg-slate-700 text-brand-sage dark:text-brand-sageBright shadow-xs border border-brand-sage/30 dark:border-brand-sageBright/50"
-                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                        }`}
-                      >
-                        Semua ({stats.totalOrders})
-                      </button>
-                    </div>
-
-                    {/* Real-time Search Box */}
-                    <div className="relative w-full md:w-80 min-w-0">
-                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        value={ticketSearch}
-                        onChange={(e) => setTicketSearch(e.target.value)}
-                        placeholder="Cari kode tiket, nama, HP..."
-                        className="w-full text-xs font-medium pl-9 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/90 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-[#3B7A57]/30 focus:border-brand-sage transition-all"
-                      />
-                      {ticketSearch && (
-                        <button
-                          type="button"
-                          onClick={() => setTicketSearch("")}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 4A. MOBILE ATTENDEE CARD VIEW (FOR SMARTPHONE SCREENS) */}
-                  <div className="block md:hidden divide-y divide-slate-100 dark:divide-slate-800 p-2 sm:p-3 space-y-2.5">
-                    {filteredTickets.length > 0 ? (
-                      filteredTickets.map((b) => {
-                        const ticketCount = b.ticketCount || 1;
-                        const checkedQty =
-                          typeof b.checkedInQty === "number"
-                            ? b.checkedInQty
-                            : b.checkInStatus === "CHECKED_IN"
-                            ? ticketCount
-                            : 0;
-                        const isFullyCheckedIn = b.checkInStatus === "CHECKED_IN" || checkedQty >= ticketCount;
-                        const isPartiallyCheckedIn = !isFullyCheckedIn && checkedQty > 0;
-                        const isPaid = b.paymentStatus === "PAID";
-                        const isProcessing = isProcessingId === b.id;
-                        const sisa = Math.max(0, ticketCount - checkedQty);
-
-                        return (
-                          <div
-                            key={b.id}
-                            className={`p-3.5 rounded-2xl border transition-all ${
-                              isFullyCheckedIn
-                                ? "bg-emerald-50/20 dark:bg-emerald-950/15 border-emerald-500/25"
-                                : "bg-white dark:bg-[#161F31]/80 border-slate-200/70 dark:border-slate-800 shadow-2xs"
-                            }`}
-                          >
-                            {/* Card Top: Code, Pax, Payment Badge */}
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <div className="flex items-center space-x-2 min-w-0">
-                                <span className="font-mono font-black text-xs text-slate-900 dark:text-slate-100 tracking-tight">
-                                  {b.ticketCode}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setViewQRBooking(b)}
-                                  className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors"
-                                  title="Lihat QR Code"
-                                >
-                                  <QrCode className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                              <div className="flex items-center space-x-1.5 shrink-0">
-                                <span className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300">
-                                  {ticketCount} Pax
-                                </span>
-                                <span
-                                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                                    b.paymentStatus === "PAID"
-                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
-                                      : b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED"
-                                      ? "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
-                                      : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
-                                  }`}
-                                >
-                                  {b.paymentStatus}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* Card Middle: Attendee Name & Contact */}
-                            <div className="mb-2.5 space-y-0.5">
-                              <p className="font-bold text-sm text-slate-900 dark:text-white leading-tight">
-                                {b.guestName}
-                              </p>
-                              {b.institution && (
-                                <p className="text-[11px] text-slate-400">{b.institution}</p>
-                              )}
-                              <p className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center space-x-1.5 pt-0.5">
-                                <span className="truncate max-w-[150px]">{b.guestEmail}</span>
-                                <span>•</span>
-                                <span className="font-mono">{b.guestPhone}</span>
-                              </p>
-                            </div>
-
-                            {/* Card Bottom: Status & Action Button */}
-                            <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
-                              <div className="min-w-0">
-                                {isFullyCheckedIn ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white shadow-2xs">
-                                    <Check className="w-3 h-3 mr-1 shrink-0" />
-                                    HADIR {ticketCount > 1 ? `(${ticketCount} Pax)` : ""}
-                                  </span>
-                                ) : isPartiallyCheckedIn ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800">
-                                    HADIR {checkedQty}/{ticketCount} Pax (Sisa {sisa})
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800">
-                                    BELUM HADIR {ticketCount > 1 ? `(0/${ticketCount})` : ""}
-                                  </span>
-                                )}
-                                {b.checkInTime && (
-                                  <p className="text-[9px] text-slate-400 mt-0.5">
-                                    {new Date(b.checkInTime).toLocaleTimeString("id-ID", {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}{" "}
-                                    WITA
-                                  </p>
-                                )}
-                              </div>
-
-                              <div className="flex items-center space-x-1.5 shrink-0">
-                                {!isFullyCheckedIn ? (
-                                  <>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      disabled={!isPaid || isProcessing}
-                                      onClick={() => {
-                                        if (ticketCount > 1) {
-                                          setGroupCheckInBooking(b);
-                                        } else {
-                                          handleCheckIn(b, "CHECKED_IN");
-                                        }
-                                      }}
-                                      className={`h-8 px-3.5 text-xs font-bold rounded-xl shadow-xs cursor-pointer ${
-                                        !isPaid
-                                          ? "opacity-50 cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-800"
-                                          : "bg-brand-sage hover:bg-[#2E6044] text-white"
-                                      }`}
-                                    >
-                                      <Check className="w-3.5 h-3.5 mr-1" />
-                                      {isProcessing
-                                        ? "Menyimpan..."
-                                        : isPartiallyCheckedIn
-                                        ? `+1 Pax`
-                                        : "Check-in"}
-                                    </Button>
-
-                                    {isPartiallyCheckedIn && (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={isProcessing}
-                                        onClick={() => handleCheckIn(b, "REGISTERED", { reset: true })}
-                                        className="h-8 px-2 text-xs font-semibold text-slate-400 hover:text-rose-600 border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer"
-                                        title="Reset kehadiran"
-                                      >
-                                        <RotateCcw className="w-3 h-3" />
-                                      </Button>
-                                    )}
-                                  </>
-                                ) : (
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={isProcessing}
-                                    onClick={() => handleCheckIn(b, "REGISTERED", { reset: true })}
-                                    className="h-8 px-2.5 text-xs font-semibold text-slate-500 hover:text-rose-600 border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer"
-                                    title="Reset status kehadiran"
-                                  >
-                                    <RotateCcw className="w-3 h-3 mr-1" />
-                                    Reset
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })
-                    ) : (
-                      <div className="py-12 text-center">
-                        <div className="max-w-md mx-auto space-y-3 px-4">
-                          {eventTickets.length > 0 && stats.remainingCount === 0 && activeTab === "UNCHECKED" ? (
-                            <>
-                              <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
-                                <CheckCircle2 className="w-6 h-6" />
-                              </div>
-                              <div>
-                                <p className="font-bold text-sm text-slate-800 dark:text-slate-100">
-                                  Semua Peserta ({stats.checkedInCount}) Sudah Hadir & Check-in!
-                                </p>
-                                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                  Tidak ada peserta yang berstatus &quot;Belum Hadir&quot; pada event ini.
-                                </p>
-                              </div>
-                              <Button
-                                type="button"
-                                size="sm"
-                                onClick={() => setActiveTab("CHECKED")}
-                                className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl cursor-pointer"
-                              >
-                                Lihat {stats.checkedInCount} Peserta yang Sudah Hadir
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center mx-auto text-slate-400">
-                                <Ticket className="w-6 h-6 text-slate-400" />
-                              </div>
-                              <div>
-                                <p className="font-bold text-sm text-slate-800 dark:text-slate-200">
-                                  {eventTickets.length === 0
-                                    ? "Belum Ada Peserta Terdaftar di Event Ini"
-                                    : "Tidak Ada Tiket yang Cocok"}
-                                </p>
-                                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                  {eventTickets.length === 0
-                                    ? `Event "${selectedEvent?.title}" saat ini belum memiliki transaksi pemesanan tiket.`
-                                    : "Tidak ditemukan data tiket yang cocok dengan filter tab atau kata kunci pencarian Anda."}
-                                </p>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 4B. DESKTOP ATTENDEES TABLE VIEW */}
-                  <div className="hidden md:block overflow-x-auto w-full min-w-0">
-                    <table className="w-full text-left text-xs min-w-[650px]">
-                      <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-800 font-bold uppercase text-[10px]">
-                        <tr>
-                          <th className="py-3.5 px-4">Kode Tiket</th>
-                          <th className="py-3.5 px-4">Nama Peserta</th>
-                          <th className="py-3.5 px-4">Kontak</th>
-                          <th className="py-3.5 px-4 text-center">Tiket</th>
-                          <th className="py-3.5 px-4 text-center">Status Pembayaran</th>
-                          <th className="py-3.5 px-4 text-center">Kehadiran</th>
-                          <th className="py-3.5 px-4 text-right">Aksi Meja Registrasi</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {filteredTickets.length > 0 ? (
-                          filteredTickets.map((b) => {
-                            const ticketCount = b.ticketCount || 1;
-                            const checkedQty =
-                              typeof b.checkedInQty === "number"
-                                ? b.checkedInQty
-                                : b.checkInStatus === "CHECKED_IN"
-                                ? ticketCount
-                                : 0;
-                            const isFullyCheckedIn = b.checkInStatus === "CHECKED_IN" || checkedQty >= ticketCount;
-                            const isPartiallyCheckedIn = !isFullyCheckedIn && checkedQty > 0;
-                            const isPaid = b.paymentStatus === "PAID";
-                            const isProcessing = isProcessingId === b.id;
-                            const sisa = Math.max(0, ticketCount - checkedQty);
-
-                            return (
-                              <tr
-                                key={b.id}
-                                className={`hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors ${
-                                  isFullyCheckedIn
-                                    ? "bg-emerald-50/30 dark:bg-emerald-950/10"
-                                    : ""
-                                }`}
-                              >
-                                <td className="py-3.5 px-4 font-mono font-bold text-slate-900 dark:text-slate-100">
-                                  <div className="flex items-center space-x-2">
-                                    <span>{b.ticketCode}</span>
-                                    <button
-                                      type="button"
-                                      onClick={() => setViewQRBooking(b)}
-                                      className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-slate-500 hover:text-brand-sage dark:hover:text-brand-sageBright transition-colors cursor-pointer"
-                                      title="Tampilkan QR Code E-Tiket"
-                                    >
-                                      <QrCode className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                                <td className="py-3.5 px-4">
-                                  <p className="font-bold text-slate-800 dark:text-slate-100">{b.guestName}</p>
-                                  {b.institution && (
-                                    <p className="text-[10px] text-slate-400">{b.institution}</p>
-                                  )}
-                                </td>
-                                <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 text-[11px]">
-                                  <p>{b.guestEmail}</p>
-                                  <p className="font-mono text-[10px]">{b.guestPhone}</p>
-                                </td>
-                                <td className="py-3.5 px-4 text-center font-bold text-slate-800 dark:text-slate-200">
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold">
-                                    {ticketCount} Pax
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4 text-center">
-                                  <span
-                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                      b.paymentStatus === "PAID"
-                                        ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"
-                                        : b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED"
-                                        ? "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800"
-                                        : "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800"
-                                    }`}
-                                  >
-                                    {b.paymentStatus}
-                                  </span>
-                                </td>
-                                <td className="py-3.5 px-4 text-center">
-                                  {isFullyCheckedIn ? (
-                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white shadow-2xs">
-                                      SUDAH HADIR {ticketCount > 1 ? `(${ticketCount} Pax)` : ""}
-                                    </span>
-                                  ) : isPartiallyCheckedIn ? (
-                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800">
-                                      HADIR {checkedQty}/{ticketCount} Pax (Sisa {sisa})
-                                    </span>
-                                  ) : (
-                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800">
-                                      BELUM HADIR {ticketCount > 1 ? `(0/${ticketCount} Pax)` : ""}
-                                    </span>
-                                  )}
-                                  {b.checkInTime && (
-                                    <p className="text-[9px] text-slate-400 mt-0.5">
-                                      {new Date(b.checkInTime).toLocaleTimeString("id-ID", {
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      })}{" "}
-                                      WITA
-                                    </p>
-                                  )}
-                                </td>
-                                <td className="py-3.5 px-4 text-right">
-                                  <div className="flex items-center justify-end space-x-1.5">
-                                    {!isFullyCheckedIn ? (
-                                      <>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          disabled={!isPaid || isProcessing}
-                                          onClick={() => {
-                                            if (ticketCount > 1) {
-                                              setGroupCheckInBooking(b);
-                                            } else {
-                                              handleCheckIn(b, "CHECKED_IN");
-                                            }
-                                          }}
-                                          className={`h-7 px-3 text-xs font-bold rounded-xl shadow-xs cursor-pointer ${
-                                            !isPaid
-                                              ? "opacity-50 cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-800"
-                                              : "bg-brand-sage hover:bg-[#2E6044] text-white"
-                                          }`}
-                                        >
-                                          <Check className="w-3.5 h-3.5 mr-1" />
-                                          {isProcessing
-                                            ? "Menyimpan..."
-                                            : isPartiallyCheckedIn
-                                            ? `Check-in (+1)`
-                                            : "Check-in"}
-                                        </Button>
-
-                                        {isPartiallyCheckedIn && (
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            disabled={isProcessing}
-                                            onClick={() => handleCheckIn(b, "REGISTERED", { reset: true })}
-                                            className="h-7 px-2 text-xs font-semibold text-slate-400 hover:text-rose-600 border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer"
-                                            title="Reset kehadiran kembali ke 0"
-                                          >
-                                            <RotateCcw className="w-3 h-3" />
-                                          </Button>
-                                        )}
-                                      </>
-                                    ) : (
-                                      <Button
-                                        type="button"
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={isProcessing}
-                                        onClick={() => handleCheckIn(b, "REGISTERED", { reset: true })}
-                                        className="h-7 px-2.5 text-xs font-semibold text-slate-500 hover:text-rose-600 border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer"
-                                        title="Batalkan status kehadiran tiket ini (Reset)"
-                                      >
-                                        <RotateCcw className="w-3 h-3 mr-1" />
-                                        Reset
-                                      </Button>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })
-                        ) : (
-                          <tr>
-                            <td colSpan={7} className="py-14 text-center">
-                              <div className="max-w-md mx-auto space-y-3 px-4">
-                                {eventTickets.length > 0 && stats.remainingCount === 0 && activeTab === "UNCHECKED" ? (
-                                  <>
-                                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
-                                      <CheckCircle2 className="w-6 h-6" />
-                                    </div>
-                                    <div>
-                                      <p className="font-bold text-sm text-slate-800 dark:text-slate-100">
-                                        Semua Peserta ({stats.checkedInCount}) Sudah Hadir & Check-in!
-                                      </p>
-                                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                        Tidak ada peserta yang berstatus &quot;Belum Hadir&quot; pada event ini.
-                                      </p>
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      onClick={() => setActiveTab("CHECKED")}
-                                      className="bg-brand-sage hover:bg-[#2E6044] text-white text-xs font-bold rounded-xl cursor-pointer"
-                                    >
-                                      Lihat {stats.checkedInCount} Peserta yang Sudah Hadir
-                                    </Button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center mx-auto text-slate-400">
-                                      <Ticket className="w-6 h-6 text-slate-400" />
-                                    </div>
-                                    <div>
-                                      <p className="font-bold text-sm text-slate-800 dark:text-slate-200">
-                                        {eventTickets.length === 0
-                                          ? "Belum Ada Peserta Terdaftar di Event Ini"
-                                          : "Tidak Ada Tiket yang Cocok"}
-                                      </p>
-                                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                                        {eventTickets.length === 0
-                                          ? `Event "${selectedEvent?.title}" saat ini belum memiliki transaksi pemesanan tiket.`
-                                          : "Tidak ditemukan data tiket yang cocok dengan filter tab atau kata kunci pencarian Anda."}
-                                      </p>
-                                    </div>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              </div>
-            )}
-          </div>
-        )}
-      </main>
-
-      {/* FOOTER */}
-      <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-4 text-center text-[11px] text-slate-400 w-full border-t border-slate-200/60 dark:border-slate-800/60">
-        © {new Date().getFullYear()} Dago Creative Hub — Modul Check-In Registrasi Lapangan Terpadu.
-      </footer>
-
-      {/* 4.5. POPUP PREVIEW QR CODE TIKET PEMESAN */}
-      {viewQRBooking && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <Card className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-3xl overflow-hidden p-6 space-y-5 text-center">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-xl bg-brand-sage/10 dark:bg-brand-sageBright/20 text-brand-sage dark:text-brand-sageBright flex items-center justify-center">
-                  <QrCode className="w-4 h-4" />
-                </div>
-                <div className="text-left">
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">QR Code E-Tiket Peserta</h3>
-                  <p className="text-[10px] text-slate-400 font-mono">{viewQRBooking.ticketCode}</p>
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setViewQRBooking(null)}
-                className="h-8 w-8 p-0 rounded-lg text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-4 h-4" />
-              </Button>
+                ))
+              ) : (
+                <EmptyState
+                  icon={<Calendar />}
+                  title="Tidak ada tiket"
+                  description="Tidak ditemukan tiket yang cocok dengan filter atau pencarian."
+                  className="border"
+                />
+              )}
             </div>
 
-            {/* QR Code Presentation */}
-            <div className="bg-white p-4 rounded-2xl shadow-inner border border-slate-100 inline-block mx-auto">
-              <QRCodeSVG
-                value={viewQRBooking.ticketCode}
-                size={200}
-                level="M"
-                includeMargin={true}
-              />
-            </div>
-
-            {/* Attendee Summary Details */}
-            <div className="space-y-1.5 text-left bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80">
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] text-slate-400 font-medium">Nama Peserta:</span>
-                <span className="text-xs font-bold text-slate-900 dark:text-white">{viewQRBooking.guestName}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] text-slate-400 font-medium">Kode Tiket:</span>
-                <span className="font-mono text-xs font-bold text-brand-sage dark:text-brand-sageBright">{viewQRBooking.ticketCode}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] text-slate-400 font-medium">Jumlah Tiket:</span>
-                <span className="text-xs font-bold text-slate-900 dark:text-white">{viewQRBooking.ticketCount || 1} Pax</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] text-slate-400 font-medium">Status Kehadiran:</span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  viewQRBooking.checkInStatus === "CHECKED_IN"
-                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-400"
-                    : viewQRBooking.checkInStatus === "PARTIALLY_CHECKED_IN"
-                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-400"
-                    : "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-400"
-                }`}>
-                  {viewQRBooking.checkInStatus === "CHECKED_IN"
-                    ? "SUDAH HADIR"
-                    : viewQRBooking.checkInStatus === "PARTIALLY_CHECKED_IN"
-                    ? `HADIR ${viewQRBooking.checkedInQty || 0}/${viewQRBooking.ticketCount || 1} Pax`
-                    : "BELUM HADIR"}
-                </span>
-              </div>
-            </div>
-
-            {/* Simulation & Close Actions */}
-            <div className="space-y-2 pt-1">
-              <Button
-                type="button"
-                onClick={async () => {
-                  const target = viewQRBooking;
-                  setViewQRBooking(null);
-                  if (target) {
-                    if ((target.ticketCount || 1) > 1) {
-                      setGroupCheckInBooking(target);
-                    } else {
-                      await handleCheckIn(target, "CHECKED_IN");
-                    }
+            {/* Desktop / Tablet Table (hidden sm:block) */}
+            <div className="hidden sm:block">
+              <CheckInAttendeesTable
+                tickets={filteredTickets}
+                isProcessingId={isProcessingId}
+                onCheckIn={(ticket) => {
+                  if ((ticket.ticketCount || 1) > 1) {
+                    setGroupCheckInBooking(ticket);
+                  } else {
+                    handleCheckIn(ticket, "CHECKED_IN");
                   }
                 }}
-                disabled={viewQRBooking.checkInStatus === "CHECKED_IN"}
-                className="w-full bg-brand-sage hover:bg-[#2E6044] text-white font-bold text-xs h-10 rounded-xl shadow-md shadow-[#3B7A57]/20 flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>
-                  {viewQRBooking.checkInStatus === "CHECKED_IN"
-                    ? "Tiket Sudah Digunakan Lengkap"
-                    : (viewQRBooking.ticketCount || 1) > 1
-                    ? "Check-in Rombongan Ini"
-                    : "Simulasikan Scan & Check-in Tiket Ini"}
-                </span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setViewQRBooking(null)}
-                className="w-full text-xs font-semibold h-9 rounded-xl border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-              >
-                Tutup Pratinjau
-              </Button>
+                onReset={(ticket) => handleCheckIn(ticket, "REGISTERED", { reset: true })}
+                onViewQR={(ticket) => setViewQRBooking(ticket)}
+                onSwitchToCheckedTab={() => setActiveTab("CHECKED")}
+                activeTab={activeTab}
+                totalUnfilteredCount={eventTickets.length}
+              />
             </div>
-          </Card>
-        </div>
-      )}
+          </div>
+        ) : null}
+      </main>
 
-      {/* 4.6. POPUP CHECK-IN ROMBONGAN / MULTI-PAX */}
-      {groupCheckInBooking && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <Card className="max-w-md w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-3xl overflow-hidden p-6 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-brand-sage/10 dark:bg-brand-sageBright/20 text-brand-sage dark:text-brand-sageBright flex items-center justify-center">
-                  <Ticket className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900 dark:text-white">Check-in Tiket Rombongan</h3>
-                  <p className="text-[10px] text-slate-400 font-mono">{groupCheckInBooking.ticketCode}</p>
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setGroupCheckInBooking(null)}
-                className="h-8 w-8 p-0 rounded-lg text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
+      {/* Footer */}
+      <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-4 text-center text-xs text-muted-foreground w-full border-t border-border">
+        Dago Creative Hub &bull; Modul Registrasi & Check-in Event
+      </footer>
 
-            {/* Attendance Progress Box */}
-            {(() => {
-              const count = groupCheckInBooking.ticketCount || 1;
-              const checked =
-                typeof groupCheckInBooking.checkedInQty === "number"
-                  ? groupCheckInBooking.checkedInQty
-                  : groupCheckInBooking.checkInStatus === "CHECKED_IN"
-                  ? count
-                  : 0;
-              const remaining = Math.max(0, count - checked);
-              const isProcessing = isProcessingId === groupCheckInBooking.id;
+      {/* Dialogs */}
+      <EventCheckInQRDialog
+        booking={viewQRBooking}
+        onClose={() => setViewQRBooking(null)}
+        onSimulateCheckIn={(booking) => {
+          setViewQRBooking(null);
+          if ((booking.ticketCount || 1) > 1) {
+            setGroupCheckInBooking(booking);
+          } else {
+            handleCheckIn(booking, "CHECKED_IN");
+          }
+        }}
+      />
 
-              return (
-                <>
-                  <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500 font-medium">Pemesan:</span>
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">
-                        {groupCheckInBooking.guestName}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500 font-medium">Total Kursi/Tiket:</span>
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">{count} Pax</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-500 font-medium">Status Hadir:</span>
-                      <span className="text-xs font-bold text-brand-sage dark:text-brand-sageBright">
-                        {checked} Hadir &bull; {remaining} Belum Hadir
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                      <div
-                        className="bg-brand-sage dark:bg-brand-sageBright h-full transition-all"
-                        style={{ width: `${(checked / count) * 100}%` }}
-                      />
-                    </div>
-                  </div>
+      <EventGroupCheckInDialog
+        booking={groupCheckInBooking}
+        onClose={() => setGroupCheckInBooking(null)}
+        isProcessing={isProcessingId === groupCheckInBooking?.id}
+        onCheckInPartial={async (booking) => {
+          const count = booking.ticketCount || 1;
+          const currentChecked = booking.checkedInQty || 0;
+          const isComplete = currentChecked + 1 >= count;
+          await handleCheckIn(booking, isComplete ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN", {
+            incrementQty: 1,
+          });
+          if (isComplete) {
+            setGroupCheckInBooking(null);
+          }
+        }}
+        onCheckInAll={async (booking) => {
+          await handleCheckIn(booking, "CHECKED_IN", {
+            targetQty: booking.ticketCount || 1,
+          });
+          setGroupCheckInBooking(null);
+        }}
+        onReset={async (booking) => {
+          await handleCheckIn(booking, "REGISTERED", { reset: true });
+          setGroupCheckInBooking(null);
+        }}
+      />
 
-                  <div className="space-y-2.5 pt-1">
-                    <p className="text-xs text-slate-500 text-center font-medium">Pilih Opsi Kehadiran:</p>
-
-                    {/* Option 1: Partial / +1 */}
-                    <Button
-                      type="button"
-                      disabled={remaining <= 0 || isProcessing}
-                      onClick={async () => {
-                        const newChecked = checked + 1;
-                        const isComplete = newChecked >= count;
-                        await handleCheckIn(
-                          groupCheckInBooking,
-                          isComplete ? "CHECKED_IN" : "PARTIALLY_CHECKED_IN",
-                          { incrementQty: 1 }
-                        );
-                        if (isComplete) {
-                          setGroupCheckInBooking(null);
-                        }
-                      }}
-                      className="w-full h-auto py-2.5 px-4 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/60 rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all"
-                    >
-                      <span className="font-bold text-xs flex items-center space-x-1.5">
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Masuk 1 Orang (+1 Pax)</span>
-                      </span>
-                      <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 mt-0.5">
-                        Teman rombongan lain datang menyusul kemudian
-                      </span>
-                    </Button>
-
-                    {/* Option 2: All remaining */}
-                    <Button
-                      type="button"
-                      disabled={remaining <= 0 || isProcessing}
-                      onClick={async () => {
-                        await handleCheckIn(groupCheckInBooking, "CHECKED_IN", {
-                          targetQty: count,
-                        });
-                        setGroupCheckInBooking(null);
-                      }}
-                      className="w-full h-auto py-2.5 px-4 bg-brand-sage hover:bg-[#2E6044] text-white rounded-2xl flex flex-col items-center justify-center cursor-pointer shadow-md shadow-[#3B7A57]/20 transition-all"
-                    >
-                      <span className="font-bold text-xs flex items-center space-x-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Hadir Semua Sekaligus ({remaining} Orang)</span>
-                      </span>
-                      <span className="text-[10px] text-emerald-100/80 mt-0.5">
-                        Seluruh rombongan sudah tiba di lokasi lengkap
-                      </span>
-                    </Button>
-
-                    {checked > 0 && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={isProcessing}
-                        onClick={async () => {
-                          await handleCheckIn(groupCheckInBooking, "REGISTERED", { reset: true });
-                          setGroupCheckInBooking(null);
-                        }}
-                        className="w-full text-xs font-semibold h-8 rounded-xl border-slate-200 dark:border-slate-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"
-                      >
-                        Reset Status Kehadiran (0/{count})
-                      </Button>
-                    )}
-
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setGroupCheckInBooking(null)}
-                      className="w-full text-xs text-slate-500 hover:text-slate-700 h-8 rounded-xl cursor-pointer"
-                    >
-                      Batal / Tutup
-                    </Button>
-                  </div>
-                </>
-              );
-            })()}
-          </Card>
-        </div>
-      )}
-
-      {/* 5. LIVE CAMERA QR SCANNER MODAL */}
-      <EventCheckInQRScannerModal
+      <EventCheckInScannerDialog
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
         selectedEvent={selectedEvent}

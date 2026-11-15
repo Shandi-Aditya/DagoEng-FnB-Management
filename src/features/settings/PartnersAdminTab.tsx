@@ -296,11 +296,11 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={onOpenAddTenant}>
+              <Button type="button" size="lg" variant="outline" onClick={onOpenAddTenant}>
                 <Plus />
                 <span>Mitra F&B</span>
               </Button>
-              <Button type="button" size="sm" onClick={onOpenAddOrganizer}>
+              <Button type="button" size="lg" onClick={onOpenAddOrganizer}>
                 <Plus />
                 <span>Penyelenggara</span>
               </Button>
@@ -536,7 +536,7 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
                   Persentase pembagian untuk tiap mitra berlaku saat transaksi diproses.
                 </CardDescription>
               </div>
-              <Button type="button" size="sm" onClick={onSaveTenantSplits}>
+              <Button type="button" size="lg" onClick={onSaveTenantSplits}>
                 <Save />
                 <span>Simpan bagi hasil</span>
               </Button>

@@ -1,20 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { KitchenTicketData, PrintPurpose } from "@/types/printer";
+import type { KitchenTicketData, PrintPurpose } from "@/types/printer";
 import { usePrinter } from "@/contexts/PrinterContext";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   UtensilsCrossed,
   Printer,
   RotateCcw,
-  X,
   CheckCircle2,
   AlertTriangle,
-  Clock,
-  User,
-  Hash,
-  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +19,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { StatusBadge } from "@/components/app";
+import { formatKitchenTicketPurpose, formatReceiptOrderType } from "@/features/pos/pos-receipt";
 
 interface KitchenOrderReceiptModalProps {
   isOpen: boolean;
@@ -49,33 +46,7 @@ export function KitchenOrderReceiptModal({
   if (!isOpen || !ticketData) return null;
 
   const currentPurpose = ticketData.purpose || "NEW_ORDER";
-
-  const getPurposeBadge = (purpose: PrintPurpose, seq?: number) => {
-    switch (purpose) {
-      case "ADDITIONAL_ORDER":
-        return {
-          title: `PESANAN TAMBAHAN #${seq || 1}`,
-          bg: "bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-300 border-amber-300 dark:border-amber-700",
-        };
-      case "REPRINT":
-        return {
-          title: "SALINAN / REPRINT",
-          bg: "bg-purple-100 dark:bg-purple-950/60 text-purple-900 dark:text-purple-300 border-purple-300 dark:border-purple-700",
-        };
-      case "CANCELLATION":
-        return {
-          title: "PEMBATALAN PESANAN",
-          bg: "bg-rose-100 dark:bg-rose-950/60 text-rose-900 dark:text-rose-300 border-rose-300 dark:border-rose-700",
-        };
-      default:
-        return {
-          title: "NOTA PESANAN DAPUR",
-          bg: "bg-emerald-100 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700",
-        };
-    }
-  };
-
-  const badge = getPurposeBadge(currentPurpose, ticketData.sequenceNumber);
+  const purposeMeta = formatKitchenTicketPurpose(currentPurpose, ticketData.sequenceNumber);
 
   const handlePrint = async (isReprint = false) => {
     setIsPrinting(true);
@@ -99,10 +70,11 @@ export function KitchenOrderReceiptModal({
           text: res.message,
         });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Gagal memproses pencetakan nota dapur.";
       setPrintFeedback({
         type: "error",
-        text: err?.message || "Gagal memproses pencetakan nota dapur.",
+        text: message,
       });
     } finally {
       setIsPrinting(false);
@@ -111,15 +83,15 @@ export function KitchenOrderReceiptModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md gap-0 p-0 overflow-hidden flex flex-col max-h-[92vh]">
+      <DialogContent className="max-w-md gap-0 p-0 overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
-        <DialogHeader className="px-5 py-3.5 border-b border-border flex flex-row items-center justify-between bg-muted/40">
+        <DialogHeader className="px-5 py-3 border-b border-border flex flex-row items-center justify-between bg-muted/40 print:hidden">
           <div className="flex items-center gap-2.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <UtensilsCrossed className="size-4" />
             </div>
             <div>
-              <DialogTitle className="text-sm font-medium text-foreground">
+              <DialogTitle className="text-xs font-medium text-foreground">
                 Nota pesanan dapur
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
@@ -132,168 +104,178 @@ export function KitchenOrderReceiptModal({
         {/* Feedback Banner if any */}
         {printFeedback && (
           <div
-            className={`px-4 py-2.5 text-xs font-semibold flex items-center space-x-2 border-b ${
+            className={`px-4 py-2 text-xs flex items-center gap-2 border-b print:hidden ${
               printFeedback.type === "success"
-                ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                : "bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                ? "bg-muted text-foreground border-border"
+                : "bg-destructive/10 text-destructive border-destructive/20"
             }`}
           >
             {printFeedback.type === "success" ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="size-4 shrink-0 text-primary" />
             ) : (
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+              <AlertTriangle className="size-4 shrink-0 text-destructive" />
             )}
             <span className="flex-1">{printFeedback.text}</span>
           </div>
         )}
 
         {/* Physical Thermal Ticket Preview */}
-        <div className="overflow-y-auto p-4 bg-slate-100 dark:bg-slate-950/80 flex justify-center">
-          <div className="w-full max-w-[340px] bg-white text-slate-950 p-5 rounded-lg shadow-sm border border-slate-200 font-mono text-xs space-y-3">
+        <div className="overflow-y-auto overflow-x-hidden p-4 sm:p-5 bg-muted/30 flex justify-center flex-1">
+          <div
+            id="kitchen-thermal-ticket"
+            className="w-full max-w-[340px] bg-card text-card-foreground p-5 rounded-lg shadow-xs border border-border font-mono text-xs space-y-3 mb-2 break-words overflow-hidden print:w-full print:shadow-none print:border-none print:bg-white print:text-black"
+          >
             {/* Header Nota */}
-            <div className="text-center space-y-1 border-b border-dashed border-slate-300 pb-3">
-              <p className="font-black text-sm tracking-wider uppercase">DagoEng F&B</p>
-              <p className="text-[10px] text-slate-600 uppercase font-semibold">
+            <div className="text-center space-y-1 border-b border-dashed border-border pb-3">
+              <p className="font-semibold text-sm text-foreground">DagoEng F&B</p>
+              <p className="text-xs text-muted-foreground">
                 {ticketData.outletName || "Outlet Singaraja"}
               </p>
-              <div
-                className={`inline-block my-1 px-3 py-1 rounded-md border font-black text-xs uppercase tracking-wider ${badge.bg}`}
-              >
-                {badge.title}
+              <div className="pt-1">
+                <StatusBadge status={purposeMeta.tone}>
+                  {purposeMeta.title}
+                </StatusBadge>
               </div>
             </div>
 
             {/* Order Details */}
-            <div className="space-y-1 text-[11px] border-b border-dashed border-slate-300 pb-2.5">
+            <div className="space-y-1 border-b border-dashed border-border pb-2.5 text-xs">
               <div className="flex justify-between">
-                <span className="text-slate-500">No. Pesanan:</span>
-                <span className="font-black">{ticketData.orderNumber}</span>
+                <span className="text-muted-foreground">No. pesanan:</span>
+                <span className="font-medium text-foreground">{ticketData.orderNumber}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Waktu:</span>
-                <span>{ticketData.timestamp}</span>
+                <span className="text-muted-foreground">Waktu:</span>
+                <span className="text-foreground">{ticketData.timestamp}</span>
               </div>
               <div className="flex justify-between items-center py-0.5">
-                <span className="text-slate-500">Nomor Meja:</span>
-                <span className="font-black text-sm px-1.5 py-0.5 bg-slate-100 rounded border border-slate-300">
+                <span className="text-muted-foreground">Nomor meja:</span>
+                <span className="font-medium text-xs px-2 py-0.5 bg-muted rounded border border-border text-foreground">
                   {ticketData.tableNumber || "-"}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Tipe Pesanan:</span>
-                <span className="font-bold">{ticketData.orderType.replace("_", " ")}</span>
+                <span className="text-muted-foreground">Tipe pesanan:</span>
+                <span className="font-medium text-foreground">
+                  {formatReceiptOrderType(ticketData.orderType)}
+                </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Nama Pelanggan:</span>
-                <span className="font-semibold">{ticketData.customerName}</span>
+                <span className="text-muted-foreground">Nama pelanggan:</span>
+                <span className="text-foreground">{ticketData.customerName || "Tamu"}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Kasir / Petugas:</span>
-                <span>{ticketData.cashierName}</span>
+                <span className="text-muted-foreground">Kasir / petugas:</span>
+                <span className="text-foreground">{ticketData.cashierName}</span>
               </div>
               {ticketData.reprintedBy && (
-                <div className="flex justify-between text-purple-700 font-bold text-[10px] pt-1">
-                  <span>Dicetak Ulang Oleh:</span>
-                  <span>{ticketData.reprintedBy}</span>
+                <div className="flex justify-between text-muted-foreground text-xs pt-1">
+                  <span>Dicetak ulang oleh:</span>
+                  <span className="font-medium text-foreground">{ticketData.reprintedBy}</span>
                 </div>
               )}
             </div>
 
             {/* Items List (Strictly NO prices, NO subtotals, NO totals) */}
-            <div className="space-y-2 border-b border-dashed border-slate-300 pb-3">
-              <p className="font-bold text-[10px] text-slate-500 uppercase tracking-wider">
-                Menu Yang Perlu Dimasak / Disiapkan:
+            <div className="space-y-2 border-b border-dashed border-border pb-3">
+              <p className="font-medium text-xs text-muted-foreground">
+                Menu yang perlu dimasak / disiapkan:
               </p>
               {ticketData.items && ticketData.items.length > 0 ? (
                 ticketData.items.map((item, idx) => (
-                  <div key={item.id || idx} className="space-y-0.5">
-                    <div className="flex items-baseline space-x-1.5 font-black text-xs text-slate-900">
-                      <span className="text-sm bg-slate-100 px-1 rounded">{item.quantity}x</span>
-                      <span className="uppercase">{item.productName}</span>
+                  <div key={item.id || idx} className="space-y-0.5 text-xs">
+                    <div className="flex items-baseline gap-1.5 font-medium text-foreground">
+                      <span className="px-1.5 py-0.2 bg-muted rounded text-xs">
+                        {item.quantity}x
+                      </span>
+                      <span>{item.productName}</span>
                     </div>
 
                     {item.variantName && (
-                      <p className="text-[10px] text-slate-600 pl-6">
-                        • Varian: <strong>{item.variantName}</strong>
+                      <p className="text-xs text-muted-foreground pl-6">
+                        • Varian: {item.variantName}
                       </p>
                     )}
 
                     {item.modifiers && item.modifiers.length > 0 && (
-                      <p className="text-[10px] text-slate-600 pl-6">
-                        • Tambahan: <strong>{item.modifiers.join(", ")}</strong>
+                      <p className="text-xs text-muted-foreground pl-6">
+                        • Tambahan: {item.modifiers.join(", ")}
                       </p>
                     )}
 
                     {item.notes && item.notes.trim() && (
-                      <p className="text-[10px] text-amber-900 bg-amber-50 p-1 rounded font-bold pl-2 border-l-2 border-amber-500 mt-0.5">
+                      <p className="text-xs text-muted-foreground bg-muted/50 p-1.5 rounded pl-2 border-l-2 border-primary mt-0.5">
                         *Catatan: {item.notes.trim()}
                       </p>
                     )}
                   </div>
                 ))
               ) : (
-                <p className="text-slate-400 italic text-[11px]">(Tidak ada item pesanan)</p>
+                <p className="text-muted-foreground italic text-xs">(Tidak ada item pesanan)</p>
               )}
             </div>
 
-            {/* Order Level Special Notes (POS-39 / TC-K10) */}
+            {/* Order Level Special Notes */}
             {ticketData.kitchenNotes && ticketData.kitchenNotes.trim() && (
-              <div className="p-2 bg-amber-50 border border-amber-300 rounded text-[11px] text-amber-950 font-semibold space-y-0.5">
-                <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
-                  Catatan Khusus Pesanan:
+              <div className="p-2 bg-muted/40 border border-border rounded text-xs space-y-0.5">
+                <span className="font-medium text-foreground block">
+                  Catatan khusus pesanan:
                 </span>
-                <p className="text-slate-900">{ticketData.kitchenNotes.trim()}</p>
+                <p className="text-muted-foreground">{ticketData.kitchenNotes.trim()}</p>
               </div>
             )}
 
             {/* Kitchen Instructions / Footer */}
-            <div className="text-center pt-1 text-[11px] font-black uppercase text-slate-700 tracking-wider">
-              {settings.kitchenFooterNote || "MOHON DIPROSES"}
+            <div className="text-center pt-1 text-xs font-medium text-muted-foreground">
+              {settings.kitchenFooterNote || "Segera diproses"}
             </div>
           </div>
         </div>
 
         {/* Modal Actions */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-850 flex flex-col sm:flex-row items-center justify-between gap-2.5">
-          <div className="text-[10px] text-slate-400 w-full sm:w-auto text-center sm:text-left">
-            <span>Printer Dapur: </span>
-            <strong className="text-slate-600 dark:text-slate-300">
-              {activeKitchenPrinter?.name || "Printer Dapur Thermal (Default)"}
-            </strong>
+        <div className="p-4 border-t border-border bg-card space-y-3 print:hidden">
+          <div className="text-xs text-muted-foreground flex items-center justify-between">
+            <span>Printer tujuan:</span>
+            <span className="font-medium text-foreground">
+              {activeKitchenPrinter?.name || "Printer dapur thermal"}
+            </span>
           </div>
 
-          <div className="flex items-center space-x-2 w-full sm:w-auto">
+          <div className="grid grid-cols-2 gap-2">
             {currentPurpose !== "REPRINT" ? (
               <Button
                 type="button"
+                size="lg"
                 disabled={isPrinting}
                 onClick={() => handlePrint(false)}
-                className="flex-1 sm:flex-none text-xs font-medium"
+                className="w-full"
               >
-                <Printer className="size-3.5 mr-1" />
-                <span>{isPrinting ? "Mengirim..." : "Cetak tiket dapur"}</span>
+                <Printer className="size-4" />
+                <span>{isPrinting ? "Mengirim..." : "Cetak tiket"}</span>
               </Button>
             ) : null}
 
             <Button
               type="button"
               variant="outline"
+              size="lg"
               disabled={isPrinting}
               onClick={() => handlePrint(true)}
-              className="flex-1 sm:flex-none text-xs font-medium"
+              className={`w-full ${currentPurpose === "REPRINT" ? "col-span-2" : ""}`}
               title="Cetak salinan dengan penanda REPRINT"
             >
-              <RotateCcw className="size-3.5 mr-1" />
-              <span>Cetak salinan (reprint)</span>
+              <RotateCcw className="size-4" />
+              <span>Cetak salinan</span>
             </Button>
 
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
+              size="lg"
               onClick={onClose}
-              className="text-xs text-muted-foreground"
+              className="w-full col-span-2"
             >
-              Tutup
+              <span>Tutup</span>
             </Button>
           </div>
         </div>
@@ -301,4 +283,3 @@ export function KitchenOrderReceiptModal({
     </Dialog>
   );
 }
-
