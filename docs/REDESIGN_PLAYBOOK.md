@@ -116,6 +116,11 @@ Aturan kelas yang paling sering dilanggar:
 - Kolom yang kehilangan header teks (aksi) diberi `<span className="sr-only">Aksi</span>`.
 - Kartu yang bisa diklik dijadikan `<button>`, bukan `div onClick`.
 - Base UI: tidak ada `asChild`. Pakai `render={<Link href="…" />}` dengan `nativeButton={false}`. `Tabs` `onValueChange` memberi `unknown`, jadi cast ke union-nya.
+- **Modal & Dialog**:
+  - Wajib `p-0 gap-0 max-h-[88vh] h-[88vh] flex flex-col overflow-hidden` pada `DialogContent` agar tidak meluap ke bawah viewport.
+  - Pembungkus scroll dalam wajib `flex-1 min-h-0 overflow-y-auto overflow-x-auto` dan pasang reset `scrollTop = 0` via `requestAnimationFrame` saat `isOpen`.
+  - Tabel dalam modal wajib `w-full min-w-[760px] sm:min-w-0 table-fixed` dengan `<colgroup>` persentase (total 100%) dan `break-words` di sel teks agar kolom kanan (alasan bisnis/status) tidak terpotong (cropped).
+  - Modal cetak PDF: gunakan invisible iframe dengan dimensi fisik A4 (`width: 210mm; height: 297mm; position: fixed; left: -9999px; visibility: hidden;`), sertakan `<base href="${window.location.origin}/" />`, link Google Fonts CDN (DM Sans & DM Mono), dan delay 400ms sebelum memanggil `iframe.contentWindow?.print()`. Jangan gunakan iframe 0x0 atau `window.print()` langsung pada modal (memicu halaman 1 cetak kosong/blank). Lihat detail di `docs/DESIGN_SYSTEM.md` bagian 7.
 
 ## 5. Copy
 

@@ -59,7 +59,123 @@ export default function StructuredReportPDFModal({
   if (!isOpen) return null;
 
   const handlePrint = () => {
-    window.print();
+    const reportEl = document.getElementById("structured-pdf-report");
+    if (!reportEl) {
+      window.print();
+      return;
+    }
+
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.left = "-9999px";
+    iframe.style.top = "0";
+    iframe.style.width = "210mm";
+    iframe.style.height = "297mm";
+    iframe.style.border = "none";
+    iframe.style.visibility = "hidden";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) {
+      window.print();
+      return;
+    }
+
+    const styles = Array.from(document.querySelectorAll("link[rel='stylesheet'], style"))
+      .map((el) => el.outerHTML)
+      .join("\n");
+
+    const htmlClass = document.documentElement.className;
+
+    doc.open();
+    doc.write(`<!DOCTYPE html>
+<html lang="id" class="${htmlClass}">
+<head>
+  <meta charset="utf-8" />
+  <base href="${window.location.origin}/" />
+  <title>Pratinjau Dokumen Laporan - ${outletName}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet" />
+  ${styles}
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm 10mm;
+    }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      box-sizing: border-box !important;
+    }
+    html, body {
+      background: #ffffff !important;
+      color: #0f172a !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      height: auto !important;
+      min-height: 0 !important;
+      overflow: visible !important;
+      font-family: 'DM Sans', var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    }
+    .font-mono, td.font-mono, th.font-mono, [class*="font-mono"] {
+      font-family: 'DM Mono', var(--font-dm-mono), ui-monospace, SFMono-Regular, Menlo, monospace !important;
+    }
+    body > *,
+    #structured-pdf-report {
+      display: block !important;
+      visibility: visible !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      border: none !important;
+      box-shadow: none !important;
+      background: #ffffff !important;
+      break-before: auto !important;
+      page-break-before: auto !important;
+    }
+    .overflow-x-auto {
+      overflow: visible !important;
+      max-width: 100% !important;
+      width: 100% !important;
+    }
+    table {
+      table-layout: fixed !important;
+      width: 100% !important;
+      border-collapse: collapse !important;
+    }
+    th, td {
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+    }
+    thead {
+      display: table-header-group !important;
+    }
+    tr {
+      break-inside: avoid !important;
+      page-break-inside: avoid !important;
+    }
+  </style>
+</head>
+<body class="bg-white text-foreground font-sans" style="background: #ffffff !important; padding: 0 !important; margin: 0 !important;">
+  ${reportEl.outerHTML}
+</body>
+</html>`);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+      } finally {
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe);
+          }
+        }, 1000);
+      }
+    }, 400);
   };
 
   const signatories = buildReportSignatories(generatedBy, outletName);
@@ -89,15 +205,18 @@ export default function StructuredReportPDFModal({
             --border: oklch(0.922 0 0) !important;
           }
 
-          /* Collapse background dashboard elements to 0 height so they don't push document to page 2 */
-          body > div:first-child,
+          /* Hide all application elements outside the dialog portal */
+          body > *:not([data-base-ui-portal]):not([data-slot="dialog-portal"]),
+          [data-slot="sidebar-wrapper"],
+          [data-slot="sidebar-inset"],
+          [data-base-ui-inert],
+          [data-slot="dialog-overlay"],
+          [data-slot="dialog-header"],
+          [data-slot="dialog-close"],
           header,
           aside,
           nav,
           main,
-          [data-slot="dialog-overlay"],
-          [data-slot="dialog-header"],
-          [data-slot="dialog-close"],
           .print\\:hidden {
             display: none !important;
           }
@@ -106,22 +225,26 @@ export default function StructuredReportPDFModal({
           body {
             background: #ffffff !important;
             height: auto !important;
+            min-height: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
             overflow: visible !important;
           }
 
-          body * {
-            visibility: hidden !important;
-          }
-
-          #structured-pdf-report,
-          #structured-pdf-report * {
-            visibility: visible !important;
+          [data-base-ui-portal],
+          [data-slot="dialog-portal"] {
+            position: static !important;
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            overflow: visible !important;
           }
 
           [data-slot="dialog-content"] {
             position: static !important;
+            display: block !important;
             transform: none !important;
             translate: none !important;
             inset: auto !important;
@@ -145,14 +268,14 @@ export default function StructuredReportPDFModal({
             max-height: none !important;
             height: auto !important;
             padding: 0 !important;
+            margin: 0 !important;
             background: transparent !important;
+            display: block !important;
           }
 
-          /* Anchor report to the top of page 1 */
           #structured-pdf-report {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            position: static !important;
+            display: block !important;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
@@ -176,7 +299,7 @@ export default function StructuredReportPDFModal({
       `}</style>
 
       <DialogContent
-        className="w-full sm:max-w-4xl md:max-w-5xl lg:max-w-6xl max-h-[92vh] h-[92vh] flex flex-col p-0 gap-0 overflow-hidden"
+        className="w-full sm:max-w-5xl md:max-w-6xl lg:max-w-7xl max-h-[88vh] h-[88vh] flex flex-col p-0 gap-0 overflow-hidden"
         showCloseButton={false}
       >
         {/* Header Toolbar (Non-printable) */}
@@ -222,12 +345,12 @@ export default function StructuredReportPDFModal({
         {/* Printable Document Body with min-h-0 for proper flexbox scroll isolation */}
         <div
           ref={scrollContainerRef}
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 bg-muted/20 flex flex-col items-center min-w-0 print:p-0 print:bg-white print:overflow-visible print:max-h-none"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-4 sm:p-6 bg-muted/20 flex flex-col items-center min-w-0 print:p-0 print:bg-white print:overflow-visible print:max-h-none"
         >
           <div
             id="structured-pdf-report"
             ref={printRef}
-            className="w-full max-w-4xl min-w-0 bg-card text-card-foreground p-6 sm:p-8 rounded-lg shadow-xs border border-border space-y-6 my-2 print:p-0 print:shadow-none print:border-none print:max-w-none print:bg-white print:text-slate-900"
+            className="w-full max-w-5xl min-w-0 bg-card text-card-foreground p-6 sm:p-8 rounded-lg shadow-xs border border-border space-y-6 my-2 print:p-0 print:shadow-none print:border-none print:max-w-none print:bg-white print:text-slate-900"
           >
             {/* Header & Logo */}
             <div className="flex items-start justify-between border-b pb-5 gap-4">
@@ -307,7 +430,7 @@ export default function StructuredReportPDFModal({
 
             {/* Table Data */}
             <div className="border rounded-lg overflow-x-auto w-full">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full min-w-[760px] sm:min-w-0 text-left text-xs border-collapse">
                 <thead className="bg-muted/50 text-foreground font-medium border-b">
                   <tr>
                     {data.tableHeaders.map((th, i) => {
@@ -315,7 +438,7 @@ export default function StructuredReportPDFModal({
                       return (
                         <th
                           key={i}
-                          className={`px-3 py-2 text-xs font-semibold whitespace-nowrap ${
+                          className={`px-3 py-2 text-xs font-semibold ${
                             isLast ? "text-right" : ""
                           }`}
                         >
@@ -338,7 +461,7 @@ export default function StructuredReportPDFModal({
                         return (
                           <td
                             key={cIdx}
-                            className={`px-3 py-2 text-xs text-foreground ${
+                            className={`px-3 py-2 text-xs text-foreground break-words ${
                               isNumeric
                                 ? "text-right font-mono tabular-nums whitespace-nowrap font-medium"
                                 : isCode

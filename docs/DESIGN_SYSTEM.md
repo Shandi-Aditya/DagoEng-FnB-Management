@@ -197,6 +197,58 @@ Token `--button-*` ada di `globals.css` dan diturunkan dari `--primary`/`--destr
 
 Catatan style Mira: `Badge` bawaan memakai teks 10px. Untuk badge yang harus dibaca cepat (status pesanan, pembayaran), tambahkan `className="text-xs"` saat dipakai, jangan mengubah file `ui/badge.tsx`.
 
+### Modal, Dialog, dan Pratinjau Cetak PDF
+
+Berdasarkan investigasi dan perbaikan bug modal/print (`ActivityLogPDFModal`, `StructuredReportPDFModal`), setiap modal pratinjau dokumen dan dialog di repo ini wajib mematuhi arsitektur berikut agar tidak mengalami overflow ke bawah, terpotong horizontal, atau halaman cetak kosong:
+
+1. **Struktur Pembungkus Dialog (Mencegah Overflow ke Bawah):**
+   - Base UI Dialog menyertakan `gap-4` bawaan. Matikan dengan `p-0 gap-0` pada `DialogContent`.
+   - Gunakan tinggi terikat `max-h-[88vh] h-[88vh] flex flex-col overflow-hidden`.
+   - Pembungkus scroll dalam wajib memiliki `flex-1 min-h-0 overflow-y-auto overflow-x-auto`.
+   ```tsx
+   <DialogContent
+     showCloseButton={false}
+     className="w-full sm:max-w-5xl md:max-w-6xl lg:max-w-7xl max-h-[88vh] h-[88vh] flex flex-col p-0 gap-0 overflow-hidden"
+   >
+     <DialogHeader className="p-4 px-6 border-b shrink-0 flex flex-row items-center justify-between">
+       ...
+     </DialogHeader>
+     <div
+       ref={scrollContainerRef}
+       className="flex-1 min-h-0 overflow-y-auto overflow-x-auto p-4 sm:p-6 bg-muted/20 flex flex-col items-center min-w-0"
+     >
+       <div id="report-content" className="w-full max-w-5xl min-w-0 bg-card p-6 sm:p-8 rounded-lg border ...">
+         ...
+       </div>
+     </div>
+   </DialogContent>
+   ```
+   - Reset scroll ke atas saat modal terbuka via `requestAnimationFrame`:
+     ```tsx
+     useEffect(() => {
+       if (isOpen) {
+         requestAnimationFrame(() => {
+           if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
+         });
+       }
+     }, [isOpen]);
+     ```
+
+2. **Tabel Pratinjau Dokumen (Mencegah Kolom Terpotong Horizontal):**
+   - Kartu dokumen multi-kolom memakai lebar `max-w-5xl` (bukan `max-w-4xl` sempit).
+   - Pembungkus tabel di dalam dokumen memakai `overflow-x-auto w-full`.
+   - Tabel wajib memakai `table-fixed w-full min-w-[760px] sm:min-w-0` disertai tag `<colgroup>` dengan persentase lebar kolom total 100%. Browser mematuhi alokasi `<colgroup>` saat merender `table-fixed`.
+   - Sel teks panjang wajib menyertakan kelas `break-words` (hindari `whitespace-nowrap` yang tidak terkendali).
+   - Badge status di dalam kolom status diberi kelas `max-w-full inline-flex align-middle`.
+
+3. **Mesin Cetak Terisolasi (Mencegah Halaman 1 Kosong & Font Berubah):**
+   - Jangan gunakan `window.print()` langsung pada dokumen induk dialog portal, karena wrapper dashboard 100vh dan scroll lock Base UI memicu halaman 1 putih kosong.
+   - Gunakan invisible iframe dengan **dimensi A4 fisik eksplisit** (`width: 210mm; height: 297mm; position: fixed; left: -9999px; top: 0; visibility: hidden;`). Iframe berukuran 0x0 menyebabkan engine Chrome menganggap halaman 1 meluap dan mencetak mulai dari halaman 2.
+   - Wajib menyertakan `<base href="${window.location.origin}/" />` di `<head>` iframe agar relative paths dan asset tidak gagal muat.
+   - Tautkan Google Fonts CDN (DM Sans & DM Mono) langsung di `<head>` iframe dan kunci `font-family` eksplisit di CSS cetak.
+   - Setel CSS cetak iframe dengan `break-before: auto !important`, `thead { display: table-header-group !important; }`, dan `tr { break-inside: avoid !important; }`.
+   - Berikan jeda waktu 400ms (`setTimeout`) sebelum memicu `iframe.contentWindow?.print()`.
+
 ---
 
 ## 8. Copy

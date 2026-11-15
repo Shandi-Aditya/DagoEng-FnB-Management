@@ -129,7 +129,7 @@ Kerjakan per halaman, mulai dari `/orders`, `/inventory`, `/tables`, lalu `/cowo
 | `/employees` | Memantau shift kasir dan data staf (berjalan sapuan tabel P3, menunggu cek visual & build) | Toolbar 1 primary + dropdown ekspor, kedua tabel tanpa `<Card>` + `DataTableToolbar` bersama + `DataPagination` + menu aksi ringkas (`lint:ui` 0 di file disentuh, `tsc` 0, `vitest` 9/9). |
 | `/commercial` | Mencari kontrak lalu bertindak (berjalan sapuan tabel P3, menunggu cek visual & build) | Toolbar 1 primary + dropdown ekspor, tabel tanpa `<Card>` + `DataTableToolbar` bersama + `DataPagination` + responsif mobile (`lint:ui` 0 di file disentuh, `tsc` 0, `vitest` 6/6). |
 | `/reports` | Memilih jenis laporan, membaca dan mencari rinciannya, lalu cetak/ekspor (selesai P3/P4) | Kategori jadi bar `Tabs` seperti `/orders` dengan angka murni, tabel tanpa `<Card>` (nol gap kosong) + `DataPagination` + pencarian; modal `StructuredReportPDFModal` dimigrasi penuh ke shadcn `Dialog` resmi (`max-w-4xl`), tombol dialog aksi distandarkan ke `size="lg"`, styling cetak A4 terisolasi `@media print` monokrom tanpa warna mentah, format tanda tangan resmi dinamis via `report-pdf-domain.ts` tanpa nama fiktif (`lint:ui` 0 di seluruh file `features/reports`, `tsc` 0 error, unit test domain lulus). |
-| `/activity-log` | Menelusuri catatan perubahan data lalu periksa detail/ekspor (berjalan P3, menunggu cek visual & build) | Header 1 primary + dropdown `Ekspor`, 3 `StatCard` faktual, `Tabs` `Tabel`/`Riwayat` + `NativeSelect`, tabel 5 kolom tanpa `<Card>` + `DataPagination`, detail di `Sheet` samping, seluruh enum diterjemahkan (`lint:ui` 0 di 9 file disentuh, `tsc` 0 error, `vitest` 1050/1054; `ActivityLogPDFModal` ditunda ke P4). |
+| `/activity-log` | Menelusuri catatan perubahan data lalu periksa detail/ekspor (selesai P3/P4) | Header 1 primary + dropdown `Ekspor`, 3 `StatCard` faktual, `Tabs` `Tabel`/`Riwayat` + `NativeSelect`, tabel 5 kolom tanpa `<Card>` + `DataPagination`, detail di `Sheet` samping; modal `ActivityLogPDFModal` dimigrasi penuh ke shadcn `Dialog` resmi (`max-w-6xl`), tombol dialog aksi distandarkan ke `size="lg"`, styling cetak A4 terisolasi `@media print` bebas halaman kosong (aliran dokumen `position: static` dengan `display: none` pada elemen aplikasi luar), 4 metrik ringkasan semantik, tabel audit 6 kolom monokrom dengan visual diff nilai sebelum/sesudah, serta 3 kolom tanda tangan otorisasi akuntabilitas resmi dinamis via `activity-log-pdf-domain.ts` tanpa klaim palsu (`lint:ui` 0 di seluruh 10 file `features/activity-log`, `tsc` 0 error, unit test domain lulus). |
 | `/ai-insight` | Menanyakan ringkasan performa operasional lalu bertindak (selesai `eed5d67`, P3) | Header bersih `PageHeader`, prompt cepat `AIInsightQuickPrompts` bersih tanpa label slop/titik dua, container chat `h-[560px]` adaptif tanpa slop cyberpunk (`uppercase tracking-wider font-bold` dan `text-[10px]/[11px]`), rekomendasi tindakan memakai `Button` outline semantik dengan `ArrowUpRight`, button submit `size="default"`, copy dan glosarium baku (`"omzet"`, fallback `"Semua outlet"`, `"Menu terlaris"`). (`lint:ui` 0, `tsc` 0, `vitest` 9/9 lulus). |
 | `/events-admin` | Memoderasi pengajuan event dan memverifikasi pembayaran tiket manual (selesai `24e88e7`, P3) | Pemecahan file 4.700 baris menjadi modul terfokus di `features/events-admin/`; migrasi total dari `@/components/legacy/ui/*` ke shadcn; header 1 primary (`Tambah event`) + dropdown `Lainnya`; 4 sub-modul ditata di `EventsAdminTabs` dengan counter antrean murni; 3 `StatCard` faktual; tabel moderasi, pembayaran, dan pencairan saldo diselaraskan ke gaya tabel bersama + `DataPagination`; detail pengajuan dipindah ke `Sheet` samping (`EventDetailSheet`); menghapus 1.786 temuan slop/cyberpunk (`uppercase`, `tracking-wider`, `text-[10px]`, `font-black`, `bg-brand-sage`, hex); pembersihan enum mentah dan copy glosarium (`"payout"` → `"pencairan saldo"`). (`lint:ui` 0 di 18 file disentuh, `tsc` 0, `vitest` 11/11 lulus). |
 | `/settings` | Memilih kategori pengaturan lalu mengubah atau menyimpan aturan bisnis (selesai, `59fa12a`, Fase 7/P3) | Pemecahan file monolitik 8.371 baris `settings/page.tsx` + 1.015 baris `PrinterSettingsTab.tsx` menjadi modul terfokus di `features/settings/`; menyatukan tabel menu admin dan tenant ke satu komponen `ProductsCatalogTab`; merapikan 20 modal manual `fixed inset-0` menjadi `Dialog`, `Sheet` samping (`PartnerDetailSheet`), dan `ConfirmDialog`; menggantikan seluruh toast alert inline buatan dengan `notify()`; menghapus seluruh 3.694 temuan slop (warna mentah, dark color, teks 10px, uppercase tracking-wide, emoji); menandai simulasi secara jujur tanpa klaim palsu (`"GATEWAY AKTIF"` / `"Real-time"`). (`lint:ui` 0 di 13 file disentuh, `tsc` 0 error, `vitest` 1081/1084, `build` 37/37 hijau). |
@@ -152,6 +152,44 @@ Hapus override `h-8 text-xs` pada `Button`. Ukuran cukup lewat prop `size`.
 
 1. Modal POS & Transaksi (`PaymentModal`, `ModifierModal`, `ReceiptModal`, `KitchenOrderReceiptModal`, `DailyClosingPDFModal`, `CashDrawerShiftModal`, dan `PaymentWaitingModal` di `features/payment`) selesai di P4, seluruhnya dipindah ke `Dialog`/`AlertDialog` sungguhan. Struk dan nota dibuat sebagai benda nyata (`font-mono tabular-nums`, lebar 80mm). Test D1, C3, dan C4 tetap dijaga. Modal POS kini mencapai 0 temuan `lint:ui` di seluruh 26 file `features/pos` dan 0 temuan di `features/payment`.
 2. Fase 7 (`settings`, portal customer, portal event, `events/*`, `checkout-link-v2`, `waiter`, `events/checkin`, `events/tickets/*`, `events/activate`, `components/premium`): Seluruh halaman publik, alur event (`events/*`), dan komponen premium selesai 100% dimigrasi ke komponen shadcn semantik (seluruhnya 0 temuan `lint:ui`, `tsc` 0, seluruh unit test lulus). Ketergantungan legacy di seluruh kode aplikasi kini **tuntas 100% (0 file)**.
+
+### 4.1 Pelajaran & Pola Baku Modal / Dialog & Cetak PDF (Kasus ActivityLogPDFModal & StructuredReportPDFModal)
+
+Di sesi P4, ditemukan beberapa kegagalan UI dan layout pada modal pratinjau dokumen audit/laporan (`ActivityLogPDFModal` dan `StructuredReportPDFModal`). Seluruh modal di proyek ini wajib mempelajari dan menerapkan pola baku di bawah:
+
+1. **Masalah: Modal Overflow ke Bawah (Dialog Memanjang Melebihi Layar)**
+   - **Penyebab:** Base UI `DialogPrimitive.Popup` secara bawaan menyertakan `gap-4`. Jika `DialogContent` tidak membatasi tinggi secara eksplisit dan tidak menonaktifkan gap bawaan, konten panjang akan mendorong dialog memanjang ke bawah viewport melebihi layar, memotong tombol aksi.
+   - **Solusi Baku:**
+     - Gunakan `className="... max-h-[88vh] h-[88vh] flex flex-col p-0 gap-0 overflow-hidden"` pada `DialogContent`.
+     - Pembungkus scroll dalam wajib memiliki `flex-1 min-h-0 overflow-y-auto overflow-x-auto`.
+     - Pasang reset posisi scroll ke atas (`scrollTop = 0`) via `requestAnimationFrame` saat dialog dibuka agar pengguna tidak mendapati dokumen ter-scroll ke tengah/bawah saat pertama kali terbuka.
+
+2. **Masalah: Kolom Kanan Tabel Terpotong Horizontal (Cropped Columns)**
+   - **Penyebab:** Kontainer dokumen di dalam dialog dibatasi sempit (`max-w-4xl` = 896px) di dalam pembungkus yang `overflow-x-hidden`. Tabel dengan 6–9 kolom dan sel yang memakai `whitespace-nowrap` tanpa batas proporsional menyebabkan kolom kanan (seperti "Alasan bisnis", "Status", atau "Total") terdorong keluar batas dan terpotong tanpa bisa di-scroll.
+   - **Solusi Baku:**
+     - Perlebar kartu dokumen multi-kolom ke `max-w-5xl`.
+     - Berikan pembungkus tabel `overflow-x-auto rounded-lg border w-full`.
+     - Tabel wajib memakai `w-full min-w-[760px] sm:min-w-0 table-fixed` dengan tag `<colgroup>` persentase (total 100%).
+     - Sel teks wajib memakai `break-words` (jangan biarkan `whitespace-nowrap` bebas di semua sel). Badge status diberi `max-w-full inline-flex align-middle`.
+
+3. **Masalah: Cetak PDF Halaman 1 Putih Kosong (Blank Page 1)**
+   - **Penyebab 1 (`window.print()` host):** Next.js layout wrapper memiliki `min-height: 100vh`. Saat `@media print` diterapkan, elemen yang disembunyikan dengan `visibility: hidden` tetap memakan ruang (100vh di halaman 1), sehingga konten dialog portal baru tercetak di halaman 2. Jika `body` memiliki inline style scroll lock (`overflow: hidden`) dari dialog Base UI, browser juga mengabaikan pagination.
+   - **Penyebab 2 (Iframe cetak 0x0):** Jika dokumen dicetak melalui iframe terisolasi namun iframe diberi `width: 0; height: 0`, engine layout Chrome (Blink) menginisialisasi pagination dengan tinggi 0px sehingga halaman 1 dianggap meluap dan dicetak mulai halaman 2.
+   - **Penyebab 3 (Aturan display none di iframe):** Jika stylesheet global yang menyertakan selector `body > *:not(...) { display: none !important; }` di-copy ke iframe, elemen laporan di iframe (yang merupakan anak langsung `body`) ikut tersembunyi.
+   - **Solusi Baku:**
+     - Buat invisible iframe cetak dengan **dimensi fisik A4 eksplisit**:
+       `width: 210mm; height: 297mm; position: fixed; left: -9999px; top: 0; visibility: hidden;`
+     - Di dalam CSS cetak iframe, kunci `break-before: auto !important`, `body > *, #report-id { display: block !important; visibility: visible !important; }`, `thead { display: table-header-group !important; }`, dan `tr { break-inside: avoid !important; }`.
+
+4. **Masalah: Font dan UI Berbeda saat Cetak PDF**
+   - **Penyebab:** Iframe `about:blank` tidak memiliki basis URL sehingga request relatif ke webfont Next.js (`/_next/static/media/*`) gagal di-resolve dan browser beralih ke font serif/Times New Roman bawaan sistem.
+   - **Solusi Baku:**
+     - Sisipkan `<base href="${window.location.origin}/" />` di `<head>` iframe.
+     - Tambahkan link Google Fonts CDN untuk font resmi aplikasi (**DM Sans** dan **DM Mono**) di `<head>` iframe.
+     - Terapkan aturan eksplisit `font-family: 'DM Sans', ...` dan `.font-mono: 'DM Mono', ...` di style iframe.
+     - Berikan jeda waktu (delay) 400ms sebelum memanggil `iframe.contentWindow?.print()`.
+
+---
 
 ## 5. Cara menjalankan scan yang dipakai di review ini
 
