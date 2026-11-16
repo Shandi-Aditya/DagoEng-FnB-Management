@@ -86,7 +86,7 @@ export const LOYALTY = {
 export const CONTACT = {
   address: "Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116",
   hours: "Setiap hari, 08:00–22:00 WITA",
-  phone: "+62 811-2233-4455",
+  phone: "+62 821-1550-1995",
   email: "info@dagoeng.com",
   instagram: { label: "@dagocreativehub", href: "https://www.instagram.com/dagocreativehub/" },
 } as const;
