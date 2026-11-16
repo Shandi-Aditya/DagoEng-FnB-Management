@@ -109,41 +109,43 @@ function sanitizeReturnTo(url: string | null | undefined): string | null {
 /** Right-hand stage: the hub's photo with a card naming who signs in here, like the landing page's product frames. */
 function LoginStage() {
   return (
-    <div
-      className="relative isolate hidden overflow-hidden bg-muted p-10 lg:flex lg:items-end"
-      data-alt={HERO_PHOTO.wanted}
-    >
-      <Image
-        src={HERO_PHOTO.src}
-        alt={HERO_PHOTO.alt}
-        fill
-        priority
-        sizes="50vw"
-        className="-z-10 object-cover saturate-75 dark:brightness-[0.35]"
-      />
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader>
-          <CardTitle>Satu akun untuk semua yang bekerja di sini</CardTitle>
-          <CardDescription>
-            Setelah masuk, Anda diarahkan ke halaman sesuai peran.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="flex flex-col divide-y">
-            {PARTNER_ROLES.map((role) => (
-              <li
-                key={role.id}
-                className="flex flex-col gap-0.5 py-2.5 first:pt-0 last:pb-0"
-              >
-                <span className="text-sm font-medium">{role.title}</span>
-                <span className="text-xs text-muted-foreground">
-                  {role.line}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+    <div className="hidden p-4 lg:flex lg:p-6">
+      <div
+        className="relative isolate flex h-full w-full items-end overflow-hidden rounded-2xl bg-muted p-8 shadow-sm lg:rounded-3xl lg:p-10"
+        data-alt={HERO_PHOTO.wanted}
+      >
+        <Image
+          src={HERO_PHOTO.src}
+          alt={HERO_PHOTO.alt}
+          fill
+          priority
+          sizes="50vw"
+          className="-z-10 object-cover saturate-75 dark:brightness-[0.35]"
+        />
+        <Card className="w-full max-w-md shadow-lg">
+          <CardHeader>
+            <CardTitle>Satu akun untuk semua yang bekerja di sini</CardTitle>
+            <CardDescription>
+              Setelah masuk, Anda diarahkan ke halaman sesuai peran.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-col divide-y">
+              {PARTNER_ROLES.map((role) => (
+                <li
+                  key={role.id}
+                  className="flex flex-col gap-0.5 py-2.5 first:pt-0 last:pb-0"
+                >
+                  <span className="text-sm font-medium">{role.title}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {role.line}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
