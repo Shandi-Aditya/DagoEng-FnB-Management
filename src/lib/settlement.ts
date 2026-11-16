@@ -1,5 +1,6 @@
 import { OrderRecord } from "@/types/order";
 import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
+import { INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
 
 export interface SettlementSummary {
   tenantId: string | "DAGO_HUB";
@@ -7,6 +8,7 @@ export interface SettlementSummary {
   grossRevenue: number;
   discount: number;
   dpp?: number;                // Base revenue (gross - discount) before tax and service charge (POS-35 / B3)
+  netSales?: number;           // Penjualan bersih (DPP = gross - discount)
   tax: number;
   serviceCharge: number;
   paymentFee: number;
@@ -101,6 +103,78 @@ export function setTenantRevenueSplit(
   }
 }
 
+/**
+ * Resolves an item's owner tenant ID using reliable tiered fallbacks:
+ * 1. Direct explicit tenantId on item (if non-empty and not default DAGO_HUB)
+ * 2. Product ID lookup in authoritative master products (INITIAL_PRODUCTS)
+ * 3. Product name lookup in INITIAL_PRODUCTS (exact or case-insensitive)
+ * 4. Substring and keyword heuristic for partner tenants
+ * 5. Order-level tenant fallback (if order has tenantId)
+ * 6. Direct tenantId if present
+ * 7. Defaults to "DAGO_HUB" if truly unmapped
+ */
+export function resolveItemTenantId(
+  item: { tenantId?: string; productId?: string; productName?: string },
+  orderFallbackTenantId?: string
+): string {
+  if (item.tenantId && item.tenantId.trim()) {
+    return item.tenantId.trim();
+  }
+
+  if (item.productId) {
+    const productById = INITIAL_PRODUCTS.find((p) => p.id === item.productId);
+    if (productById?.tenantId) {
+      return productById.tenantId;
+    }
+  }
+
+  if (item.productName) {
+    const cleanName = item.productName.trim().toLowerCase();
+
+    // Exact name match in INITIAL_PRODUCTS
+    const productByExactName = INITIAL_PRODUCTS.find(
+      (p) => p.name.trim().toLowerCase() === cleanName
+    );
+    if (productByExactName?.tenantId) {
+      return productByExactName.tenantId;
+    }
+
+    // Substring match in INITIAL_PRODUCTS
+    const productBySubstring = INITIAL_PRODUCTS.find(
+      (p) =>
+        p.name.toLowerCase().includes(cleanName) ||
+        cleanName.includes(p.name.toLowerCase())
+    );
+    if (productBySubstring?.tenantId) {
+      return productBySubstring.tenantId;
+    }
+
+    // Category / keyword heuristic for partner tenants
+    if (/kopi|coffee|espresso|americano|matcha|latte|cappuccino|fries/i.test(cleanName)) {
+      return "tenant-ks";
+    }
+    if (/beef|nasi|goreng|mie|ayam|kitchen|sambal|sate|tahu|bakso|bowl/i.test(cleanName)) {
+      return "tenant-kitchen";
+    }
+    if (/croissant|bakery|roti|bread|pastry|cinnamon|sourdough|chocolat/i.test(cleanName)) {
+      return "tenant-bakery";
+    }
+    if (/teh|tea|jamu|pisang|narti|warung/i.test(cleanName)) {
+      return "tenant-tea";
+    }
+  }
+
+  if (orderFallbackTenantId && orderFallbackTenantId.trim()) {
+    return orderFallbackTenantId.trim();
+  }
+
+  if (item.tenantId && item.tenantId.trim()) {
+    return item.tenantId.trim();
+  }
+
+  return "DAGO_HUB";
+}
+
 export function calculateSettlement(
   orders: OrderRecord[],
   tenantMap?: Record<string, string>,
@@ -124,7 +198,7 @@ export function calculateSettlement(
           return;
         }
 
-        const ownerId = item.tenantId || "DAGO_HUB";
+        const ownerId = resolveItemTenantId(item, (order as any).tenantId);
         const itemGross = qty * price;
 
         orderValidGross += itemGross;
@@ -197,6 +271,7 @@ export function calculateSettlement(
           grossRevenue: current.grossRevenue + data.gross,
           discount: current.discount + allocatedDiscount,
           dpp: (current.dpp || 0) + tenantDpp,
+          netSales: (current.netSales || 0) + tenantDpp,
           tax: current.tax + allocatedTax,
           serviceCharge: current.serviceCharge + allocatedServiceCharge,
           netRevenue: current.netRevenue + netRevenue,
@@ -216,6 +291,7 @@ export function calculateSettlement(
     r.grossRevenue = Math.round(r.grossRevenue);
     r.discount = Math.round(r.discount);
     if (r.dpp !== undefined) r.dpp = Math.round(r.dpp);
+    if (r.netSales !== undefined) r.netSales = Math.round(r.netSales);
     r.tax = Math.round(r.tax);
     r.serviceCharge = Math.round(r.serviceCharge);
     r.netRevenue = Math.round(r.netRevenue);
@@ -263,7 +339,8 @@ export function calculateTenantProfitSharing(
   tenantOrders.forEach((order) => {
     let hasTenantItem = false;
     order.items.forEach((item) => {
-      if (item.tenantId === tenantId) {
+      const resolvedTenant = resolveItemTenantId(item, (order as any).tenantId);
+      if (resolvedTenant === tenantId) {
         hasTenantItem = true;
         grossSales += (item.unitPrice || 0) * (item.quantity || 1);
       }

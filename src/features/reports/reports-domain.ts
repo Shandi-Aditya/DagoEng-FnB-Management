@@ -585,7 +585,10 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
     case "SETTLEMENT": {
       const settlementData = calculateSettlement(orders);
-      const totalNetSettlement = settlementData.reduce((sum, s) => sum + s.netRevenue, 0);
+      const totalNetSettlement = settlementData.reduce(
+        (sum, s) => sum + (s.dpp ?? (s.grossRevenue - s.discount)),
+        0
+      );
       const totalTenantShare = settlementData.reduce((sum, s) => sum + (s.tenantShareAmount || 0), 0);
       const totalDagoShare = settlementData.reduce((sum, s) => sum + (s.dagoShareAmount || 0), 0);
       const totalDiscount = settlementData.reduce((sum, s) => sum + s.discount, 0);
@@ -600,6 +603,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           s.tenantId === "DAGO_HUB"
             ? "100% DAGO"
             : `${s.tenantSharePercent ?? 85}% Mitra / ${s.dagoSharePercent ?? 15}% DAGO`;
+        const netDpp = s.dpp ?? (s.grossRevenue - s.discount);
 
         return [
           s.tenantId,
@@ -610,7 +614,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           `Rp ${s.grossRevenue.toLocaleString("id-ID")}`,
           `Rp ${(s.tenantShareAmount ?? 0).toLocaleString("id-ID")}`,
           `Rp ${(s.dagoShareAmount ?? 0).toLocaleString("id-ID")}`,
-          `Rp ${s.netRevenue.toLocaleString("id-ID")}`,
+          `Rp ${netDpp.toLocaleString("id-ID")}`,
         ];
       });
 

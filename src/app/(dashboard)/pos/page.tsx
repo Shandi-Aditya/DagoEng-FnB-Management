@@ -418,35 +418,43 @@ export default function POSPage() {
 
   // Add Item to Cart
   const handleAddToCart = (item: POSCartItem) => {
-    const tId = item.tenantId || "tenant-ks";
+    const tId =
+      item.tenantId ||
+      posProducts.find((p) => p.id === item.productId)?.tenantId ||
+      "tenant-ks";
     const tenantOp = isTenantAcceptingOrders(tId, settings?.tenantOperations);
     if (!tenantOp.isOpen) {
       notify.warning(`${getTenantName(tId) || "Mitra F&B"} tutup sementara`, tenantClosedMessage(tenantOp));
       return;
     }
+    const resolvedItem: POSCartItem = {
+      ...item,
+      tenantId: tId,
+    };
     setCartItems((prev) => {
       const existingIdx = prev.findIndex(
         (i) =>
-          i.productId === item.productId &&
-          i.selectedVariant?.name === item.selectedVariant?.name &&
-          i.notes === item.notes &&
+          i.productId === resolvedItem.productId &&
+          i.selectedVariant?.name === resolvedItem.selectedVariant?.name &&
+          i.notes === resolvedItem.notes &&
           JSON.stringify(i.selectedModifiers.map((m) => m.name).sort()) ===
-          JSON.stringify(item.selectedModifiers.map((m) => m.name).sort())
+          JSON.stringify(resolvedItem.selectedModifiers.map((m) => m.name).sort())
       );
 
       if (existingIdx > -1) {
         const updated = [...prev];
         const exist = updated[existingIdx];
-        const newQty = exist.quantity + item.quantity;
+        const newQty = exist.quantity + resolvedItem.quantity;
         updated[existingIdx] = {
           ...exist,
           quantity: newQty,
           itemTotal: exist.unitFinalPrice * newQty,
+          tenantId: exist.tenantId || tId,
         };
         return updated;
       }
 
-      return [...prev, item];
+      return [...prev, resolvedItem];
     });
   };
 
@@ -566,7 +574,7 @@ export default function POSPage() {
       items: cartItems.map((c, i) => ({
         id: `pos-it-${i}-${Date.now()}`,
         productId: c.productId,
-        tenantId: c.tenantId,
+        tenantId: c.tenantId || posProducts.find((p) => p.id === c.productId)?.tenantId || "tenant-ks",
         productName: c.productName,
         quantity: c.quantity,
         unitPrice: c.unitFinalPrice,
