@@ -92,6 +92,8 @@ import { CoworkingToolbar } from "@/features/pos/CoworkingToolbar";
 import { CoworkingRoomCard } from "@/features/pos/CoworkingRoomCard";
 import { CoworkingBookingPanel } from "@/features/pos/CoworkingBookingPanel";
 import { CoworkingPhotoModal } from "@/features/pos/CoworkingPhotoModal";
+import { CoworkingQrisModal } from "@/features/coworking/CoworkingQrisModal";
+import { CoworkingBooking } from "@/types/coworking";
 import { PosVoucherModal } from "@/features/pos/PosVoucherModal";
 import { PosOpenShiftModal } from "@/features/pos/PosOpenShiftModal";
 import {
@@ -142,13 +144,20 @@ export default function POSPage() {
   const [cwVoucherValidationMsg, setCwVoucherValidationMsg] = useState<{ type: "SUCCESS" | "ERROR"; text: string } | null>(null);
   const [lastCoworkReceiptData, setLastCoworkReceiptData] = useState<CoworkingReceiptData | null>(null);
   const [isCoworkReceiptModalOpen, setIsCoworkReceiptModalOpen] = useState<boolean>(false);
+  const [pendingCwQrisBooking, setPendingCwQrisBooking] = useState<CoworkingBooking | null>(null);
+  const [isCwQrisModalOpen, setIsCwQrisModalOpen] = useState<boolean>(false);
 
   // Shift & Cash Drawer Quick Controls
   const [isPosOpenShiftModalOpen, setIsPosOpenShiftModalOpen] = useState<boolean>(false);
   const [posOpenShiftName, setPosOpenShiftName] = useState<string>("Shift Pagi (08:00 - 16:00)");
-  const [posOpeningCashInput, setPosOpeningCashInput] = useState<number>(500000);
+  const [posOpeningCashInput, setPosOpeningCashInput] = useState<number | "">("");
   const [isSubmittingShift, setIsSubmittingShift] = useState<boolean>(false);
   const [previewSpacePhoto, setPreviewSpacePhoto] = useState<CoworkingSpaceItem | null>(null);
+
+  const handleOpenShiftModal = () => {
+    setPosOpeningCashInput("");
+    setIsPosOpenShiftModalOpen(true);
+  };
 
   // Mount state for SSR Hydration safety
   const [isMounted, setIsMounted] = useState(false);
@@ -191,6 +200,7 @@ export default function POSPage() {
   const [orderType, setOrderType] = useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
   const [selectedTable, setSelectedTable] = useState<string>("");
   const [customerName, setCustomerName] = useState<string>("");
+  const [orderNotes, setOrderNotes] = useState<string>("");
   const [selectedPromoId, setSelectedPromoId] = useState<string>("");
   const [fnbVoucherCode, setFnbVoucherCode] = useState<string>("");
   const [fnbVoucherValidationMsg, setFnbVoucherValidationMsg] = useState<{ type: "SUCCESS" | "ERROR"; text: string } | null>(null);
@@ -409,35 +419,43 @@ export default function POSPage() {
 
   // Add Item to Cart
   const handleAddToCart = (item: POSCartItem) => {
-    const tId = item.tenantId || "tenant-ks";
+    const tId =
+      item.tenantId ||
+      posProducts.find((p) => p.id === item.productId)?.tenantId ||
+      "tenant-ks";
     const tenantOp = isTenantAcceptingOrders(tId, settings?.tenantOperations);
     if (!tenantOp.isOpen) {
       notify.warning(`${getTenantName(tId) || "Mitra F&B"} tutup sementara`, tenantClosedMessage(tenantOp));
       return;
     }
+    const resolvedItem: POSCartItem = {
+      ...item,
+      tenantId: tId,
+    };
     setCartItems((prev) => {
       const existingIdx = prev.findIndex(
         (i) =>
-          i.productId === item.productId &&
-          i.selectedVariant?.name === item.selectedVariant?.name &&
-          i.notes === item.notes &&
+          i.productId === resolvedItem.productId &&
+          i.selectedVariant?.name === resolvedItem.selectedVariant?.name &&
+          i.notes === resolvedItem.notes &&
           JSON.stringify(i.selectedModifiers.map((m) => m.name).sort()) ===
-          JSON.stringify(item.selectedModifiers.map((m) => m.name).sort())
+          JSON.stringify(resolvedItem.selectedModifiers.map((m) => m.name).sort())
       );
 
       if (existingIdx > -1) {
         const updated = [...prev];
         const exist = updated[existingIdx];
-        const newQty = exist.quantity + item.quantity;
+        const newQty = exist.quantity + resolvedItem.quantity;
         updated[existingIdx] = {
           ...exist,
           quantity: newQty,
           itemTotal: exist.unitFinalPrice * newQty,
+          tenantId: exist.tenantId || tId,
         };
         return updated;
       }
 
-      return [...prev, item];
+      return [...prev, resolvedItem];
     });
   };
 
@@ -551,13 +569,14 @@ export default function POSPage() {
       taxRatePercent: isTaxEnabled ? Number(taxRatePercent) || 10 : 0,
       serviceChargePercent: orderType === "DINE_IN" ? Number(settings.serviceChargePercent) || 0 : 0,
       total: grandTotal,
+      notes: orderNotes.trim() || undefined,
       paymentMethod: paymentData.method,
       paymentReference: paymentData.qrisVerification?.referenceNumber,
       qrisVerification: paymentData.qrisVerification,
       items: cartItems.map((c, i) => ({
         id: `pos-it-${i}-${Date.now()}`,
         productId: c.productId,
-        tenantId: c.tenantId,
+        tenantId: c.tenantId || posProducts.find((p) => p.id === c.productId)?.tenantId || "tenant-ks",
         productName: c.productName,
         quantity: c.quantity,
         unitPrice: c.unitFinalPrice,
@@ -589,6 +608,7 @@ export default function POSPage() {
       })),
       cashierName: user?.name || "Kasir Bertugas",
       timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
+      kitchenNotes: orderNotes.trim() || undefined,
     };
     setKitchenModalTicket(kitchenTicket);
 
@@ -745,6 +765,7 @@ export default function POSPage() {
     setIsReceiptModalOpen(false);
     setCartItems([]);
     setCustomerName("");
+    setOrderNotes("");
     setSelectedMemberId("");
     setAppliedVoucher(null);
     setSelectedPromoId("");
@@ -904,7 +925,7 @@ export default function POSPage() {
     });
     if (!activeShift) {
       notify.warning("Shift kasir belum dibuka", "Buka shift dengan modal awal sebelum menerima pembayaran.");
-      setIsPosOpenShiftModalOpen(true);
+      handleOpenShiftModal();
       return;
     }
 
@@ -914,6 +935,7 @@ export default function POSPage() {
     }
 
     const effectiveCompany = cwUsageType === "GROUP" ? (cwCompanyName.trim() || "Group / Company") : "Personal";
+    const isQris = cwPaymentMethod === "QRIS";
 
     let createdBooking: any;
     try {
@@ -933,14 +955,25 @@ export default function POSPage() {
         discount: cwPricing.discountAmount,
         totalAmount: cwPricing.total,
         paymentMethod: cwPaymentMethod,
-        paidAmount: cwPricing.total,
-        remainingAmount: 0,
-        paymentStatus: "PAID",
+        paidAmount: isQris ? 0 : cwPricing.total,
+        remainingAmount: isQris ? cwPricing.total : 0,
+        paymentStatus: isQris ? "PENDING" : "PAID",
         fnbVoucherApplied: cwAppliedPromo?.code,
         notes: cwNotes || undefined,
       });
     } catch (err: any) {
       notify.error("Booking gagal", err.message);
+      return;
+    }
+
+    if (isQris) {
+      // QRIS tidak boleh langsung lunas tanpa konfirmasi supervisor (Task V-05)
+      setPendingCwQrisBooking(createdBooking);
+      setIsCwQrisModalOpen(true);
+      notify.warning(
+        "Menunggu konfirmasi QRIS",
+        `Booking ${createdBooking.bookingCode} dibuat. Tampilkan QRIS statis dan minta persetujuan supervisor.`
+      );
       return;
     }
 
@@ -1018,6 +1051,68 @@ export default function POSPage() {
     notify.success(`Booking ${createdBooking.bookingCode} tersimpan`);
   };
 
+  const handleCwQrisSuccess = (verifiedBooking: CoworkingBooking) => {
+    if (cwAppliedPromo?.id) {
+      redeemPromo(cwAppliedPromo.id, verifiedBooking.guestPhone || "cw-guest");
+    }
+
+    if (cwCustomerType === "MEMBER" && cwSelectedMember) {
+      const earnedPoints = Math.floor(verifiedBooking.totalAmount / 1000);
+      if (earnedPoints > 0) {
+        addPoints(cwSelectedMember.id, earnedPoints, `Booking Coworking #${verifiedBooking.bookingCode}`);
+      }
+    }
+
+    // Record Shift Transaction for Co-Working Payment
+    recordShiftTransaction(
+      0,
+      verifiedBooking.totalAmount,
+      activeOutletId,
+      verifiedBooking.id ? `cw-${verifiedBooking.id}` : undefined
+    );
+
+    const endTimeFormatted = calculateEndTime(cwStartTime, cwDuration);
+    const cwPublisher = resolveCoworkingReceiptPublisher(activeOutlet);
+    const coworkReceipt: CoworkingReceiptData = {
+      bookingCode: verifiedBooking.bookingCode,
+      transactionDate: new Date().toLocaleString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }) + " WITA",
+      guestName: verifiedBooking.guestName,
+      guestPhone: verifiedBooking.guestPhone,
+      guestEmail: verifiedBooking.guestEmail,
+      company: verifiedBooking.company,
+      spaceName: verifiedBooking.spaceName,
+      spaceType: verifiedBooking.spaceType,
+      outletName: cwPublisher.outletName,
+      outletAddress: cwPublisher.outletAddress,
+      outletPhone: cwPublisher.outletPhone,
+      bookingDate: verifiedBooking.date,
+      startTime: verifiedBooking.startTime,
+      endTime: endTimeFormatted,
+      duration: verifiedBooking.duration,
+      bookingType: "HOURLY",
+      basePrice: verifiedBooking.totalAmount,
+      tax: 0,
+      totalAmount: verifiedBooking.totalAmount,
+      paymentMethod: "QRIS",
+      paymentStatus: "PAID",
+      notes: verifiedBooking.notes,
+    };
+
+    setLastCoworkReceiptData(coworkReceipt);
+    setIsCoworkReceiptModalOpen(true);
+    setCwSelectedSpaceId("");
+    setIsManualTimeSet(false);
+    setIsCwQrisModalOpen(false);
+    setPendingCwQrisBooking(null);
+    notify.success("Pembayaran QRIS lunas", `Booking #${verifiedBooking.bookingCode} berhasil disetujui supervisor.`);
+  };
+
   const fnbPromos = (settings.promos ?? []).filter(
     (promo: PromoConfig) => promo.isActive && (!promo.scope || promo.scope === "ALL" || promo.scope === "FNB"),
   );
@@ -1048,7 +1143,7 @@ export default function POSPage() {
     }
     if (!activeShift) {
       notify.warning("Shift kasir belum dibuka", "Buka shift dengan modal awal sebelum menerima pembayaran.");
-      setIsPosOpenShiftModalOpen(true);
+      handleOpenShiftModal();
       return;
     }
     setIsPaymentModalOpen(true);
@@ -1065,7 +1160,7 @@ export default function POSPage() {
         onModeChange={setPosMode}
         cartCount={cartCount}
         activeShift={activeShift}
-        onOpenShift={() => setIsPosOpenShiftModalOpen(true)}
+        onOpenShift={handleOpenShiftModal}
         onCloseShift={() => setIsClosingShiftModalOpen(true)}
       />
 
@@ -1106,6 +1201,8 @@ export default function POSPage() {
                 appliedVoucherTitle={appliedVoucher?.title ?? null}
                 onOpenVouchers={() => setIsVoucherModalOpen(true)}
                 onRemoveVoucher={() => setAppliedVoucher(null)}
+                orderNotes={orderNotes}
+                onOrderNotesChange={setOrderNotes}
               />
               <Separator />
               <div className="max-h-80 overflow-y-auto">
@@ -1462,7 +1559,18 @@ export default function POSPage() {
         />
       )}
 
-      {/* 7. Quick Open Shift Modal for POS Cashier */}
+      {/* 7. Coworking QRIS Supervisor Confirmation Modal (Task V-05) */}
+      <CoworkingQrisModal
+        isOpen={isCwQrisModalOpen}
+        onClose={() => {
+          setIsCwQrisModalOpen(false);
+          setPendingCwQrisBooking(null);
+        }}
+        booking={pendingCwQrisBooking}
+        onSuccess={handleCwQrisSuccess}
+      />
+
+      {/* 8. Quick Open Shift Modal for POS Cashier */}
       <PosOpenShiftModal
         isOpen={isPosOpenShiftModalOpen}
         onClose={() => setIsPosOpenShiftModalOpen(false)}
@@ -1471,38 +1579,36 @@ export default function POSPage() {
         onShiftNameChange={setPosOpenShiftName}
         openingCash={posOpeningCashInput}
         onOpeningCashChange={setPosOpeningCashInput}
-        onSubmit={async (e) => {
+        onSubmit={(e) => {
           e.preventDefault();
           if (isSubmittingShift) return;
-          setIsSubmittingShift(true);
 
-          const targetOutlet = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
-          const targetCashier = user?.name || "Kasir Bertugas";
-
-          try {
-            const res = await fetch("/api/shifts", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                action: "OPEN",
-                shiftName: posOpenShiftName,
-                startingCash: Number(posOpeningCashInput) || 0,
-                cashierName: targetCashier,
-                outletId: targetOutlet,
-              }),
-            });
-            const data = await res.json().catch(() => null);
-            if (res.status === 409) {
-              notify.warning(data?.error || "Shift kasir sudah berjalan");
-            }
-          } catch (err) {
-            console.warn("[Shift Open Sync Warn]:", err);
+          if (
+            posOpeningCashInput === "" ||
+            isNaN(Number(posOpeningCashInput)) ||
+            Number(posOpeningCashInput) < 0
+          ) {
+            notify.warning("Modal awal wajib diisi", "Masukkan jumlah uang kas awal di laci kasir (minimal Rp 0).");
+            return;
           }
 
-          openShift(posOpenShiftName, Number(posOpeningCashInput) || 0, targetCashier);
-          setIsSubmittingShift(false);
-          setIsPosOpenShiftModalOpen(false);
-          notify.success(`${posOpenShiftName} dibuka`, `Modal kas ${formatCurrencyIDR(Number(posOpeningCashInput) || 0)}.`);
+          setIsSubmittingShift(true);
+
+          const targetCashier = user?.name || "Kasir Bertugas";
+          const cashAmount = Number(posOpeningCashInput);
+
+          try {
+            openShift(posOpenShiftName, cashAmount, targetCashier);
+            setIsPosOpenShiftModalOpen(false);
+            notify.success(
+              `${posOpenShiftName} dibuka`,
+              `Modal kas ${formatCurrencyIDR(cashAmount)}.`
+            );
+          } catch (err: any) {
+            notify.error("Gagal membuka shift", err?.message || "Terjadi kesalahan saat membuka shift.");
+          } finally {
+            setIsSubmittingShift(false);
+          }
         }}
       />
     </div>

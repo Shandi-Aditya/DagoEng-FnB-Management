@@ -30,6 +30,7 @@ import {
 import { CoworkingReportPDFModal } from "@/features/coworking/CoworkingReportPDFModal";
 import { CoworkingSpacesTab } from "@/features/coworking/CoworkingSpacesTab";
 import { CoworkingToolbar } from "@/features/coworking/CoworkingToolbar";
+import { CoworkingQrisModal } from "@/features/coworking/CoworkingQrisModal";
 import { NewBookingModal } from "@/features/coworking/NewBookingModal";
 import { NewMemberModal } from "@/features/coworking/NewMemberModal";
 
@@ -59,6 +60,8 @@ export default function CoworkingPage() {
   const [isNewBookingModalOpen, setIsNewBookingModalOpen] = useState(false);
   const [isNewMemberModalOpen, setIsNewMemberModalOpen] = useState(false);
   const [selectedSpaceIdForBooking, setSelectedSpaceIdForBooking] = useState<string | undefined>();
+  const [selectedQrisBooking, setSelectedQrisBooking] = useState<CoworkingBooking | null>(null);
+  const [isQrisModalOpen, setIsQrisModalOpen] = useState(false);
 
   // Cashier redirection
   if (user?.role?.slug === "CASHIER") {
@@ -131,7 +134,8 @@ export default function CoworkingPage() {
     isImmediateCheckIn: boolean;
     paymentMethod: string;
   }) => {
-    bookSpace({
+    const isQris = bookingData.paymentMethod === "QRIS";
+    const createdBooking = bookSpace({
       guestName: bookingData.guestName,
       guestPhone: bookingData.guestPhone,
       guestEmail: bookingData.guestEmail || "-",
@@ -148,16 +152,25 @@ export default function CoworkingPage() {
       price: bookingData.totalAmount,
       discount: 0,
       totalAmount: bookingData.totalAmount,
-      paidAmount: bookingData.totalAmount,
-      remainingAmount: 0,
-      paymentStatus: "PAID",
+      paidAmount: isQris ? 0 : bookingData.totalAmount,
+      remainingAmount: isQris ? bookingData.totalAmount : 0,
+      paymentStatus: isQris ? "PENDING" : "PAID",
       paymentMethod: bookingData.paymentMethod,
-      paymentRef: `PAY-CWK-${Date.now().toString().slice(-6)}`,
-      paymentTimestamp: new Date().toISOString(),
-      checkInStatus: bookingData.isImmediateCheckIn ? "CHECKED_IN" : "RESERVED",
+      paymentRef: isQris ? undefined : `PAY-CWK-${Date.now().toString().slice(-6)}`,
+      paymentTimestamp: isQris ? undefined : new Date().toISOString(),
+      checkInStatus: !isQris && bookingData.isImmediateCheckIn ? "CHECKED_IN" : "RESERVED",
     });
 
-    notify.success("Booking dibuat", bookingData.guestName);
+    if (isQris) {
+      setSelectedQrisBooking(createdBooking);
+      setIsQrisModalOpen(true);
+      notify.warning(
+        "Menunggu konfirmasi QRIS",
+        `Booking ${createdBooking.bookingCode} dibuat. Tampilkan QRIS statis dan minta otorisasi supervisor.`
+      );
+    } else {
+      notify.success("Booking dibuat", bookingData.guestName);
+    }
   };
 
   const handleCreateMember = (params: {
@@ -322,6 +335,10 @@ export default function CoworkingPage() {
             onOpenReceipt={handleOpenReceipt}
             onCheckIn={handleCheckInBooking}
             onCheckout={handleCheckoutSpace}
+            onConfirmQris={(booking) => {
+              setSelectedQrisBooking(booking);
+              setIsQrisModalOpen(true);
+            }}
           />
         </TabsContent>
 
@@ -375,6 +392,21 @@ export default function CoworkingPage() {
           outletName={activeOutlet?.name || "Semua Gerai"}
         />
       )}
+
+      {/* QRIS Supervisor Confirmation Modal (Task V-05) */}
+      <CoworkingQrisModal
+        isOpen={isQrisModalOpen}
+        onClose={() => {
+          setIsQrisModalOpen(false);
+          setSelectedQrisBooking(null);
+        }}
+        booking={selectedQrisBooking}
+        onSuccess={() => {
+          setIsQrisModalOpen(false);
+          setSelectedQrisBooking(null);
+          notify.success("Pembayaran QRIS berhasil disetujui supervisor.");
+        }}
+      />
     </div>
   );
 }

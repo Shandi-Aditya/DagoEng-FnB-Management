@@ -99,7 +99,7 @@ const KITCHEN_DOT: readonly string[] = [
   "bg-unit-loyalty",
 ];
 
-const STAGGER = 100;
+const STAGGER = 130;
 
 const LIFT =
   "transition-[translate,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-md";
@@ -145,22 +145,21 @@ function KitchenStrip() {
             Empat mitra aktif menggunakan layanan POS di sistem ini
           </h2>
         </Reveal>
-        <Reveal delay={100}>
-          <ul className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
-            {KITCHENS.map((kitchen, index) => (
-              <li
-                key={kitchen}
-                className="flex items-center gap-3 text-2xl font-medium tracking-tight"
-              >
-                <span
-                  className={`size-3 rounded-full ${KITCHEN_DOT[index % KITCHEN_DOT.length]}`}
-                  aria-hidden
-                />
-                {kitchen}
-              </li>
-            ))}
-          </ul>
-        </Reveal>
+        <ul className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
+          {KITCHENS.map((kitchen, index) => (
+            <li key={kitchen} className="list-none">
+              <Reveal delay={index * 110}>
+                <div className="flex items-center gap-3 text-2xl font-medium tracking-tight">
+                  <span
+                    className={`size-3 rounded-full ${KITCHEN_DOT[index % KITCHEN_DOT.length]}`}
+                    aria-hidden
+                  />
+                  {kitchen}
+                </div>
+              </Reveal>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );
@@ -188,33 +187,42 @@ function FeatureSplit({
   return (
     <section
       id={id}
-      className={`${SECTION} grid scroll-mt-20 items-center gap-10 py-16 lg:grid-cols-[5fr_7fr] lg:gap-16 lg:py-24`}
+      className={`${SECTION} grid scroll-mt-20 items-center gap-10 py-16 lg:grid-cols-[5fr_7fr] lg:gap-16 lg:py-24 overflow-hidden`}
       aria-labelledby={`${id}-title`}
     >
-      <Reveal className="flex flex-col items-start gap-6">
-        <div className="flex flex-col gap-3">
-          <h2
-            id={`${id}-title`}
-            className="text-3xl font-medium tracking-tight text-balance sm:text-5xl"
-          >
-            {title}
-          </h2>
-          <p className="text-base text-pretty text-muted-foreground sm:text-lg">
-            {line}
-          </p>
-        </div>
-        <ul className="flex flex-wrap gap-2" aria-label="Yang termasuk">
-          {features.map((feature) => (
-            <li key={feature}>
-              <Badge variant="outline">{feature}</Badge>
-            </li>
-          ))}
-        </ul>
-        <Button size="lg" render={<Link href={action.href} />} nativeButton={false}>
-          {action.label}
-        </Button>
-      </Reveal>
-      <Reveal delay={150} className="relative isolate">
+      <div className="flex flex-col items-start gap-6 min-w-0 w-full">
+        <Reveal delay={60} duration={950}>
+          <div className="flex flex-col gap-3">
+            <h2
+              id={`${id}-title`}
+              className="text-3xl font-medium tracking-tight text-balance sm:text-5xl"
+            >
+              {title}
+            </h2>
+            <p className="text-base text-pretty text-muted-foreground sm:text-lg">
+              {line}
+            </p>
+          </div>
+        </Reveal>
+
+        <Reveal delay={160} duration={950}>
+          <ul className="flex flex-wrap gap-2" aria-label="Yang termasuk">
+            {features.map((feature) => (
+              <li key={feature}>
+                <Badge variant="outline">{feature}</Badge>
+              </li>
+            ))}
+          </ul>
+        </Reveal>
+
+        <Reveal delay={240} duration={950}>
+          <Button size="lg" render={<Link href={action.href} />} nativeButton={false}>
+            {action.label}
+          </Button>
+        </Reveal>
+      </div>
+
+      <Reveal delay={120} duration={1050} className="relative isolate min-w-0 w-full">
         <AmbientUnitFrame unit={unit}>
           {children}
         </AmbientUnitFrame>
@@ -230,31 +238,38 @@ function PartnerRoles() {
       className={`${SECTION} flex scroll-mt-20 flex-col items-center gap-12 py-16 lg:py-24`}
       aria-labelledby="mitra-title"
     >
-      <Reveal className="flex max-w-2xl flex-col items-center gap-4 text-center">
-        <h2
-          id="mitra-title"
-          className="text-3xl font-medium tracking-tight text-balance sm:text-5xl"
-        >
-          Satu sistem untuk semua yang bekerja di sini
-        </h2>
-        <p className="text-base text-pretty text-muted-foreground sm:text-lg">
-          Dapur mitra, tenant, penyelenggara event, dan kasir memakai aplikasi
-          yang sama, jadi pesanan dan penjualan tidak dicatat dua kali.
-        </p>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button size="lg" render={<Link href="/login" />} nativeButton={false}>
-            Masuk sebagai mitra
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            render={<Link href="/events/portal" />}
-            nativeButton={false}
+      <div className="flex max-w-2xl flex-col items-center gap-4 text-center">
+        <Reveal delay={60} duration={950}>
+          <h2
+            id="mitra-title"
+            className="text-3xl font-medium tracking-tight text-balance sm:text-5xl"
           >
-            Portal event
-          </Button>
-        </div>
-      </Reveal>
+            Satu sistem untuk semua yang bekerja di sini
+          </h2>
+        </Reveal>
+        <Reveal delay={140} duration={950}>
+          <p className="text-base text-pretty text-muted-foreground sm:text-lg">
+            Dapur mitra, tenant, penyelenggara event, dan kasir memakai aplikasi
+            yang sama, jadi pesanan dan penjualan tidak dicatat dua kali.
+          </p>
+        </Reveal>
+        <Reveal delay={220} duration={950}>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button size="lg" render={<Link href="/login" />} nativeButton={false}>
+              Masuk sebagai mitra
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              render={<Link href="/events/portal" />}
+              nativeButton={false}
+            >
+              Portal event
+            </Button>
+          </div>
+        </Reveal>
+      </div>
+
       <div className="grid w-full gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {PARTNER_ROLES.map((role, index) => (
           <Reveal key={role.id} delay={index * STAGGER} className="h-full">
@@ -389,26 +404,32 @@ function ClosingCta() {
     >
       <BrandRings className="absolute top-1/2 -left-24 -z-10 hidden h-[140%] -translate-y-1/2 opacity-25 md:block" />
       <BrandRings className="absolute top-1/2 -right-24 -z-10 hidden h-[140%] -translate-y-1/2 rotate-180 opacity-25 md:block" />
-      <Reveal
+      <div
         className={`${SECTION} flex flex-col items-center gap-6 text-center`}
       >
-        <h2
-          id="closing-title"
-          className="text-3xl font-medium tracking-tight text-balance sm:text-5xl"
-        >
-          Meja Anda sudah menunggu
-        </h2>
-        <p className="max-w-xl text-base text-muted-foreground sm:text-lg">
-          Pesan ruang kerja dari ponsel, lalu datang dan mulai bekerja.
-        </p>
-        <Button
-          size="lg"
-          render={<Link href="/customer?tab=COWORKING" />}
-          nativeButton={false}
-        >
-          Pesan ruang kerja
-        </Button>
-      </Reveal>
+        <Reveal delay={60} duration={950}>
+          <h2
+            id="closing-title"
+            className="text-3xl font-medium tracking-tight text-balance sm:text-5xl"
+          >
+            Meja Anda sudah menunggu
+          </h2>
+        </Reveal>
+        <Reveal delay={140} duration={950}>
+          <p className="max-w-xl text-base text-muted-foreground sm:text-lg">
+            Pesan ruang kerja dari ponsel, lalu datang dan mulai bekerja.
+          </p>
+        </Reveal>
+        <Reveal delay={220} duration={950}>
+          <Button
+            size="lg"
+            render={<Link href="/customer?tab=COWORKING" />}
+            nativeButton={false}
+          >
+            Pesan ruang kerja
+          </Button>
+        </Reveal>
+      </div>
     </section>
   );
 }
@@ -446,44 +467,46 @@ function Footer() {
   return (
     <footer className="relative overflow-hidden border-t bg-muted/20 text-foreground pt-14 pb-4 sm:pt-20 sm:pb-8">
       {/* 1. Multi-Column Navigation */}
-      <div
-        className={`${SECTION} grid gap-10 pb-12 sm:pb-16 md:grid-cols-[2fr_1fr_1fr_1fr]`}
-      >
-        <div className="flex flex-col gap-4">
-          <Link href="/" className="flex items-center gap-2.5 font-semibold text-lg tracking-tight">
-            <Image src="/logo-dagoeng.svg" alt="DagoEng Logo" width={22} height={28} />
-            Dago Creative Hub
-          </Link>
-          <p className="max-w-xs text-sm text-muted-foreground leading-relaxed">
-            {ADDRESS}
-          </p>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Clock className="size-3.5 text-unit-coworking" />
-            <span>{HOURS}</span>
+      <Reveal delay={80}>
+        <div
+          className={`${SECTION} grid gap-10 pb-12 sm:pb-16 md:grid-cols-[2fr_1fr_1fr_1fr]`}
+        >
+          <div className="flex flex-col gap-4">
+            <Link href="/" className="flex items-center gap-2.5 font-semibold text-lg tracking-tight">
+              <Image src="/logo-dagoeng.svg" alt="DagoEng Logo" width={22} height={28} />
+              Dago Creative Hub
+            </Link>
+            <p className="max-w-xs text-sm text-muted-foreground leading-relaxed">
+              {ADDRESS}
+            </p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Clock className="size-3.5 text-unit-coworking" />
+              <span>{HOURS}</span>
+            </div>
           </div>
-        </div>
 
-        {FOOTER_COLUMNS.map((column) => (
-          <nav
-            key={column.title}
-            aria-labelledby={`foot-${column.title}`}
-            className="flex flex-col gap-3"
-          >
-            <h2 id={`foot-${column.title}`} className="text-sm font-semibold text-foreground">
-              {column.title}
-            </h2>
-            <ul className="flex flex-col gap-2.5 text-sm text-muted-foreground">
-              {column.links.map((link) => (
-                <li key={link.href}>
-                  <Link href={link.href} className="transition-colors hover:text-foreground">
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
-        ))}
-      </div>
+          {FOOTER_COLUMNS.map((column) => (
+            <nav
+              key={column.title}
+              aria-labelledby={`foot-${column.title}`}
+              className="flex flex-col gap-3"
+            >
+              <h2 id={`foot-${column.title}`} className="text-sm font-semibold text-foreground">
+                {column.title}
+              </h2>
+              <ul className="flex flex-col gap-2.5 text-sm text-muted-foreground">
+                {column.links.map((link) => (
+                  <li key={link.href}>
+                    <Link href={link.href} className="transition-colors hover:text-foreground">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ))}
+        </div>
+      </Reveal>
 
       {/* 2. Divider */}
       <div className={`${SECTION}`}>
@@ -491,21 +514,25 @@ function Footer() {
       </div>
 
       {/* 3. Bottom Copyright */}
-      <div
-        className={`${SECTION} flex flex-col items-center justify-between gap-3 py-6 text-xs text-muted-foreground sm:flex-row`}
-      >
-        <p>© 2026 Dago Creative Hub. Seluruh hak cipta dilindungi.</p>
-      </div>
+      <Reveal delay={120}>
+        <div
+          className={`${SECTION} flex flex-col items-center justify-between gap-3 py-6 text-xs text-muted-foreground sm:flex-row`}
+        >
+          <p>© 2026 Dago Creative Hub. Seluruh hak cipta dilindungi.</p>
+        </div>
+      </Reveal>
 
       {/* 4. Giant Monumental Wordmark Watermark at the Bottom */}
-      <div
-        className="relative -mb-6 sm:-mb-10 md:-mb-16 flex select-none justify-center overflow-hidden pointer-events-none"
-        aria-hidden="true"
-      >
-        <span className="text-[17vw] font-semibold tracking-tighter leading-none text-foreground/[0.04] dark:text-foreground/[0.05] whitespace-nowrap">
-          DAGOENG
-        </span>
-      </div>
+      <Reveal delay={160} duration={1200} withScale={false}>
+        <div
+          className="relative -mb-6 sm:-mb-10 md:-mb-16 flex select-none justify-center overflow-hidden pointer-events-none"
+          aria-hidden="true"
+        >
+          <span className="text-[17vw] font-semibold tracking-tighter leading-none text-foreground/[0.04] dark:text-foreground/[0.05] whitespace-nowrap">
+            DAGOENG
+          </span>
+        </div>
+      </Reveal>
     </footer>
   );
 }

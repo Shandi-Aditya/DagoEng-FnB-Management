@@ -44,7 +44,7 @@ export function ReportsToolbar({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={onExportExcel}>
                 <FileSpreadsheet />
-                Excel
+                Excel (.xlsx)
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onExportCSV}>
                 <Download />

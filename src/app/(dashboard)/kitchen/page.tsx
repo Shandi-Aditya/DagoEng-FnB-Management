@@ -25,6 +25,7 @@ import {
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
 import { soundChime } from "@/lib/audio-chime";
 import { isAddonActive } from "@/lib/subscription";
+import { DEFAULT_FNB_TENANTS } from "@/lib/tenant";
 import type { OrderStatus } from "@/types/order";
 import type { KitchenTicketData } from "@/types/printer";
 
@@ -54,12 +55,27 @@ export default function KitchenKDSPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // POS-38 / TC-K09: a tenant kitchen only sees tickets with its own items
-  const tenantId = user?.scopeLevel === "TENANT" ? user?.tenant?.id : undefined;
+  // POS-38 / V-09: a tenant kitchen only sees tickets with its own items; staff can switch tenant filter
+  const isTenantLocked = user?.scopeLevel === "TENANT";
+  const [selectedTenant, setSelectedTenant] = useState<string>(
+    isTenantLocked ? user?.tenant?.id || "ALL" : "ALL"
+  );
+
+  const effectiveTenantId = isTenantLocked
+    ? user?.tenant?.id
+    : selectedTenant === "ALL"
+    ? undefined
+    : selectedTenant;
 
   const activeOrders = useMemo(
-    () => filterKitchenOrders(filteredOrders, { tenantId, type: typeFilter, station, multiStation: isMultiStation }),
-    [filteredOrders, tenantId, typeFilter, station, isMultiStation],
+    () =>
+      filterKitchenOrders(filteredOrders, {
+        tenantId: effectiveTenantId,
+        type: typeFilter,
+        station,
+        multiStation: isMultiStation,
+      }),
+    [filteredOrders, effectiveTenantId, typeFilter, station, isMultiStation],
   );
 
   // Ring the bell when a new ticket arrives
@@ -100,6 +116,22 @@ export default function KitchenKDSPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
+          {!isTenantLocked ? (
+            <Tabs value={selectedTenant} onValueChange={setSelectedTenant}>
+              <TabsList>
+                <TabsTrigger value="ALL">Semua mitra</TabsTrigger>
+                {DEFAULT_FNB_TENANTS.map((t) => (
+                  <TabsTrigger key={t.id} value={t.id}>
+                    {t.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          ) : (
+            <Badge variant="outline" className="text-xs">
+              {user?.tenant?.name || "Dapur Mitra"}
+            </Badge>
+          )}
           <Tabs value={typeFilter} onValueChange={(value) => setTypeFilter(value as KitchenTypeFilter)}>
             <TabsList>
               {TYPE_FILTERS.map((filter) => (
@@ -148,7 +180,7 @@ export default function KitchenKDSPage() {
                 <p className="rounded-lg border border-dashed py-10 text-center text-xs text-muted-foreground">Tidak ada tiket</p>
               ) : (
                 tickets.map((order, ticketIdx) => {
-                  const items = ticketItems(order, tenantId);
+                  const items = ticketItems(order, effectiveTenantId);
                   const queueNumber = ticketIdx + 1;
                   return (
                     <KitchenTicketCard

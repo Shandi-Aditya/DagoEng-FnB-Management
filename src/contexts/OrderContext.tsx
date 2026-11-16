@@ -8,6 +8,7 @@ import { useDateFilter } from "./DateFilterContext";
 import { useActivityLog } from "./ActivityLogContext";
 import { useNotifications } from "./NotificationContext";
 import { syncWithOutbox, flushOutbox } from "@/lib/sync-outbox";
+import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 
 const ORDER_SYNC_ENDPOINT = "/api/orders";
 const orderSyncId = (orderId: string) => `order-sync-${orderId}`;
@@ -25,6 +26,8 @@ interface OrderContextType {
       paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
       paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
       qrisVerification?: OrderRecord["qrisVerification"];
+      tax?: number;
+      serviceCharge?: number;
     }
   ) => void;
   createOrder: (order: Partial<OrderRecord>) => OrderRecord;
@@ -165,6 +168,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       paymentStatus?: "PENDING" | "PAID" | "REFUNDED";
       paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
       qrisVerification?: OrderRecord["qrisVerification"];
+      tax?: number;
+      serviceCharge?: number;
     }
   ) => {
     const target = orders.find((o) => o.id === orderId);
@@ -207,6 +212,14 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       if (paymentUpdate?.qrisVerification) {
         updated.qrisVerification = paymentUpdate.qrisVerification;
       }
+      // V-08: Freeze final PB1 and service charge at payment completion
+      const breakdown = getOrderTaxBreakdown(target);
+      updated.tax = Math.round(paymentUpdate?.tax !== undefined ? paymentUpdate.tax : (target.tax ?? breakdown.pb1));
+      updated.serviceCharge = Math.round(
+        paymentUpdate?.serviceCharge !== undefined
+          ? paymentUpdate.serviceCharge
+          : (target.serviceCharge ?? breakdown.serviceCharge)
+      );
     } else if (nextStatus === "CANCELLED") {
       updated.paymentStatus =
         paymentUpdate?.paymentStatus || (target.paymentStatus === "PAID" ? "REFUNDED" : "PENDING");
@@ -249,6 +262,12 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     const targetOutletId = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
     const targetOutletName = activeOutlet?.name || "Singaraja";
 
+    const breakdown = getOrderTaxBreakdown(newOrderData);
+    const finalTax = Math.round(newOrderData.tax !== undefined ? newOrderData.tax : breakdown.pb1);
+    const finalService = Math.round(
+      newOrderData.serviceCharge !== undefined ? newOrderData.serviceCharge : breakdown.serviceCharge
+    );
+
     const newOrder: OrderRecord = {
       id: newId,
       orderNumber: newNo,
@@ -262,8 +281,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       targetServiceMinutes: 10,
       items: newOrderData.items || [],
       subtotal: newOrderData.subtotal || 0,
-      tax: newOrderData.tax || 0,
-      serviceCharge: newOrderData.serviceCharge || 0,
+      tax: finalTax,
+      serviceCharge: finalService,
       taxRatePercent: newOrderData.taxRatePercent,
       serviceChargePercent: newOrderData.serviceChargePercent,
       total: newOrderData.total || 0,
@@ -308,6 +327,12 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     const targetOutletId = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
     const targetOutletName = activeOutlet?.name || "Singaraja";
 
+    const breakdown = getOrderTaxBreakdown(newOrderData);
+    const finalTax = Math.round(newOrderData.tax !== undefined ? newOrderData.tax : breakdown.pb1);
+    const finalService = Math.round(
+      newOrderData.serviceCharge !== undefined ? newOrderData.serviceCharge : breakdown.serviceCharge
+    );
+
     const newOrder: OrderRecord = {
       id: newId,
       orderNumber: newNo,
@@ -323,8 +348,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       subtotal: newOrderData.subtotal || 0,
       discount: newOrderData.discount,
       promoId: newOrderData.promoId,
-      tax: newOrderData.tax || 0,
-      serviceCharge: newOrderData.serviceCharge || 0,
+      tax: finalTax,
+      serviceCharge: finalService,
       taxRatePercent: newOrderData.taxRatePercent,
       serviceChargePercent: newOrderData.serviceChargePercent,
       total: newOrderData.total || 0,

@@ -374,7 +374,10 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
       const tableRows = orders.map((o) => {
         const promoName = promos.find((p) => p.id === o.promoId)?.name || o.promoId || "-";
-        const disc = getOrderTaxBreakdown(o).discount;
+        const breakdown = getOrderTaxBreakdown(o);
+        const disc = breakdown.discount;
+        const pb1 = breakdown.pb1;
+        const service = breakdown.serviceCharge;
         return [
           o.orderNumber || o.id,
           o.customerName || "Tamu",
@@ -382,6 +385,8 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           formatMakassarDate(o.createdAt),
           promoName,
           disc > 0 ? `-Rp ${disc.toLocaleString("id-ID")}` : "-",
+          pb1 > 0 ? `Rp ${pb1.toLocaleString("id-ID")}` : "Rp 0",
+          service > 0 ? `Rp ${service.toLocaleString("id-ID")}` : "Rp 0",
           orderStatusLabel(o.status),
           paymentMethodLabel(o.paymentMethod),
           `Rp ${o.total.toLocaleString("id-ID")}`,
@@ -396,6 +401,11 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           { label: "Transaksi", value: `${totalOrdersCount} pesanan` },
           { label: "Diskon promo", value: `Rp ${totalDiscounts.toLocaleString("id-ID")}` },
           { label: "Item terjual", value: `${totalItemsSold} item` },
+          { label: "Total PB1", value: `Rp ${aggregatedTax.totalTaxPB1.toLocaleString("id-ID")}` },
+          {
+            label: "Total service",
+            value: `Rp ${aggregatedTax.totalServiceCharge.toLocaleString("id-ID")}`,
+          },
         ],
         tableHeaders: [
           "Pesanan",
@@ -404,6 +414,8 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           "Tanggal",
           "Promo",
           "Diskon",
+          "PB1 (Rp)",
+          "Service (Rp)",
           "Status",
           "Metode bayar",
           "Total (Rp)",
@@ -585,7 +597,10 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
     case "SETTLEMENT": {
       const settlementData = calculateSettlement(orders);
-      const totalNetSettlement = settlementData.reduce((sum, s) => sum + s.netRevenue, 0);
+      const totalNetSettlement = settlementData.reduce(
+        (sum, s) => sum + (s.dpp ?? (s.grossRevenue - s.discount)),
+        0
+      );
       const totalTenantShare = settlementData.reduce((sum, s) => sum + (s.tenantShareAmount || 0), 0);
       const totalDagoShare = settlementData.reduce((sum, s) => sum + (s.dagoShareAmount || 0), 0);
       const totalDiscount = settlementData.reduce((sum, s) => sum + s.discount, 0);
@@ -600,6 +615,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           s.tenantId === "DAGO_HUB"
             ? "100% DAGO"
             : `${s.tenantSharePercent ?? 85}% Mitra / ${s.dagoSharePercent ?? 15}% DAGO`;
+        const netDpp = s.dpp ?? (s.grossRevenue - s.discount);
 
         return [
           s.tenantId,
@@ -610,7 +626,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           `Rp ${s.grossRevenue.toLocaleString("id-ID")}`,
           `Rp ${(s.tenantShareAmount ?? 0).toLocaleString("id-ID")}`,
           `Rp ${(s.dagoShareAmount ?? 0).toLocaleString("id-ID")}`,
-          `Rp ${s.netRevenue.toLocaleString("id-ID")}`,
+          `Rp ${netDpp.toLocaleString("id-ID")}`,
         ];
       });
 

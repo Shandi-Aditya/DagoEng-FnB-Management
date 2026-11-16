@@ -5,6 +5,7 @@ import { Crown, Ticket, X } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -37,6 +38,8 @@ interface CartOrderSetupProps {
   appliedVoucherTitle: string | null;
   onOpenVouchers: () => void;
   onRemoveVoucher: () => void;
+  orderNotes?: string;
+  onOrderNotesChange?: (notes: string) => void;
 }
 
 /** Who the order is for: dine in table or takeaway, plus the loyalty member. */
@@ -53,6 +56,8 @@ export function CartOrderSetup({
   appliedVoucherTitle,
   onOpenVouchers,
   onRemoveVoucher,
+  orderNotes,
+  onOrderNotesChange,
 }: CartOrderSetupProps) {
   return (
     <div className="flex flex-col gap-3">
@@ -106,6 +111,16 @@ export function CartOrderSetup({
           </NativeSelect>
         </Field>
       </div>
+
+      <Field className="gap-1">
+        <FieldLabel htmlFor="pos-order-notes">Catatan pesanan</FieldLabel>
+        <Input
+          id="pos-order-notes"
+          value={orderNotes || ""}
+          onChange={(e) => onOrderNotesChange?.(e.target.value)}
+          placeholder='Contoh: "TES QA - abaikan"'
+        />
+      </Field>
 
       {selectedMember ? (
         <div className="flex items-center justify-between gap-2 rounded-md border px-2.5 py-2">

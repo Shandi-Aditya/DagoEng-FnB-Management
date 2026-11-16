@@ -404,25 +404,12 @@ export function PaymentModal({
           {activeTab === "QRIS" && (
             <div className="flex flex-col items-center justify-center space-y-4 py-2 text-center">
               <div className="relative rounded-2xl border-2 border-dashed border-primary/40 bg-card p-4 shadow-xs">
-                <div className="relative flex size-44 flex-col items-center justify-center overflow-hidden rounded-xl border bg-muted p-2 text-foreground">
-                  <div className="grid h-full w-full grid-cols-6 gap-1 p-1 opacity-90">
-                    {Array.from({ length: 36 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={cn(
-                          "rounded-xs",
-                          i % 2 === 0 || i % 7 === 0 || i < 6
-                            ? "bg-foreground"
-                            : "bg-muted-foreground/30"
-                        )}
-                      />
-                    ))}
-                  </div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="rounded-lg border bg-card p-2 shadow-xs">
-                      <QrCode className="size-8 text-primary" />
-                    </div>
-                  </div>
+                <div className="relative flex size-44 flex-col items-center justify-center overflow-hidden rounded-xl border bg-white p-2 text-foreground">
+                  <img
+                    src="/images/qris/qris-dago.jpeg"
+                    alt="QRIS Statis Dago"
+                    className="size-full object-contain"
+                  />
                 </div>
               </div>
 

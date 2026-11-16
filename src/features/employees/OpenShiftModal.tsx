@@ -35,15 +35,15 @@ export function OpenShiftModal({
   onSubmit,
 }: OpenShiftModalProps) {
   const [shiftName, setShiftName] = useState(SHIFT_OPTIONS[0]);
-  const [openingCash, setOpeningCash] = useState<number>(500000);
+  const [openingCash, setOpeningCash] = useState<number | "">("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (openingCash < 0) return;
+    if (openingCash === "" || isNaN(Number(openingCash)) || Number(openingCash) < 0) return;
 
     onSubmit({
       shiftName,
-      openingCash: Math.max(0, openingCash),
+      openingCash: Number(openingCash),
     });
 
     onClose();
@@ -91,13 +91,19 @@ export function OpenShiftModal({
               min={0}
               step={10000}
               required
-              value={openingCash}
-              onChange={(e) => setOpeningCash(Number(e.target.value))}
+              value={openingCash === "" ? "" : openingCash}
+              onChange={(e) => {
+                const val = e.target.value;
+                setOpeningCash(val === "" ? "" : Number(val));
+              }}
+              placeholder="Wajib diisi, misalnya 200000"
               className="text-xs font-mono font-medium"
             />
-            <p className="font-mono text-xs text-muted-foreground">
-              Terbaca: {formatCurrencyIDR(openingCash)}
-            </p>
+            {openingCash !== "" && (
+              <p className="font-mono text-xs text-muted-foreground">
+                Terbaca: {formatCurrencyIDR(Number(openingCash))}
+              </p>
+            )}
           </div>
 
           <DialogFooter className="border-t pt-3">
@@ -109,7 +115,15 @@ export function OpenShiftModal({
             >
               Batal
             </Button>
-            <Button type="submit" size="lg">
+            <Button
+              type="submit"
+              size="lg"
+              disabled={
+                openingCash === "" ||
+                isNaN(Number(openingCash)) ||
+                Number(openingCash) < 0
+              }
+            >
               Mulai shift
             </Button>
           </DialogFooter>

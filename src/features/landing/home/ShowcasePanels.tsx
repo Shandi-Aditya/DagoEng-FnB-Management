@@ -263,19 +263,25 @@ function EventList() {
         const row = eventNoticeRow(event);
         return (
           <li key={event.id}>
-            <Link href={`/events/${event.id}`} className="flex items-center gap-4 py-3 hover:text-primary">
-              <span className="flex w-12 shrink-0 flex-col items-center rounded-md border py-1">
-                <span className="font-mono text-base tabular-nums">{row.day}</span>
+            <Link
+              href={`/events/${event.id}`}
+              className="flex items-center gap-3 sm:gap-4 py-2.5 sm:py-3 hover:text-primary"
+            >
+              <span className="flex w-11 sm:w-12 shrink-0 flex-col items-center rounded-md border py-1">
+                <span className="font-mono text-sm sm:text-base tabular-nums">{row.day}</span>
                 <span className="text-xs text-muted-foreground">{row.month}</span>
               </span>
               <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm font-medium">{event.title}</span>
-                <span className="text-xs text-muted-foreground">
+                <span className="truncate text-xs sm:text-sm font-medium">{event.title}</span>
+                <span className="truncate text-xs text-muted-foreground">
                   {eventCategoryLabel(event.category)}, {row.time} WITA, {row.price}
                 </span>
               </span>
               {row.ticket ? (
-                <StatusBadge status={row.ticket === "tersedia" ? "success" : "neutral"}>
+                <StatusBadge
+                  status={row.ticket === "tersedia" ? "success" : "neutral"}
+                  className="hidden sm:inline-flex shrink-0"
+                >
                   {row.ticket === "tersedia" ? "Tiket tersedia" : "Habis"}
                 </StatusBadge>
               ) : null}
@@ -297,12 +303,12 @@ export function EventsPanel({
   withBottomDissolve?: boolean;
 }) {
   const card = (
-    <Card className="w-full max-w-xl rounded-2xl border border-border/60 bg-background/95 shadow-none backdrop-blur-md">
-      <CardHeader>
-        <CardTitle>Event berikutnya</CardTitle>
-        <CardDescription>Langsung dari jadwal Dago Creative Hub</CardDescription>
+    <Card className="w-full max-w-xl rounded-2xl border border-border/60 bg-background/95 shadow-none backdrop-blur-md p-3.5 sm:p-6">
+      <CardHeader className="p-0 pb-2.5 sm:pb-4">
+        <CardTitle className="text-base sm:text-lg">Event berikutnya</CardTitle>
+        <CardDescription className="text-xs sm:text-sm">Langsung dari jadwal Dago Creative Hub</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+      <CardContent className="p-0 flex flex-col gap-3 sm:gap-4">
         <EventList />
         <Button variant="outline" size="lg" render={<Link href="/events" />} nativeButton={false}>
           Semua event
@@ -313,7 +319,7 @@ export function EventsPanel({
 
   if (noPhoto) {
     return (
-      <div className={cn("relative flex items-center justify-center p-3 sm:p-6", className)}>
+      <div className={cn("relative flex items-center justify-center p-1 sm:p-6 w-full", className)}>
         {card}
       </div>
     );

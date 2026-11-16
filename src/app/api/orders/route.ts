@@ -170,6 +170,7 @@ const OrderPayloadSchema = z.object({
   items: z.array(OrderItemSchema).optional(),
   paymentStatus: z.enum(["PENDING", "PAID", "REFUNDED"]).optional(),
   paymentMethod: z.enum(["CASH", "QRIS", "EDC", "TRANSFER", "SPLIT"]).optional(),
+  notes: z.string().optional(),
   status: z
     .enum(["NEW", "CONFIRMED", "KITCHEN_RECEIVED", "COOKING", "READY", "SERVED", "COMPLETED", "CANCELLED"])
     .optional(),
@@ -260,6 +261,7 @@ export async function POST(req: NextRequest) {
       items: Array.isArray(orderData.items) ? orderData.items : undefined,
       paymentStatus: orderData.paymentStatus,
       paymentMethod: orderData.paymentMethod as any,
+      notes: orderData.notes,
       status: orderData.status,
     });
 

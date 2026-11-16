@@ -15,117 +15,8 @@ import {
   hydrateShiftsFromServer,
 } from "@/lib/shift-management";
 import { syncWithOutbox, getOutboxItems, flushOutbox } from "@/lib/sync-outbox";
-
-export const INITIAL_EMPLOYEES: EmployeeProfile[] = [
-  {
-    id: "emp-001",
-    employeeNumber: "EMP-SGR-001",
-    name: "Putu Arya",
-    role: "Store Manager",
-    department: "Management",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    contact: "+62 812-3456-7891",
-    email: "putu.arya@kopisenja.com",
-    status: "AKTIF",
-    assignedShift: "Shift Pagi (08:00 - 16:00)",
-    joinedDate: "10 Jan 2025",
-    permissions: [
-      "pos_access",
-      "pos_discount",
-      "pos_void",
-      "pos_shift_close",
-      "inventory_access",
-      "menu_master_edit",
-      "financial_reports",
-      "coworking_manage",
-      "staff_management",
-    ],
-  },
-  {
-    id: "emp-002",
-    employeeNumber: "EMP-SGR-002",
-    name: "Ni Kadek Sri",
-    role: "Head Cashier",
-    department: "Cashier",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    contact: "+62 812-3456-7892",
-    email: "kadek.sri@kopisenja.com",
-    status: "AKTIF",
-    assignedShift: "Shift Pagi (08:00 - 16:00)",
-    joinedDate: "15 Jan 2025",
-    permissions: ["pos_access", "pos_discount", "pos_shift_close"],
-  },
-  {
-    id: "emp-003",
-    employeeNumber: "EMP-SGR-003",
-    name: "Gede Agus",
-    role: "Head Chef",
-    department: "Kitchen",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    contact: "+62 812-3456-7893",
-    email: "gede.agus@kopisenja.com",
-    status: "AKTIF",
-    assignedShift: "Shift Pagi (08:00 - 16:00)",
-    joinedDate: "01 Feb 2025",
-    permissions: ["pos_access", "inventory_access"],
-  },
-  {
-    id: "emp-004",
-    employeeNumber: "EMP-SGR-004",
-    name: "Komang Bayu",
-    role: "Inventory Specialist",
-    department: "Inventory",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    contact: "+62 812-3456-7894",
-    email: "komang.bayu@kopisenja.com",
-    status: "AKTIF",
-    assignedShift: "Reguler (09:00 - 17:00)",
-    joinedDate: "01 Mar 2025",
-    permissions: ["inventory_access"],
-  },
-  {
-    id: "emp-005",
-    employeeNumber: "EMP-SGR-005",
-    name: "Made Surya",
-    role: "Floor Waiter",
-    department: "Service",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    contact: "+62 812-3456-7895",
-    email: "made.surya@kopisenja.com",
-    status: "AKTIF",
-    assignedShift: "Shift Pagi (08:00 - 16:00)",
-    joinedDate: "10 Apr 2025",
-    permissions: ["pos_access"],
-  },
-  {
-    id: "emp-006",
-    employeeNumber: "EMP-DPS-001",
-    name: "I Wayan Pratama",
-    role: "Outlet Supervisor",
-    department: "Management",
-    outletId: "outlet-dps",
-    outletName: "Denpasar",
-    contact: "+62 813-9988-7766",
-    email: "wayan.pratama@kopisenja.com",
-    status: "AKTIF",
-    assignedShift: "Shift Sore (14:00 - 22:00)",
-    joinedDate: "01 Jun 2025",
-    permissions: [
-      "pos_access",
-      "pos_discount",
-      "pos_void",
-      "pos_shift_close",
-      "inventory_access",
-      "financial_reports",
-      "coworking_manage",
-    ],
-  },
-];
+import { INITIAL_EMPLOYEES } from "@/lib/master-data-defaults";
+export { INITIAL_EMPLOYEES } from "@/lib/master-data-defaults";
 
 export const INITIAL_SHIFTS: ShiftRecord[] = [];
 
@@ -217,6 +108,20 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
               }
             })
             .catch(() => {});
+
+          // Hydrate employees from server storage (V-06)
+          fetch("/api/employees")
+            .then((res) => (res.ok ? res.json() : null))
+            .then((data) => {
+              if (data && Array.isArray(data.employees) && data.employees.length > 0) {
+                setEmployees((prev) => {
+                  const serverMap = new Map(data.employees.map((e: EmployeeProfile) => [e.id, e]));
+                  const pendingEmp = prev.filter((e) => !serverMap.has(e.id));
+                  return [...data.employees, ...pendingEmp];
+                });
+              }
+            })
+            .catch(() => {});
         });
     }
   }, []);
@@ -280,16 +185,25 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       outletName: newEmp.outletName,
     });
 
+    syncWithOutbox({
+      id: newEmp.id,
+      endpoint: "/api/employees",
+      method: "POST",
+      payload: { employee: newEmp },
+    }).catch(() => {});
+
     return newEmp;
   };
 
   const toggleEmployeeStatus = (id: string) => {
     const target = employees.find((e) => e.id === id);
     if (!target) return;
-    const nextStatus = target.status === "AKTIF" ? "CUTI" : target.status === "CUTI" ? "NON-AKTIF" : "AKTIF";
+    const nextStatus: EmployeeProfile["status"] =
+      target.status === "AKTIF" ? "CUTI" : target.status === "CUTI" ? "NON-AKTIF" : "AKTIF";
+    const updatedEmployee: EmployeeProfile = { ...target, status: nextStatus };
 
     setEmployees((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, status: nextStatus } : e))
+      prev.map((e) => (e.id === id ? updatedEmployee : e))
     );
 
     logActivity({
@@ -304,9 +218,19 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       outletId: target.outletId,
       outletName: target.outletName,
     });
+
+    syncWithOutbox({
+      id: updatedEmployee.id,
+      endpoint: "/api/employees",
+      method: "PUT",
+      payload: { employee: updatedEmployee },
+    }).catch(() => {});
   };
 
   const updateEmployee = (id: string, updates: Partial<EmployeeProfile>) => {
+    const target = employees.find((e) => e.id === id);
+    const updatedEmployee = target ? { ...target, ...updates } : updates;
+
     setEmployees((prev) =>
       prev.map((e) => (e.id === id ? { ...e, ...updates } : e))
     );
@@ -320,6 +244,13 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       reason: "Penyesuaian jabatan / hak akses staf",
       status: "SUCCESS",
     });
+
+    syncWithOutbox({
+      id,
+      endpoint: "/api/employees",
+      method: "PUT",
+      payload: { employee: updatedEmployee },
+    }).catch(() => {});
   };
 
   const deleteEmployee = (id: string) => {
@@ -340,6 +271,13 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       outletId: target.outletId,
       outletName: target.outletName,
     });
+
+    syncWithOutbox({
+      id,
+      endpoint: "/api/employees",
+      method: "DELETE",
+      payload: { id },
+    }).catch(() => {});
   };
 
   const openShift = (shiftName: string, openingCash: number, cashierName?: string): ShiftRecord => {
