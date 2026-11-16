@@ -362,7 +362,7 @@ describe("Payout Bank Guard & Empty Bank for New Organizers", () => {
         }),
       });
 
-      const res = await postPayoutHandler(req, { params: { id: apiTestEventId } });
+      const res = await postPayoutHandler(req, { params: Promise.resolve({ id: apiTestEventId }) });
       expect(res.status).toBe(400);
 
       const json = await res.json();
@@ -393,7 +393,7 @@ describe("Payout Bank Guard & Empty Bank for New Organizers", () => {
         }),
       });
 
-      const res = await postPayoutHandler(req, { params: { id: apiTestEventId } });
+      const res = await postPayoutHandler(req, { params: Promise.resolve({ id: apiTestEventId }) });
       expect(res.status).toBe(200);
 
       const json = await res.json();
@@ -430,7 +430,7 @@ describe("Payout Bank Guard & Empty Bank for New Organizers", () => {
         }),
       });
 
-      const res = await patchPayoutHandler(req, { params: { id: apiTestEventId } });
+      const res = await patchPayoutHandler(req, { params: Promise.resolve({ id: apiTestEventId }) });
       expect(res.status).toBe(400);
 
       const json = await res.json();

@@ -7,6 +7,9 @@ import {
   getRecoveryStatusMeta,
   buildSupportWhatsAppUrl,
   DEFAULT_CS_WHATSAPP_NUMBER,
+  maskEmail,
+  maskPhone,
+  buildRecoveryWhatsAppMessage,
 } from "@/features/events-tickets-recovery/ticket-recovery-domain";
 import { CONTACT } from "@/features/landing/landing-content";
 
@@ -144,4 +147,74 @@ describe("Ticket Recovery Domain Logic", () => {
       expect(DEFAULT_CS_WHATSAPP_NUMBER).toBe("6282115501995");
     });
   });
+
+  describe("maskEmail", () => {
+    it("masks email local part while preserving domain", () => {
+      expect(maskEmail("budi.santoso@gmail.com")).toBe("b***o@gmail.com");
+      expect(maskEmail("alex@example.com")).toBe("a***x@example.com");
+    });
+
+    it("handles short local parts safely", () => {
+      expect(maskEmail("me@test.com")).toBe("m***@test.com");
+      expect(maskEmail("a@test.com")).toBe("a***@test.com");
+    });
+
+    it("handles empty or invalid inputs gracefully", () => {
+      expect(maskEmail("")).toBe("");
+      expect(maskEmail("not-an-email")).toBe("not-an-email");
+    });
+  });
+
+  describe("maskPhone", () => {
+    it("masks middle digits of international phone numbers", () => {
+      expect(maskPhone("6281234567890")).toBe("6281****7890");
+      expect(maskPhone("081234567891")).toBe("0812****7891");
+    });
+
+    it("handles short or empty inputs gracefully", () => {
+      expect(maskPhone("")).toBe("");
+      expect(maskPhone("12345")).toBe("12345");
+    });
+  });
+
+  describe("buildRecoveryWhatsAppMessage", () => {
+    it("formats message for single booking correctly", () => {
+      const msg = buildRecoveryWhatsAppMessage("Budi", [
+        {
+          ticketCode: "DAGO-EVT-001",
+          eventTitle: "Workshop Kopi",
+          ticketCount: 2,
+          privateAccessUrl: "https://dagoeng.com/events/tickets/tok-123",
+        },
+      ]);
+      expect(msg).toContain("Halo Budi,");
+      expect(msg).toContain("Workshop Kopi");
+      expect(msg).toContain("DAGO-EVT-001");
+      expect(msg).toContain("2 tiket");
+      expect(msg).toContain("https://dagoeng.com/events/tickets/tok-123");
+    });
+
+    it("formats message for multiple bookings correctly", () => {
+      const msg = buildRecoveryWhatsAppMessage("", [
+        {
+          ticketCode: "DAGO-EVT-001",
+          eventTitle: "Event A",
+          ticketCount: 1,
+          privateAccessUrl: "https://dagoeng.com/events/tickets/tok-1",
+        },
+        {
+          ticketCode: "DAGO-EVT-002",
+          eventTitle: "Event B",
+          ticketCount: 3,
+          privateAccessUrl: "https://dagoeng.com/events/tickets/tok-2",
+        },
+      ]);
+      expect(msg).toContain("Halo Kak,");
+      expect(msg).toContain("1. Event A");
+      expect(msg).toContain("2. Event B");
+      expect(msg).toContain("https://dagoeng.com/events/tickets/tok-1");
+      expect(msg).toContain("https://dagoeng.com/events/tickets/tok-2");
+    });
+  });
 });
+

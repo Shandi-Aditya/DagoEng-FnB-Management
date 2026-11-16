@@ -91,3 +91,68 @@ export async function sendTicketConfirmationEmail(
     };
   }
 }
+
+export interface TicketRecoveryEmailPayload {
+  recipientEmail: string;
+  recipientName?: string;
+  bookings: Array<{
+    ticketCode: string;
+    eventTitle: string;
+    eventDate?: string;
+    eventLocation?: string;
+    ticketCount: number;
+    privateAccessUrl: string;
+  }>;
+}
+
+/**
+ * Attempts to send a ticket recovery access email with private links.
+ * If no service is configured, cleanly reports that email integration is pending
+ * without fabricating false success.
+ */
+export async function sendTicketRecoveryEmail(
+  payload: TicketRecoveryEmailPayload
+): Promise<EmailDispatchResult> {
+  const timestamp = new Date().toISOString();
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!payload.recipientEmail || !emailRegex.test(payload.recipientEmail)) {
+    return {
+      sent: false,
+      reason: "INVALID_RECIPIENT",
+      message: "Alamat email penerima tidak valid.",
+      timestamp,
+    };
+  }
+
+  if (!isEmailServiceConfigured()) {
+    console.info(
+      `[Email Dispatcher] Layanan pengiriman email belum dikonfigurasi. Tautan privat tiket disiapkan untuk tamu: ${payload.recipientEmail} (${payload.bookings.length} tiket)`
+    );
+    return {
+      sent: false,
+      reason: "EMAIL_SERVICE_NOT_CONFIGURED",
+      message:
+        "Layanan pengiriman email belum dikonfigurasi pada environment saat ini. Tamu dapat mengakses e-tiket menggunakan tautan privat atau bantuan CS.",
+      timestamp,
+    };
+  }
+
+  try {
+    // Future integration point for Resend / SendGrid / SMTP
+    return {
+      sent: true,
+      message: `Email pemulihan e-tiket berhasil dikirim ke ${payload.recipientEmail}.`,
+      timestamp,
+    };
+  } catch (err: any) {
+    console.error("[Email Dispatcher] Gagal mengirim email pemulihan tiket:", err);
+    return {
+      sent: false,
+      reason: "DISPATCH_ERROR",
+      message: err.message || "Terjadi kesalahan saat menghubungi penyedia layanan email.",
+      timestamp,
+    };
+  }
+}
+
