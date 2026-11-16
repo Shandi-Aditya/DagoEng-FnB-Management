@@ -200,6 +200,7 @@ export default function POSPage() {
   const [orderType, setOrderType] = useState<"DINE_IN" | "TAKEAWAY">("DINE_IN");
   const [selectedTable, setSelectedTable] = useState<string>("");
   const [customerName, setCustomerName] = useState<string>("");
+  const [orderNotes, setOrderNotes] = useState<string>("");
   const [selectedPromoId, setSelectedPromoId] = useState<string>("");
   const [fnbVoucherCode, setFnbVoucherCode] = useState<string>("");
   const [fnbVoucherValidationMsg, setFnbVoucherValidationMsg] = useState<{ type: "SUCCESS" | "ERROR"; text: string } | null>(null);
@@ -568,6 +569,7 @@ export default function POSPage() {
       taxRatePercent: isTaxEnabled ? Number(taxRatePercent) || 10 : 0,
       serviceChargePercent: orderType === "DINE_IN" ? Number(settings.serviceChargePercent) || 0 : 0,
       total: grandTotal,
+      notes: orderNotes.trim() || undefined,
       paymentMethod: paymentData.method,
       paymentReference: paymentData.qrisVerification?.referenceNumber,
       qrisVerification: paymentData.qrisVerification,
@@ -606,6 +608,7 @@ export default function POSPage() {
       })),
       cashierName: user?.name || "Kasir Bertugas",
       timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
+      kitchenNotes: orderNotes.trim() || undefined,
     };
     setKitchenModalTicket(kitchenTicket);
 
@@ -762,6 +765,7 @@ export default function POSPage() {
     setIsReceiptModalOpen(false);
     setCartItems([]);
     setCustomerName("");
+    setOrderNotes("");
     setSelectedMemberId("");
     setAppliedVoucher(null);
     setSelectedPromoId("");
@@ -1197,6 +1201,8 @@ export default function POSPage() {
                 appliedVoucherTitle={appliedVoucher?.title ?? null}
                 onOpenVouchers={() => setIsVoucherModalOpen(true)}
                 onRemoveVoucher={() => setAppliedVoucher(null)}
+                orderNotes={orderNotes}
+                onOrderNotesChange={setOrderNotes}
               />
               <Separator />
               <div className="max-h-80 overflow-y-auto">

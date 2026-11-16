@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/components/app/status-badge";
+import { resolveItemTenantId } from "@/lib/settlement";
 import type { OrderItemRecord, OrderRecord, OrderStatus, SLAStatus } from "@/types/order";
 import type { KitchenTicketData } from "@/types/printer";
 
@@ -58,7 +59,11 @@ export function stationFor(productName: string): Exclude<KitchenStation, "ALL"> 
 
 /** Items a kitchen should see on a ticket: a tenant only sees its own. */
 export function ticketItems(order: OrderRecord, tenantId: string | undefined): OrderItemRecord[] {
-  return tenantId ? order.items.filter((item) => item.tenantId === tenantId) : order.items;
+  if (!tenantId || tenantId === "ALL") return order.items;
+  return order.items.filter((item) => {
+    const itemTenant = resolveItemTenantId(item);
+    return itemTenant === tenantId;
+  });
 }
 
 function matchesType(order: OrderRecord, type: KitchenTypeFilter): boolean {
