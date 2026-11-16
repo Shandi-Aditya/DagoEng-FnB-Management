@@ -1,5 +1,4 @@
 <svg viewBox="0 0 280 272" fill="none" xmlns="http://www.w3.org/2000/svg" shape-rendering="geometricPrecision">
-<g filter="url(#filter0_dd_44_2)">
 <path d="M209.832 59.1032C206.864 57.0322 202.545 56.126 198.961 56.1663C173.552 56.4519 174.204 109.557 179.045 121.04C183.886 132.522 181.696 136.603 162.308 144.411C142.92 152.219 153.441 163.323 156.437 170.075C159.433 176.827 164.717 182.305 150.781 190.404C136.845 198.503 142.237 202.369 142.237 202.369C142.237 202.369 171.231 227.53 169.034 218.892C166.837 210.254 168.427 196.808 192.325 193.834C202.619 192.552 218.031 186.326 220.625 174.978C221.229 172.336 221.474 168.355 220.634 165.741C219.47 162.114 216.803 159.4 215.17 156.03C211.363 148.178 218.752 141.591 222.839 135.798C224.973 132.773 227.1 129.677 228.647 126.301C231.859 119.293 229.861 112.223 225.256 106.385C223.048 103.585 220.06 100.667 218.913 97.2055C217.681 93.4869 218.057 88.237 217.955 84.3156C217.875 81.2403 217.916 78.1667 217.492 75.1121C216.703 69.4298 214.794 62.5654 209.832 59.1032Z" fill="url(#paint0_linear_44_2)"/>
 <mask id="mask0_44_2" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="141" y="56" width="90" height="165">
 <path d="M209.832 59.1032C206.864 57.0322 202.545 56.126 198.961 56.1663C173.552 56.4519 174.204 109.557 179.045 121.04C183.886 132.522 181.696 136.603 162.308 144.411C142.92 152.219 153.441 163.323 156.437 170.075C159.433 176.827 164.717 182.305 150.781 190.404C136.845 198.503 142.237 202.369 142.237 202.369C142.237 202.369 171.231 227.53 169.034 218.892C166.837 210.254 168.427 196.808 192.325 193.834C202.619 192.552 218.031 186.326 220.625 174.978C221.229 172.336 221.474 168.355 220.634 165.741C219.47 162.114 216.803 159.4 215.17 156.03C211.363 148.178 218.752 141.591 222.839 135.798C224.973 132.773 227.1 129.677 228.647 126.301C231.859 119.293 229.861 112.223 225.256 106.385C223.048 103.585 220.06 100.667 218.913 97.2055C217.681 93.4869 218.057 88.237 217.955 84.3156C217.875 81.2403 217.916 78.1667 217.492 75.1121C216.703 69.4298 214.794 62.5654 209.832 59.1032Z" fill="white" style="fill:white;fill-opacity:1;"/>
@@ -164,25 +163,7 @@
 <path d="M223.92 54.7532C225.693 55.5411 227.244 55.5577 228.572 54.8028C228.961 54.5821 229.154 54.1284 229.066 53.6904L226.179 39.3359L223.314 53.582C223.216 54.0658 223.469 54.5528 223.92 54.7532Z" fill="url(#paint68_linear_44_2)"/>
 <path d="M198.996 34.0391L226.599 36.9722V41.7605H225.781L225.697 37.5641L198.996 34.0391Z" fill="url(#paint69_linear_44_2)"/>
 <path opacity="0.6" d="M162.883 42.2131C162.883 62.1616 179.052 78.3309 199.001 78.3309C206.113 78.3309 212.747 76.274 218.337 72.7196C214.941 63.4801 205.122 53.5621 194.957 47.3462C176.141 35.8425 190.44 15.0571 198.006 6.10938C178.518 6.63673 162.883 22.5985 162.883 42.2131Z" fill="white" style="fill:white;fill-opacity:1;"/>
-</g>
 <defs>
-<filter id="filter0_dd_44_2" x="-0.000937104" y="-7.78437e-05" width="279.053" height="271.152" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-<feFlood flood-opacity="0" result="BackgroundImageFix"/>
-<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
-<feMorphology radius="2.28" operator="dilate" in="SourceAlpha" result="effect1_dropShadow_44_2"/>
-<feOffset/>
-<feComposite in2="hardAlpha" operator="out"/>
-<feColorMatrix type="matrix" values="0 0 0 0 0.93 0 0 0 0 1 0 0 0 0 0.96 0 0 0 1 0"/>
-<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_44_2"/>
-<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
-<feMorphology radius="1.14" operator="dilate" in="SourceAlpha" result="effect2_dropShadow_44_2"/>
-<feOffset dy="9.12"/>
-<feGaussianBlur stdDeviation="5.7"/>
-<feComposite in2="hardAlpha" operator="out"/>
-<feColorMatrix type="matrix" values="0 0 0 0 0.01 0 0 0 0 0.22 0 0 0 0 0.13 0 0 0 0.38 0"/>
-<feBlend mode="normal" in2="effect1_dropShadow_44_2" result="effect2_dropShadow_44_2"/>
-<feBlend mode="normal" in="SourceGraphic" in2="effect2_dropShadow_44_2" result="shape"/>
-</filter>
 <linearGradient id="paint0_linear_44_2" x1="193.638" y1="44.5955" x2="171.149" y2="371.924" gradientUnits="userSpaceOnUse">
 <stop stop-color="#FFC444" style="stop-color:#FFC444;stop-color:color(display-p3 1.0000 0.7686 0.2667);stop-opacity:1;"/>
 <stop offset="0.9964" stop-color="#F36F56" style="stop-color:#F36F56;stop-color:color(display-p3 0.9529 0.4353 0.3373);stop-opacity:1;"/>

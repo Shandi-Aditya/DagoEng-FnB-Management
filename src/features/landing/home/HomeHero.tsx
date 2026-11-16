@@ -135,8 +135,8 @@ export function HomeHero() {
       <div
         className={`flex max-w-4xl flex-col items-center gap-6 text-center ${ENTER}`}
       >
-        <h1 className="text-4xl font-medium tracking-tight text-balance text-center sm:text-6xl leading-[1.2] sm:leading-[1.2]">
-          <span className="whitespace-nowrap">
+        <h1 className="text-[1.95rem] font-medium tracking-tight text-balance text-center sm:text-6xl leading-[1.2] sm:leading-[1.2]">
+          <span className="inline-block sm:inline whitespace-nowrap">
             <span className="text-unit-coworking">Kerja</span>
             <Hero3dBadge
               src="/kerjahero.svg"
@@ -145,7 +145,7 @@ export function HomeHero() {
               tilt="right"
             />
           </span>{" "}
-          <span className="whitespace-nowrap">
+          <span className="inline-block sm:inline whitespace-nowrap">
             <span className="text-unit-fnb">makan</span>
             <Hero3dBadge
               src="/makanhero.svg"
@@ -154,17 +154,21 @@ export function HomeHero() {
               tilt="left"
             />
           </span>{" "}
-          <span>dan ikuti </span>
-          <span className="whitespace-nowrap">
-            <span className="text-unit-event">kegiatan</span>
-            <Hero3dBadge
-              src="/kegiatanhero.svg"
-              alt="Kegiatan"
-              unit="event"
-              tilt="right"
-            />
+          <span className="inline-block sm:inline whitespace-nowrap sm:whitespace-normal">
+            dan ikuti{" "}
+            <span className="inline-block sm:inline whitespace-nowrap">
+              <span className="text-unit-event">kegiatan</span>
+              <Hero3dBadge
+                src="/kegiatanhero.svg"
+                alt="Kegiatan"
+                unit="event"
+                tilt="right"
+              />
+            </span>
           </span>{" "}
-          <span>di satu tempat</span>
+          <span className="inline-block sm:inline whitespace-nowrap">
+            di satu tempat
+          </span>
         </h1>
         <p className="max-w-xl text-base text-pretty text-muted-foreground sm:text-lg">
           Ruang kerja per jam, 4 mitra kuliner, dan event komunitas di Singaraja.
@@ -193,7 +197,7 @@ export function HomeHero() {
         onValueChange={(value) => setShowcase(value as ShowcaseId)}
         className={`w-full flex flex-col items-center gap-6 ${ENTER} delay-200`}
       >
-        <TabsList className="h-auto flex-wrap justify-center gap-2 bg-transparent p-0">
+        <TabsList className="!h-auto group-data-horizontal/tabs:!h-auto flex-wrap justify-center gap-2 bg-transparent p-0 w-full max-w-full">
           {SHOWCASE_TABS.map((tab) => (
             <TabsTrigger key={tab.id} value={tab.id} className={CHIP}>
               {tab.icon}
