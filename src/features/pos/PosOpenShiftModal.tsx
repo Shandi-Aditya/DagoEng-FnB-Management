@@ -25,8 +25,8 @@ interface PosOpenShiftModalProps {
   isSubmitting: boolean;
   shiftName: string;
   onShiftNameChange: (name: string) => void;
-  openingCash: number;
-  onOpeningCashChange: (cash: number) => void;
+  openingCash: number | "";
+  onOpeningCashChange: (cash: number | "") => void;
   onSubmit: (e: React.FormEvent) => void;
 }
 
@@ -84,10 +84,12 @@ export function PosOpenShiftModal({
               required
               min={0}
               step={10000}
-              value={openingCash || ""}
-              onChange={(e) => onOpeningCashChange(Number(e.target.value))}
+              value={openingCash === "" ? "" : openingCash}
+              onChange={(e) =>
+                onOpeningCashChange(e.target.value === "" ? "" : Number(e.target.value))
+              }
               disabled={isSubmitting}
-              placeholder="Misalnya 500000"
+              placeholder="Wajib diisi, misalnya 200000"
               className="font-mono tabular-nums"
             />
 
@@ -128,9 +130,18 @@ export function PosOpenShiftModal({
             >
               Batal
             </Button>
-            <Button type="submit" size="lg" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              size="lg"
+              disabled={
+                isSubmitting ||
+                openingCash === "" ||
+                isNaN(Number(openingCash)) ||
+                Number(openingCash) < 0
+              }
+            >
               {isSubmitting ? (
-                <span>Membuka shift</span>
+                <span>Membuka shift...</span>
               ) : (
                 <span>Buka shift dan mulai transaksi</span>
               )}

@@ -146,9 +146,14 @@ export default function POSPage() {
   // Shift & Cash Drawer Quick Controls
   const [isPosOpenShiftModalOpen, setIsPosOpenShiftModalOpen] = useState<boolean>(false);
   const [posOpenShiftName, setPosOpenShiftName] = useState<string>("Shift Pagi (08:00 - 16:00)");
-  const [posOpeningCashInput, setPosOpeningCashInput] = useState<number>(500000);
+  const [posOpeningCashInput, setPosOpeningCashInput] = useState<number | "">("");
   const [isSubmittingShift, setIsSubmittingShift] = useState<boolean>(false);
   const [previewSpacePhoto, setPreviewSpacePhoto] = useState<CoworkingSpaceItem | null>(null);
+
+  const handleOpenShiftModal = () => {
+    setPosOpeningCashInput("");
+    setIsPosOpenShiftModalOpen(true);
+  };
 
   // Mount state for SSR Hydration safety
   const [isMounted, setIsMounted] = useState(false);
@@ -904,7 +909,7 @@ export default function POSPage() {
     });
     if (!activeShift) {
       notify.warning("Shift kasir belum dibuka", "Buka shift dengan modal awal sebelum menerima pembayaran.");
-      setIsPosOpenShiftModalOpen(true);
+      handleOpenShiftModal();
       return;
     }
 
@@ -1048,7 +1053,7 @@ export default function POSPage() {
     }
     if (!activeShift) {
       notify.warning("Shift kasir belum dibuka", "Buka shift dengan modal awal sebelum menerima pembayaran.");
-      setIsPosOpenShiftModalOpen(true);
+      handleOpenShiftModal();
       return;
     }
     setIsPaymentModalOpen(true);
@@ -1065,7 +1070,7 @@ export default function POSPage() {
         onModeChange={setPosMode}
         cartCount={cartCount}
         activeShift={activeShift}
-        onOpenShift={() => setIsPosOpenShiftModalOpen(true)}
+        onOpenShift={handleOpenShiftModal}
         onCloseShift={() => setIsClosingShiftModalOpen(true)}
       />
 
@@ -1471,38 +1476,36 @@ export default function POSPage() {
         onShiftNameChange={setPosOpenShiftName}
         openingCash={posOpeningCashInput}
         onOpeningCashChange={setPosOpeningCashInput}
-        onSubmit={async (e) => {
+        onSubmit={(e) => {
           e.preventDefault();
           if (isSubmittingShift) return;
-          setIsSubmittingShift(true);
 
-          const targetOutlet = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
-          const targetCashier = user?.name || "Kasir Bertugas";
-
-          try {
-            const res = await fetch("/api/shifts", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                action: "OPEN",
-                shiftName: posOpenShiftName,
-                startingCash: Number(posOpeningCashInput) || 0,
-                cashierName: targetCashier,
-                outletId: targetOutlet,
-              }),
-            });
-            const data = await res.json().catch(() => null);
-            if (res.status === 409) {
-              notify.warning(data?.error || "Shift kasir sudah berjalan");
-            }
-          } catch (err) {
-            console.warn("[Shift Open Sync Warn]:", err);
+          if (
+            posOpeningCashInput === "" ||
+            isNaN(Number(posOpeningCashInput)) ||
+            Number(posOpeningCashInput) < 0
+          ) {
+            notify.warning("Modal awal wajib diisi", "Masukkan jumlah uang kas awal di laci kasir (minimal Rp 0).");
+            return;
           }
 
-          openShift(posOpenShiftName, Number(posOpeningCashInput) || 0, targetCashier);
-          setIsSubmittingShift(false);
-          setIsPosOpenShiftModalOpen(false);
-          notify.success(`${posOpenShiftName} dibuka`, `Modal kas ${formatCurrencyIDR(Number(posOpeningCashInput) || 0)}.`);
+          setIsSubmittingShift(true);
+
+          const targetCashier = user?.name || "Kasir Bertugas";
+          const cashAmount = Number(posOpeningCashInput);
+
+          try {
+            openShift(posOpenShiftName, cashAmount, targetCashier);
+            setIsPosOpenShiftModalOpen(false);
+            notify.success(
+              `${posOpenShiftName} dibuka`,
+              `Modal kas ${formatCurrencyIDR(cashAmount)}.`
+            );
+          } catch (err: any) {
+            notify.error("Gagal membuka shift", err?.message || "Terjadi kesalahan saat membuka shift.");
+          } finally {
+            setIsSubmittingShift(false);
+          }
         }}
       />
     </div>
