@@ -52,6 +52,8 @@ export interface TenantOperationConfig {
   isAcceptingOrders?: boolean;
   temporaryClosedReason?: string;
   estimatedReopenTime?: string;
+  manualOverride?: "OPEN" | "CLOSED" | null;
+  updatedAt?: string;
 }
 
 /**
@@ -397,6 +399,28 @@ export function isTenantAcceptingOrders(
   if (!config) {
     // If not configured, default to open
     return { isOpen: true, reason: "Mitra beroperasi normal" };
+  }
+
+  // 1. Tombol Buka/Tutup manual mengalahkan jadwal sampai di-reset (Task V-03)
+  if (config.manualOverride === "OPEN") {
+    return {
+      isOpen: true,
+      reason: "Buka manual (override jadwal operasional oleh operator)",
+    };
+  }
+
+  if (config.manualOverride === "CLOSED") {
+    const reopenEstimate =
+      config.estimatedReopenTime ||
+      (config.openTime ? `Buka kembali pk ${config.openTime} WITA` : "Estimasi buka segera");
+    return {
+      isOpen: false,
+      reason:
+        config.temporaryClosedReason ||
+        config.notes ||
+        "Mitra sedang Tutup Sementara (manual override oleh operator)",
+      estimatedReopenTime: reopenEstimate,
+    };
   }
 
   if (!config.isOpenOrder) {

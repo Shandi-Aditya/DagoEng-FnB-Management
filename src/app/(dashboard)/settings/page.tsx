@@ -183,6 +183,7 @@ export default function SettingsPage() {
   const [bankAccountNumber, setBankAccountNumber] = useState<string>("");
   const [bankAccountHolder, setBankAccountHolder] = useState<string>("");
   const [bankFormError, setBankFormError] = useState<string>("");
+  const [isSavingTenantOps, setIsSavingTenantOps] = useState(false);
 
   // Flexible Revenue Sharing
   const [revenueSplits, setRevenueSplits] = useState<Record<string, TenantRevenueSplitConfig>>({});
@@ -1004,6 +1005,27 @@ export default function SettingsPage() {
     notify.success("Pengaturan mitra disimpan", `Profil dan status operasional ${tenantBrandName} disimpan.`);
   };
 
+  const handleSaveTenantOperations = async () => {
+    setIsSavingTenantOps(true);
+    updateSettings({ tenantOperations: tenantOps });
+    try {
+      const res = await fetch("/api/tenant/operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantOperations: tenantOps }),
+      });
+      if (res.ok) {
+        notify.success("Jam operasional disimpan", "Jam buka-tutup mitra tersimpan ke server.");
+      } else {
+        notify.warning("Penyimpanan lokal berhasil", "Pembaruan tersimpan di browser, gagal sinkronisasi server.");
+      }
+    } catch {
+      notify.warning("Penyimpanan lokal berhasil", "Pembaruan tersimpan di browser, gagal sinkronisasi server.");
+    } finally {
+      setIsSavingTenantOps(false);
+    }
+  };
+
   // Filtered Products
   const myTenantId = user?.tenant?.id || "";
   const displayedProducts = filterAndSortProducts(filteredProducts, {
@@ -1346,11 +1368,46 @@ export default function SettingsPage() {
                   },
                 }));
               }}
-              onToggleTenantOrderStatus={(tId, name, next) => {
+              onToggleTenantOrderStatus={async (tId, name, next) => {
+                const nextManualOverride: "OPEN" | "CLOSED" = next ? "OPEN" : "CLOSED";
+                const currentOp = tenantOps[tId] || {
+                  tenantId: tId,
+                  tenantName: name,
+                  openTime: "08:00",
+                  closeTime: "21:00",
+                };
+                const updated = {
+                  ...tenantOps,
+                  [tId]: {
+                    ...currentOp,
+                    tenantId: tId,
+                    tenantName: name,
+                    isOpenOrder: next,
+                    isAcceptingOrders: next,
+                    manualOverride: nextManualOverride,
+                  },
+                };
+                setTenantOps(updated);
                 setTenantStatus(tId, next ? "ACTIVE" : "INACTIVE");
                 refreshAllTenantStatuses();
-                notify.success("Status pesanan diubah", `${name}: ${next ? "Menerima pesanan" : "Tutup sementara"}.`);
+
+                updateSettings({ tenantOperations: updated });
+
+                try {
+                  await fetch("/api/tenant/operations", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ tenantOperations: updated }),
+                  });
+                } catch {}
+
+                notify.success(
+                  "Status pesanan diubah",
+                  `${name}: ${next ? "Buka (override manual)" : "Tutup sementara (override manual)"}.`
+                );
               }}
+              onSaveTenantOperations={handleSaveTenantOperations}
+              isSavingTenantOperations={isSavingTenantOps}
               revenueSplits={revenueSplits}
               revenueSplitErrors={revenueSplitErrors}
               splitSaveFeedback={splitSaveFeedback}

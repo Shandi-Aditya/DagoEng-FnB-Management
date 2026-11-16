@@ -130,6 +130,24 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsInitialized(true);
     }
+
+    // Hydrate tenant operations from persistent server storage (Task V-03)
+    if (typeof window !== "undefined") {
+      fetch("/api/tenant/operations")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.tenantOperations) {
+            setSettings((prev) => ({
+              ...prev,
+              tenantOperations: {
+                ...prev.tenantOperations,
+                ...data.tenantOperations,
+              },
+            }));
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -150,6 +168,15 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const newDesc = `PB1: ${nextTax}%, Service: ${nextService}%, Lang: ${nextLang}, Curr: ${nextCurr}`;
 
     setSettings((prev) => ({ ...prev, ...newSettings }));
+
+    // Persist tenant operational changes to server endpoint (Task V-03)
+    if (newSettings.tenantOperations && typeof window !== "undefined") {
+      fetch("/api/tenant/operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantOperations: newSettings.tenantOperations }),
+      }).catch((err) => console.warn("[SettingsContext] Failed to persist tenantOperations to server", err));
+    }
 
     // Log the configuration changes
     logActivity({

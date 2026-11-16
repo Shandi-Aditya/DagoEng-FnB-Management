@@ -77,6 +77,8 @@ export interface PartnersAdminTabProps {
   tenantOps: Record<string, TenantOperationConfig>;
   onUpdateTenantOperation: (tenantId: string, field: keyof TenantOperationConfig, value: unknown) => void;
   onToggleTenantOrderStatus: (tenantId: string, name: string, nextAccepting: boolean) => void;
+  onSaveTenantOperations?: () => void;
+  isSavingTenantOperations?: boolean;
   revenueSplits: Record<string, TenantRevenueSplitConfig>;
   revenueSplitErrors: Record<string, string>;
   splitSaveFeedback: string;
@@ -131,6 +133,8 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
     tenantOps,
     onUpdateTenantOperation,
     onToggleTenantOrderStatus,
+    onSaveTenantOperations,
+    isSavingTenantOperations,
     revenueSplits,
     revenueSplitErrors,
     splitSaveFeedback,
@@ -454,78 +458,107 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
       {/* SUB-TAB 2: OPERASIONAL & BAGI HASIL F&B */}
       {partnerSubTab === "BAGI_HASIL_FNB" ? (
         <div className="flex flex-col gap-6">
-          <div className="overflow-hidden rounded-lg border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Mitra F&B</TableHead>
-                  <TableHead className="hidden sm:table-cell">Jam buka–tutup</TableHead>
-                  <TableHead>Terima pesanan</TableHead>
-                  <TableHead className="w-0 text-right">
-                    <span className="sr-only">Aksi</span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {localTenants.map((t) => {
-                  const op = tenantOps[t.id] || {
-                    tenantId: t.id,
-                    tenantName: t.name,
-                    isAcceptingOrders: (allTenantStatuses[t.id] || "ACTIVE") === "ACTIVE",
-                    openTime: "08:00",
-                    closeTime: "21:00",
-                  };
-                  const isAccepting = op.isAcceptingOrders;
+          <div className="flex flex-col gap-3 rounded-lg border bg-card p-4">
+            <div className="flex flex-row flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Jam operasional & status mitra</h3>
+                <p className="text-xs text-muted-foreground">
+                  Atur jam operasional rutin. Tombol Buka/Tutup manual mengalahkan jadwal operasional.
+                </p>
+              </div>
+              {onSaveTenantOperations && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={onSaveTenantOperations}
+                  disabled={isSavingTenantOperations}
+                >
+                  <Save />
+                  <span>{isSavingTenantOperations ? "Menyimpan..." : "Simpan jam operasional"}</span>
+                </Button>
+              )}
+            </div>
+            <div className="overflow-hidden rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Mitra F&B</TableHead>
+                    <TableHead className="hidden sm:table-cell">Jam buka–tutup</TableHead>
+                    <TableHead>Terima pesanan</TableHead>
+                    <TableHead className="w-0 text-right">
+                      <span className="sr-only">Aksi</span>
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {localTenants.map((t) => {
+                    const op = tenantOps[t.id] || {
+                      tenantId: t.id,
+                      tenantName: t.name,
+                      isAcceptingOrders: (allTenantStatuses[t.id] || "ACTIVE") === "ACTIVE",
+                      openTime: "08:00",
+                      closeTime: "21:00",
+                    };
+                    const isAccepting = op.manualOverride
+                      ? op.manualOverride === "OPEN"
+                      : (op.isAcceptingOrders ?? true);
 
-                  return (
-                    <TableRow key={t.id}>
-                      <TableCell>
-                        <p className="text-sm font-medium text-foreground">{t.name}</p>
-                        <p className="text-xs text-muted-foreground">{t.badge}</p>
-                      </TableCell>
+                    return (
+                      <TableRow key={t.id}>
+                        <TableCell>
+                          <p className="text-sm font-medium text-foreground">{t.name}</p>
+                          <p className="text-xs text-muted-foreground">{t.badge}</p>
+                        </TableCell>
 
-                      <TableCell className="hidden sm:table-cell">
-                        <div className="flex items-center gap-1.5">
-                          <Input
-                            type="time"
-                            value={op.openTime || "08:00"}
-                            onChange={(e) => onUpdateTenantOperation(t.id, "openTime", e.target.value)}
-                            aria-label={`Jam buka ${t.name}`}
-                            className="w-28 font-mono tabular-nums"
-                          />
-                          <span className="text-muted-foreground">–</span>
-                          <Input
-                            type="time"
-                            value={op.closeTime || "21:00"}
-                            onChange={(e) => onUpdateTenantOperation(t.id, "closeTime", e.target.value)}
-                            aria-label={`Jam tutup ${t.name}`}
-                            className="w-28 font-mono tabular-nums"
-                          />
-                        </div>
-                      </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              type="time"
+                              value={op.openTime || "08:00"}
+                              onChange={(e) => onUpdateTenantOperation(t.id, "openTime", e.target.value)}
+                              aria-label={`Jam buka ${t.name}`}
+                              className="w-28 font-mono tabular-nums"
+                            />
+                            <span className="text-muted-foreground">–</span>
+                            <Input
+                              type="time"
+                              value={op.closeTime || "21:00"}
+                              onChange={(e) => onUpdateTenantOperation(t.id, "closeTime", e.target.value)}
+                              aria-label={`Jam tutup ${t.name}`}
+                              className="w-28 font-mono tabular-nums"
+                            />
+                          </div>
+                        </TableCell>
 
-                      <TableCell>
-                        <StatusBadge status={isAccepting ? "success" : "destructive"}>
-                          {isAccepting ? "Buka" : "Tutup sementara"}
-                        </StatusBadge>
-                      </TableCell>
+                        <TableCell>
+                          <StatusBadge status={isAccepting ? "success" : "destructive"}>
+                            {op.manualOverride === "OPEN"
+                              ? "Buka (Manual)"
+                              : op.manualOverride === "CLOSED"
+                                ? "Tutup (Manual)"
+                                : isAccepting
+                                  ? "Buka"
+                                  : "Tutup sementara"}
+                          </StatusBadge>
+                        </TableCell>
 
-                      <TableCell className="text-right">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => onToggleTenantOrderStatus(t.id, t.name, !isAccepting)}
-                        >
-                          <Power />
-                          <span>{isAccepting ? "Tutup" : "Buka"}</span>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => onToggleTenantOrderStatus(t.id, t.name, !isAccepting)}
+                          >
+                            <Power />
+                            <span>{isAccepting ? "Tutup" : "Buka"}</span>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </div>
 
           <Card>
