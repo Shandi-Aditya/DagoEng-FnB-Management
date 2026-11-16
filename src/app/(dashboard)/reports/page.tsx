@@ -22,11 +22,12 @@ import {
 } from "@/features/reports/reports-domain";
 import StructuredReportPDFModal from "@/features/reports/StructuredReportPDFModal";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
+import { exportTransactionReportExcel } from "@/lib/transaction-export-template";
 import { calculateSettlement } from "@/lib/settlement";
 import type { EventTicketOrder } from "@/types/event";
 
 export default function ReportsPage() {
-  const { formattedRangeLabel } = useDateFilter();
+  const { formattedRangeLabel, startDate, endDate } = useDateFilter();
   const { activeOutlet, activeOutletId } = useOutlet();
   const { user } = useAuth();
   const { orders } = useOrders();
@@ -122,7 +123,28 @@ export default function ReportsPage() {
     notify.success("Laporan diekspor ke CSV", currentReport.title);
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcelTemplate = async () => {
+    try {
+      await exportTransactionReportExcel({
+        orders: filteredOrders,
+        products: filteredProducts,
+        startDate,
+        endDate,
+        outletName: activeOutlet?.name,
+      });
+      notify.success("Laporan transaksi template diekspor ke Excel (.xlsx)", "3 Sheet: transaction, detail, tenant shares");
+    } catch (err) {
+      console.error("Gagal mengekspor laporan transaksi Excel", err);
+      notify.error("Gagal mengekspor laporan transaksi ke Excel");
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (selectedReportType === "SALES") {
+      await handleExportExcelTemplate();
+      return;
+    }
+
     downloadExcel(
       `Laporan_${selectedReportType}_${activeOutlet?.name || "All"}_${Date.now()}`,
       currentReport.title.slice(0, 30),

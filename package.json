@@ -30,6 +30,7 @@
     "cn": "^0.5.2",
     "cookie": "^1.0.2",
     "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
     "html5-qrcode": "^2.3.8",
     "lucide-react": "^1.71.0",
     "next": "^15.5.29",
