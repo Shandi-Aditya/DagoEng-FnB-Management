@@ -1,3 +1,5 @@
+import type { QRISVerificationDetail } from "@/lib/qris-verification";
+
 export type PresetSpaceType = "HOT_DESK" | "DEDICATED_DESK" | "MEETING_ROOM" | "PRIVATE_POD";
 export type SpaceType = PresetSpaceType | (string & {});
 
@@ -66,6 +68,7 @@ export interface CoworkingBooking {
   checkInStatus: "RESERVED" | "CHECKED_IN" | "COMPLETED" | "CANCELLED";
   fnbVoucherApplied?: string;
   notes?: string;
+  qrisVerification?: QRISVerificationDetail;
 }
 
 export interface CoworkingMembershipPlan {

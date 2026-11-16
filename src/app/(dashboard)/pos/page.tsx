@@ -92,6 +92,8 @@ import { CoworkingToolbar } from "@/features/pos/CoworkingToolbar";
 import { CoworkingRoomCard } from "@/features/pos/CoworkingRoomCard";
 import { CoworkingBookingPanel } from "@/features/pos/CoworkingBookingPanel";
 import { CoworkingPhotoModal } from "@/features/pos/CoworkingPhotoModal";
+import { CoworkingQrisModal } from "@/features/coworking/CoworkingQrisModal";
+import { CoworkingBooking } from "@/types/coworking";
 import { PosVoucherModal } from "@/features/pos/PosVoucherModal";
 import { PosOpenShiftModal } from "@/features/pos/PosOpenShiftModal";
 import {
@@ -142,6 +144,8 @@ export default function POSPage() {
   const [cwVoucherValidationMsg, setCwVoucherValidationMsg] = useState<{ type: "SUCCESS" | "ERROR"; text: string } | null>(null);
   const [lastCoworkReceiptData, setLastCoworkReceiptData] = useState<CoworkingReceiptData | null>(null);
   const [isCoworkReceiptModalOpen, setIsCoworkReceiptModalOpen] = useState<boolean>(false);
+  const [pendingCwQrisBooking, setPendingCwQrisBooking] = useState<CoworkingBooking | null>(null);
+  const [isCwQrisModalOpen, setIsCwQrisModalOpen] = useState<boolean>(false);
 
   // Shift & Cash Drawer Quick Controls
   const [isPosOpenShiftModalOpen, setIsPosOpenShiftModalOpen] = useState<boolean>(false);
@@ -919,6 +923,7 @@ export default function POSPage() {
     }
 
     const effectiveCompany = cwUsageType === "GROUP" ? (cwCompanyName.trim() || "Group / Company") : "Personal";
+    const isQris = cwPaymentMethod === "QRIS";
 
     let createdBooking: any;
     try {
@@ -938,14 +943,25 @@ export default function POSPage() {
         discount: cwPricing.discountAmount,
         totalAmount: cwPricing.total,
         paymentMethod: cwPaymentMethod,
-        paidAmount: cwPricing.total,
-        remainingAmount: 0,
-        paymentStatus: "PAID",
+        paidAmount: isQris ? 0 : cwPricing.total,
+        remainingAmount: isQris ? cwPricing.total : 0,
+        paymentStatus: isQris ? "PENDING" : "PAID",
         fnbVoucherApplied: cwAppliedPromo?.code,
         notes: cwNotes || undefined,
       });
     } catch (err: any) {
       notify.error("Booking gagal", err.message);
+      return;
+    }
+
+    if (isQris) {
+      // QRIS tidak boleh langsung lunas tanpa konfirmasi supervisor (Task V-05)
+      setPendingCwQrisBooking(createdBooking);
+      setIsCwQrisModalOpen(true);
+      notify.warning(
+        "Menunggu konfirmasi QRIS",
+        `Booking ${createdBooking.bookingCode} dibuat. Tampilkan QRIS statis dan minta persetujuan supervisor.`
+      );
       return;
     }
 
@@ -1021,6 +1037,68 @@ export default function POSPage() {
     setCwSelectedSpaceId("");
     setIsManualTimeSet(false);
     notify.success(`Booking ${createdBooking.bookingCode} tersimpan`);
+  };
+
+  const handleCwQrisSuccess = (verifiedBooking: CoworkingBooking) => {
+    if (cwAppliedPromo?.id) {
+      redeemPromo(cwAppliedPromo.id, verifiedBooking.guestPhone || "cw-guest");
+    }
+
+    if (cwCustomerType === "MEMBER" && cwSelectedMember) {
+      const earnedPoints = Math.floor(verifiedBooking.totalAmount / 1000);
+      if (earnedPoints > 0) {
+        addPoints(cwSelectedMember.id, earnedPoints, `Booking Coworking #${verifiedBooking.bookingCode}`);
+      }
+    }
+
+    // Record Shift Transaction for Co-Working Payment
+    recordShiftTransaction(
+      0,
+      verifiedBooking.totalAmount,
+      activeOutletId,
+      verifiedBooking.id ? `cw-${verifiedBooking.id}` : undefined
+    );
+
+    const endTimeFormatted = calculateEndTime(cwStartTime, cwDuration);
+    const cwPublisher = resolveCoworkingReceiptPublisher(activeOutlet);
+    const coworkReceipt: CoworkingReceiptData = {
+      bookingCode: verifiedBooking.bookingCode,
+      transactionDate: new Date().toLocaleString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      }) + " WITA",
+      guestName: verifiedBooking.guestName,
+      guestPhone: verifiedBooking.guestPhone,
+      guestEmail: verifiedBooking.guestEmail,
+      company: verifiedBooking.company,
+      spaceName: verifiedBooking.spaceName,
+      spaceType: verifiedBooking.spaceType,
+      outletName: cwPublisher.outletName,
+      outletAddress: cwPublisher.outletAddress,
+      outletPhone: cwPublisher.outletPhone,
+      bookingDate: verifiedBooking.date,
+      startTime: verifiedBooking.startTime,
+      endTime: endTimeFormatted,
+      duration: verifiedBooking.duration,
+      bookingType: "HOURLY",
+      basePrice: verifiedBooking.totalAmount,
+      tax: 0,
+      totalAmount: verifiedBooking.totalAmount,
+      paymentMethod: "QRIS",
+      paymentStatus: "PAID",
+      notes: verifiedBooking.notes,
+    };
+
+    setLastCoworkReceiptData(coworkReceipt);
+    setIsCoworkReceiptModalOpen(true);
+    setCwSelectedSpaceId("");
+    setIsManualTimeSet(false);
+    setIsCwQrisModalOpen(false);
+    setPendingCwQrisBooking(null);
+    notify.success("Pembayaran QRIS lunas", `Booking #${verifiedBooking.bookingCode} berhasil disetujui supervisor.`);
   };
 
   const fnbPromos = (settings.promos ?? []).filter(
@@ -1467,7 +1545,18 @@ export default function POSPage() {
         />
       )}
 
-      {/* 7. Quick Open Shift Modal for POS Cashier */}
+      {/* 7. Coworking QRIS Supervisor Confirmation Modal (Task V-05) */}
+      <CoworkingQrisModal
+        isOpen={isCwQrisModalOpen}
+        onClose={() => {
+          setIsCwQrisModalOpen(false);
+          setPendingCwQrisBooking(null);
+        }}
+        booking={pendingCwQrisBooking}
+        onSuccess={handleCwQrisSuccess}
+      />
+
+      {/* 8. Quick Open Shift Modal for POS Cashier */}
       <PosOpenShiftModal
         isOpen={isPosOpenShiftModalOpen}
         onClose={() => setIsPosOpenShiftModalOpen(false)}

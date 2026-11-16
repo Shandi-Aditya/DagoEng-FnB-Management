@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { CoworkingSpaceItem, CoworkingBooking, CoworkingMembershipPlan } from "@/types/coworking";
+import type { QRISVerificationDetail } from "@/lib/qris-verification";
 import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
 import { useSettings } from "./SettingsContext";
@@ -192,7 +193,7 @@ interface CoworkingContextType {
   updateSpace: (id: string, updates: Partial<CoworkingSpaceItem>) => void;
   deleteSpace: (id: string) => void;
   bookSpace: (booking: NewBookingInput) => typeof INITIAL_BOOKINGS[0];
-  confirmBookingPayment: (bookingId: string, paymentMethod?: string) => void;
+  confirmBookingPayment: (bookingId: string, paymentMethod?: string, qrisVerification?: QRISVerificationDetail) => void;
   cancelBooking: (bookingId: string) => void;
   checkInBooking: (bookingId: string) => void;
   checkoutSpace: (spaceIdOrBookingId: string) => void;
@@ -379,12 +380,21 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     const nowFormatted = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA";
     const dateFormatted = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
     const actorName = user?.name || "Rian Hidayat (Manager Coworking)";
-    const isPaid = bookingData.paymentStatus === "PAID";
+
+    // QRIS cannot be marked PAID immediately without supervisor confirmation (Task V-05)
+    const isQris = bookingData.paymentMethod === "QRIS";
+    const effectivePaymentStatus: "PAID" | "PENDING" = isQris ? "PENDING" : (bookingData.paymentStatus ?? "PAID");
+    const isPaid = effectivePaymentStatus === "PAID";
+    const paidAmount = isPaid ? (bookingData.paidAmount ?? bookingData.totalAmount) : 0;
+    const remainingAmount = isPaid ? 0 : bookingData.totalAmount;
 
     const newBooking: typeof INITIAL_BOOKINGS[0] = {
       ...bookingData,
       id: `bk-${Date.now()}`,
       bookingCode,
+      paymentStatus: effectivePaymentStatus,
+      paidAmount,
+      remainingAmount,
       checkInStatus: bookingData.checkInStatus ?? (isPaid ? "CHECKED_IN" : "RESERVED"),
       checkedInAt: isPaid || bookingData.checkInStatus === "CHECKED_IN" ? `${dateFormatted} ${nowFormatted}` : undefined,
       checkedInBy: isPaid || bookingData.checkInStatus === "CHECKED_IN" ? actorName : undefined,
@@ -463,13 +473,18 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     return newBooking;
   };
 
-  const confirmBookingPayment = (bookingId: string, paymentMethod?: string) => {
+  const confirmBookingPayment = (
+    bookingId: string,
+    paymentMethod?: string,
+    qrisVerification?: QRISVerificationDetail
+  ) => {
     const booking = bookings.find((b) => b.id === bookingId || b.bookingCode === bookingId);
     if (!booking) return;
 
     const nowFormatted = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA";
     const dateFormatted = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
     const method = paymentMethod || booking.paymentMethod || "QRIS";
+    const supervisorName = qrisVerification?.supervisorName || user?.name || "Supervisor Coworking";
 
     setBookings((prev) =>
       prev.map((b) =>
@@ -478,24 +493,61 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
               ...b,
               paymentStatus: "PAID",
               paymentMethod: method,
-              checkInStatus: "RESERVED",
+              checkInStatus: "CHECKED_IN",
               paidAmount: b.totalAmount,
               remainingAmount: 0,
+              paymentRef: qrisVerification?.referenceNumber || b.paymentRef || `PAY-CWK-${Date.now().toString().slice(-6)}`,
               paymentTimestamp: `${dateFormatted} ${nowFormatted}`,
+              qrisVerification: qrisVerification || b.qrisVerification,
             }
           : b
       )
     );
 
+    // Update space status to OCCUPIED
+    setSpaces((prev) =>
+      prev.map((s) =>
+        s.id === booking.spaceId
+          ? {
+              ...s,
+              status: "OCCUPIED",
+              currentSession: {
+                guestName: booking.guestName,
+                company: booking.company || "Personal",
+                checkInTime: nowFormatted,
+                endTime: "Selesai",
+                bookingCode: booking.bookingCode,
+              },
+            }
+          : s
+      )
+    );
+
+    // Record check-in log
+    const newLog: CheckInOutLog = {
+      id: `chk-${Date.now()}`,
+      bookingCode: booking.bookingCode,
+      guestName: booking.guestName,
+      spaceName: booking.spaceName,
+      checkInDate: dateFormatted,
+      checkInTime: nowFormatted,
+      checkInBy: supervisorName,
+      durationFormatted: "Sedang Aktif",
+      status: "ACTIVE_IN",
+    };
+    setCheckLogs((prev) => [newLog, ...prev]);
+
     if (typeof window !== "undefined") {
       const updatedBooking = {
         ...booking,
-        paymentStatus: "PAID",
+        paymentStatus: "PAID" as const,
         paymentMethod: method,
-        checkInStatus: "RESERVED",
+        checkInStatus: "CHECKED_IN" as const,
         paidAmount: booking.totalAmount,
         remainingAmount: 0,
+        paymentRef: qrisVerification?.referenceNumber || booking.paymentRef || `PAY-CWK-${Date.now().toString().slice(-6)}`,
         paymentTimestamp: `${dateFormatted} ${nowFormatted}`,
+        qrisVerification: qrisVerification || booking.qrisVerification,
       };
       fetch("/api/coworking/bookings", {
         method: "POST",
@@ -509,7 +561,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     addNotification({
       type: "PAYMENT_RECEIVED",
       title: "Pembayaran Booking Co-working Berhasil",
-      detail: `Pembayaran booking ${booking.spaceName} atas nama ${booking.guestName} sebesar Rp ${booking.totalAmount.toLocaleString()} telah lunas (${method}).`,
+      detail: `Pembayaran booking ${booking.spaceName} (${booking.guestName}) sebesar Rp ${booking.totalAmount.toLocaleString()} disetujui supervisor (${method}).`,
       relatedModule: "COWORKING",
       actionUrl: "/coworking",
       outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
@@ -518,13 +570,24 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
 
     logActivity({
       module: "COWORKING",
-      action: "CONFIRM_BOOKING_PAYMENT",
+      action: qrisVerification ? "QRIS_SUPERVISOR_MANUAL_OVERRIDE" : "CONFIRM_BOOKING_PAYMENT",
       recordId: booking.bookingCode,
       previousValue: `Payment: ${booking.paymentStatus}`,
       newValue: `Payment: PAID (${method})`,
-      description: `Pembayaran booking Co-working ${booking.bookingCode} lunas via ${method}`,
-      reason: "Konfirmasi pembayaran tamu",
+      description: qrisVerification
+        ? `Otorisasi pembayaran QRIS Co-working ${booking.bookingCode} (${booking.spaceName}) lunas oleh supervisor ${supervisorName}. Ref RRN: ${qrisVerification.referenceNumber}`
+        : `Pembayaran booking Co-working ${booking.bookingCode} lunas via ${method}`,
+      reason: qrisVerification?.note || "Otorisasi QRIS Statis oleh Supervisor",
       status: "SUCCESS",
+      metadata: qrisVerification
+        ? {
+            supervisorId: qrisVerification.supervisorId,
+            supervisorName: qrisVerification.supervisorName,
+            supervisorRole: qrisVerification.supervisorRole,
+            referenceNumber: qrisVerification.referenceNumber,
+            verifiedAt: qrisVerification.verifiedAt,
+          }
+        : undefined,
     });
   };
 

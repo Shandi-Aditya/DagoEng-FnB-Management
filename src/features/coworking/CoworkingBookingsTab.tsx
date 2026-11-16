@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Calendar, LogOut, Printer, UserCheck } from "lucide-react";
+import { Calendar, KeyRound, LogOut, Printer, UserCheck } from "lucide-react";
 
 import { DataPagination } from "@/components/app/data-pagination";
 import { DataTableToolbar } from "@/components/app/data-table-toolbar";
@@ -34,6 +34,7 @@ export interface CoworkingBookingsTabProps {
   onOpenReceipt: (booking: CoworkingBooking) => void;
   onCheckIn: (bookingId: string) => void;
   onCheckout: (spaceId: string) => void;
+  onConfirmQris?: (booking: CoworkingBooking) => void;
 }
 
 export function CoworkingBookingsTab({
@@ -41,6 +42,7 @@ export function CoworkingBookingsTab({
   onOpenReceipt,
   onCheckIn,
   onCheckout,
+  onConfirmQris,
 }: CoworkingBookingsTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -175,8 +177,8 @@ export function CoworkingBookingsTab({
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {b.paymentMethod || "Tunai"} ·{" "}
-                            <span className="text-success">
-                              {bookingPaymentStatusLabel(b.paymentStatus || "PAID")}
+                            <span className={b.paymentStatus === "PENDING" ? "text-warning" : "text-success"}>
+                              {b.paymentStatus === "PENDING" ? "Menunggu konfirmasi" : bookingPaymentStatusLabel(b.paymentStatus || "PAID")}
                             </span>
                           </span>
                         </div>
@@ -190,6 +192,19 @@ export function CoworkingBookingsTab({
 
                       <TableCell>
                         <div className="flex items-center justify-end gap-1.5">
+                          {b.paymentStatus === "PENDING" && onConfirmQris && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => onConfirmQris(b)}
+                              aria-label={`Konfirmasi QRIS ${b.guestName}`}
+                              className="border-warning/40 text-warning hover:bg-warning/10"
+                            >
+                              <KeyRound className="size-3.5" />
+                              <span className="hidden sm:inline">Konfirmasi QRIS</span>
+                            </Button>
+                          )}
+
                           <Button
                             size="sm"
                             variant="outline"
