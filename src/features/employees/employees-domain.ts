@@ -386,6 +386,7 @@ export function buildClosingReportData(
     isTaxEnabled: true,
     taxRatePercent: 10,
     totalTax: storedTaxTotal,
+    totalServiceCharge: storedServiceTotal,
     totalNetSales: netSalesAfterTax,
     tenantSharePercent: 80,
     dagoSharePercent: 20,

@@ -11,7 +11,8 @@ export async function GET(req: NextRequest) {
   const transactions = searchParams.get("transactions") || "0";
   const gross = Number(searchParams.get("gross")) || 0;
   const tax = Number(searchParams.get("tax")) || 0;
-  const net = Number(searchParams.get("net")) || (gross - tax);
+  const service = Number(searchParams.get("service")) || 0;
+  const net = Number(searchParams.get("net")) || (gross - tax - service);
   const qris = Number(searchParams.get("qris")) || 0;
   const cash = Number(searchParams.get("cash")) || 0;
   const edc = Number(searchParams.get("edc")) || 0;
@@ -115,6 +116,10 @@ export async function GET(req: NextRequest) {
           <td>Pajak Restoran PB1 (10%)</td>
           <td class="text-right font-mono" style="color: #dc2626;">-${formatIDR(tax)}</td>
         </tr>
+        ${service > 0 ? `<tr>
+          <td>Biaya Layanan (Service Charge)</td>
+          <td class="text-right font-mono" style="color: #ea580c;">-${formatIDR(service)}</td>
+        </tr>` : ""}
         <tr class="highlight-row">
           <td>Omset Bersih (Net Sales)</td>
           <td class="text-right font-mono" style="color: #16a34a; font-size: 14px;">${formatIDR(net)}</td>

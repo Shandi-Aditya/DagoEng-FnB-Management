@@ -43,6 +43,7 @@ export interface ClosingReportData {
   isTaxEnabled: boolean;
   taxRatePercent: number;
   totalTax: number;
+  totalServiceCharge?: number;
   totalNetSales: number;
   tenantSharePercent: number;
   dagoSharePercent: number;
@@ -389,6 +390,14 @@ export function DailyClosingPDFModal({
                         {formatCurrencyIDR(reportData.totalTax)}
                       </td>
                     </tr>
+                    {reportData.totalServiceCharge !== undefined && reportData.totalServiceCharge > 0 && (
+                      <tr>
+                        <td className="py-2 text-muted-foreground">Biaya layanan (Service charge)</td>
+                        <td className="py-2 text-right font-mono tabular-nums font-medium text-foreground">
+                          {formatCurrencyIDR(reportData.totalServiceCharge)}
+                        </td>
+                      </tr>
+                    )}
                     <tr className="bg-muted/40 font-semibold text-foreground border-t border-border">
                       <td className="py-2.5 px-2">Total omzet bersih</td>
                       <td className="py-2.5 px-2 text-right font-mono tabular-nums text-sm text-primary">

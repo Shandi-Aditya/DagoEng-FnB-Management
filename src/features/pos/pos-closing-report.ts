@@ -87,6 +87,7 @@ export function buildClosingReportPdfUrl(report: ClosingReportData): string {
     transactions: String(report.totalTransactionsCount),
     gross: String(report.totalGrossSales),
     tax: String(report.totalTax),
+    service: String(report.totalServiceCharge || 0),
     net: String(report.totalNetSales),
     qris: String(report.qrisSales),
     cash: String(report.totalCashSales),

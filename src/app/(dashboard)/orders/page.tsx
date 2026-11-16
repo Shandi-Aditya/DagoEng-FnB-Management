@@ -141,6 +141,7 @@ export default function OrdersPage() {
     if (!paymentOrder) return;
 
     const chosenMethod = paymentData.method;
+    const pBreakdown = getOrderTaxBreakdown(paymentOrder);
 
     // 1. Advance order status to COMPLETED and update payment
     advanceOrderStatus(
@@ -150,6 +151,8 @@ export default function OrdersPage() {
       {
         paymentStatus: "PAID",
         paymentMethod: chosenMethod,
+        tax: pBreakdown.pb1,
+        serviceCharge: pBreakdown.serviceCharge,
       }
     );
 

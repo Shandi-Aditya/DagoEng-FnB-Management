@@ -374,7 +374,10 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
       const tableRows = orders.map((o) => {
         const promoName = promos.find((p) => p.id === o.promoId)?.name || o.promoId || "-";
-        const disc = getOrderTaxBreakdown(o).discount;
+        const breakdown = getOrderTaxBreakdown(o);
+        const disc = breakdown.discount;
+        const pb1 = breakdown.pb1;
+        const service = breakdown.serviceCharge;
         return [
           o.orderNumber || o.id,
           o.customerName || "Tamu",
@@ -382,6 +385,8 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           formatMakassarDate(o.createdAt),
           promoName,
           disc > 0 ? `-Rp ${disc.toLocaleString("id-ID")}` : "-",
+          pb1 > 0 ? `Rp ${pb1.toLocaleString("id-ID")}` : "Rp 0",
+          service > 0 ? `Rp ${service.toLocaleString("id-ID")}` : "Rp 0",
           orderStatusLabel(o.status),
           paymentMethodLabel(o.paymentMethod),
           `Rp ${o.total.toLocaleString("id-ID")}`,
@@ -396,6 +401,11 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           { label: "Transaksi", value: `${totalOrdersCount} pesanan` },
           { label: "Diskon promo", value: `Rp ${totalDiscounts.toLocaleString("id-ID")}` },
           { label: "Item terjual", value: `${totalItemsSold} item` },
+          { label: "Total PB1", value: `Rp ${aggregatedTax.totalTaxPB1.toLocaleString("id-ID")}` },
+          {
+            label: "Total service",
+            value: `Rp ${aggregatedTax.totalServiceCharge.toLocaleString("id-ID")}`,
+          },
         ],
         tableHeaders: [
           "Pesanan",
@@ -404,6 +414,8 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           "Tanggal",
           "Promo",
           "Diskon",
+          "PB1 (Rp)",
+          "Service (Rp)",
           "Status",
           "Metode bayar",
           "Total (Rp)",
