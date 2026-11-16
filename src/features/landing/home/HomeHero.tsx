@@ -55,8 +55,8 @@ const STAGE = "aspect-4/5 sm:aspect-16/9";
 
 // Page-load entrance for the hero and a soft fade when a chip swaps the stage; both skip for reduced motion.
 const ENTER =
-  "animate-in fade-in slide-in-from-bottom-4 fill-mode-both duration-700 ease-out motion-reduce:animate-none";
-const SWAP = "animate-in fade-in duration-300 motion-reduce:animate-none";
+  "animate-in fade-in slide-in-from-bottom-6 fill-mode-both duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:animate-none";
+const SWAP = "animate-in fade-in duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:animate-none";
 
 interface Hero3dBadgeProps {
   src: string;
@@ -133,9 +133,9 @@ export function HomeHero() {
   return (
     <section className="mx-auto flex max-w-6xl flex-col items-center gap-10 px-4 pt-12 pb-16 sm:px-6 sm:pt-20">
       <div
-        className={`flex max-w-4xl flex-col items-center gap-6 text-center ${ENTER}`}
+        className="flex max-w-4xl flex-col items-center gap-6 text-center"
       >
-        <h1 className="text-[1.95rem] font-medium tracking-tight text-balance text-center sm:text-6xl leading-[1.2] sm:leading-[1.2]">
+        <h1 className={`text-[1.95rem] font-medium tracking-tight text-balance text-center sm:text-6xl leading-[1.2] sm:leading-[1.2] ${ENTER}`}>
           <span className="inline-block sm:inline whitespace-nowrap">
             <span className="text-unit-coworking">Kerja</span>
             <Hero3dBadge
@@ -170,10 +170,10 @@ export function HomeHero() {
             di satu tempat
           </span>
         </h1>
-        <p className="max-w-xl text-base text-pretty text-muted-foreground sm:text-lg">
+        <p className={`max-w-xl text-base text-pretty text-muted-foreground sm:text-lg ${ENTER} delay-100`}>
           Ruang kerja per jam, 4 mitra kuliner, dan event komunitas di Singaraja.
         </p>
-        <div className="flex flex-col items-center gap-3 sm:flex-row">
+        <div className={`flex flex-col items-center gap-3 sm:flex-row ${ENTER} delay-200`}>
           <Button
             size="lg"
             render={<Link href="/customer?tab=COWORKING" />}
@@ -195,7 +195,7 @@ export function HomeHero() {
       <Tabs
         value={showcase}
         onValueChange={(value) => setShowcase(value as ShowcaseId)}
-        className={`w-full flex flex-col items-center gap-6 ${ENTER} delay-200`}
+        className={`w-full flex flex-col items-center gap-6 ${ENTER} delay-300`}
       >
         <TabsList className="!h-auto group-data-horizontal/tabs:!h-auto flex-wrap justify-center gap-2 bg-transparent p-0 w-full max-w-full">
           {SHOWCASE_TABS.map((tab) => (
