@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Calendar } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,8 +14,6 @@ import { ModeToggle } from "./ModeToggle";
 import { NotificationMenu } from "./NotificationMenu";
 import { RoleAwareStatusPill } from "./RoleAwareStatusPill";
 import { findActiveNavItem } from "./nav-groups";
-
-const ACTIVE_OUTLET_LABEL = "Outlet Singaraja (Pusat)";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -39,11 +36,7 @@ export function SiteHeader() {
         <h1 className="truncate text-base font-medium">{pageTitle}</h1>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <Badge variant="outline" className="hidden h-6 gap-1.5 px-2 text-xs sm:inline-flex">
-            <span className="size-1.5 rounded-full bg-success" aria-hidden />
-            {ACTIVE_OUTLET_LABEL}
-          </Badge>
-          <div className="hidden xl:block">
+          <div className="hidden sm:block">
             <RoleAwareStatusPill />
           </div>
           {isMounted && formattedRangeLabel ? (
