@@ -1,7 +1,10 @@
 import { MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { buildSupportWhatsAppUrl } from "./ticket-recovery-domain";
+import {
+  DEFAULT_CS_WHATSAPP_NUMBER,
+  buildSupportWhatsAppUrl,
+} from "./ticket-recovery-domain";
 
 interface TicketRecoverySupportCardProps {
   csWhatsappNumber?: string;
@@ -9,7 +12,7 @@ interface TicketRecoverySupportCardProps {
 }
 
 export function TicketRecoverySupportCard({
-  csWhatsappNumber = "6281234567890",
+  csWhatsappNumber = DEFAULT_CS_WHATSAPP_NUMBER,
   email,
 }: TicketRecoverySupportCardProps) {
   const waUrl = buildSupportWhatsAppUrl(csWhatsappNumber, email);

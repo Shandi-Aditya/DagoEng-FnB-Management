@@ -26,6 +26,7 @@ import {
   formatTicketCodeInput,
   normalizePhoneNumber,
   buildSupportWhatsAppUrl,
+  DEFAULT_CS_WHATSAPP_NUMBER,
   type RecoveredBookingItem,
 } from "@/features/events-tickets-recovery";
 
@@ -48,8 +49,9 @@ export default function TicketRecoveryPage() {
   const [phoneSearchError, setPhoneSearchError] = useState<string | null>(null);
   const [phoneRecoveredList, setPhoneRecoveredList] = useState<RecoveredBookingItem[]>([]);
 
-  // CS WhatsApp Contact (configurable via NEXT_PUBLIC_CS_WHATSAPP)
-  const csWhatsappNumber = process.env.NEXT_PUBLIC_CS_WHATSAPP || "6281234567890";
+  // CS WhatsApp Contact (configurable via NEXT_PUBLIC_CS_WHATSAPP, fallback to central contact)
+  const csWhatsappNumber =
+    process.env.NEXT_PUBLIC_CS_WHATSAPP || DEFAULT_CS_WHATSAPP_NUMBER;
 
   // Handler for Mode 1: Cari dengan Kode Booking
   const handleSearchWithCode = async (e: React.FormEvent) => {

@@ -6,7 +6,9 @@ import {
   validateRecoveryPhoneInput,
   getRecoveryStatusMeta,
   buildSupportWhatsAppUrl,
+  DEFAULT_CS_WHATSAPP_NUMBER,
 } from "@/features/events-tickets-recovery/ticket-recovery-domain";
+import { CONTACT } from "@/features/landing/landing-content";
 
 describe("Ticket Recovery Domain Logic", () => {
   describe("formatTicketCodeInput", () => {
@@ -124,6 +126,22 @@ describe("Ticket Recovery Domain Logic", () => {
       const url = buildSupportWhatsAppUrl("6281234567890", "");
       expect(url).toContain("https://wa.me/6281234567890?text=");
       expect(url).toContain(encodeURIComponent("Halo Admin Dago Hub, saya lupa kode booking tiket event saya"));
+    });
+
+    it("generates WhatsApp URL using default central CS number", () => {
+      const url = buildSupportWhatsAppUrl(DEFAULT_CS_WHATSAPP_NUMBER, "user@example.com");
+      expect(url).toBe(
+        `https://wa.me/${DEFAULT_CS_WHATSAPP_NUMBER}?text=${encodeURIComponent(
+          "Halo Admin Dago Hub, saya lupa kode booking tiket event saya untuk email (user@example.com). Mohon bantu verifikasi dan kirimkan e-tiket saya. Terima kasih!"
+        )}`
+      );
+    });
+  });
+
+  describe("DEFAULT_CS_WHATSAPP_NUMBER", () => {
+    it("is derived from central CONTACT.phone configuration", () => {
+      expect(DEFAULT_CS_WHATSAPP_NUMBER).toBe(normalizePhoneNumber(CONTACT.phone));
+      expect(DEFAULT_CS_WHATSAPP_NUMBER).toBe("6282115501995");
     });
   });
 });

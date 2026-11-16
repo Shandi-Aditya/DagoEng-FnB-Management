@@ -2,6 +2,7 @@
  * Pure domain logic for Ticket Recovery Portal.
  * Handles input normalization, validation, WhatsApp link generation, and status mapping.
  */
+import { CONTACT } from "@/features/landing/landing-content";
 
 export interface TicketRecoveryCodeValidation {
   valid: boolean;
@@ -44,6 +45,11 @@ export function normalizePhoneNumber(phone: string): string {
   }
   return cleaned;
 }
+
+/**
+ * Default Customer Service WhatsApp number derived from central contact configuration.
+ */
+export const DEFAULT_CS_WHATSAPP_NUMBER = normalizePhoneNumber(CONTACT.phone);
 
 /**
  * Validates email format.
