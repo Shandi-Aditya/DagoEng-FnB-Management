@@ -7,6 +7,10 @@ import {
   formatCheckInTime,
   getPaymentStatusTone,
   getCheckInStatusTone,
+  getWitaDateString,
+  getEventDateStatusWita,
+  isEventTodayWita,
+  filterTodayEventsWita,
 } from "@/features/events-checkin/events-checkin-domain";
 import type { EventTicketOrder } from "@/types/event";
 
@@ -292,6 +296,108 @@ describe("events-checkin-domain", () => {
       const res = getCheckInStatusTone(order);
       expect(res.tone).toBe("info");
       expect(res.label).toBe("Hadir 1/3");
+    });
+  });
+
+  describe("WITA date filtering for check-in desk (Task S-06)", () => {
+    // Reference date: Monday, 16 Nov 2026, 10:00 WITA (02:00 UTC)
+    const refDate = new Date("2026-11-16T02:00:00.000Z");
+
+    describe("getWitaDateString", () => {
+      it("formats ISO timestamps to YYYY-MM-DD in WITA (UTC+8)", () => {
+        // 2026-11-15 23:30 UTC is 2026-11-16 07:30 WITA
+        expect(getWitaDateString(new Date("2026-11-15T23:30:00.000Z"))).toBe("2026-11-16");
+        // 2026-11-16 15:59 UTC is 2026-11-16 23:59 WITA
+        expect(getWitaDateString(new Date("2026-11-16T15:59:00.000Z"))).toBe("2026-11-16");
+        // 2026-11-16 16:01 UTC is 2026-11-17 00:01 WITA
+        expect(getWitaDateString(new Date("2026-11-16T16:01:00.000Z"))).toBe("2026-11-17");
+      });
+
+      it("handles string and number timestamps and invalid input gracefully", () => {
+        expect(getWitaDateString("2026-11-09T08:00:00+08:00")).toBe("2026-11-09");
+        expect(getWitaDateString("invalid-date")).toBe("");
+      });
+    });
+
+    describe("getEventDateStatusWita & isEventTodayWita", () => {
+      it("identifies past event (e.g. 9 Nov 2026) as PAST and not today", () => {
+        const pastEvent = {
+          startDate: "2026-11-09T00:30:00.000Z", // 9 Nov 08:30 WITA
+          endDate: "2026-11-09T04:00:00.000Z",   // 9 Nov 12:00 WITA
+        };
+        expect(getEventDateStatusWita(pastEvent, refDate)).toBe("PAST");
+        expect(isEventTodayWita(pastEvent, refDate)).toBe(false);
+      });
+
+      it("identifies past event with corrupted multi-year dummy end date (e.g. 2048) as PAST", () => {
+        const corruptDummyEvent = {
+          startDate: "2026-11-09T00:30:00.000Z",
+          endDate: "2048-12-31T23:59:59.000Z", // abnormal duration > 7 days
+        };
+        expect(getEventDateStatusWita(corruptDummyEvent, refDate)).toBe("PAST");
+        expect(isEventTodayWita(corruptDummyEvent, refDate)).toBe(false);
+      });
+
+      it("identifies upcoming event (e.g. 22 Nov 2026) as UPCOMING and not today", () => {
+        const futureEvent = {
+          startDate: "2026-11-22T23:00:00.000Z",
+          endDate: "2026-11-23T04:00:00.000Z",
+        };
+        expect(getEventDateStatusWita(futureEvent, refDate)).toBe("UPCOMING");
+        expect(isEventTodayWita(futureEvent, refDate)).toBe(false);
+      });
+
+      it("identifies event taking place today (16 Nov 2026) as TODAY", () => {
+        const todayEvent = {
+          startDate: "2026-11-16T01:00:00.000Z", // 16 Nov 09:00 WITA
+          endDate: "2026-11-16T09:00:00.000Z",   // 16 Nov 17:00 WITA
+        };
+        expect(getEventDateStatusWita(todayEvent, refDate)).toBe("TODAY");
+        expect(isEventTodayWita(todayEvent, refDate)).toBe(true);
+      });
+
+      it("identifies multi-day festival spanning today (15-17 Nov 2026) as TODAY", () => {
+        const festival = {
+          startDate: "2026-11-15T02:00:00.000Z",
+          endDate: "2026-11-17T14:00:00.000Z",
+        };
+        expect(getEventDateStatusWita(festival, refDate)).toBe("TODAY");
+        expect(isEventTodayWita(festival, refDate)).toBe(true);
+      });
+
+      it("handles single-day event without explicit endDate as TODAY on its date", () => {
+        const eventNoEnd = {
+          startDate: "2026-11-16T08:00:00+08:00",
+        };
+        expect(getEventDateStatusWita(eventNoEnd, refDate)).toBe("TODAY");
+        expect(isEventTodayWita(eventNoEnd, refDate)).toBe(true);
+      });
+    });
+
+    describe("filterTodayEventsWita", () => {
+      const mockEvents = [
+        { id: "ev-past-9nov", title: "Pengajian Akbar 9 Nov", startDate: "2026-11-09T00:30:00.000Z", endDate: "2026-11-09T04:00:00.000Z" },
+        { id: "ev-past-corrupt", title: "Dummy Event Past", startDate: "2026-11-08T00:00:00.000Z", endDate: "2048-01-01T00:00:00.000Z" },
+        { id: "ev-today", title: "Workshop Barista Hari Ini", startDate: "2026-11-16T01:00:00.000Z", endDate: "2026-11-16T09:00:00.000Z" },
+        { id: "ev-future-22nov", title: "Konser Musik 22 Nov", startDate: "2026-11-22T23:00:00.000Z", endDate: "2026-11-23T04:00:00.000Z" },
+      ];
+
+      it("filters strictly to today's events, excluding past and upcoming events", () => {
+        const result = filterTodayEventsWita(mockEvents, refDate);
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe("ev-today");
+        expect(result.some((e) => e.id === "ev-past-9nov")).toBe(false);
+        expect(result.some((e) => e.id === "ev-future-22nov")).toBe(false);
+      });
+
+      it("returns empty array when no events occur today", () => {
+        const noTodayEvents = [
+          mockEvents[0], // 9 Nov
+          mockEvents[3], // 22 Nov
+        ];
+        const result = filterTodayEventsWita(noTodayEvents, refDate);
+        expect(result).toEqual([]);
+      });
     });
   });
 });

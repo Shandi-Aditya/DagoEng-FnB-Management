@@ -25,6 +25,7 @@ import {
   validateTicketCheckIn,
   calculateCheckInStats,
   filterCheckInTickets,
+  filterTodayEventsWita,
 } from "@/features/events-checkin";
 
 export default function EventCheckInDashboardPage() {
@@ -80,22 +81,23 @@ export default function EventCheckInDashboardPage() {
               (e) => e.status === "APPROVED" && (e.organizerEmail || "").toLowerCase() === userEmail
             );
 
-      setEvents(accessibleEvents);
+      // S-06: Meja check-in hanya untuk event hari ini (WITA). Event lampau dan mendatang tidak dapat dipilih.
+      const todayEvents = filterTodayEventsWita(accessibleEvents);
+      setEvents(todayEvents);
 
-      // Prioritize selecting an event that has registered attendee bookings or is currently ongoing
-      if (accessibleEvents.length > 0 && !selectedEventId) {
-        const now = Date.now();
-        const eventWithBookings =
-          accessibleEvents.find((e) => {
-            const hasBookings = allBookings.some((b) => b.eventId === e.id);
-            const s = new Date(e.startDate).getTime();
-            const end = new Date(e.endDate).getTime();
-            return hasBookings && s <= now && end >= now;
-          }) ||
-          accessibleEvents.find((e) => allBookings.some((b) => b.eventId === e.id)) ||
-          accessibleEvents[0];
-
-        setSelectedEventId(eventWithBookings.id);
+      // Prioritize selecting an event that has registered attendee bookings or is currently ongoing today
+      if (todayEvents.length > 0) {
+        setSelectedEventId((prev) => {
+          if (prev && todayEvents.some((e) => e.id === prev)) {
+            return prev;
+          }
+          const eventWithBookings =
+            todayEvents.find((e) => allBookings.some((b) => b.eventId === e.id)) ||
+            todayEvents[0];
+          return eventWithBookings.id;
+        });
+      } else {
+        setSelectedEventId("");
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Gagal memuat data check-in event.";
@@ -325,8 +327,8 @@ export default function EventCheckInDashboardPage() {
         {events.length === 0 && !isLoading ? (
           <EmptyState
             icon={<Calendar />}
-            title="Belum ada event aktif"
-            description="Tidak ada event aktif yang disetujui untuk meja registrasi lapangan saat ini."
+            title="Tidak ada event hari ini"
+            description="Meja check-in hanya melayani event yang berlangsung hari ini (WITA). Event lampau atau mendatang tidak dapat diproses."
             className="border"
           />
         ) : selectedEvent ? (
