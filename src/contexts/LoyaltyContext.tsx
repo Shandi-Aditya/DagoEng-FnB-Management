@@ -7,105 +7,9 @@ import { useOutlet } from "./OutletContext";
 import { useSettings } from "./SettingsContext";
 import { useActivityLog } from "./ActivityLogContext";
 import { useNotifications } from "./NotificationContext";
-
-export const INITIAL_MEMBERS: LoyaltyMember[] = [
-  {
-    id: "mem-001",
-    name: "Ketut Dian",
-    phone: "+62 819-1122-3344",
-    email: "ketut.dian@gmail.com",
-    identityNo: "NIK-510801990001",
-    tier: "Silver",
-    points: 55,
-    totalSpend: 550000,
-    totalVisits: 5,
-    favoriteItem: "Kopi Senja Aren",
-    lastVisit: "05 Nov 2026",
-    registeredOutletId: "outlet-sgr",
-    registeredOutletName: "Singaraja",
-    status: "ACTIVE",
-    joinedDate: "12 Jan 2026",
-    pointHistory: [
-      {
-        id: "ptx-init-1",
-        memberId: "mem-001",
-        type: "EARN",
-        points: 55,
-        balanceAfter: 55,
-        reason: "Saldo Poin Awal CRM",
-        timestamp: "2026-11-05T10:00:00.000Z",
-        actorName: "Sistem Loyalty",
-        outletId: "outlet-sgr",
-      },
-    ],
-    tierHistory: [],
-  },
-  {
-    id: "mem-002",
-    name: "Budi Santoso",
-    phone: "+62 857-9988-7766",
-    email: "budi.santoso@yahoo.com",
-    identityNo: "NIK-510801990002",
-    tier: "Bronze",
-    points: 0,
-    totalSpend: 0,
-    totalVisits: 0,
-    favoriteItem: "-",
-    lastVisit: "-",
-    registeredOutletId: "outlet-sgr",
-    registeredOutletName: "Singaraja",
-    status: "ACTIVE",
-    joinedDate: "05 Agu 2026",
-    pointHistory: [],
-    tierHistory: [],
-  },
-  {
-    id: "mem-003",
-    name: "Ibu Maya Santika",
-    phone: "+62 815-6677-8899",
-    email: "maya.santika@corp.id",
-    identityNo: "NIK-510801990003",
-    tier: "Bronze",
-    points: 0,
-    totalSpend: 0,
-    totalVisits: 0,
-    favoriteItem: "-",
-    lastVisit: "-",
-    registeredOutletId: "outlet-sgr",
-    registeredOutletName: "Singaraja",
-    status: "ACTIVE",
-    joinedDate: "15 Mei 2026",
-    pointHistory: [],
-    tierHistory: [],
-  },
-  {
-    id: "mem-004",
-    name: "Bpk. Hendra Wijaya",
-    phone: "+62 811-2233-4455",
-    email: "hendra.w@dagoeng.com",
-    identityNo: "NIK-510801990004",
-    tier: "Bronze",
-    points: 0,
-    totalSpend: 0,
-    totalVisits: 0,
-    favoriteItem: "-",
-    lastVisit: "-",
-    registeredOutletId: "outlet-sgr",
-    registeredOutletName: "Singaraja",
-    status: "ACTIVE",
-    joinedDate: "01 Jan 2026",
-    pointHistory: [],
-    tierHistory: [],
-  },
-];
-
-export function normalizeLoyaltyPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("62")) {
-    return "0" + digits.slice(2);
-  }
-  return digits;
-}
+import { syncWithOutbox } from "@/lib/sync-outbox";
+import { INITIAL_MEMBERS, normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
+export { INITIAL_MEMBERS, normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
 
 interface LoyaltyContextType {
   members: LoyaltyMember[];
@@ -146,6 +50,22 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to load loyalty members", e);
     } finally {
       setIsInitialized(true);
+    }
+
+    // Hydrate authoritative loyalty members from server storage (V-06)
+    if (typeof window !== "undefined") {
+      fetch("/api/loyalty/members")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data && Array.isArray(data.members) && data.members.length > 0) {
+            setMembers((prev) => {
+              const serverMap = new Map(data.members.map((m: LoyaltyMember) => [m.id, m]));
+              const localCustom = prev.filter((m) => !serverMap.has(m.id));
+              return [...data.members, ...localCustom];
+            });
+          }
+        })
+        .catch(() => {});
     }
   }, []);
 
@@ -243,6 +163,13 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       outletId: targetOutletId,
       outletName: targetOutletName,
     });
+
+    syncWithOutbox({
+      id: newMember.id,
+      endpoint: "/api/loyalty/members",
+      method: "POST",
+      payload: { member: newMember },
+    }).catch(() => {});
 
     return newMember;
   };
@@ -384,6 +311,24 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       outletId: target.registeredOutletId,
       outletName: target.registeredOutletName,
     });
+
+    syncWithOutbox({
+      id: memberId,
+      endpoint: "/api/loyalty/members",
+      method: "PUT",
+      payload: {
+        id: memberId,
+        updates: {
+          points: newPoints,
+          tier: newTier,
+          totalSpend: (target.totalSpend || 0) + effectiveSpend,
+          totalVisits: (target.totalVisits || 0) + 1,
+          lastVisit: new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }),
+          pointHistory: [ptx, ...target.pointHistory],
+          tierHistory: newTierHistory,
+        },
+      },
+    }).catch(() => {});
   };
 
   const reverseTransactionPoints = (memberId: string, transactionId: string, reason?: string) => {
@@ -465,6 +410,23 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       outletId: target.registeredOutletId,
       outletName: target.registeredOutletName,
     });
+
+    syncWithOutbox({
+      id: memberId,
+      endpoint: "/api/loyalty/members",
+      method: "PUT",
+      payload: {
+        id: memberId,
+        updates: {
+          points: newPoints,
+          tier: newTier,
+          totalSpend: Math.max(0, (target.totalSpend || 0) - refundedSpend),
+          totalVisits: Math.max(0, (target.totalVisits || 0) - 1),
+          pointHistory: [ptx, ...target.pointHistory],
+          tierHistory: newTierHistory,
+        },
+      },
+    }).catch(() => {});
   };
 
   const redeemPoints = (memberId: string, pointsToRedeem: number, reason: string): boolean => {
@@ -531,6 +493,21 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       outletName: target.registeredOutletName,
     });
 
+    syncWithOutbox({
+      id: memberId,
+      endpoint: "/api/loyalty/members",
+      method: "PUT",
+      payload: {
+        id: memberId,
+        updates: {
+          points: newPoints,
+          tier: newTier,
+          pointHistory: [ptx, ...target.pointHistory],
+          tierHistory: newTierHistory,
+        },
+      },
+    }).catch(() => {});
+
     return true;
   };
 
@@ -575,6 +552,19 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       outletId: target.registeredOutletId,
       outletName: target.registeredOutletName,
     });
+
+    syncWithOutbox({
+      id: memberId,
+      endpoint: "/api/loyalty/members",
+      method: "PUT",
+      payload: {
+        id: memberId,
+        updates: {
+          tier: newTier,
+          tierHistory: [th, ...target.tierHistory],
+        },
+      },
+    }).catch(() => {});
   };
 
   const resetLoyaltyData = () => {
