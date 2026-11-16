@@ -188,10 +188,10 @@ function FeatureSplit({
   return (
     <section
       id={id}
-      className={`${SECTION} grid scroll-mt-20 items-center gap-10 py-16 lg:grid-cols-[5fr_7fr] lg:gap-16 lg:py-24`}
+      className={`${SECTION} grid scroll-mt-20 items-center gap-10 py-16 lg:grid-cols-[5fr_7fr] lg:gap-16 lg:py-24 overflow-hidden`}
       aria-labelledby={`${id}-title`}
     >
-      <Reveal className="flex flex-col items-start gap-6">
+      <Reveal className="flex flex-col items-start gap-6 min-w-0 w-full">
         <div className="flex flex-col gap-3">
           <h2
             id={`${id}-title`}
@@ -214,7 +214,7 @@ function FeatureSplit({
           {action.label}
         </Button>
       </Reveal>
-      <Reveal delay={150} className="relative isolate">
+      <Reveal delay={150} className="relative isolate min-w-0 w-full">
         <AmbientUnitFrame unit={unit}>
           {children}
         </AmbientUnitFrame>

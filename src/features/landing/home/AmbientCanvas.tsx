@@ -287,7 +287,7 @@ export function AmbientUnitFrame({
         "relative w-full overflow-hidden",
         withDissolve
           ? "rounded-t-2xl sm:rounded-t-3xl rounded-b-none pt-5 px-5 pb-0 sm:pt-10 sm:px-10 sm:pb-0 lg:pt-14 lg:px-14 lg:pb-0"
-          : "rounded-3xl sm:rounded-[2rem] p-6 sm:p-9 lg:p-11 shadow-2xl",
+          : "rounded-3xl sm:rounded-[2rem] p-3.5 sm:p-8 lg:p-11 shadow-2xl",
         className,
       )}
     >
@@ -298,7 +298,7 @@ export function AmbientUnitFrame({
           aria-hidden="true"
         />
       )}
-      <div className="relative z-10 w-full">{children}</div>
+      <div className="relative z-10 w-full min-w-0">{children}</div>
     </div>
   );
 }
