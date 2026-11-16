@@ -80,6 +80,7 @@ import {
   maskAccountNumber,
   BankAccountHolderCandidate,
 } from "@/lib/payout";
+import { dispatchPaidTicketEmail } from "@/lib/email";
 
 const getEventsFile = () => getDataFilePath("events.json");
 const getBookingsFile = () => getDataFilePath("event_bookings.json");
@@ -3230,6 +3231,13 @@ export async function createEventBooking(
     if (committedBookingsList) {
       syncBookingsToLocalDiskAndCache(committedBookingsList, Date.now());
       markStorageSyncSynced("event_bookings.json");
+
+      // Task S-08: Kirim email e-tiket dan QR per peserta setelah tiket gratis terbit (PAID)
+      if (committedBooking && (committedBooking as EventTicketOrder).paymentStatus === "PAID") {
+        dispatchPaidTicketEmail(committedBooking as EventTicketOrder).catch((err) => {
+          console.warn("[Events] Gagal mengirim email tiket gratis:", err);
+        });
+      }
     }
 
     return result;
@@ -3767,6 +3775,14 @@ export async function updateBookingPaymentStatus(
     if (committedBookingsList && committedBooking) {
       syncBookingsToLocalDiskAndCache(committedBookingsList, Date.now());
       markStorageSyncSynced("event_bookings.json");
+
+      // Task S-08: Kirim email e-tiket dan QR per peserta setelah tiket berbayar diverifikasi (PAID)
+      if (status === "PAID") {
+        dispatchPaidTicketEmail(committedBooking).catch((err) => {
+          console.warn("[Events] Gagal mengirim email tiket lunas:", err);
+        });
+      }
+
       return committedBooking;
     }
 

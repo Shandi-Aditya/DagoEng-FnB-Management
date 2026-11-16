@@ -106,7 +106,152 @@ describe("Ticket Recovery API (/api/events/bookings/recover)", () => {
     expect(blockedJson.success).toBe(false);
     expect(blockedJson.error).toContain("Terlalu banyak permintaan");
   });
+
+  describe("Task S-05: Multi-Channel Recovery (WhatsApp & Email)", () => {
+    const mockBookings: any[] = [
+      {
+        id: "book-qa",
+        ticketCode: "DAGO-EVT-777",
+        eventId: "evt-latte",
+        eventTitle: "Latte Art Workshop",
+        guestName: "Dewi Lestari",
+        guestEmail: "dewi.lestari@desain.ac.id",
+        guestPhone: "087811223344",
+        ticketCount: 2,
+        guestToken: "tok-dewi-secret-xyz",
+      },
+    ];
+
+    it("Mode Code: should validate phone ownership when channel is whatsapp", async () => {
+      vi.spyOn(eventsLib, "getEventBookings").mockResolvedValue(mockBookings);
+
+      // Wrong phone for the booking code
+      const reqWrong = new NextRequest("http://localhost:3000/api/events/bookings/recover", {
+        method: "POST",
+        headers: { "x-forwarded-for": "10.1.0.1" },
+        body: JSON.stringify({
+          mode: "code",
+          channel: "whatsapp",
+          ticketCode: "DAGO-EVT-777",
+          phone: "081234567890",
+        }),
+      });
+
+      const resWrong = await recoverTicketsPost(reqWrong);
+      expect(resWrong.status).toBe(404);
+      const jsonWrong = await resWrong.json();
+      expect(jsonWrong.success).toBe(false);
+      expect(jsonWrong.error).toContain("tidak ditemukan");
+
+      // Correct phone for the booking code
+      const reqRight = new NextRequest("http://localhost:3000/api/events/bookings/recover", {
+        method: "POST",
+        headers: { "x-forwarded-for": "10.1.0.2" },
+        body: JSON.stringify({
+          mode: "code",
+          channel: "whatsapp",
+          ticketCode: "DAGO-EVT-777",
+          phone: "087811223344",
+        }),
+      });
+
+      const resRight = await recoverTicketsPost(reqRight);
+      expect(resRight.status).toBe(200);
+      const jsonRight = await resRight.json();
+      expect(jsonRight.success).toBe(true);
+      expect(jsonRight.channel).toBe("whatsapp");
+      expect(jsonRight.target).toBe("6287****3344");
+      expect(jsonRight.guestToken).toBeUndefined();
+      expect(jsonRight.tickets).toBeUndefined();
+      expect(JSON.stringify(jsonRight)).not.toContain("tok-dewi-secret-xyz");
+    });
+
+    it("Mode Code: should validate email ownership when channel is email", async () => {
+      vi.spyOn(eventsLib, "getEventBookings").mockResolvedValue(mockBookings);
+
+      // Wrong email for the booking code
+      const reqWrong = new NextRequest("http://localhost:3000/api/events/bookings/recover", {
+        method: "POST",
+        headers: { "x-forwarded-for": "10.1.0.3" },
+        body: JSON.stringify({
+          mode: "code",
+          channel: "email",
+          ticketCode: "DAGO-EVT-777",
+          email: "imposter@desain.ac.id",
+        }),
+      });
+
+      const resWrong = await recoverTicketsPost(reqWrong);
+      expect(resWrong.status).toBe(404);
+
+      // Correct email for the booking code
+      const reqRight = new NextRequest("http://localhost:3000/api/events/bookings/recover", {
+        method: "POST",
+        headers: { "x-forwarded-for": "10.1.0.4" },
+        body: JSON.stringify({
+          mode: "code",
+          channel: "email",
+          ticketCode: "DAGO-EVT-777",
+          email: "dewi.lestari@desain.ac.id",
+        }),
+      });
+
+      const resRight = await recoverTicketsPost(reqRight);
+      expect(resRight.status).toBe(200);
+      const jsonRight = await resRight.json();
+      expect(jsonRight.success).toBe(true);
+      expect(jsonRight.channel).toBe("email");
+      expect(jsonRight.target).toBe("d***i@desain.ac.id");
+      expect(jsonRight.guestToken).toBeUndefined();
+      expect(jsonRight.tickets).toBeUndefined();
+      expect(JSON.stringify(jsonRight)).not.toContain("tok-dewi-secret-xyz");
+    });
+
+    it("Mode Forgot Code: should reject invalid phone when channel is whatsapp", async () => {
+      const req = new NextRequest("http://localhost:3000/api/events/bookings/recover", {
+        method: "POST",
+        headers: { "x-forwarded-for": "10.1.0.5" },
+        body: JSON.stringify({
+          mode: "forgot_code",
+          channel: "whatsapp",
+          phone: "123",
+        }),
+      });
+
+      const res = await recoverTicketsPost(req);
+      expect(res.status).toBe(400);
+      const json = await res.json();
+      expect(json.success).toBe(false);
+      expect(json.error).toContain("Nomor WhatsApp tidak valid");
+    });
+
+    it("Mode Forgot Code: should handle WhatsApp recovery without token leakage", async () => {
+      vi.spyOn(eventsLib, "getEventBookings").mockResolvedValue(mockBookings);
+
+      const req = new NextRequest("http://localhost:3000/api/events/bookings/recover", {
+        method: "POST",
+        headers: { "x-forwarded-for": "10.1.0.6" },
+        body: JSON.stringify({
+          mode: "forgot_code",
+          channel: "whatsapp",
+          phone: "087811223344",
+          email: "dewi.lestari@desain.ac.id",
+        }),
+      });
+
+      const res = await recoverTicketsPost(req);
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.success).toBe(true);
+      expect(json.channel).toBe("whatsapp");
+      expect(json.target).toBe("6287****3344");
+      expect(json.guestToken).toBeUndefined();
+      expect(json.tickets).toBeUndefined();
+      expect(JSON.stringify(json)).not.toContain("tok-dewi-secret-xyz");
+    });
+  });
 });
+
 
 describe("Payment Method and Active Bank Accounts Verification", () => {
   beforeEach(() => {

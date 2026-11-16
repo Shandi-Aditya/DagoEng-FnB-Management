@@ -2,13 +2,13 @@
 
 import React, { useState } from "react";
 import {
-  Search,
   Ticket,
   Phone,
   AlertCircle,
-  CheckCircle2,
   RefreshCw,
   MessageCircle,
+  Mail,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,148 +20,163 @@ import { UnitScope } from "@/components/app/unit-scope";
 import {
   TicketRecoveryHeader,
   TicketRecoveryHero,
-  TicketRecoveryResultCard,
+  TicketRecoveryConfirmationCard,
   TicketRecoverySupportCard,
   TicketRecoveryAccountNote,
   formatTicketCodeInput,
   normalizePhoneNumber,
   buildSupportWhatsAppUrl,
   DEFAULT_CS_WHATSAPP_NUMBER,
-  type RecoveredBookingItem,
+  type RecoveryChannel,
 } from "@/features/events-tickets-recovery";
 
+interface RecoverySuccessState {
+  channel: RecoveryChannel;
+  target?: string;
+  configured: boolean;
+  message: string;
+}
+
 export default function TicketRecoveryPage() {
-  // Mode: "code" = Cari dengan Kode Booking (Default), "phone" = Lupa Kode Booking (Email + No WhatsApp)
+  // Mode: "code" = Cari dengan Kode Booking (Default), "phone" = Lupa Kode Booking
   const [activeTab, setActiveTab] = useState<string>("code");
 
-  // Common email state
-  const [email, setEmail] = useState("");
-
-  // Mode 1: Ticket Code + Email
+  // Tab 1 (Cari dengan Kode Booking) states
   const [ticketCode, setTicketCode] = useState("");
-  const [isSearchingCode, setIsSearchingCode] = useState(false);
-  const [codeSearchError, setCodeSearchError] = useState<string | null>(null);
-  const [codeRecoveredBooking, setCodeRecoveredBooking] = useState<RecoveredBookingItem | null>(null);
+  const [tab1Channel, setTab1Channel] = useState<RecoveryChannel>("whatsapp");
+  const [tab1Phone, setTab1Phone] = useState("");
+  const [tab1Email, setTab1Email] = useState("");
+  const [isSubmittingCode, setIsSubmittingCode] = useState(false);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [codeSuccess, setCodeSuccess] = useState<RecoverySuccessState | null>(null);
 
-  // Mode 2: Phone + Email (Lupa Kode Booking)
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [isSearchingPhone, setIsSearchingPhone] = useState(false);
-  const [phoneSearchError, setPhoneSearchError] = useState<string | null>(null);
-  const [phoneRecoveredList, setPhoneRecoveredList] = useState<RecoveredBookingItem[]>([]);
+  // Tab 2 (Lupa Kode Booking) states
+  const [tab2Email, setTab2Email] = useState("");
+  const [tab2Phone, setTab2Phone] = useState("");
+  const [tab2Channel, setTab2Channel] = useState<RecoveryChannel>("whatsapp");
+  const [isSubmittingPhone, setIsSubmittingPhone] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [phoneSuccess, setPhoneSuccess] = useState<RecoverySuccessState | null>(null);
 
   // CS WhatsApp Contact (configurable via NEXT_PUBLIC_CS_WHATSAPP, fallback to central contact)
   const csWhatsappNumber =
     process.env.NEXT_PUBLIC_CS_WHATSAPP || DEFAULT_CS_WHATSAPP_NUMBER;
 
-  // Handler for Mode 1: Cari dengan Kode Booking
-  const handleSearchWithCode = async (e: React.FormEvent) => {
+  // Handler for Tab 1: Cari dengan Kode Booking
+  const handleRecoverWithCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!ticketCode.trim() || !email.trim()) {
-      setCodeSearchError("Kode booking tiket dan alamat email wajib diisi.");
+    const cleanCode = formatTicketCodeInput(ticketCode);
+
+    if (!cleanCode) {
+      setCodeError("Kode booking tiket wajib diisi.");
       return;
     }
 
-    try {
-      setIsSearchingCode(true);
-      setCodeSearchError(null);
-      setCodeRecoveredBooking(null);
-
-      const query = new URLSearchParams({
-        ticketCode: formatTicketCodeInput(ticketCode),
-        email: email.trim().toLowerCase(),
-      });
-
-      const res = await fetch(`/api/events/bookings/my?${query.toString()}`);
-      const json = await res.json();
-
-      if (!res.ok || !json.success || !json.data || json.data.length === 0) {
-        if (res.status === 403) {
-          setCodeSearchError(
-            json.error ||
-              "Akses ditolak: Anda saat ini masuk dengan sesi akun yang berbeda. Silakan logout terlebih dahulu untuk memulihkan tiket guest ini."
-          );
-          return;
-        }
-        setCodeSearchError(
-          "Tiket dengan kombinasi kode booking dan email tersebut tidak ditemukan. Periksa kembali ejaan Anda atau gunakan tombol 'Lupa kode booking?' di atas."
-        );
+    if (tab1Channel === "whatsapp") {
+      const cleanPhone = normalizePhoneNumber(tab1Phone);
+      if (!cleanPhone || cleanPhone.length < 9) {
+        setCodeError("Nomor WhatsApp pemesan wajib diisi (minimal 9 digit).");
         return;
       }
-
-      const match = json.data[0];
-      if (!match.guestToken) {
-        setCodeSearchError(
-          "Tiket ini adalah tiket warisan (legacy) tanpa token tautan privat langsung. Silakan tunjukkan kode booking ini kepada panitia saat registrasi di venue atau hubungi admin DagoEng."
-        );
+    } else {
+      if (!tab1Email.trim()) {
+        setCodeError("Alamat email pemesan wajib diisi.");
         return;
       }
-
-      setCodeRecoveredBooking({
-        id: match.id || match.ticketCode,
-        ticketCode: match.ticketCode,
-        eventTitle: match.eventTitle,
-        eventDate: match.eventDate,
-        eventLocation: match.eventLocation,
-        guestName: match.guestName,
-        guestEmail: match.guestEmail,
-        ticketCount: match.ticketCount || 1,
-        paymentStatus: match.paymentStatus,
-        guestToken: match.guestToken,
-      });
-    } catch (err: any) {
-      setCodeSearchError(err.message || "Terjadi kesalahan saat memulihkan tiket.");
-    } finally {
-      setIsSearchingCode(false);
-    }
-  };
-
-  // Handler for Mode 2: Lupa Kode Booking (Email + No WhatsApp)
-  const handleSearchWithPhone = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email.trim() || !phoneNumber.trim()) {
-      setPhoneSearchError("Alamat email dan nomor WhatsApp/HP wajib diisi.");
-      return;
     }
 
     try {
-      setIsSearchingPhone(true);
-      setPhoneSearchError(null);
-      setPhoneRecoveredList([]);
+      setIsSubmittingCode(true);
+      setCodeError(null);
+      setCodeSuccess(null);
 
-      const query = new URLSearchParams({
-        email: email.trim().toLowerCase(),
-        phone: normalizePhoneNumber(phoneNumber),
+      const payload = {
+        mode: "code",
+        channel: tab1Channel,
+        ticketCode: cleanCode,
+        phone: tab1Channel === "whatsapp" ? normalizePhoneNumber(tab1Phone) : undefined,
+        email: tab1Channel === "email" ? tab1Email.trim().toLowerCase() : undefined,
+      };
+
+      const res = await fetch("/api/events/bookings/recover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
-      const res = await fetch(`/api/events/bookings/my?${query.toString()}`);
       const json = await res.json();
 
       if (!res.ok || !json.success) {
-        if (res.status === 403) {
-          setPhoneSearchError(
-            json.error ||
-              "Akses ditolak: Anda saat ini masuk dengan sesi akun yang berbeda. Silakan logout terlebih dahulu untuk memulihkan tiket guest ini."
-          );
-          return;
-        }
-        setPhoneSearchError(
-          json.error || "Gagal melakukan pencarian tiket. Harap periksa koneksi Anda."
+        setCodeError(
+          json.error ||
+            "Tiket tidak ditemukan atau kontak tidak sesuai. Pastikan kode booking dan kontak sama dengan data saat pemesanan."
         );
         return;
       }
 
-      if (!json.data || json.data.length === 0) {
-        setPhoneSearchError(
-          "Tidak ditemukan tiket dengan kombinasi Email dan Nomor WhatsApp tersebut. Pastikan nomor WhatsApp yang Anda masukkan sama dengan data saat registrasi checkout."
-        );
-        return;
-      }
-
-      setPhoneRecoveredList(json.data);
+      setCodeSuccess({
+        channel: json.channel || tab1Channel,
+        target: json.target,
+        configured: json.configured ?? json.emailConfigured ?? true,
+        message: json.message,
+      });
     } catch (err: any) {
-      setPhoneSearchError(err.message || "Terjadi kesalahan saat memulihkan tiket.");
+      setCodeError(err.message || "Terjadi kesalahan sistem saat memproses pemulihan tiket.");
     } finally {
-      setIsSearchingPhone(false);
+      setIsSubmittingCode(false);
+    }
+  };
+
+  // Handler for Tab 2: Lupa Kode Booking
+  const handleRecoverWithPhone = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!tab2Email.trim() || !tab2Phone.trim()) {
+      setPhoneError("Alamat email dan nomor WhatsApp/HP terdaftar wajib diisi.");
+      return;
+    }
+
+    const cleanPhone = normalizePhoneNumber(tab2Phone);
+    if (cleanPhone.length < 9) {
+      setPhoneError("Nomor WhatsApp minimal 9 digit angka.");
+      return;
+    }
+
+    try {
+      setIsSubmittingPhone(true);
+      setPhoneError(null);
+      setPhoneSuccess(null);
+
+      const payload = {
+        mode: "forgot_code",
+        channel: tab2Channel,
+        email: tab2Email.trim().toLowerCase(),
+        phone: cleanPhone,
+      };
+
+      const res = await fetch("/api/events/bookings/recover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json.success) {
+        setPhoneError(json.error || "Gagal memproses permintaan pemulihan tiket.");
+        return;
+      }
+
+      setPhoneSuccess({
+        channel: json.channel || tab2Channel,
+        target: json.target,
+        configured: json.configured ?? json.emailConfigured ?? true,
+        message: json.message,
+      });
+    } catch (err: any) {
+      setPhoneError(err.message || "Terjadi kesalahan sistem saat memulihkan tiket.");
+    } finally {
+      setIsSubmittingPhone(false);
     }
   };
 
@@ -186,8 +201,8 @@ export default function TicketRecoveryPage() {
               value={activeTab}
               onValueChange={(val) => {
                 setActiveTab(val as string);
-                setCodeSearchError(null);
-                setPhoneSearchError(null);
+                setCodeError(null);
+                setPhoneError(null);
               }}
               className="w-full space-y-4"
             >
@@ -198,199 +213,291 @@ export default function TicketRecoveryPage() {
                 </TabsTrigger>
                 <TabsTrigger value="phone" className="gap-1.5">
                   <Phone className="size-4" />
-                  <span>WhatsApp & Email</span>
+                  <span>Lupa Kode Booking</span>
                 </TabsTrigger>
               </TabsList>
 
-              {/* TAB 1: KODE BOOKING & EMAIL */}
+              {/* ========================================================= */}
+              {/* TAB 1: KODE BOOKING + PILIHAN CHANNEL                     */}
+              {/* ========================================================= */}
               <TabsContent value="code" className="space-y-4 pt-1">
-                <div className="space-y-1">
-                  <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <Search className="size-4 text-primary" />
-                    <span>Akses Cepat: Kode Booking & Email</span>
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Masukkan kombinasi kode booking (misal: DAGO-EVT-XXXXX) dan alamat email pemesan.
-                  </p>
-                </div>
-
-                <form onSubmit={handleSearchWithCode} className="space-y-3.5">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="ticketCode" className="text-xs">
-                      Kode Booking Tiket
-                    </Label>
-                    <Input
-                      id="ticketCode"
-                      type="text"
-                      value={ticketCode}
-                      onChange={(e) => setTicketCode(e.target.value)}
-                      placeholder="Contoh: DAGO-EVT-48246"
-                      className="font-mono text-xs"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="codeEmail" className="text-xs">
-                      Alamat Email Pemesan
-                    </Label>
-                    <Input
-                      id="codeEmail"
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="email.pemesan@example.com"
-                      className="text-xs"
-                    />
-                  </div>
-
-                  {codeSearchError && (
-                    <Alert variant="destructive">
-                      <AlertCircle className="size-4" />
-                      <AlertDescription className="text-xs">
-                        {codeSearchError}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  <Button
-                    type="submit"
-                    size="lg"
-                    disabled={isSearchingCode}
-                    className="w-full gap-2"
-                  >
-                    {isSearchingCode ? (
-                      <RefreshCw className="size-4 animate-spin" />
-                    ) : (
-                      <Search className="size-4" />
-                    )}
-                    <span>Cari & Buka E-Tiket Saya</span>
-                  </Button>
-                </form>
-
-                {/* Single Ticket Success Result */}
-                {codeRecoveredBooking && (
-                  <div className="pt-3 border-t border-border space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-                      <CheckCircle2 className="size-4" />
-                      <span>E-Tiket Ditemukan!</span>
+                {codeSuccess ? (
+                  <TicketRecoveryConfirmationCard
+                    channel={codeSuccess.channel}
+                    target={codeSuccess.target}
+                    configured={codeSuccess.configured}
+                    message={codeSuccess.message}
+                    csWhatsappNumber={csWhatsappNumber}
+                    onReset={() => setCodeSuccess(null)}
+                  />
+                ) : (
+                  <>
+                    <div className="space-y-1">
+                      <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Ticket className="size-4 text-primary" />
+                        <span>Kirim Tautan E-Tiket via WhatsApp atau Email</span>
+                      </h2>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Masukkan kode booking dan pilih saluran pengiriman untuk menerima tautan akses privat e-tiket Anda.
+                      </p>
                     </div>
 
-                    <TicketRecoveryResultCard
-                      booking={codeRecoveredBooking}
-                      buttonLabel="Buka Tautan E-Tiket Privat Sekarang"
-                    />
-                  </div>
+                    <form onSubmit={handleRecoverWithCode} className="space-y-4">
+                      {/* Booking Code Input */}
+                      <div className="space-y-1.5">
+                        <Label htmlFor="ticketCode" className="text-xs">
+                          Kode Booking Tiket
+                        </Label>
+                        <Input
+                          id="ticketCode"
+                          type="text"
+                          required
+                          value={ticketCode}
+                          onChange={(e) => setTicketCode(e.target.value)}
+                          placeholder="Contoh: DAGO-EVT-48246"
+                          className="font-mono text-xs"
+                        />
+                      </div>
+
+                      {/* Delivery Channel Selector */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Kirim Tautan Akses Melalui</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTab1Channel("whatsapp");
+                              setCodeError(null);
+                            }}
+                            className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition-colors ${
+                              tab1Channel === "whatsapp"
+                                ? "border-primary bg-primary/10 text-primary shadow-2xs font-semibold"
+                                : "border-border bg-card/50 text-muted-foreground hover:bg-muted/50"
+                            }`}
+                          >
+                            <MessageCircle className="size-4 shrink-0" />
+                            <span>WhatsApp</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTab1Channel("email");
+                              setCodeError(null);
+                            }}
+                            className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition-colors ${
+                              tab1Channel === "email"
+                                ? "border-primary bg-primary/10 text-primary shadow-2xs font-semibold"
+                                : "border-border bg-card/50 text-muted-foreground hover:bg-muted/50"
+                            }`}
+                          >
+                            <Mail className="size-4 shrink-0" />
+                            <span>Email</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Dynamic Contact Input depending on selected channel */}
+                      {tab1Channel === "whatsapp" ? (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="tab1Phone" className="text-xs">
+                            Nomor WhatsApp Pemesan (Terdaftar saat Checkout)
+                          </Label>
+                          <Input
+                            id="tab1Phone"
+                            type="tel"
+                            required
+                            value={tab1Phone}
+                            onChange={(e) => setTab1Phone(e.target.value)}
+                            placeholder="Contoh: 08123456789 atau 628123456789"
+                            className="text-xs"
+                          />
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          <Label htmlFor="tab1Email" className="text-xs">
+                            Alamat Email Pemesan (Terdaftar saat Checkout)
+                          </Label>
+                          <Input
+                            id="tab1Email"
+                            type="email"
+                            required
+                            value={tab1Email}
+                            onChange={(e) => setTab1Email(e.target.value)}
+                            placeholder="email.pemesan@example.com"
+                            className="text-xs"
+                          />
+                        </div>
+                      )}
+
+                      {codeError && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="size-4" />
+                          <AlertDescription className="text-xs">
+                            {codeError}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      <Button
+                        type="submit"
+                        size="lg"
+                        disabled={isSubmittingCode}
+                        className="w-full gap-2"
+                      >
+                        {isSubmittingCode ? (
+                          <RefreshCw className="size-4 animate-spin" />
+                        ) : (
+                          <Send className="size-4" />
+                        )}
+                        <span>
+                          {tab1Channel === "whatsapp"
+                            ? "Kirim Tautan ke WhatsApp"
+                            : "Kirim Tautan ke Email"}
+                        </span>
+                      </Button>
+                    </form>
+                  </>
                 )}
               </TabsContent>
 
-              {/* TAB 2: WHATSAPP & EMAIL */}
+              {/* ========================================================= */}
+              {/* TAB 2: LUPA KODE BOOKING + PILIHAN CHANNEL                 */}
+              {/* ========================================================= */}
               <TabsContent value="phone" className="space-y-4 pt-1">
-                <div className="space-y-1">
-                  <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <Phone className="size-4 text-primary" />
-                    <span>Pemulihan Mandiri: Email & No. WhatsApp</span>
-                  </h2>
-                  <p className="text-xs text-muted-foreground">
-                    Masukkan email dan nomor WhatsApp yang digunakan saat mendaftar tiket untuk membuka e-tiket Anda seketika.
-                  </p>
-                </div>
-
-                <form onSubmit={handleSearchWithPhone} className="space-y-3.5">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="phoneEmail" className="text-xs">
-                      Alamat Email Pemesan
-                    </Label>
-                    <Input
-                      id="phoneEmail"
-                      type="email"
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="email.pemesan@example.com"
-                      className="text-xs"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="phoneNumber" className="text-xs">
-                      Nomor WhatsApp / HP Terdaftar
-                    </Label>
-                    <Input
-                      id="phoneNumber"
-                      type="tel"
-                      required
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="Contoh: 08123456789 atau 628123456789"
-                      className="text-xs"
-                    />
-                  </div>
-
-                  {phoneSearchError && (
-                    <Alert variant="destructive" className="space-y-2">
-                      <div className="flex items-start gap-2">
-                        <AlertCircle className="size-4 shrink-0 mt-0.5" />
-                        <AlertDescription className="text-xs">
-                          {phoneSearchError}
-                        </AlertDescription>
-                      </div>
-
-                      <div className="pt-2 border-t border-destructive/20 flex items-center justify-between">
-                        <span className="text-xs text-destructive">
-                          Masih kesulitan menemukan tiket?
-                        </span>
-                        <a
-                          href={buildSupportWhatsAppUrl(csWhatsappNumber, email)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-                        >
-                          <MessageCircle className="size-3.5" />
-                          <span>Chat CS WhatsApp</span>
-                        </a>
-                      </div>
-                    </Alert>
-                  )}
-
-                  <Button
-                    type="submit"
-                    size="lg"
-                    disabled={isSearchingPhone}
-                    className="w-full gap-2"
-                  >
-                    {isSearchingPhone ? (
-                      <RefreshCw className="size-4 animate-spin" />
-                    ) : (
-                      <Search className="size-4" />
-                    )}
-                    <span>Cari & Pulihkan Tiket Saya</span>
-                  </Button>
-                </form>
-
-                {/* Multiple Tickets Success Result */}
-                {phoneRecoveredList.length > 0 && (
-                  <div className="pt-3 border-t border-border space-y-3">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-primary flex items-center gap-1.5">
-                        <CheckCircle2 className="size-4" />
-                        <span>Ditemukan {phoneRecoveredList.length} Tiket Event</span>
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {email}
-                      </span>
+                {phoneSuccess ? (
+                  <TicketRecoveryConfirmationCard
+                    channel={phoneSuccess.channel}
+                    target={phoneSuccess.target}
+                    configured={phoneSuccess.configured}
+                    message={phoneSuccess.message}
+                    csWhatsappNumber={csWhatsappNumber}
+                    onReset={() => setPhoneSuccess(null)}
+                  />
+                ) : (
+                  <>
+                    <div className="space-y-1">
+                      <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                        <Phone className="size-4 text-primary" />
+                        <span>Pemulihan Tiket Tanpa Kode Booking</span>
+                      </h2>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Masukkan email dan nomor WhatsApp terdaftar. Kami akan memvalidasi data Anda dan mengirimkan tautan e-tiket ke saluran yang Anda pilih.
+                      </p>
                     </div>
 
-                    <div className="space-y-2.5">
-                      {phoneRecoveredList.map((bk) => (
-                        <TicketRecoveryResultCard
-                          key={bk.id}
-                          booking={bk}
-                          buttonLabel="Buka E-Tiket Saya"
+                    <form onSubmit={handleRecoverWithPhone} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="tab2Email" className="text-xs">
+                          Alamat Email Pemesan
+                        </Label>
+                        <Input
+                          id="tab2Email"
+                          type="email"
+                          required
+                          value={tab2Email}
+                          onChange={(e) => setTab2Email(e.target.value)}
+                          placeholder="email.pemesan@example.com"
+                          className="text-xs"
                         />
-                      ))}
-                    </div>
-                  </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="tab2Phone" className="text-xs">
+                          Nomor WhatsApp / HP Terdaftar
+                        </Label>
+                        <Input
+                          id="tab2Phone"
+                          type="tel"
+                          required
+                          value={tab2Phone}
+                          onChange={(e) => setTab2Phone(e.target.value)}
+                          placeholder="Contoh: 08123456789 atau 628123456789"
+                          className="text-xs"
+                        />
+                      </div>
+
+                      {/* Delivery Channel Selector */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Kirim Tautan Akses Melalui</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTab2Channel("whatsapp");
+                              setPhoneError(null);
+                            }}
+                            className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition-colors ${
+                              tab2Channel === "whatsapp"
+                                ? "border-primary bg-primary/10 text-primary shadow-2xs font-semibold"
+                                : "border-border bg-card/50 text-muted-foreground hover:bg-muted/50"
+                            }`}
+                          >
+                            <MessageCircle className="size-4 shrink-0" />
+                            <span>WhatsApp</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTab2Channel("email");
+                              setPhoneError(null);
+                            }}
+                            className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition-colors ${
+                              tab2Channel === "email"
+                                ? "border-primary bg-primary/10 text-primary shadow-2xs font-semibold"
+                                : "border-border bg-card/50 text-muted-foreground hover:bg-muted/50"
+                            }`}
+                          >
+                            <Mail className="size-4 shrink-0" />
+                            <span>Email</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {phoneError && (
+                        <Alert variant="destructive" className="space-y-2">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                            <AlertDescription className="text-xs">
+                              {phoneError}
+                            </AlertDescription>
+                          </div>
+
+                          <div className="pt-2 border-t border-destructive/20 flex items-center justify-between">
+                            <span className="text-xs text-destructive">
+                              Masih kesulitan menemukan tiket?
+                            </span>
+                            <a
+                              href={buildSupportWhatsAppUrl(csWhatsappNumber, tab2Email)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+                            >
+                              <MessageCircle className="size-3.5" />
+                              <span>Chat CS WhatsApp</span>
+                            </a>
+                          </div>
+                        </Alert>
+                      )}
+
+                      <Button
+                        type="submit"
+                        size="lg"
+                        disabled={isSubmittingPhone}
+                        className="w-full gap-2"
+                      >
+                        {isSubmittingPhone ? (
+                          <RefreshCw className="size-4 animate-spin" />
+                        ) : (
+                          <Send className="size-4" />
+                        )}
+                        <span>
+                          {tab2Channel === "whatsapp"
+                            ? "Kirim Tautan ke WhatsApp"
+                            : "Kirim Tautan ke Email"}
+                        </span>
+                      </Button>
+                    </form>
+                  </>
                 )}
               </TabsContent>
             </Tabs>
@@ -400,7 +507,7 @@ export default function TicketRecoveryPage() {
         {/* WhatsApp CS Fast Support Card */}
         <TicketRecoverySupportCard
           csWhatsappNumber={csWhatsappNumber}
-          email={email}
+          email={tab1Email || tab2Email}
         />
 
         {/* Account User Option */}

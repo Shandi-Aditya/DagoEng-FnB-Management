@@ -58,6 +58,9 @@ export function CheckInActionToolbar({
           <Badge variant="secondary" className="text-xs">
             {event.category}
           </Badge>
+          <Badge variant="default" className="text-xs">
+            Hari ini (WITA)
+          </Badge>
           {event.organizerName && (
             <span className="text-xs text-muted-foreground truncate">
               Penyelenggara: <span className="text-foreground font-medium">{event.organizerName}</span>
@@ -70,7 +73,7 @@ export function CheckInActionToolbar({
             <NativeSelect
               value={selectedEventId || event.id}
               onChange={(e) => onSelectEvent(e.target.value)}
-              aria-label="Pilih event operasional"
+              aria-label="Pilih event hari ini"
               className="text-xs"
             >
               {events!.map((evt) => (

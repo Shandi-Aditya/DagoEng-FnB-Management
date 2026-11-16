@@ -318,3 +318,85 @@ export function getCheckInStatusTone(ticket: EventTicketOrder): { tone: StatusTo
     label: count > 1 ? `Belum hadir (0/${count})` : "Belum hadir",
   };
 }
+
+export const WITA_TIMEZONE = "Asia/Makassar";
+
+export type EventDateStatus = "TODAY" | "PAST" | "UPCOMING";
+
+/**
+ * Returns YYYY-MM-DD date string in WITA timezone (Asia/Makassar, UTC+8).
+ */
+export function getWitaDateString(date: Date | string | number = new Date()): string {
+  const d = typeof date === "object" ? date : new Date(date);
+  if (isNaN(d.getTime())) return "";
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: WITA_TIMEZONE }).format(d);
+  } catch {
+    const tzOffset = 8 * 60;
+    const utc = d.getTime() + d.getTimezoneOffset() * 60000;
+    const witaDate = new Date(utc + tzOffset * 60000);
+    return witaDate.toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * Determines whether an event is in the past, occurs today, or is upcoming in WITA timezone.
+ * Sanity-checks duration (caps at 7 days) to prevent corrupted multi-year dummy end dates from staying active.
+ */
+export function getEventDateStatusWita(
+  event: { startDate: string; endDate?: string | null },
+  referenceDate: Date = new Date()
+): EventDateStatus {
+  const todayWita = getWitaDateString(referenceDate);
+  const startWita = getWitaDateString(event.startDate);
+
+  if (!startWita || !todayWita) return "PAST";
+
+  const startMs = new Date(event.startDate).getTime();
+  let endMs = event.endDate ? new Date(event.endDate).getTime() : startMs;
+
+  if (isNaN(startMs)) return "PAST";
+  if (isNaN(endMs) || endMs < startMs) {
+    endMs = startMs;
+  }
+
+  // Dago Hub community events last hours or a few days. Cap anomalous durations > 7 days to start date.
+  const MAX_EVENT_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+  if (endMs - startMs > MAX_EVENT_DURATION_MS) {
+    endMs = startMs;
+  }
+
+  const endWita = getWitaDateString(new Date(endMs));
+
+  if (endWita < todayWita) {
+    return "PAST";
+  }
+
+  if (startWita > todayWita) {
+    return "UPCOMING";
+  }
+
+  return "TODAY";
+}
+
+/**
+ * Checks whether an event occurs today in WITA timezone (Asia/Makassar).
+ */
+export function isEventTodayWita(
+  event: { startDate: string; endDate?: string | null },
+  referenceDate: Date = new Date()
+): boolean {
+  return getEventDateStatusWita(event, referenceDate) === "TODAY";
+}
+
+/**
+ * Filters a list of events to strictly those taking place today in WITA timezone.
+ * Excludes past events and upcoming events.
+ */
+export function filterTodayEventsWita<T extends { startDate: string; endDate?: string | null }>(
+  events: readonly T[],
+  referenceDate: Date = new Date()
+): T[] {
+  return events.filter((e) => isEventTodayWita(e, referenceDate));
+}
+

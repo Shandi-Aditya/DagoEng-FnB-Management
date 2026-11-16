@@ -149,6 +149,15 @@ export function getRecoveryStatusMeta(status: string): TicketStatusMeta {
   }
 }
 
+export type RecoveryChannel = "whatsapp" | "email";
+
+export interface RecoveryBookingItem {
+  ticketCode: string;
+  eventTitle: string;
+  ticketCount: number;
+  privateAccessUrl: string;
+}
+
 /**
  * Builds customer support WhatsApp escalation link.
  */
@@ -159,3 +168,68 @@ export function buildSupportWhatsAppUrl(csNumber: string, email?: string): strin
     : `Halo Admin Dago Hub, saya lupa kode booking tiket event saya di DagoEng. Mohon bantu verifikasi e-tiket saya. Terima kasih!`;
   return `https://wa.me/${csNumber}?text=${encodeURIComponent(msg)}`;
 }
+
+/**
+ * Masks an email address for privacy (e.g. b***o@example.com).
+ */
+export function maskEmail(email: string): string {
+  if (!email) return "";
+  const parts = email.trim().split("@");
+  if (parts.length !== 2) return email;
+  const [local, domain] = parts;
+  if (local.length <= 2) {
+    return `${local[0]}***@${domain}`;
+  }
+  return `${local[0]}***${local[local.length - 1]}@${domain}`;
+}
+
+/**
+ * Masks a phone number for privacy (e.g. 62812****7890 or 0812****7890).
+ */
+export function maskPhone(phone: string): string {
+  if (!phone) return "";
+  const cleaned = phone.replace(/\D/g, "");
+  if (cleaned.length < 8) return phone;
+  const start = cleaned.slice(0, 4);
+  const end = cleaned.slice(-4);
+  return `${start}****${end}`;
+}
+
+/**
+ * Formats transactional WhatsApp message containing private e-ticket access links.
+ */
+export function buildRecoveryWhatsAppMessage(
+  guestName: string,
+  bookings: RecoveryBookingItem[]
+): string {
+  const salutation = guestName?.trim() ? `Halo ${guestName.trim()},` : "Halo Kak,";
+  if (bookings.length === 1) {
+    const b = bookings[0];
+    return (
+      `${salutation}\n\n` +
+      `Berikut tautan akses privat e-tiket DagoEng Anda:\n\n` +
+      `• Acara: ${b.eventTitle}\n` +
+      `• Kode Booking: ${b.ticketCode}\n` +
+      `• Jumlah Tiket: ${b.ticketCount} tiket\n` +
+      `• Tautan E-Tiket: ${b.privateAccessUrl}\n\n` +
+      `Harap simpan tautan ini dengan baik dan tunjukkan barcode tiket saat kedatangan di lokasi acara. Terima kasih!`
+    );
+  }
+
+  const list = bookings
+    .map(
+      (b, idx) =>
+        `${idx + 1}. ${b.eventTitle}\n` +
+        `   Kode: ${b.ticketCode} (${b.ticketCount} tiket)\n` +
+        `   Tautan: ${b.privateAccessUrl}`
+    )
+    .join("\n\n");
+
+  return (
+    `${salutation}\n\n` +
+    `Berikut adalah daftar tautan akses privat e-tiket DagoEng Anda:\n\n` +
+    `${list}\n\n` +
+    `Harap simpan tautan ini dan jangan bagikan ke pihak lain demi mencegah penyalahgunaan tiket. Terima kasih!`
+  );
+}
+
