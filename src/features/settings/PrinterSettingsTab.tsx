@@ -427,6 +427,36 @@ export function PrinterSettingsTab() {
 
               <label className="flex cursor-pointer items-start justify-between gap-3 rounded-lg border p-3">
                 <div>
+                  <p className="font-medium text-foreground">Cetak senyap dapur tanpa dialog</p>
+                  <p className="text-muted-foreground">Mencetak nota dapur via print agent (QZ/PrintNode) atau Chrome kiosk tanpa membuka dialog.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={localSettings.silentKitchenPrint}
+                  onChange={(e) =>
+                    setLocalSettings((prev) => ({ ...prev, silentKitchenPrint: e.target.checked }))
+                  }
+                  className="mt-1 rounded border"
+                />
+              </label>
+
+              <label className="flex cursor-pointer items-start justify-between gap-3 rounded-lg border p-3">
+                <div>
+                  <p className="font-medium text-foreground">Pisahkan nota dapur per mitra</p>
+                  <p className="text-muted-foreground">Memecah tiket dapur multi-tenant agar tiap tenant hanya menerima item miliknya tanpa harga.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={localSettings.splitKitchenTicketPerTenant}
+                  onChange={(e) =>
+                    setLocalSettings((prev) => ({ ...prev, splitKitchenTicketPerTenant: e.target.checked }))
+                  }
+                  className="mt-1 rounded border"
+                />
+              </label>
+
+              <label className="flex cursor-pointer items-start justify-between gap-3 rounded-lg border p-3">
+                <div>
                   <p className="font-medium text-foreground">Cetak struk kasir otomatis</p>
                   <p className="text-muted-foreground">Mencetak struk pembayaran untuk pelanggan.</p>
                 </div>
@@ -682,9 +712,11 @@ export function PrinterSettingsTab() {
                 value={formConnectionType}
                 onChange={(e) => setFormConnectionType(e.target.value as PrinterConnectionType)}
               >
-                <NativeSelectOption value="BROWSER_SYSTEM">Dialog cetak browser</NativeSelectOption>
+                <NativeSelectOption value="BROWSER_SYSTEM">Dialog cetak browser / Kiosk</NativeSelectOption>
                 <NativeSelectOption value="LOCAL_BRIDGE">Bridge lokal (HTTP daemon)</NativeSelectOption>
                 <NativeSelectOption value="NETWORK_LAN_VIA_BRIDGE">LAN via bridge</NativeSelectOption>
+                <NativeSelectOption value="QZ_TRAY">QZ Tray agent (Senyap)</NativeSelectOption>
+                <NativeSelectOption value="PRINTNODE">PrintNode cloud agent</NativeSelectOption>
               </NativeSelect>
             </div>
 

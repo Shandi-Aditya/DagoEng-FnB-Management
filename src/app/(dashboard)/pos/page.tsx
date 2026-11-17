@@ -605,15 +605,18 @@ export default function POSPage() {
         variantName: c.selectedVariant?.name,
         modifiers: c.selectedModifiers.map((m) => m.name),
         notes: c.notes,
+        tenantId: c.tenantId,
+        tenantName: getTenantName(c.tenantId),
       })),
       cashierName: user?.name || "Kasir Bertugas",
       timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
       kitchenNotes: orderNotes.trim() || undefined,
+      isSilent: true,
     };
     setKitchenModalTicket(kitchenTicket);
 
     if (printerSettings.autoPrintKitchenOrder) {
-      printKitchenOrder(kitchenTicket, "NEW_ORDER").then((res) => {
+      printKitchenOrder(kitchenTicket, "NEW_ORDER", { isSilent: true }).then((res) => {
         if (res.success) {
           setKitchenPrintNotification({
             type: "success",

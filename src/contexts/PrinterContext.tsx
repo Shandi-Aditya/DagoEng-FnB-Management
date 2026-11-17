@@ -26,6 +26,7 @@ import {
   saveStoredPrintQueue,
   recoverStalePrintingJobs,
   dispatchPrintJob,
+  splitKitchenTicketByTenant,
 } from "@/lib/printer";
 
 interface PrinterContextType {
@@ -41,8 +42,8 @@ interface PrinterContextType {
   printKitchenOrder: (
     ticket: KitchenTicketData,
     purpose?: PrintPurpose,
-    options?: { isManualReprint?: boolean; reprintedBy?: string }
-  ) => Promise<{ success: boolean; job: PrintJob; message: string }>;
+    options?: { isManualReprint?: boolean; reprintedBy?: string; isSilent?: boolean }
+  ) => Promise<{ success: boolean; job: PrintJob; jobs?: PrintJob[]; message: string }>;
   printCustomerReceipt: (
     receipt: POSReceiptData,
     options?: { isManualReprint?: boolean }
@@ -262,93 +263,129 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     async (
       ticket: KitchenTicketData,
       purpose: PrintPurpose = "NEW_ORDER",
-      options?: { isManualReprint?: boolean; reprintedBy?: string }
-    ): Promise<{ success: boolean; job: PrintJob; message: string }> => {
+      options?: { isManualReprint?: boolean; reprintedBy?: string; isSilent?: boolean }
+    ): Promise<{ success: boolean; job: PrintJob; jobs?: PrintJob[]; message: string }> => {
       const targetPrinter = activeKitchenPrinter || DEFAULT_PRINTER_DEVICES[1];
       const seqNo = ticket.sequenceNumber || 1;
-      const idempotencyKey = buildIdempotencyKey(ticket.orderId, purpose, seqNo);
+      const isSilent = options?.isSilent !== undefined ? options.isSilent : settings.silentKitchenPrint;
 
-      // Check Idempotency for automatic prints
-      if (!options?.isManualReprint && isJobIdempotentDuplicate(queue, idempotencyKey, purpose)) {
-        const existing = queue.find((j) => j.idempotencyKey === idempotencyKey);
-        return {
-          success: true,
-          job: existing!,
-          message: "Tiket pesanan sudah pernah dikirim ke printer (Deduplicated).",
+      // Pemisahan tiket dapur per mitra (Task V-15)
+      const shouldSplit = settings.splitKitchenTicketPerTenant !== false;
+      const ticketsToPrint = shouldSplit ? splitKitchenTicketByTenant(ticket) : [ticket];
+
+      const createdJobs: PrintJob[] = [];
+      let allSuccess = true;
+      let lastResultStatus = "";
+
+      for (let i = 0; i < ticketsToPrint.length; i++) {
+        const subTicket = ticketsToPrint[i];
+        const tenantSuffix = subTicket.tenantId ? `_${subTicket.tenantId}` : "";
+        const idempotencyKey = `${buildIdempotencyKey(subTicket.orderId, purpose, seqNo)}${tenantSuffix}`;
+
+        // Check Idempotency for automatic prints
+        if (!options?.isManualReprint && isJobIdempotentDuplicate(queue, idempotencyKey, purpose)) {
+          const existing = queue.find((j) => j.idempotencyKey === idempotencyKey);
+          if (existing) {
+            createdJobs.push(existing);
+            continue;
+          }
+        }
+
+        // Generate Ticket Text per mitra (Strictly no financial data)
+        const payloadText = generateKitchenTicketText(
+          {
+            ...subTicket,
+            purpose,
+            reprintedBy: options?.reprintedBy,
+            reprintedAt: options?.reprintedBy ? new Date().toLocaleTimeString("id-ID") : undefined,
+          },
+          {
+            paperWidth: targetPrinter.paperWidth,
+            settings,
+          }
+        );
+
+        const nowIso = new Date().toISOString();
+        const jobId = `job-prn-${Date.now()}-${i}-${Math.floor(100 + Math.random() * 900)}`;
+
+        const newJob: PrintJob = {
+          id: jobId,
+          idempotencyKey,
+          orderId: subTicket.orderId,
+          orderNumber: subTicket.orderNumber,
+          outletId: subTicket.outletId || activeOutletId || "outlet-sgr",
+          printerId: targetPrinter.id,
+          printerName: targetPrinter.name,
+          receiptType: "KITCHEN_ORDER",
+          purpose,
+          sequenceNumber: seqNo,
+          payloadText,
+          status: "PRINTING",
+          attempts: 1,
+          lastAttemptAt: nowIso,
+          createdAt: nowIso,
+          reprintedBy: options?.reprintedBy,
         };
+
+        // Add to persistent queue
+        setQueue((prev) => {
+          const updated = [newJob, ...prev];
+          saveStoredPrintQueue(updated);
+          return updated;
+        });
+
+        // Dispatch asynchronously
+        const result = await dispatchPrintJob(newJob, targetPrinter, { isSilent });
+        lastResultStatus = result.status;
+
+        // Update Job status with verifiable result
+        const finalizedJob: PrintJob = {
+          ...newJob,
+          status: result.status,
+          errorInfo: result.errorInfo,
+          completedAt:
+            result.status !== "FAILED" && result.status !== "OFFLINE" ? new Date().toISOString() : undefined,
+        };
+
+        setQueue((prev) => {
+          const updated = prev.map((j) => (j.id === jobId ? finalizedJob : j));
+          saveStoredPrintQueue(updated);
+          return updated;
+        });
+
+        createdJobs.push(finalizedJob);
+
+        const isSuccessfulStatus =
+          result.status === "BRIDGE_ACKNOWLEDGED" || result.status === "SENT_TO_SPOOLER";
+        if (!isSuccessfulStatus) {
+          allSuccess = false;
+        }
       }
 
-      // Generate Ticket Text (Strictly no financial data)
-      const payloadText = generateKitchenTicketText(
-        {
-          ...ticket,
-          purpose,
-          reprintedBy: options?.reprintedBy,
-          reprintedAt: options?.reprintedBy ? new Date().toLocaleTimeString("id-ID") : undefined,
-        },
-        {
-          paperWidth: targetPrinter.paperWidth,
-          settings,
-        }
-      );
-
-      const nowIso = new Date().toISOString();
-      const jobId = `job-prn-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
-
-      const newJob: PrintJob = {
-        id: jobId,
-        idempotencyKey,
-        orderId: ticket.orderId,
-        orderNumber: ticket.orderNumber,
-        outletId: ticket.outletId || activeOutletId || "outlet-sgr",
+      const primaryJob = createdJobs[0] || {
+        id: `job-prn-empty`,
+        outletId: activeOutletId || "outlet-sgr",
         printerId: targetPrinter.id,
         printerName: targetPrinter.name,
-        receiptType: "KITCHEN_ORDER",
+        receiptType: "KITCHEN_ORDER" as const,
         purpose,
-        sequenceNumber: seqNo,
-        payloadText,
-        status: "PRINTING",
+        payloadText: "",
+        status: "FAILED" as const,
         attempts: 1,
-        lastAttemptAt: nowIso,
-        createdAt: nowIso,
-        reprintedBy: options?.reprintedBy,
+        createdAt: new Date().toISOString(),
       };
 
-      // Add to persistent queue
-      setQueue((prev) => {
-        const updated = [newJob, ...prev];
-        saveStoredPrintQueue(updated);
-        return updated;
-      });
-
-      // Dispatch asynchronously to prevent blocking POS transaction
-      const result = await dispatchPrintJob(newJob, targetPrinter);
-
-      // Update Job status with verifiable result
-      const finalizedJob: PrintJob = {
-        ...newJob,
-        status: result.status,
-        errorInfo: result.errorInfo,
-        completedAt: result.status !== "FAILED" && result.status !== "OFFLINE" ? new Date().toISOString() : undefined,
-      };
-
-      setQueue((prev) => {
-        const updated = prev.map((j) => (j.id === jobId ? finalizedJob : j));
-        saveStoredPrintQueue(updated);
-        return updated;
-      });
-
-      const isSuccessfulStatus =
-        result.status === "BRIDGE_ACKNOWLEDGED" || result.status === "SENT_TO_SPOOLER";
+      const countMsg = ticketsToPrint.length > 1 ? ` (${ticketsToPrint.length} nota mitra)` : "";
 
       return {
-        success: isSuccessfulStatus,
-        job: finalizedJob,
-        message: isSuccessfulStatus
-          ? result.status === "BRIDGE_ACKNOWLEDGED"
-            ? `Nota dapur berhasil diteruskan ke Print Bridge (${targetPrinter.name}).`
-            : `Nota dapur dikirim ke spooler sistem (${targetPrinter.name}).`
-          : result.errorInfo || "Gagal mencetak nota dapur.",
+        success: allSuccess,
+        job: primaryJob,
+        jobs: createdJobs,
+        message: allSuccess
+          ? lastResultStatus === "BRIDGE_ACKNOWLEDGED"
+            ? `Nota dapur berhasil diteruskan ke Print Bridge (${targetPrinter.name})${countMsg}.`
+            : `Nota dapur dikirim ke spooler sistem (${targetPrinter.name})${countMsg}.`
+          : primaryJob.errorInfo || "Gagal mencetak nota dapur.",
       };
     },
     [activeKitchenPrinter, queue, settings, activeOutletId]
@@ -441,6 +478,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
           quantity: i.quantity,
           modifiers: i.modifiers,
           notes: i.notes,
+          tenantId: i.tenantId,
         })),
         cashierName: options?.cashierName || "Kasir / Staff",
         timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
