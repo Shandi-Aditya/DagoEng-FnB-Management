@@ -168,6 +168,7 @@ export default function OrdersPage() {
 
     // 2. Inventory: Deduct ingredients based on Recipe BOM
     const bomItems = paymentOrder.items.map((it) => ({
+      productId: it.productId,
       productName: it.productName,
       quantity: it.quantity,
       modifiers: it.modifiers,

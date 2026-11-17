@@ -633,6 +633,7 @@ export default function POSPage() {
 
     // 2. Cross-Module: Auto-deduct inventory ingredients based on Recipe BOM (POS-36 / B4)
     const bomItems = cartItems.map((c) => ({
+      productId: c.productId,
       productName: c.productName,
       quantity: c.quantity,
       modifiers: [
