@@ -116,6 +116,11 @@ export function EventTicketPassDialog({
                 <span className="text-muted-foreground block text-xs truncate">
                   {ticket.guestEmail}
                 </span>
+                {ticket.ticketTierName && (
+                  <Badge variant="outline" className="mt-1 text-xs font-medium">
+                    {ticket.ticketTierName}
+                  </Badge>
+                )}
               </div>
               <div>
                 <span className="text-muted-foreground block text-xs">Jumlah & biaya</span>

@@ -24,6 +24,8 @@ import {
   OrganizerPortalSummary,
   OrganizerPortalData,
   EventTicketAvailability,
+  EventTicketTier,
+  EventTicketTierAvailability,
   RevenueSplitParty,
   RevenueSplitNegotiationStatus,
   ProposedRevenueSplit,
@@ -43,6 +45,8 @@ export {
   type OrganizerPortalSummary,
   type OrganizerPortalData,
   type EventTicketAvailability,
+  type EventTicketTier,
+  type EventTicketTierAvailability,
   type RevenueSplitParty,
   type RevenueSplitNegotiationStatus,
   type ProposedRevenueSplit,
@@ -1675,6 +1679,7 @@ export function toPublicEvent(event: CommunityEvent): PublicCommunityEvent {
     maxCapacity: event.maxCapacity || getEventCapacity(event),
     isPaid: event.isPaid,
     price: event.price,
+    ticketTiers: event.ticketTiers || [],
     posterUrl: event.posterUrl,
     externalRegistrationUrl: event.externalRegistrationUrl || null,
     organizerName: event.organizerName,
@@ -1750,6 +1755,47 @@ export function getEventActiveBookedTicketCount(
 }
 
 /**
+ * Calculates currently booked active tickets for a specific tier of an event.
+ * Strictly excludes CANCELLED and EXPIRED bookings.
+ */
+export function getEventActiveBookedTicketCountForTier(
+  eventId: string,
+  tierId: string,
+  customBookings?: EventTicketOrder[]
+): number {
+  if (!eventId || !tierId) return 0;
+  const normalizedId = eventId.trim().toLowerCase();
+  const normalizedTierId = tierId.trim().toLowerCase();
+  const allBookings = customBookings || loadBookingsFromDisk();
+  const now = Date.now();
+  const expiryWindow = getBookingPaymentExpiryMs();
+
+  const activeBookings = allBookings.filter((b) => {
+    if ((b.eventId || "").trim().toLowerCase() !== normalizedId) return false;
+    if ((b.ticketTierId || "").trim().toLowerCase() !== normalizedTierId) return false;
+    if (b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED") return false;
+
+    // Unpaid pending booking expiry check
+    if (b.paymentStatus === "PENDING" && b.totalPrice > 0 && !b.paymentProofUrl) {
+      const createdMs = new Date(b.createdAt).getTime();
+      const expiresAtMs = b.expiresAt ? new Date(b.expiresAt).getTime() : NaN;
+      if (!isNaN(expiresAtMs) && now > expiresAtMs) return false;
+      if (!isNaN(createdMs) && now - createdMs > expiryWindow) return false;
+    }
+
+    return true;
+  });
+
+  return activeBookings.reduce((sum, b) => {
+    const count =
+      typeof b.ticketCount === "number" && b.ticketCount > 0
+        ? b.ticketCount
+        : parseInt(String(b.ticketCount || 1), 10) || 1;
+    return sum + count;
+  }, 0);
+}
+
+/**
  * Computes live ticket availability metrics for an event based on confirmed capacity and active bookings.
  * Follows exact quota rules: CANCELLED bookings are excluded; PENDING and PAID hold quota.
  */
@@ -1765,13 +1811,56 @@ export function getEventTicketAvailability(
   }
 
   const capacityRes = resolveVenueCapacity(event);
-  const totalCapacity = capacityRes.capacity;
+  let totalCapacity = capacityRes.capacity;
+  if (event.ticketTiers && event.ticketTiers.length > 0) {
+    const sumTierQuota = event.ticketTiers.reduce((acc, t) => acc + (t.quota || 0), 0);
+    if (!event.maxCapacity || event.maxCapacity <= 0) {
+      totalCapacity = sumTierQuota;
+    }
+  }
+
   const allBookings = customBookings || loadBookingsFromDisk();
   const ticketsReserved = getEventActiveBookedTicketCount(eventId, allBookings);
   const ticketsRemaining = Math.max(0, totalCapacity - ticketsReserved);
   const occupancyRate =
     totalCapacity > 0 ? Math.min(100, Math.round((ticketsReserved / totalCapacity) * 100)) : 0;
-  const isSoldOut = ticketsRemaining <= 0;
+  let isSoldOut = ticketsRemaining <= 0;
+
+  let tierAvailabilities: EventTicketTierAvailability[] | undefined = undefined;
+  if (event.ticketTiers && event.ticketTiers.length > 0) {
+    tierAvailabilities = event.ticketTiers.map((t) => {
+      const booked = getEventActiveBookedTicketCountForTier(eventId, t.id, allBookings);
+      const remaining = Math.max(0, t.quota - booked);
+      const isTierSoldOut = remaining <= 0;
+      const now = Date.now();
+      let salesStatus: "UPCOMING" | "ON_SALE" | "ENDED" = "ON_SALE";
+      if (t.salesStartDate && new Date(t.salesStartDate).getTime() > now) {
+        salesStatus = "UPCOMING";
+      } else if (t.salesEndDate && new Date(t.salesEndDate).getTime() < now) {
+        salesStatus = "ENDED";
+      }
+      return {
+        tierId: t.id,
+        name: t.name,
+        price: t.price,
+        quota: t.quota,
+        booked,
+        remaining,
+        isSoldOut: isTierSoldOut,
+        salesStatus,
+        salesStartDate: t.salesStartDate,
+        salesEndDate: t.salesEndDate,
+        description: t.description,
+      };
+    });
+
+    const hasAvailableTier = tierAvailabilities.some(
+      (t) => !t.isSoldOut && t.salesStatus === "ON_SALE"
+    );
+    if (!hasAvailableTier) {
+      isSoldOut = true;
+    }
+  }
 
   return {
     totalCapacity,
@@ -1782,6 +1871,7 @@ export function getEventTicketAvailability(
     capacitySource: capacityRes.source,
     capacityDescription: capacityRes.sourceDescription,
     isSoldOut,
+    tiers: tierAvailabilities,
   };
 }
 
@@ -1959,6 +2049,7 @@ export async function getPublicEventById(id: string): Promise<PublicCommunityEve
 
   const publicEvt = toPublicEvent(event);
   publicEvt.availability = getEventTicketAvailability(event.id, allEvents, allBookings);
+  publicEvt.tierAvailability = publicEvt.availability.tiers;
   return publicEvt;
 }
 
@@ -2289,6 +2380,7 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
         revenueSplitHistory: [],
         payoutStatus: "UNQUALIFIED",
         payoutHistory: [],
+        ticketTiers: Array.isArray(payload.ticketTiers) ? payload.ticketTiers : undefined,
 
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -2483,6 +2575,9 @@ export async function updateEventDetails(
       }
       if (updates.organizerName !== undefined) sanitizedUpdates.organizerName = sanitizeHtmlText(updates.organizerName);
       if (updates.guidelines !== undefined) sanitizedUpdates.guidelines = parseGuidelinesInput(updates.guidelines);
+      if (updates.ticketTiers !== undefined) {
+        sanitizedUpdates.ticketTiers = Array.isArray(updates.ticketTiers) ? updates.ticketTiers : undefined;
+      }
       if (updates.customPlatformFeePercent !== undefined) {
         if (isEventRevenueSplitLocked(id)) {
           const lockErr = new Error(
@@ -3057,6 +3152,29 @@ export function validateEventBooking(
     errors.push(`Jumlah pemesanan tiket harus antara 1 sampai ${maxAllowed} tiket per transaksi.`);
   }
 
+  // Tier validation if event has ticketTiers
+  if (event.ticketTiers && event.ticketTiers.length > 0) {
+    if (!payload.ticketTierId) {
+      errors.push("Jenis tiket wajib dipilih.");
+    } else {
+      const tier = event.ticketTiers.find((t) => t.id === payload.ticketTierId);
+      if (!tier) {
+        errors.push("Jenis tiket yang dipilih tidak ditemukan pada event ini.");
+      } else {
+        if (tier.isActive === false) {
+          errors.push(`Tiket ${tier.name} saat ini sedang dinonaktifkan.`);
+        }
+        const now = Date.now();
+        if (tier.salesStartDate && new Date(tier.salesStartDate).getTime() > now) {
+          errors.push(`Penjualan tiket ${tier.name} belum dibuka.`);
+        }
+        if (tier.salesEndDate && new Date(tier.salesEndDate).getTime() < now) {
+          errors.push(`Periode penjualan tiket ${tier.name} telah berakhir.`);
+        }
+      }
+    }
+  }
+
   return {
     valid: errors.length === 0,
     errors,
@@ -3101,6 +3219,40 @@ export async function createEventBooking(
       );
 
       // 1. Quota & Venue Capacity Check
+      let selectedTier: EventTicketTier | undefined;
+      let unitPrice = 0;
+
+      if (event.ticketTiers && event.ticketTiers.length > 0) {
+        selectedTier = event.ticketTiers.find((t) => t.id === payload.ticketTierId);
+        if (!selectedTier) {
+          throw new Error("Jenis tiket yang dipilih tidak valid.");
+        }
+        if (selectedTier.isActive === false) {
+          throw new Error(`Tiket ${selectedTier.name} saat ini sedang dinonaktifkan.`);
+        }
+        const now = Date.now();
+        if (selectedTier.salesStartDate && new Date(selectedTier.salesStartDate).getTime() > now) {
+          throw new Error(`Penjualan tiket ${selectedTier.name} belum dibuka.`);
+        }
+        if (selectedTier.salesEndDate && new Date(selectedTier.salesEndDate).getTime() < now) {
+          throw new Error(`Periode penjualan tiket ${selectedTier.name} telah berakhir.`);
+        }
+
+        // Tier Quota Check
+        const tierBooked = activeBookings
+          .filter((b) => b.ticketTierId === selectedTier!.id)
+          .reduce((sum, b) => sum + b.ticketCount, 0);
+        const tierRemaining = selectedTier.quota - tierBooked;
+        if (payload.ticketCount > tierRemaining) {
+          throw new Error(
+            `Kuota tiket ${selectedTier.name} tidak mencukupi. Sisa tiket tersedia saat ini: ${Math.max(0, tierRemaining)} tiket.`
+          );
+        }
+        unitPrice = Number(selectedTier.price || 0);
+      } else {
+        unitPrice = event.isPaid ? Number(event.price || 0) : 0;
+      }
+
       const maxCapacity = getEventCapacity(event);
       const currentlyBooked = activeBookings.reduce((sum, b) => sum + b.ticketCount, 0);
       const remainingQuota = maxCapacity - currentlyBooked;
@@ -3127,7 +3279,6 @@ export async function createEventBooking(
       }
 
       const ticketCount = Math.floor(payload.ticketCount);
-      const unitPrice = event.isPaid ? Number(event.price || 0) : 0;
       const totalPrice = unitPrice * ticketCount;
 
       // Revenue sharing formula: per-event platform fee with single shared calculation helper
@@ -3201,6 +3352,8 @@ export async function createEventBooking(
         guestEmail: payload.guestEmail.trim().toLowerCase(),
         guestPhone: payload.guestPhone.trim(),
         institution: payload.institution ? sanitizeHtmlText(payload.institution) : null,
+        ticketTierId: selectedTier?.id,
+        ticketTierName: selectedTier?.name,
         ticketCount,
         unitPrice,
         totalPrice,

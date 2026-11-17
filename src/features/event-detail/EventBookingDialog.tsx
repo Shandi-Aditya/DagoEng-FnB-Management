@@ -20,6 +20,7 @@ export interface BookingFormData {
   guestPhone: string;
   institution: string;
   ticketCount: number;
+  ticketTierId?: string;
 }
 
 interface EventBookingDialogProps {
@@ -45,10 +46,51 @@ export function EventBookingDialog({
 }: EventBookingDialogProps) {
   if (!event) return null;
 
+  const tiers = event.ticketTiers || [];
+  const hasTiers = tiers.length > 0;
+  const tierAvailabilities = event.availability?.tiers || event.tierAvailability || [];
+
+  const selectedTier = hasTiers
+    ? tiers.find((t) => t.id === form.ticketTierId) || null
+    : null;
+  const selectedTierAvail =
+    hasTiers && selectedTier
+      ? tierAvailabilities.find((t) => t.tierId === selectedTier.id) || null
+      : null;
+
+  // Auto-select first available tier on open
+  React.useEffect(() => {
+    if (open && hasTiers && (!form.ticketTierId || !tiers.some((t) => t.id === form.ticketTierId))) {
+      const firstAvailable =
+        tiers.find((t) => {
+          const a = tierAvailabilities.find((ta) => ta.tierId === t.id);
+          return a ? !a.isSoldOut && a.salesStatus === "ON_SALE" : true;
+        }) || tiers[0];
+      if (firstAvailable) {
+        setForm((prev) => ({ ...prev, ticketTierId: firstAvailable.id }));
+      }
+    }
+  }, [open, hasTiers, tiers, tierAvailabilities, form.ticketTierId, setForm]);
+
   const maxAllowedPerTx = event.maxTicketsPerBooking || 5;
-  const remainingTickets = event.availability?.ticketsRemaining ?? maxAllowedPerTx;
-  const effectiveMaxTickets = Math.min(maxAllowedPerTx, Math.max(1, remainingTickets));
-  const totalPrice = event.isPaid ? event.price * form.ticketCount : 0;
+  const overallRemainingTickets = event.availability?.ticketsRemaining ?? maxAllowedPerTx;
+  const tierRemaining = selectedTierAvail
+    ? selectedTierAvail.remaining
+    : selectedTier
+    ? selectedTier.quota
+    : overallRemainingTickets;
+
+  const effectiveMaxTickets = Math.min(
+    maxAllowedPerTx,
+    Math.max(1, hasTiers ? tierRemaining : overallRemainingTickets)
+  );
+
+  const unitPrice = selectedTier
+    ? Number(selectedTier.price || 0)
+    : event.isPaid
+    ? Number(event.price || 0)
+    : 0;
+  const totalPrice = unitPrice * form.ticketCount;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,6 +115,75 @@ export function EventBookingDialog({
         )}
 
         <form onSubmit={onSubmit} className="space-y-4 text-xs">
+          {/* Ticket Tier Selection */}
+          {hasTiers && (
+            <div className="space-y-2">
+              <label className="font-medium text-foreground block">
+                Pilih jenis tiket <span className="text-destructive">*</span>
+              </label>
+              <div className="grid grid-cols-1 gap-2">
+                {tiers.map((tier) => {
+                  const avail = tierAvailabilities.find((a) => a.tierId === tier.id);
+                  const isSoldOut = avail ? avail.isSoldOut : false;
+                  const isUpcoming = avail?.salesStatus === "UPCOMING";
+                  const isEnded = avail?.salesStatus === "ENDED";
+                  const isUnavailable = isSoldOut || isUpcoming || isEnded;
+                  const isSelected = form.ticketTierId === tier.id;
+
+                  return (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      disabled={isUnavailable}
+                      onClick={() => {
+                        setForm((prev) => ({
+                          ...prev,
+                          ticketTierId: tier.id,
+                          ticketCount: 1,
+                        }));
+                      }}
+                      className={`w-full text-left p-3 rounded-lg border transition-colors flex flex-col gap-1.5 ${
+                        isSelected
+                          ? "border-primary bg-primary/5 ring-1 ring-primary"
+                          : isUnavailable
+                          ? "border-muted bg-muted/40 opacity-60 cursor-not-allowed"
+                          : "border-border hover:border-primary/50 bg-card hover:bg-muted/10 cursor-pointer"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-foreground text-xs">{tier.name}</span>
+                        <span className="font-mono font-medium text-foreground text-xs">
+                          {tier.price > 0 ? formatCurrencyIDR(tier.price) : "Gratis"}
+                        </span>
+                      </div>
+                      {tier.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">
+                          {tier.description}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between text-xs pt-1 border-t border-border/50">
+                        <span className="text-muted-foreground">
+                          {isSoldOut
+                            ? "Habis terjual"
+                            : isUpcoming
+                            ? "Penjualan belum dibuka"
+                            : isEnded
+                            ? "Penjualan telah berakhir"
+                            : avail
+                            ? `Sisa ${avail.remaining} tiket`
+                            : `Kuota ${tier.quota} tiket`}
+                        </span>
+                        {isSelected && (
+                          <span className="text-primary font-medium text-xs">Dipilih</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Guest Name */}
           <div className="space-y-1.5">
             <label className="font-medium text-foreground">
@@ -138,7 +249,7 @@ export function EventBookingDialog({
             <div>
               <span className="font-medium text-foreground block">Jumlah tiket</span>
               <span className="text-xs text-muted-foreground block mt-0.5">
-                {event.isPaid ? `${formatCurrencyIDR(event.price)} / tiket` : "Tiket gratis"}{" "}
+                {unitPrice > 0 ? `${formatCurrencyIDR(unitPrice)} / tiket` : "Tiket gratis"}{" "}
                 (maks. {effectiveMaxTickets} tiket)
               </span>
             </div>
@@ -174,7 +285,7 @@ export function EventBookingDialog({
             <div>
               <span className="text-xs text-muted-foreground block">Total biaya tiket</span>
               <span className="font-mono tabular-nums font-medium text-base text-foreground">
-                {event.isPaid ? formatCurrencyIDR(totalPrice) : "Gratis"}
+                {totalPrice > 0 ? formatCurrencyIDR(totalPrice) : "Gratis"}
               </span>
             </div>
 
@@ -187,10 +298,14 @@ export function EventBookingDialog({
               >
                 Batal
               </Button>
-              <Button type="submit" size="lg" disabled={isSubmitting}>
+              <Button
+                type="submit"
+                size="lg"
+                disabled={isSubmitting || (hasTiers && !form.ticketTierId)}
+              >
                 {isSubmitting
                   ? "Memproses..."
-                  : event.isPaid
+                  : totalPrice > 0
                   ? "Lanjut ke pembayaran"
                   : "Dapatkan tiket"}
               </Button>

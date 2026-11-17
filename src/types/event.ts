@@ -14,6 +14,31 @@ export type EventCategory =
   | "SEMINAR"
   | "OTHER";
 
+export interface EventTicketTier {
+  id: string;
+  name: string;
+  price: number;
+  quota: number;
+  description?: string;
+  salesStartDate?: string;
+  salesEndDate?: string;
+  isActive?: boolean;
+}
+
+export interface EventTicketTierAvailability {
+  tierId: string;
+  name: string;
+  price: number;
+  quota: number;
+  booked: number;
+  remaining: number;
+  isSoldOut: boolean;
+  salesStatus: "UPCOMING" | "ON_SALE" | "ENDED";
+  salesStartDate?: string;
+  salesEndDate?: string;
+  description?: string;
+}
+
 export interface CommunityEvent {
   id: string;
   title: string;
@@ -42,6 +67,7 @@ export interface CommunityEvent {
   maxCapacity?: number;
   maxTicketsPerBooking?: number; // Override batas pembelian tiket khusus event
   destinationBankId?: string | null; // Override rekening bank tujuan khusus event
+  ticketTiers?: EventTicketTier[];
 
   // Collaboration requirements
   collaborationFacilities?: string[] | string | null;
@@ -156,6 +182,8 @@ export interface PublicCommunityEvent {
   organizerName: string;
   status: "APPROVED";
   guidelines?: string[] | null;
+  ticketTiers?: EventTicketTier[];
+  tierAvailability?: EventTicketTierAvailability[];
   availability?: EventTicketAvailability;
   createdAt: string;
 }
@@ -175,6 +203,7 @@ export interface EventSubmissionPayload {
   destinationBankId?: string;
   isPaid: boolean;
   price?: number;
+  ticketTiers?: EventTicketTier[];
   posterUrl: string;
   externalRegistrationUrl?: string;
   guidelines?: string[] | string | null;
@@ -239,6 +268,7 @@ export interface EventTicketAvailability {
   capacitySource: string;
   capacityDescription: string;
   isSoldOut: boolean;
+  tiers?: EventTicketTierAvailability[];
 }
 
 export interface EventTicketOrder {
@@ -252,6 +282,8 @@ export interface EventTicketOrder {
   guestEmail: string;
   guestPhone: string;
   institution?: string | null;
+  ticketTierId?: string;
+  ticketTierName?: string;
   ticketCount: number;
   checkedInQty?: number; // Jumlah tiket yang sudah check-in (0 <= checkedInQty <= ticketCount)
   checkedInSeats?: number[]; // Daftar nomor index tiket (1..ticketCount) yang sudah check-in
@@ -288,6 +320,7 @@ export interface EventBookingPayload {
   guestEmail: string;
   guestPhone: string;
   institution?: string;
+  ticketTierId?: string;
   ticketCount: number;
   paymentMethod?: TicketPaymentMethod;
   destinationBankId?: string;

@@ -26,6 +26,27 @@ export function EventDetailSidebar({
   const occupancyRate = event.availability?.occupancyRate ?? 0;
   const quotaStatus = getQuotaBadgeTone(occupancyRate, isSoldOut);
 
+  const hasTiers = Boolean(event.ticketTiers && event.ticketTiers.length > 0);
+  const tiers = event.ticketTiers || [];
+  const tierAvailabilities = event.availability?.tiers || event.tierAvailability || [];
+
+  const minTierPrice = hasTiers
+    ? Math.min(...tiers.map((t) => Number(t.price || 0)))
+    : event.price;
+  const maxTierPrice = hasTiers
+    ? Math.max(...tiers.map((t) => Number(t.price || 0)))
+    : event.price;
+
+  const displayPrice = hasTiers
+    ? minTierPrice === 0 && maxTierPrice === 0
+      ? "Gratis"
+      : minTierPrice === maxTierPrice
+      ? formatCurrencyIDR(minTierPrice)
+      : `Mulai dari ${formatCurrencyIDR(minTierPrice)}`
+    : event.isPaid
+    ? formatCurrencyIDR(event.price)
+    : "Gratis";
+
   return (
     <div className="space-y-4">
       {/* 1. Main Sticky Ticket Card */}
@@ -36,9 +57,9 @@ export function EventDetailSidebar({
           </span>
           <div className="flex items-baseline gap-2">
             <span className="font-mono text-2xl sm:text-3xl font-medium text-foreground">
-              {event.isPaid ? formatCurrencyIDR(event.price) : "Gratis"}
+              {displayPrice}
             </span>
-            {event.isPaid && (
+            {(event.isPaid || (hasTiers && maxTierPrice > 0)) && (
               <span className="text-xs text-muted-foreground">/ orang</span>
             )}
           </div>
@@ -96,6 +117,43 @@ export function EventDetailSidebar({
                 </span>
               )}
             </span>
+          </div>
+        )}
+
+        {/* Tier Breakdown */}
+        {hasTiers && (
+          <div className="rounded-lg border bg-muted/10 p-3 space-y-2 text-xs">
+            <span className="font-medium text-foreground block text-xs">
+              Pilihan jenis tiket
+            </span>
+            <div className="space-y-1.5">
+              {tiers.map((t) => {
+                const avail = tierAvailabilities.find((a) => a.tierId === t.id);
+                const isSoldOutTier = avail?.isSoldOut;
+                return (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between text-xs py-1 border-b border-border/40 last:border-0"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <span className="font-medium text-foreground block truncate">
+                        {t.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground block">
+                        {isSoldOutTier
+                          ? "Habis terjual"
+                          : avail
+                          ? `Sisa ${avail.remaining} tiket`
+                          : `Kuota ${t.quota}`}
+                      </span>
+                    </div>
+                    <span className="font-mono font-medium text-foreground text-xs shrink-0">
+                      {t.price > 0 ? formatCurrencyIDR(t.price) : "Gratis"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 
