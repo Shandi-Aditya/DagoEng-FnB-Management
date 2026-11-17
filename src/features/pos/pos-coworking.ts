@@ -1,4 +1,5 @@
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
+import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
 
 export const COWORKING_TIME_SLOTS = [
   "09:00",
@@ -31,12 +32,21 @@ export function getCurrentTimeFormatted(): string {
 
 export function getValidOperationalTime(targetDateStr?: string): string {
   const now = new Date();
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const todayStr = getTodayWitaDateString(now);
   if (targetDateStr && targetDateStr > todayStr) {
     return "09:00";
   }
-  const curH = now.getHours();
-  const curM = now.getMinutes();
+  const witaHourStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Makassar",
+    hour: "numeric",
+    hour12: false,
+  }).format(now);
+  const witaMinuteStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Makassar",
+    minute: "numeric",
+  }).format(now);
+  const curH = parseInt(witaHourStr, 10);
+  const curM = parseInt(witaMinuteStr, 10);
   if (curH < 9) return "09:00";
   if (curH >= 9 && curH <= 17) {
     const slotHour = curM > 15 ? Math.min(curH + 1, 17) : curH;

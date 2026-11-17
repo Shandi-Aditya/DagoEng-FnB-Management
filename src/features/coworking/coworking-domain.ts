@@ -15,6 +15,18 @@ export interface CoworkingKPIs {
 
 export type DailyPreset = "1_DAY" | "3_DAYS" | "7_DAYS" | "14_DAYS" | "CUSTOM_RANGE";
 
+/**
+ * Returns a date string (YYYY-MM-DD) formatted in WITA timezone (Asia/Makassar, UTC+8).
+ */
+export function getTodayWitaDateString(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Makassar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
 export function calculateCoworkingKPIs(
   spaces: CoworkingSpaceItem[],
   members: CoworkingMember[]

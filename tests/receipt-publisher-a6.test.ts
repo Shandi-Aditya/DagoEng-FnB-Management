@@ -9,8 +9,9 @@ import { DEMO_OUTLETS as CONTEXT_OUTLETS } from "@/contexts/OutletContext";
 
 describe("Task A6: Dynamic Receipt Publisher & Location Consistency (POS-03)", () => {
   describe("Master Data Lokasi (A6-1)", () => {
-    it("uses single shared master location Jl. Ngurah Rai No. 45, Singaraja, Bali across OutletContext and receipt-publisher", () => {
-      expect(MASTER_HQ_OUTLET.address).toBe("Jl. Ngurah Rai No. 45, Singaraja, Bali");
+    it("uses single shared master location Jl. Teleng No. 1, Banyuasri across OutletContext and receipt-publisher", () => {
+      expect(MASTER_HQ_OUTLET.address).toBe("Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116");
+      expect(MASTER_HQ_OUTLET.phone).toBe("+62 821-1550-1995");
       expect(MASTER_HQ_OUTLET.name).toContain("Singaraja");
       expect(CONTEXT_OUTLETS[0].address).toBe(MASTER_HQ_OUTLET.address);
       expect(DEMO_OUTLETS).toBe(CONTEXT_OUTLETS);
@@ -21,16 +22,16 @@ describe("Task A6: Dynamic Receipt Publisher & Location Consistency (POS-03)", (
     it("dynamically publishes co-working receipts under Dago Creative Hub, never Kopi Senja", () => {
       const activeOutlet = {
         name: "Singaraja (Pusat)",
-        address: "Jl. Ngurah Rai No. 45, Singaraja, Bali",
-        phone: "(0362) 23456",
+        address: "Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116",
+        phone: "+62 821-1550-1995",
       };
 
       const publisher = resolveCoworkingReceiptPublisher(activeOutlet);
       expect(publisher.brandName).toBe("DAGO CREATIVE HUB");
       expect(publisher.outletName).toContain("Dago Creative Hub");
       expect(publisher.outletName).not.toContain("Kopi Senja");
-      expect(publisher.outletAddress).toBe("Jl. Ngurah Rai No. 45, Singaraja, Bali");
-      expect(publisher.outletPhone).toBe("(0362) 23456");
+      expect(publisher.outletAddress).toBe("Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116");
+      expect(publisher.outletPhone).toBe("+62 821-1550-1995");
     });
 
     it("falls back to central HQ data when active outlet is null or undefined", () => {
@@ -45,8 +46,8 @@ describe("Task A6: Dynamic Receipt Publisher & Location Consistency (POS-03)", (
   describe("F&B Order Receipt Publisher (A6-2)", () => {
     const activeOutlet = {
       name: "Singaraja (Pusat)",
-      address: "Jl. Ngurah Rai No. 45, Singaraja, Bali",
-      phone: "(0362) 23456",
+      address: "Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116",
+      phone: "+62 821-1550-1995",
     };
 
     it("publishes single-mitra receipt under the specific tenant name even if first item lacked tenantId", () => {
@@ -59,7 +60,7 @@ describe("Task A6: Dynamic Receipt Publisher & Location Consistency (POS-03)", (
       expect(publisher.isMultiTenant).toBe(false);
       expect(publisher.brandName).toBe("Dapur Mama");
       expect(publisher.outletName).toBe("Dapur Mama — Singaraja (Pusat)");
-      expect(publisher.outletAddress).toBe("Jl. Ngurah Rai No. 45, Singaraja, Bali");
+      expect(publisher.outletAddress).toBe("Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116");
     });
 
     it("publishes multi-mitra receipt under Dago Creative Hub with multi-tenant tagline", () => {
@@ -73,7 +74,7 @@ describe("Task A6: Dynamic Receipt Publisher & Location Consistency (POS-03)", (
       expect(publisher.brandName).toBe("DAGO CREATIVE HUB");
       expect(publisher.outletName).toBe("Dago Creative Hub — Singaraja (Pusat)");
       expect(publisher.tagline).toBe("Ringkasan Pesanan Multi-Mitra");
-      expect(publisher.outletAddress).toBe("Jl. Ngurah Rai No. 45, Singaraja, Bali");
+      expect(publisher.outletAddress).toBe("Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116");
     });
   });
 });

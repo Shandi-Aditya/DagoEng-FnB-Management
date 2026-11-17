@@ -94,7 +94,7 @@ export function ReceiptModal({
     : (storedTenantSettings?.tagline || defaultTenantInfo.tagline || defaultTenantInfo.badge);
 
   const contactPhone = isMultiTenant
-    ? receiptData.outletPhone || "(0362) 23456"
+    ? receiptData.outletPhone || MASTER_HQ_OUTLET.phone || "+62 821-1550-1995"
     : (storedTenantSettings?.contactPhone || receiptData.outletPhone);
 
   const footerMessage =

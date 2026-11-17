@@ -93,6 +93,7 @@ import { CoworkingRoomCard } from "@/features/pos/CoworkingRoomCard";
 import { CoworkingBookingPanel } from "@/features/pos/CoworkingBookingPanel";
 import { CoworkingPhotoModal } from "@/features/pos/CoworkingPhotoModal";
 import { CoworkingQrisModal } from "@/features/coworking/CoworkingQrisModal";
+import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
 import { CoworkingBooking } from "@/types/coworking";
 import { PosVoucherModal } from "@/features/pos/PosVoucherModal";
 import { PosOpenShiftModal } from "@/features/pos/PosOpenShiftModal";
@@ -126,7 +127,7 @@ export default function POSPage() {
   const [cwSelectedSpaceId, setCwSelectedSpaceId] = useState<string>("");
   const [cwSpaceTypeFilter, setCwSpaceTypeFilter] = useState<string>("ALL");
   const [cwSearchQuery, setCwSearchQuery] = useState<string>("");
-  const [cwDate, setCwDate] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [cwDate, setCwDate] = useState<string>(() => getTodayWitaDateString());
   const [cwStartTime, setCwStartTime] = useState<string>("09:00");
   const [isManualTimeSet, setIsManualTimeSet] = useState<boolean>(false);
   const [cwDuration, setCwDuration] = useState<number>(2); // hours
@@ -1250,7 +1251,7 @@ export default function POSPage() {
             spaceTypeFilter={cwSpaceTypeFilter}
             onSpaceTypeFilterChange={setCwSpaceTypeFilter}
             date={cwDate}
-            minDate={new Date().toISOString().split("T")[0]}
+            minDate={getTodayWitaDateString()}
             onDateChange={(newDate) => {
               setCwDate(newDate);
               if (!isManualTimeSet) {
