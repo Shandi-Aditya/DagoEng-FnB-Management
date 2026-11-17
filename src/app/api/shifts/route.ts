@@ -9,6 +9,7 @@ import {
   reconcileOverdueShifts,
   validateManualShiftOpen,
   recordShiftSaleTransaction,
+  recordShiftRefundTransaction,
   closeShiftById,
 } from "@/lib/shift-management";
 
@@ -180,6 +181,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, shift: saleResult.shift });
     }
 
+    if (action === "RECORD_REFUND") {
+      const refundResult = recordShiftRefundTransaction({
+        shifts,
+        cashierId: cashierId || auth.userId,
+        shiftId,
+        refundAmount: Number(body.refundAmount) || 0,
+        orderId: typeof body.orderId === "string" && body.orderId.trim() ? body.orderId.trim() : undefined,
+        actorId: auth.userId,
+        actorRole: auth.role,
+        currentTimeMs: nowMs,
+      });
+
+      if (!refundResult.success || !refundResult.shift) {
+        return NextResponse.json(
+          { error: refundResult.error },
+          { status: refundResult.statusCode || 400 }
+        );
+      }
+
+      await savePersistentShift(refundResult.shift);
+      return NextResponse.json({ success: true, shift: refundResult.shift });
+    }
+
     if (action === "CLOSE") {
       const closeResult = closeShiftById({
         shifts,
@@ -204,7 +228,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: "Action must be OPEN, RECORD_SALE, or CLOSE." },
+      { error: "Action must be OPEN, RECORD_SALE, RECORD_REFUND, or CLOSE." },
       { status: 400 }
     );
   } catch (error: any) {

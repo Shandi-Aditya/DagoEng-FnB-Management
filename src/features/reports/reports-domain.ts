@@ -365,11 +365,11 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
       );
 
       const totalNonCashRevenue = orders
-        .filter((o) => o.status !== "CANCELLED" && o.paymentMethod !== "CASH")
+        .filter((o) => o.status !== "CANCELLED" && o.paymentStatus !== "REFUNDED" && o.paymentMethod !== "CASH")
         .reduce((sum, o) => sum + o.total, 0);
 
       const totalCashRevenue = orders
-        .filter((o) => o.status !== "CANCELLED" && o.paymentMethod === "CASH")
+        .filter((o) => o.status !== "CANCELLED" && o.paymentStatus !== "REFUNDED" && o.paymentMethod === "CASH")
         .reduce((sum, o) => sum + o.total, 0);
 
       const tableRows = orders.map((o) => {

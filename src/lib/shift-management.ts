@@ -393,6 +393,89 @@ export function recordShiftSaleTransaction(params: {
 }
 
 /**
+ * Records a cash refund transaction against an active shift (V-13).
+ * When cash or QRIS is refunded, cash is returned to the customer from the drawer.
+ * Increases shift.refundAmount and decreases shift.expectedCash.
+ */
+export function recordShiftRefundTransaction(params: {
+  shifts: ShiftRecord[];
+  cashierId: string;
+  shiftId?: string;
+  refundAmount: number;
+  orderId?: string;
+  actorId?: string;
+  actorRole?: RoleSlug;
+  currentTimeMs?: number;
+}): {
+  success: boolean;
+  statusCode: number;
+  error?: string;
+  shift?: ShiftRecord;
+  updatedShifts: ShiftRecord[];
+} {
+  const nowMs = params.currentTimeMs ?? Date.now();
+  const { shifts: reconciled } = reconcileOverdueShifts(params.shifts, nowMs);
+
+  const isSupervisor =
+    params.actorRole === "SUPER_ADMIN" ||
+    params.actorRole === "OWNER" ||
+    params.actorRole === "MANAGER";
+
+  const effectiveCashierId =
+    params.actorId && !isSupervisor ? params.actorId : params.cashierId;
+
+  const targetIndex = reconciled.findIndex((s) =>
+    params.shiftId
+      ? s.id === params.shiftId
+      : s.assignedCashierId === effectiveCashierId && (s.status === "ACTIVE" || s.status === "OPEN")
+  );
+
+  if (targetIndex === -1) {
+    // If no exact match by cashierId, find any active shift at outlet
+    const fallbackActiveIndex = reconciled.findIndex(
+      (s) => s.status === "ACTIVE" || s.status === "OPEN"
+    );
+    if (fallbackActiveIndex === -1) {
+      return {
+        success: false,
+        statusCode: 400,
+        error: "SHIFT_NOT_OPEN: Tidak ada sesi shift aktif untuk mencatat refund kas.",
+        updatedShifts: reconciled,
+      };
+    }
+  }
+
+  const finalIndex = targetIndex !== -1 ? targetIndex : reconciled.findIndex((s) => s.status === "ACTIVE" || s.status === "OPEN");
+  const target = reconciled[finalIndex];
+  const delta = Math.max(0, Number(params.refundAmount) || 0);
+
+  const recordedRefundIds = target.recordedRefundIds ?? [];
+  if (params.orderId && recordedRefundIds.includes(params.orderId)) {
+    return { success: true, statusCode: 200, shift: target, updatedShifts: reconciled };
+  }
+
+  const newRefundAmount = (target.refundAmount || 0) + delta;
+  const newExpected = target.openingCash + (target.cashSales || 0) - newRefundAmount;
+
+  const updatedShift: ShiftRecord = {
+    ...target,
+    refundAmount: newRefundAmount,
+    expectedCash: newExpected,
+    recordedRefundIds: params.orderId ? [...recordedRefundIds, params.orderId] : recordedRefundIds,
+  };
+
+  const nextShifts = [...reconciled];
+  nextShifts[finalIndex] = updatedShift;
+
+  return {
+    success: true,
+    statusCode: 200,
+    shift: updatedShift,
+    updatedShifts: nextShifts,
+  };
+}
+
+/**
  * Closes a specific shift by shiftId with server-calculated expectedCash and cashVariance (A2-5 & R2).
  * Never trusts client-provided metrics to overwrite server-recorded cashSales or nonCashSales.
  */

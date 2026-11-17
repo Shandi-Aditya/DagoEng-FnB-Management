@@ -32,6 +32,15 @@ interface OrderContextType {
   ) => void;
   createOrder: (order: Partial<OrderRecord>) => OrderRecord;
   createPosOrder: (order: Partial<OrderRecord>) => OrderRecord;
+  refundOrder: (
+    orderId: string,
+    params: {
+      reason: string;
+      supervisorName: string;
+      supervisorRole?: string;
+      refundMethod?: "CASH";
+    }
+  ) => { success: boolean; error?: string; order?: OrderRecord };
   getOrderById: (orderId: string) => OrderRecord | undefined;
   resetOrderData: () => void;
 }
@@ -255,6 +264,76 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const refundOrder = (
+    orderId: string,
+    params: {
+      reason: string;
+      supervisorName: string;
+      supervisorRole?: string;
+      refundMethod?: "CASH";
+    }
+  ): { success: boolean; error?: string; order?: OrderRecord } => {
+    const target = orders.find((o) => o.id === orderId);
+    if (!target) {
+      return { success: false, error: "Pesanan tidak ditemukan." };
+    }
+
+    if (target.paymentStatus === "REFUNDED") {
+      return { success: false, error: "Pesanan sudah berstatus REFUNDED." };
+    }
+
+    const cleanReason = (params.reason || "").trim();
+    if (!cleanReason) {
+      return { success: false, error: "Alasan refund wajib diisi." };
+    }
+
+    const cleanSupervisor = (params.supervisorName || "").trim();
+    if (!cleanSupervisor) {
+      return { success: false, error: "Persetujuan supervisor wajib disertakan." };
+    }
+
+    const nowIso = new Date().toISOString();
+    const updatedOrder: OrderRecord = {
+      ...target,
+      status: "CANCELLED",
+      paymentStatus: "REFUNDED",
+      refundReason: cleanReason,
+      refundApprovedBy: cleanSupervisor,
+      refundedAt: nowIso,
+      refundMethod: params.refundMethod || "CASH",
+      statusHistory: [
+        ...target.statusHistory,
+        {
+          id: `hist-${Date.now()}`,
+          orderId: target.id,
+          fromStatus: target.status,
+          toStatus: "CANCELLED",
+          timestamp: nowIso,
+          actorName: cleanSupervisor,
+          note: `[REFUND ${target.paymentMethod || "CASH"} -> CASH] ${cleanReason}`,
+        },
+      ],
+    };
+
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? updatedOrder : o)));
+    syncOrderToServer(updatedOrder);
+
+    logActivity({
+      module: "POS",
+      action: "REFUND_ORDER",
+      recordId: target.orderNumber,
+      previousValue: `Status: ${target.status}, Payment: ${target.paymentStatus}`,
+      newValue: `Status: CANCELLED, Payment: REFUNDED (via CASH)`,
+      description: `Refund transaksi ${target.orderNumber} (Meja ${target.tableNumber}) sebesar Rp ${target.total.toLocaleString("id-ID")} dikembalikan tunai. Disetujui supervisor: ${cleanSupervisor}`,
+      reason: cleanReason,
+      status: "SUCCESS",
+      outletId: target.outletId,
+      outletName: target.outletName,
+    });
+
+    return { success: true, order: updatedOrder };
+  };
+
   const createOrder = (newOrderData: Partial<OrderRecord>): OrderRecord => {
     const nowIso = new Date().toISOString();
     const newId = `ord-${Date.now()}`;
@@ -422,6 +501,7 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
         advanceOrderStatus,
         createOrder,
         createPosOrder,
+        refundOrder,
         getOrderById,
         resetOrderData,
       }}
