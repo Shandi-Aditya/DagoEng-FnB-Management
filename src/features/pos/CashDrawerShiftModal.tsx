@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { AlertTriangle, Printer } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 interface CashDrawerShiftModalProps {
   isOpen: boolean;
   onClose: () => void;
+  shiftId?: string;
   cashierName: string;
   outletName: string;
   initialCash: number;
@@ -40,6 +40,7 @@ interface CashDrawerShiftModalProps {
 export function CashDrawerShiftModal({
   isOpen,
   onClose,
+  shiftId,
   cashierName,
   outletName,
   initialCash,
@@ -48,11 +49,8 @@ export function CashDrawerShiftModal({
   totalTransactionsCount,
   qrisSales,
   edcSales,
-  totalDiscounts = 0,
   isTaxEnabled = true,
   taxRatePercent = 10,
-  tenantName = "Kopi Senja (Mitra Utama)",
-  tenantPhone = "081234567890",
   onConfirmClose,
 }: CashDrawerShiftModalProps) {
   const router = useRouter();
@@ -112,61 +110,11 @@ export function CashDrawerShiftModal({
   const dagoTotalShare = totalNetSales - tenantTotalShare;
 
   const dateNow = new Date();
-  const dateFormatted = dateNow.toLocaleDateString("id-ID", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-  const timeFormatted = dateNow.toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  const dateTimeStr = `${dateFormatted}, ${timeFormatted}`;
   const docNo = `EOD-${dateNow.getFullYear()}${(dateNow.getMonth() + 1)
     .toString()
     .padStart(2, "0")}${dateNow.getDate().toString().padStart(2, "0")}-${Math.floor(
     100 + Math.random() * 900
   )}`;
-
-  // Generate WhatsApp Message strictly matching standard template
-  const generateWhatsAppTemplate = () => {
-    const formatNum = (num: number) => num.toLocaleString("id-ID");
-    const expectedCash = initialCash + totalCashSales;
-    const cashVariance = cashInDrawer - expectedCash;
-
-    return `*LAPORAN CLOSING SHIFT & REKAP KEUANGAN*
-Outlet: ${outletName}
-Waktu: ${dateTimeStr}
-Kasir: ${confirmCashierName || cashierName}
-
-----------------------------------------
-*RINGKASAN PENJUALAN*
-• Total Transaksi: ${totalTransactionsCount} Struk
-• Omset Kotor: Rp ${formatNum(totalGrossSales)}
-• Pajak PB1 (${taxRatePercent}%): Rp ${formatNum(estimatedTax)}
-• *Omset Bersih:* *Rp ${formatNum(totalNetSales)}*
-
-*METODE PEMBAYARAN*
-• QRIS Dinamis: Rp ${formatNum(finalQrisSales)}
-• Tunai (Cash): Rp ${formatNum(totalCashSales)}
-• Kartu EDC: Rp ${formatNum(finalEdcSales)}
-
-*REKONSILIASI KAS LACI (FO)*
-• Modal awal kas: Rp ${formatNum(initialCash)}
-• Penjualan tunai: Rp ${formatNum(totalCashSales)}
-• Kas seharusnya: Rp ${formatNum(expectedCash)}
-• Kas fisik aktual: Rp ${formatNum(cashInDrawer)}
-• Selisih kas: ${cashVariance >= 0 ? "+" : ""}Rp ${formatNum(cashVariance)} (${cashVariance === 0 ? "Seimbang" : cashVariance < 0 ? "Kurang" : "Lebih"})
-
-*ESTIMASI BAGI HASIL*
-• *Mitra / Owner (${tenantSharePercent}%):* Rp ${formatNum(tenantTotalShare)}
-• *Manajemen Dago (${dagoSharePercent}%):* Rp ${formatNum(dagoTotalShare)}
-----------------------------------------
-*DOKUMEN RESMI:*
-• File Rekapitulasi PDF terlampir di bawah ini (Auto-Generated).
-_Sent via POS DagoEng Platform_`;
-  };
 
   const handleCashInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawVal = e.target.value.replace(/\D/g, "");
@@ -193,54 +141,29 @@ _Sent via POS DagoEng Platform_`;
     if (isClosing) return;
     setIsClosing(true);
 
-    const pdfUrl = getClosingPdfUrl();
+    const closingNote = `Tutup Sesi Kasir (${docNo})`;
 
-    // 1. Trigger local Shift state & closing calculation
     if (onConfirmClose) {
-      onConfirmClose(cashInDrawer, `Tutup Sesi Kasir (${docNo})`);
-    }
-
-    // 2. Lock shift via backend API
-    try {
-      await fetch("/api/shifts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "CLOSE",
-          cashierName: confirmCashierName || cashierName,
-          outletId: outletName,
-          actualCash: cashInDrawer,
-          notes: "Tutup Sesi Kasir",
-        }),
-      });
-    } catch (e) {
-      console.warn("Shift lock sync:", e);
-    }
-
-    // 2. Dispatch WhatsApp Chatbot to Owner Dago & Admin Mitra (Fonnte API)
-    const waMessage = generateWhatsAppTemplate();
-    try {
-      const waRes = await fetch("/api/notifications/whatsapp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: waMessage,
-          targetPhone: tenantPhone,
-          url: pdfUrl,
-          filename: `Laporan_Closing_${docNo}.pdf`,
-        }),
-      });
-      const waData = await waRes.json().catch(() => null);
-      if (waData?.success) {
-        console.log("[WhatsApp Chatbot Sent Successfully]:", waData);
-      } else {
-        console.warn("[WhatsApp Chatbot Response]:", waData);
+      onConfirmClose(cashInDrawer, closingNote);
+    } else {
+      try {
+        await fetch("/api/shifts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "CLOSE",
+            shiftId,
+            cashierName: confirmCashierName || cashierName,
+            outletId: outletName,
+            actualCash: cashInDrawer,
+            notes: closingNote,
+          }),
+        });
+      } catch (e) {
+        console.warn("Shift lock sync:", e);
       }
-    } catch (err) {
-      console.error("WhatsApp dispatch error:", err);
     }
 
-    // 3. Gracefully logout and redirect
     setTimeout(async () => {
       try {
         await logout();
@@ -340,7 +263,7 @@ _Sent via POS DagoEng Platform_`;
               className="w-full"
             >
               <Printer className="size-4" />
-              <span>Cetak / Pratinjau Laporan FO</span>
+              <span>Cetak / pratinjau laporan FO</span>
             </Button>
 
             <Button
@@ -359,12 +282,9 @@ _Sent via POS DagoEng Platform_`;
                 <span>Konfirmasi tutup sesi</span>
               )}
             </Button>
-            <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
-              <span>Laporan otomatis via WhatsApp:</span>
-              <Badge variant="outline" className="font-mono text-xs">
-                ADD-ON
-              </Badge>
-            </div>
+            <p className="text-center text-xs text-muted-foreground">
+              Ringkasan otomatis ke Ka Ari dan mitra
+            </p>
           </div>
         </div>
       </DialogContent>

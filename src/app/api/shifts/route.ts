@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  getPersistentOrders,
   getPersistentShifts,
   savePersistentShift,
 } from "@/lib/persistent-storage";
+import { dispatchShiftClosingChatbot } from "@/lib/closing-chatbot";
 import { getRequestAuthUser } from "@/lib/server-auth";
 import { RoleSlug } from "@/types/auth";
 import {
@@ -224,7 +226,18 @@ export async function POST(req: NextRequest) {
       }
 
       await savePersistentShift(closeResult.shift);
-      return NextResponse.json({ success: true, shift: closeResult.shift });
+      const allOrders = await getPersistentOrders();
+      const chatbotDispatch = await dispatchShiftClosingChatbot({
+        shift: closeResult.shift,
+        orders: allOrders,
+      }).catch((e) => ({
+        error: e?.message || "Gagal mengirim ringkasan chatbot.",
+      }));
+      return NextResponse.json({
+        success: true,
+        shift: closeResult.shift,
+        chatbotDispatch,
+      });
     }
 
     return NextResponse.json(

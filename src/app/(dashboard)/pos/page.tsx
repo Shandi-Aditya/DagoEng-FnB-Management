@@ -1542,6 +1542,7 @@ export default function POSPage() {
         <CashDrawerShiftModal
           isOpen={isClosingShiftModalOpen}
           onClose={() => setIsClosingShiftModalOpen(false)}
+          shiftId={activeShift?.id}
           cashierName={user?.name || "Kasir Bertugas"}
           outletName={activeOutlet?.name || "Singaraja"}
           initialCash={activeShift ? activeShift.openingCash : 500000}

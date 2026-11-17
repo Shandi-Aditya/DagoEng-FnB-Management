@@ -364,6 +364,7 @@ export default function EmployeesPage() {
           setIsClosingPDFModalOpen(false);
           setSelectedShiftForClosingPDF(null);
         }}
+        shiftId={selectedShiftForClosingPDF?.id}
         managerPhone="+62 812-3456-7890"
         reportData={buildClosingReportData(
           selectedShiftForClosingPDF || activeShift,
