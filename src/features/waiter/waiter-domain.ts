@@ -190,3 +190,22 @@ export function findActiveOrderForTable(
       o.status !== "CANCELLED"
   );
 }
+
+/**
+ * Detects newly ready orders for floor waiters to serve to guests.
+ * Only includes orders in READY status for the outlet that have not yet been dismissed.
+ */
+export function getReadyWaiterOrders(
+  orders: readonly OrderRecord[],
+  outletId: string,
+  dismissedIds: ReadonlySet<string> = new Set()
+): OrderRecord[] {
+  return orders
+    .filter(
+      (o) =>
+        o.status === "READY" &&
+        (!outletId || outletId === "ALL" || o.outletId === outletId) &&
+        !dismissedIds.has(o.id)
+    )
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}

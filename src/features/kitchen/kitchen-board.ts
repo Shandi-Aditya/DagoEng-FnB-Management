@@ -85,6 +85,26 @@ export function filterKitchenOrders(orders: readonly OrderRecord[], filters: Kit
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
+/**
+ * Detects newly arrived unaccepted orders for the kitchen station or tenant.
+ * Only includes orders in NEW or CONFIRMED status that contain items for the tenant
+ * and have not yet been dismissed.
+ */
+export function getNewIncomingKitchenOrders(
+  orders: readonly OrderRecord[],
+  tenantId: string | undefined,
+  dismissedIds: ReadonlySet<string> = new Set()
+): OrderRecord[] {
+  return orders
+    .filter(
+      (o) =>
+        (o.status === "NEW" || o.status === "CONFIRMED") &&
+        ticketItems(o, tenantId).length > 0 &&
+        !dismissedIds.has(o.id)
+    )
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
 /** Kitchen ticket payload for a reprint; the queue number matches the board. */
 export function buildReprintTicket(
   order: OrderRecord,

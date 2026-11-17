@@ -148,6 +148,69 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
             })
             .catch(() => {});
         });
+
+      // V-14: Listen to cross-tab storage events for immediate local synchronization
+      const handleStorage = (event: StorageEvent) => {
+        if (event.key === STORAGE_KEY_ORDERS && event.newValue) {
+          try {
+            const parsed = JSON.parse(event.newValue);
+            if (Array.isArray(parsed)) {
+              setOrders((prev) => {
+                const merged = new Map(prev.map((o) => [o.id, o]));
+                let changed = false;
+                for (const o of parsed) {
+                  const existing = merged.get(o.id);
+                  if (
+                    !existing ||
+                    existing.status !== o.status ||
+                    existing.paymentStatus !== o.paymentStatus ||
+                    existing.statusHistory?.length !== o.statusHistory?.length
+                  ) {
+                    merged.set(o.id, o);
+                    changed = true;
+                  }
+                }
+                return changed ? Array.from(merged.values()) : prev;
+              });
+            }
+          } catch (e) {
+            console.error("Failed to parse storage update", e);
+          }
+        }
+      };
+      window.addEventListener("storage", handleStorage);
+
+      // V-14: 5-second polling interval for real-time cross-device order sync (KDS & Waiter)
+      const pollInterval = setInterval(() => {
+        fetch("/api/orders")
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && Array.isArray(data.orders) && data.orders.length > 0) {
+              setOrders((prev) => {
+                const merged = new Map(prev.map((o) => [o.id, o]));
+                let changed = false;
+                for (const srvOrder of data.orders) {
+                  const existing = merged.get(srvOrder.id);
+                  if (
+                    !existing ||
+                    existing.status !== srvOrder.status ||
+                    existing.paymentStatus !== srvOrder.paymentStatus
+                  ) {
+                    merged.set(srvOrder.id, srvOrder);
+                    changed = true;
+                  }
+                }
+                return changed ? Array.from(merged.values()) : prev;
+              });
+            }
+          })
+          .catch(() => {});
+      }, 5000);
+
+      return () => {
+        window.removeEventListener("storage", handleStorage);
+        clearInterval(pollInterval);
+      };
     }
   }, []);
 
