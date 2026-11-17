@@ -45,7 +45,7 @@ export default function OrdersPage() {
   const { logActivity } = useActivityLog();
   const { settings } = useSettings();
   const { recordShiftTransaction, recordShiftRefund } = useEmployeeShift();
-  const { queue } = usePrinter();
+  const { canReceiveCashierReceipt, canReceiveKitchenReceipt } = usePrinter();
 
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
   const userTenantId = user?.tenant?.id;
@@ -63,6 +63,8 @@ export default function OrdersPage() {
   const canProcessPayment =
     roleSlug === "CASHIER" ||
     isSupervisor;
+  const canPrintCashierReceipt = canReceiveCashierReceipt(roleSlug);
+  const canPrintKitchenReceipt = canReceiveKitchenReceipt(roleSlug);
 
   // Strict tenant-aware order list
   const displayedOrders = useMemo(() => {
@@ -256,11 +258,25 @@ export default function OrdersPage() {
     : [];
 
   const handlePrintReceipt = (order: OrderRecord) => {
+    if (!canPrintCashierReceipt) {
+      notify.error(
+        "Akses struk kasir dibatasi",
+        "Peran Anda tidak diizinkan mencetak struk pelanggan."
+      );
+      return;
+    }
     setReceiptModalOrder(buildOrderReceiptData(order));
     setIsReceiptModalOpen(true);
   };
 
   const handlePrintKitchenTicket = (order: OrderRecord, purpose: PrintPurpose) => {
+    if (!canPrintKitchenReceipt) {
+      notify.error(
+        "Akses nota dapur dibatasi",
+        "Peran Anda tidak diizinkan mencetak nota dapur."
+      );
+      return;
+    }
     setKitchenModalTicket(buildReprintKitchenTicket(order, purpose, user?.name));
     setIsKitchenModalOpen(true);
   };
@@ -378,6 +394,8 @@ export default function OrdersPage() {
         onClose={() => setSelectedOrder(null)}
         canViewNominals={canViewNominals}
         canProcessPayment={canProcessPayment}
+        canPrintCashierReceipt={canPrintCashierReceipt}
+        canPrintKitchenReceipt={canPrintKitchenReceipt}
         promos={settings.promos}
         onOpenPayment={handleOpenPayment}
         onPrintReceipt={handlePrintReceipt}

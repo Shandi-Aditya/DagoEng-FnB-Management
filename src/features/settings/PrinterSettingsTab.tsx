@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -16,11 +16,13 @@ import {
 
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { EmptyState } from "@/components/app/empty-state";
+import { notify } from "@/components/app/notify";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +38,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { usePrinter } from "@/contexts/PrinterContext";
+import {
+  CONFIGURABLE_RECEIPT_ROLES,
+  DEFAULT_RECEIPT_ROLE_POLICY,
+  canManageSettlementAndReceiptPolicy,
+} from "@/lib/settlement-receipt-policy";
+import type { RoleSlug } from "@/types/auth";
 import type {
   POSPrintingSettings,
   PrinterConnectionType,
@@ -73,10 +81,42 @@ export function PrinterSettingsTab() {
     user?.role?.slug === "MANAGER" ||
     user?.scopeLevel === "ORGANIZATION" ||
     user?.scopeLevel === "PLATFORM";
+  const canManageReceiptRoles = canManageSettlementAndReceiptPolicy(user);
 
   // Local Form state for operational settings
   const [localSettings, setLocalSettings] = useState<POSPrintingSettings>(settings);
   const [savedSettingsSuccess, setSavedSettingsSuccess] = useState(false);
+
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
+
+  const cashierReceiptRoles =
+    localSettings.cashierReceiptRoles ?? DEFAULT_RECEIPT_ROLE_POLICY.cashierReceiptRoles;
+  const kitchenReceiptRoles =
+    localSettings.kitchenReceiptRoles ?? DEFAULT_RECEIPT_ROLE_POLICY.kitchenReceiptRoles;
+
+  const toggleReceiptRole = (
+    kind: "cashierReceiptRoles" | "kitchenReceiptRoles",
+    role: RoleSlug,
+    enabled: boolean
+  ) => {
+    if (!canManageReceiptRoles) return;
+    setLocalSettings((prev) => {
+      const current = prev[kind] ?? DEFAULT_RECEIPT_ROLE_POLICY[kind];
+      const nextSet = new Set<RoleSlug>(current);
+      nextSet.add("SUPER_ADMIN");
+      if (enabled) {
+        nextSet.add(role);
+      } else {
+        nextSet.delete(role);
+      }
+      return {
+        ...prev,
+        [kind]: Array.from(nextSet),
+      };
+    });
+  };
 
   // Device Modal state
   const [isDeviceModalOpen, setIsDeviceModalOpen] = useState(false);
@@ -166,8 +206,20 @@ export function PrinterSettingsTab() {
 
   const handleSaveSettings = (e: React.FormEvent) => {
     e.preventDefault();
-    updateSettings(localSettings);
+    updateSettings(
+      canManageReceiptRoles
+        ? localSettings
+        : {
+            ...localSettings,
+            cashierReceiptRoles: settings.cashierReceiptRoles,
+            kitchenReceiptRoles: settings.kitchenReceiptRoles,
+          }
+    );
     setSavedSettingsSuccess(true);
+    notify.success(
+      "Aturan cetak disimpan",
+      "Preferensi cetak dan distribusi role struk diperbarui."
+    );
     setTimeout(() => setSavedSettingsSuccess(false), 3000);
   };
 
@@ -405,7 +457,7 @@ export function PrinterSettingsTab() {
             {savedSettingsSuccess ? (
               <Alert>
                 <CheckCircle2 />
-                <AlertDescription>Aturan operasional cetak berhasil disimpan.</AlertDescription>
+                <AlertDescription>Aturan operasional cetak dan distribusi role disimpan.</AlertDescription>
               </Alert>
             ) : null}
 
@@ -523,6 +575,65 @@ export function PrinterSettingsTab() {
                   }
                   placeholder="Contoh: Harap segera disiapkan sesuai antrean"
                 />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 rounded-lg border bg-muted/20 p-4">
+              <div className="flex flex-col gap-0.5">
+                <h3 className="text-sm font-medium text-foreground">
+                  Distribusi role struk kasir dan nota dapur
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Atur peran staf yang berhak melihat atau mencetak struk kasir dan nota dapur. Super Admin selalu memiliki akses penuh.
+                </p>
+                {!canManageReceiptRoles ? (
+                  <p className="text-xs text-muted-foreground">
+                    Hanya Owner organisasi atau Super Admin yang dapat mengubah distribusi role struk.
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="divide-y rounded-md border bg-card">
+                <div className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-3 py-2 text-xs font-medium text-muted-foreground">
+                  <span>Peran</span>
+                  <span className="w-20 text-center">Struk kasir</span>
+                  <span className="w-20 text-center">Nota dapur</span>
+                </div>
+                {CONFIGURABLE_RECEIPT_ROLES.map((item) => {
+                  const hasCashier = cashierReceiptRoles.includes(item.role);
+                  const hasKitchen = kitchenReceiptRoles.includes(item.role);
+                  return (
+                    <div
+                      key={item.role}
+                      className="grid grid-cols-[1fr_auto_auto] items-center gap-4 px-3 py-2.5"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-foreground">{item.label}</p>
+                        <p className="text-xs text-muted-foreground">{item.description}</p>
+                      </div>
+                      <div className="flex w-20 justify-center">
+                        <Checkbox
+                          checked={hasCashier}
+                          disabled={!canManageReceiptRoles}
+                          aria-label={`Struk kasir ${item.label}`}
+                          onCheckedChange={(checked) =>
+                            toggleReceiptRole("cashierReceiptRoles", item.role, checked === true)
+                          }
+                        />
+                      </div>
+                      <div className="flex w-20 justify-center">
+                        <Checkbox
+                          checked={hasKitchen}
+                          disabled={!canManageReceiptRoles}
+                          aria-label={`Nota dapur ${item.label}`}
+                          onCheckedChange={(checked) =>
+                            toggleReceiptRole("kitchenReceiptRoles", item.role, checked === true)
+                          }
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

@@ -1,6 +1,10 @@
 import { OrderRecord } from "@/types/order";
 import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import { INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
+import {
+  getStoredSettlementReceiptPolicy,
+  type SettlementBasisMode,
+} from "@/lib/settlement-receipt-policy";
 
 export interface SettlementSummary {
   tenantId: string | "DAGO_HUB";
@@ -15,10 +19,12 @@ export interface SettlementSummary {
   netRevenue: number;
   transactionCount: number;
   itemCount: number;
+  settlementBasis?: SettlementBasisMode;
+  settlementBasisAmount?: number;
   tenantSharePercent?: number; // e.g. 85 or 90
   dagoSharePercent?: number;   // e.g. 15 or 10
-  tenantShareAmount?: number;  // e.g. dpp * (tenantSharePercent / 100)
-  dagoShareAmount?: number;    // e.g. dpp * (dagoSharePercent / 100)
+  tenantShareAmount?: number;
+  dagoShareAmount?: number;
 }
 
 export const REVENUE_SPLIT_STORAGE_KEY = "dagoeng_tenant_revenue_splits_v1";
@@ -175,13 +181,34 @@ export function resolveItemTenantId(
   return "DAGO_HUB";
 }
 
+function resolveSettlementBasisAmount(
+  basis: SettlementBasisMode,
+  amounts: { dpp: number; gross: number; totalWithTax: number }
+): number {
+  switch (basis) {
+    case "RECEIPT_NET_BEFORE_TAX":
+      return amounts.dpp;
+    case "RECEIPT_GROSS_SUBTOTAL":
+      return amounts.gross;
+    case "RECEIPT_TOTAL_WITH_TAX":
+      return amounts.totalWithTax;
+    default: {
+      const _exhaustive: never = basis;
+      return _exhaustive;
+    }
+  }
+}
+
 export function calculateSettlement(
   orders: OrderRecord[],
   tenantMap?: Record<string, string>,
-  customSplits?: Record<string, { tenantSharePercent: number; dagoSharePercent: number }>
+  customSplits?: Record<string, { tenantSharePercent: number; dagoSharePercent: number }>,
+  options?: { settlementBasis?: SettlementBasisMode }
 ): SettlementSummary[] {
   const settlementMap = new Map<string, SettlementSummary>();
   const activeSplits = customSplits || getAllTenantRevenueSplits();
+  const basis: SettlementBasisMode =
+    options?.settlementBasis ?? getStoredSettlementReceiptPolicy().settlementBasis;
 
   orders.forEach((order) => {
     // Only process valid paid non-cancelled orders
@@ -228,6 +255,12 @@ export function calculateSettlement(
         const netRevenue =
           data.gross - allocatedDiscount + allocatedTax + allocatedServiceCharge;
 
+        const basisAmount = resolveSettlementBasisAmount(basis, {
+          dpp: tenantDpp,
+          gross: data.gross,
+          totalWithTax: netRevenue,
+        });
+
         const defaultTenantNames: Record<string, string> = {
           "tenant-ks": "Kopi Senja",
           "tenant-kitchen": "Dapur Mama",
@@ -256,15 +289,16 @@ export function calculateSettlement(
           netRevenue: 0,
           transactionCount: 0,
           itemCount: 0,
+          settlementBasis: basis,
+          settlementBasisAmount: 0,
           tenantSharePercent: tenantSharePct,
           dagoSharePercent: dagoSharePct,
           tenantShareAmount: 0,
           dagoShareAmount: 0,
         };
 
-        // B3: Partner revenue share (85/15) is calculated strictly from DPP (before tax and service charge).
-        const addedTenantShare = Math.round(tenantDpp * (tenantSharePct / 100));
-        const addedDagoShare = tenantDpp - addedTenantShare;
+        const addedTenantShare = Math.round(basisAmount * (tenantSharePct / 100));
+        const addedDagoShare = basisAmount - addedTenantShare;
 
         settlementMap.set(tenantId, {
           ...current,
@@ -277,6 +311,8 @@ export function calculateSettlement(
           netRevenue: current.netRevenue + netRevenue,
           itemCount: current.itemCount + data.qty,
           transactionCount: current.transactionCount + 1,
+          settlementBasis: basis,
+          settlementBasisAmount: (current.settlementBasisAmount || 0) + basisAmount,
           tenantShareAmount: (current.tenantShareAmount || 0) + addedTenantShare,
           dagoShareAmount: (current.dagoShareAmount || 0) + addedDagoShare,
         });
@@ -295,6 +331,9 @@ export function calculateSettlement(
     r.tax = Math.round(r.tax);
     r.serviceCharge = Math.round(r.serviceCharge);
     r.netRevenue = Math.round(r.netRevenue);
+    if (r.settlementBasisAmount !== undefined) {
+      r.settlementBasisAmount = Math.round(r.settlementBasisAmount);
+    }
     if (r.tenantShareAmount !== undefined) r.tenantShareAmount = Math.round(r.tenantShareAmount);
     if (r.dagoShareAmount !== undefined) r.dagoShareAmount = Math.round(r.dagoShareAmount);
   });

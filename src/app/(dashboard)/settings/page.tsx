@@ -43,6 +43,12 @@ import {
   type TenantRevenueSplitConfig,
 } from "@/lib/settlement";
 import {
+  canManageSettlementAndReceiptPolicy,
+  getStoredSettlementReceiptPolicy,
+  saveStoredSettlementReceiptPolicy,
+  type SettlementBasisMode,
+} from "@/lib/settlement-receipt-policy";
+import {
   getSimulatedOrgSubscription,
   getSimulatedTenantAddons,
   type OrgSubscriptionState,
@@ -113,6 +119,7 @@ export default function SettingsPage() {
   const isOrgOwner = user?.role?.slug === "OWNER" && user?.scopeLevel === "ORGANIZATION";
   const isTenantOwner = user?.role?.slug === "OWNER" && user?.scopeLevel === "TENANT";
   const canAccessSettings = isSuperAdmin || isOrgOwner || isTenantOwner;
+  const canEditSettlementPolicy = canManageSettlementAndReceiptPolicy(user);
 
   // Tab Utama Navigasi
   const [selectedAdminTab, setSelectedAdminTab] = useState<string>("PRODUCTS");
@@ -186,6 +193,9 @@ export default function SettingsPage() {
   const [isSavingTenantOps, setIsSavingTenantOps] = useState(false);
 
   // Flexible Revenue Sharing
+  const [settlementBasis, setSettlementBasis] = useState<SettlementBasisMode>(
+    () => getStoredSettlementReceiptPolicy().settlementBasis
+  );
   const [revenueSplits, setRevenueSplits] = useState<Record<string, TenantRevenueSplitConfig>>({});
   const [revenueSplitErrors, setRevenueSplitErrors] = useState<Record<string, string>>({});
   const [splitSaveFeedback, setSplitSaveFeedback] = useState<string>("");
@@ -332,6 +342,30 @@ export default function SettingsPage() {
     const currentScopeId = isTenantOwner ? (user?.tenant?.id || "tenant-unassigned") : "org-dago-hub";
     setTenantAddons(getSimulatedTenantAddons(currentScopeId));
   }, [user, isTenantOwner]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/settings/settlement-receipt")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data?.success || !data?.policy) return;
+        const policy = data.policy;
+        setSettlementBasis(policy.settlementBasis);
+        if (policy.revenueSplits) {
+          setRevenueSplits((prev) => ({
+            ...DEFAULT_TENANT_REVENUE_SPLITS,
+            ...prev,
+            ...policy.revenueSplits,
+          }));
+        }
+        saveStoredSettlementReceiptPolicy(policy);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     fetch("/api/events/admin/organizers")
@@ -754,7 +788,15 @@ export default function SettingsPage() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleSaveTenantSplits = () => {
+  const handleSaveTenantSplits = async () => {
+    if (!canEditSettlementPolicy) {
+      notify.error(
+        "Akses ditolak",
+        "Hanya pemilik organisasi atau super admin yang dapat mengubah bagi hasil."
+      );
+      return;
+    }
+
     let hasError = false;
     const newErrors: Record<string, string> = {};
 
@@ -773,12 +815,39 @@ export default function SettingsPage() {
       return;
     }
 
+    setRevenueSplitErrors({});
+
     Object.values(revenueSplits).forEach((cfg) => {
       setTenantRevenueSplit(cfg.tenantId, cfg.tenantSharePercent, cfg.dagoSharePercent);
     });
+    saveStoredSettlementReceiptPolicy({ settlementBasis, revenueSplits });
 
-    setSplitSaveFeedback("Skema bagi hasil mitra F&B berhasil diperbarui.");
-    notify.success("Bagi hasil disimpan", "Skema bagi hasil mitra F&B berhasil disinkronkan.");
+    try {
+      const res = await fetch("/api/settings/settlement-receipt", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settlementBasis, revenueSplits }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        const errMsg = data?.error || "Gagal menyimpan kebijakan bagi hasil ke server.";
+        setSplitSaveFeedback("");
+        notify.error("Gagal menyimpan bagi hasil", errMsg);
+        return;
+      }
+      if (data.policy) {
+        saveStoredSettlementReceiptPolicy(data.policy);
+      }
+    } catch {
+      notify.warning(
+        "Tersimpan di browser",
+        "Skema bagi hasil tersimpan lokal, tetapi sinkronisasi server belum tercapai."
+      );
+      return;
+    }
+
+    setSplitSaveFeedback("Skema dan dasar bagi hasil mitra F&B diperbarui.");
+    notify.success("Bagi hasil disimpan", "Dasar perhitungan dan pembagian mitra diperbarui.");
     setTimeout(() => setSplitSaveFeedback(""), 4000);
   };
 
@@ -1411,6 +1480,9 @@ export default function SettingsPage() {
               revenueSplits={revenueSplits}
               revenueSplitErrors={revenueSplitErrors}
               splitSaveFeedback={splitSaveFeedback}
+              settlementBasis={settlementBasis}
+              onSettlementBasisChange={setSettlementBasis}
+              canEditSettlementPolicy={canEditSettlementPolicy}
               onTenantSplitChange={(tId, share) => {
                 setRevenueSplits((prev) => ({
                   ...prev,

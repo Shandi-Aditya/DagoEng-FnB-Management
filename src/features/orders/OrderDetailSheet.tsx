@@ -18,6 +18,8 @@ interface OrderDetailSheetProps {
   onClose: () => void;
   canViewNominals: boolean;
   canProcessPayment: boolean;
+  canPrintCashierReceipt?: boolean;
+  canPrintKitchenReceipt?: boolean;
   promos?: Array<{ id: string; name?: string }>;
   onOpenPayment: (order: OrderRecord) => void;
   onPrintReceipt: (order: OrderRecord) => void;
@@ -40,6 +42,8 @@ export function OrderDetailSheet({
   onClose,
   canViewNominals,
   canProcessPayment,
+  canPrintCashierReceipt = true,
+  canPrintKitchenReceipt = true,
   promos = [],
   onOpenPayment,
   onPrintReceipt,
@@ -54,6 +58,8 @@ export function OrderDetailSheet({
             selectedOrder={order}
             canViewNominals={canViewNominals}
             canProcessPayment={canProcessPayment}
+            canPrintCashierReceipt={canPrintCashierReceipt}
+            canPrintKitchenReceipt={canPrintKitchenReceipt}
             promos={promos}
             onOpenPayment={onOpenPayment}
             onPrintReceipt={onPrintReceipt}
@@ -70,12 +76,19 @@ function OrderDetailBody({
   selectedOrder,
   canViewNominals,
   canProcessPayment,
+  canPrintCashierReceipt,
+  canPrintKitchenReceipt,
   promos,
   onOpenPayment,
   onPrintReceipt,
   onPrintKitchenTicket,
   onOpenRefund,
-}: Omit<OrderDetailSheetProps, "order" | "onClose" | "promos"> & { selectedOrder: OrderRecord; promos: Array<{ id: string; name?: string }> }) {
+}: Omit<OrderDetailSheetProps, "order" | "onClose" | "promos"> & {
+  selectedOrder: OrderRecord;
+  canPrintCashierReceipt: boolean;
+  canPrintKitchenReceipt: boolean;
+  promos: Array<{ id: string; name?: string }>;
+}) {
   const metrics = calculateOrderMetrics(selectedOrder);
   const isCancelled = selectedOrder.status === "CANCELLED";
   const isPaid = selectedOrder.paymentStatus === "PAID";
@@ -224,7 +237,7 @@ function OrderDetailBody({
             Bayar
           </Button>
         ) : null}
-        {isPaid ? (
+        {isPaid && canPrintCashierReceipt ? (
           <Button variant="outline" size="lg" onClick={() => onPrintReceipt(selectedOrder)}>
             <Printer />
             Struk
@@ -241,14 +254,16 @@ function OrderDetailBody({
             Refund
           </Button>
         ) : null}
-        <Button
-          variant="outline"
-          size="lg"
-          onClick={() => onPrintKitchenTicket(selectedOrder, isCancelled ? "CANCELLATION" : "REPRINT")}
-        >
-          <Printer />
-          {isCancelled ? "Slip batal" : "Nota dapur"}
-        </Button>
+        {canPrintKitchenReceipt ? (
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => onPrintKitchenTicket(selectedOrder, isCancelled ? "CANCELLATION" : "REPRINT")}
+          >
+            <Printer />
+            {isCancelled ? "Slip batal" : "Nota dapur"}
+          </Button>
+        ) : null}
       </SheetFooter>
     </>
   );

@@ -38,6 +38,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { TenantOperationConfig } from "@/lib/operating-hours";
 import { DEFAULT_TENANT_REVENUE_SPLITS, type TenantRevenueSplitConfig } from "@/lib/settlement";
+import {
+  SETTLEMENT_BASIS_OPTIONS,
+  type SettlementBasisMode,
+} from "@/lib/settlement-receipt-policy";
 import { DEFAULT_TENANT_PROFILES } from "@/lib/tenant";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { CommunityEvent } from "@/types/event";
@@ -82,6 +86,9 @@ export interface PartnersAdminTabProps {
   revenueSplits: Record<string, TenantRevenueSplitConfig>;
   revenueSplitErrors: Record<string, string>;
   splitSaveFeedback: string;
+  settlementBasis?: SettlementBasisMode;
+  onSettlementBasisChange?: (basis: SettlementBasisMode) => void;
+  canEditSettlementPolicy?: boolean;
   onTenantSplitChange: (tenantId: string, tenantShare: number) => void;
   onSaveTenantSplits: () => void;
   // Event Bagi Hasil
@@ -138,6 +145,9 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
     revenueSplits,
     revenueSplitErrors,
     splitSaveFeedback,
+    settlementBasis = "RECEIPT_NET_BEFORE_TAX",
+    onSettlementBasisChange,
+    canEditSettlementPolicy = true,
     onTenantSplitChange,
     onSaveTenantSplits,
     eventPlatformFee,
@@ -566,10 +576,15 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
               <div>
                 <CardTitle>Bagi hasil mitra F&B</CardTitle>
                 <CardDescription>
-                  Persentase pembagian untuk tiap mitra berlaku saat transaksi diproses.
+                  Persentase dan dasar perhitungan bagi hasil berlaku untuk setiap struk lunas.
                 </CardDescription>
               </div>
-              <Button type="button" size="lg" onClick={onSaveTenantSplits}>
+              <Button
+                type="button"
+                size="lg"
+                onClick={onSaveTenantSplits}
+                disabled={!canEditSettlementPolicy}
+              >
                 <Save />
                 <span>Simpan bagi hasil</span>
               </Button>
@@ -580,6 +595,41 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
                   <AlertDescription>{splitSaveFeedback}</AlertDescription>
                 </Alert>
               ) : null}
+
+              <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-0.5">
+                    <Label htmlFor="settlement-basis-select">Dasar perhitungan bagi hasil</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {
+                        SETTLEMENT_BASIS_OPTIONS.find((opt) => opt.value === settlementBasis)
+                          ?.description
+                      }
+                    </p>
+                  </div>
+                  <NativeSelect
+                    id="settlement-basis-select"
+                    value={settlementBasis}
+                    disabled={!canEditSettlementPolicy || !onSettlementBasisChange}
+                    onChange={(e) =>
+                      onSettlementBasisChange?.(e.target.value as SettlementBasisMode)
+                    }
+                    aria-label="Dasar perhitungan bagi hasil"
+                    className="w-full sm:w-80"
+                  >
+                    {SETTLEMENT_BASIS_OPTIONS.map((opt) => (
+                      <NativeSelectOption key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </div>
+                {!canEditSettlementPolicy ? (
+                  <p className="text-xs text-muted-foreground">
+                    Hanya Owner organisasi atau Super Admin yang dapat mengubah kebijakan bagi hasil.
+                  </p>
+                ) : null}
+              </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {localTenants.map((tenant) => {
@@ -612,6 +662,7 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
                             type="number"
                             min={0}
                             max={100}
+                            disabled={!canEditSettlementPolicy}
                             value={cfg.tenantSharePercent}
                             onChange={(e) => onTenantSplitChange(tenant.id, Number(e.target.value))}
                             className="font-mono tabular-nums"

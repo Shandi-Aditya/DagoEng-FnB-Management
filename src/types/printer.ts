@@ -1,3 +1,5 @@
+import type { RoleSlug } from "./auth";
+
 export type PrinterConnectionType =
   | "BROWSER_SYSTEM"
   | "LOCAL_BRIDGE"
@@ -62,6 +64,8 @@ export interface POSPrintingSettings {
   maxRetryAttempts: number;
   kitchenHeaderNote?: string;
   kitchenFooterNote?: string;
+  cashierReceiptRoles?: RoleSlug[];
+  kitchenReceiptRoles?: RoleSlug[];
 }
 
 export interface KitchenTicketItem {
@@ -168,5 +172,7 @@ export const DEFAULT_PRINTING_SETTINGS: POSPrintingSettings = {
   maxRetryAttempts: 3,
   kitchenHeaderNote: "DAGOENG — NOTA OPERASIONAL DAPUR",
   kitchenFooterNote: "MOHON DIPROSES",
+  cashierReceiptRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"],
+  kitchenReceiptRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER", "KITCHEN_STAFF", "WAITER"],
 };
 

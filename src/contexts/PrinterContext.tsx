@@ -11,9 +11,20 @@ import {
   DEFAULT_PRINTING_SETTINGS,
 } from "@/types/printer";
 import { POSReceiptData } from "@/features/pos/types";
+import type { RoleSlug } from "@/types/auth";
 import { OrderRecord } from "@/types/order";
+import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
 import { useActivityLog } from "./ActivityLogContext";
+import {
+  canRoleReceiveCashierReceipt,
+  canRoleReceiveKitchenReceipt,
+  DEFAULT_RECEIPT_ROLE_POLICY,
+  getStoredSettlementReceiptPolicy,
+  saveStoredSettlementReceiptPolicy,
+  SETTLEMENT_POLICY_LOCAL_KEY,
+  type ReceiptRoleDistributionPolicy,
+} from "@/lib/settlement-receipt-policy";
 import {
   STORAGE_KEY_PRINT_QUEUE,
   STORAGE_KEY_PRINTER_DEVICES,
@@ -56,11 +67,24 @@ interface PrinterContextType {
   retryPrintJob: (jobId: string) => Promise<{ success: boolean; job: PrintJob; message: string }>;
   testPrintDevice: (deviceId: string) => Promise<{ success: boolean; message: string }>;
   clearQueueHistory: () => void;
+  canReceiveCashierReceipt: (role?: RoleSlug | string | null) => boolean;
+  canReceiveKitchenReceipt: (role?: RoleSlug | string | null) => boolean;
 }
 
 const PrinterContext = createContext<PrinterContextType | undefined>(undefined);
 
+function sameRoleSet(a: readonly RoleSlug[] | undefined, b: readonly RoleSlug[] | undefined): boolean {
+  const normA = Array.from(new Set(a || [])).sort();
+  const normB = Array.from(new Set(b || [])).sort();
+  return normA.length === normB.length && normA.every((val, idx) => val === normB[idx]);
+}
+
+function withSuperAdminRole(roles: readonly RoleSlug[]): RoleSlug[] {
+  return Array.from(new Set<RoleSlug>(["SUPER_ADMIN", ...roles]));
+}
+
 export function PrinterProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const { activeOutletId, activeOutlet } = useOutlet();
   const { logActivity } = useActivityLog();
 
@@ -81,12 +105,22 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Load Settings
       const savedSettings = localStorage.getItem(STORAGE_KEY_PRINTER_SETTINGS);
-      if (savedSettings) {
-        const parsed = JSON.parse(savedSettings);
-        setSettings({ ...DEFAULT_PRINTING_SETTINGS, ...parsed });
-      }
+      const parsedSettings = savedSettings
+        ? (JSON.parse(savedSettings) as Partial<POSPrintingSettings>)
+        : {};
+      const hasStoredPolicy = Boolean(localStorage.getItem(SETTLEMENT_POLICY_LOCAL_KEY));
+      const storedPolicy = getStoredSettlementReceiptPolicy();
+      setSettings({
+        ...DEFAULT_PRINTING_SETTINGS,
+        ...parsedSettings,
+        cashierReceiptRoles: hasStoredPolicy
+          ? storedPolicy.receiptRoles.cashierReceiptRoles
+          : parsedSettings.cashierReceiptRoles ?? DEFAULT_PRINTING_SETTINGS.cashierReceiptRoles,
+        kitchenReceiptRoles: hasStoredPolicy
+          ? storedPolicy.receiptRoles.kitchenReceiptRoles
+          : parsedSettings.kitchenReceiptRoles ?? DEFAULT_PRINTING_SETTINGS.kitchenReceiptRoles,
+      });
 
       // Load & Recover Queue
       const storedQueue = getStoredPrintQueue();
@@ -102,7 +136,32 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // 1.1 Cross-Tab Storage Event Synchronization
+  useEffect(() => {
+    let active = true;
+    fetch("/api/settings/settlement-receipt")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data?.success || !data?.policy?.receiptRoles) return;
+        const nextCashier = withSuperAdminRole(
+          data.policy.receiptRoles.cashierReceiptRoles || DEFAULT_RECEIPT_ROLE_POLICY.cashierReceiptRoles
+        );
+        const nextKitchen = withSuperAdminRole(
+          data.policy.receiptRoles.kitchenReceiptRoles || DEFAULT_RECEIPT_ROLE_POLICY.kitchenReceiptRoles
+        );
+        saveStoredSettlementReceiptPolicy(data.policy);
+        setSettings((prev) => ({
+          ...prev,
+          cashierReceiptRoles: nextCashier,
+          kitchenReceiptRoles: nextKitchen,
+        }));
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -124,14 +183,42 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
           if (updatedSettings && typeof updatedSettings === "object") {
             setSettings({ ...DEFAULT_PRINTING_SETTINGS, ...updatedSettings });
           }
+        } else if (e.key === SETTLEMENT_POLICY_LOCAL_KEY) {
+          const updatedPolicy = getStoredSettlementReceiptPolicy();
+          setSettings((prev) => ({
+            ...prev,
+            cashierReceiptRoles: updatedPolicy.receiptRoles.cashierReceiptRoles,
+            kitchenReceiptRoles: updatedPolicy.receiptRoles.kitchenReceiptRoles,
+          }));
         }
-      } catch (err) {
+      } catch {
         // Silently ignore corrupted storage messages
       }
     };
 
+    const handlePolicyUpdated = () => {
+      const updatedPolicy = getStoredSettlementReceiptPolicy();
+      setSettings((prev) => {
+        if (
+          sameRoleSet(prev.cashierReceiptRoles, updatedPolicy.receiptRoles.cashierReceiptRoles) &&
+          sameRoleSet(prev.kitchenReceiptRoles, updatedPolicy.receiptRoles.kitchenReceiptRoles)
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          cashierReceiptRoles: updatedPolicy.receiptRoles.cashierReceiptRoles,
+          kitchenReceiptRoles: updatedPolicy.receiptRoles.kitchenReceiptRoles,
+        };
+      });
+    };
+
     window.addEventListener("storage", handleStorageEvent);
-    return () => window.removeEventListener("storage", handleStorageEvent);
+    window.addEventListener("settlement_receipt_policy_updated", handlePolicyUpdated);
+    return () => {
+      window.removeEventListener("storage", handleStorageEvent);
+      window.removeEventListener("settlement_receipt_policy_updated", handlePolicyUpdated);
+    };
   }, []);
 
   // 2. Persist Devices on Change
@@ -248,7 +335,48 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateSettings = (updates: Partial<POSPrintingSettings>) => {
-    setSettings((prev) => ({ ...prev, ...updates }));
+    const hasRoleUpdates =
+      updates.cashierReceiptRoles !== undefined || updates.kitchenReceiptRoles !== undefined;
+
+    const nextCashierRoles = withSuperAdminRole(
+      updates.cashierReceiptRoles ??
+        settings.cashierReceiptRoles ??
+        DEFAULT_RECEIPT_ROLE_POLICY.cashierReceiptRoles
+    );
+    const nextKitchenRoles = withSuperAdminRole(
+      updates.kitchenReceiptRoles ??
+        settings.kitchenReceiptRoles ??
+        DEFAULT_RECEIPT_ROLE_POLICY.kitchenReceiptRoles
+    );
+
+    const normalizedUpdates: Partial<POSPrintingSettings> = hasRoleUpdates
+      ? {
+          ...updates,
+          cashierReceiptRoles: nextCashierRoles,
+          kitchenReceiptRoles: nextKitchenRoles,
+        }
+      : updates;
+
+    setSettings((prev) => ({ ...prev, ...normalizedUpdates }));
+
+    if (hasRoleUpdates) {
+      const receiptRoles: ReceiptRoleDistributionPolicy = {
+        cashierReceiptRoles: nextCashierRoles,
+        kitchenReceiptRoles: nextKitchenRoles,
+      };
+      const rolesChanged =
+        !sameRoleSet(settings.cashierReceiptRoles, nextCashierRoles) ||
+        !sameRoleSet(settings.kitchenReceiptRoles, nextKitchenRoles);
+      saveStoredSettlementReceiptPolicy({ receiptRoles });
+      if (rolesChanged) {
+        fetch("/api/settings/settlement-receipt", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ receiptRoles }),
+        }).catch(() => {});
+      }
+    }
+
     logActivity({
       module: "POS",
       action: "UPDATE_PRINT_SETTINGS",
@@ -607,6 +735,32 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     saveStoredPrintQueue([]);
   };
 
+  const activeRolePolicy = useMemo<ReceiptRoleDistributionPolicy>(
+    () => ({
+      cashierReceiptRoles:
+        settings.cashierReceiptRoles ?? DEFAULT_RECEIPT_ROLE_POLICY.cashierReceiptRoles,
+      kitchenReceiptRoles:
+        settings.kitchenReceiptRoles ?? DEFAULT_RECEIPT_ROLE_POLICY.kitchenReceiptRoles,
+    }),
+    [settings.cashierReceiptRoles, settings.kitchenReceiptRoles]
+  );
+
+  const canReceiveCashierReceipt = useCallback(
+    (role?: RoleSlug | string | null) => {
+      const targetRole = role !== undefined ? role : user?.role?.slug;
+      return canRoleReceiveCashierReceipt(targetRole, activeRolePolicy);
+    },
+    [activeRolePolicy, user?.role?.slug]
+  );
+
+  const canReceiveKitchenReceipt = useCallback(
+    (role?: RoleSlug | string | null) => {
+      const targetRole = role !== undefined ? role : user?.role?.slug;
+      return canRoleReceiveKitchenReceipt(targetRole, activeRolePolicy);
+    },
+    [activeRolePolicy, user?.role?.slug]
+  );
+
   return (
     <PrinterContext.Provider
       value={{
@@ -625,6 +779,8 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         retryPrintJob,
         testPrintDevice,
         clearQueueHistory,
+        canReceiveCashierReceipt,
+        canReceiveKitchenReceipt,
       }}
     >
       {children}

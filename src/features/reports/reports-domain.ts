@@ -14,6 +14,11 @@ import type { StatusTone } from "@/components/app/status-badge";
 import { ingredientCategoryLabel } from "@/features/inventory/inventory-reorder";
 import { orderStatusLabel, paymentMethodLabel } from "@/features/orders/orders-domain";
 import { calculateSettlement, getTenantPayoutAccount, maskAccountNumber } from "@/lib/settlement";
+import {
+  getStoredSettlementReceiptPolicy,
+  settlementBasisLabel,
+  type SettlementBasisMode,
+} from "@/lib/settlement-receipt-policy";
 import { aggregateOrdersTaxAndRevenue, getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import type { ActivityLogEntry } from "@/types/audit";
 import type { EventTicketOrder } from "@/types/event";
@@ -241,6 +246,8 @@ export interface BuildReportParams {
   promos?: PromoReference[];
   eventBookings?: EventTicketOrder[];
   operatorName?: string;
+  settlementBasis?: SettlementBasisMode;
+  customSplits?: Record<string, { tenantSharePercent: number; dagoSharePercent: number }>;
 }
 
 export interface ReportCategoryMeta {
@@ -364,6 +371,8 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     promos = [],
     eventBookings = [],
     operatorName,
+    settlementBasis,
+    customSplits,
   } = params;
 
   switch (type) {
@@ -630,7 +639,10 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     }
 
     case "SETTLEMENT": {
-      const settlementData = calculateSettlement(orders);
+      const effectiveBasis = settlementBasis ?? getStoredSettlementReceiptPolicy().settlementBasis;
+      const settlementData = calculateSettlement(orders, undefined, customSplits, {
+        settlementBasis: effectiveBasis,
+      });
       const totalNetSettlement = settlementData.reduce(
         (sum, s) => sum + (s.dpp ?? (s.grossRevenue - s.discount)),
         0
@@ -685,6 +697,9 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           "Bersih (Rp)",
         ],
         tableRows,
+        reconciliationInfo: [
+          { label: "Dasar bagi hasil", value: settlementBasisLabel(effectiveBasis) },
+        ],
       };
     }
 
