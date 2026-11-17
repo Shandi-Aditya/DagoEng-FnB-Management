@@ -80,7 +80,9 @@ export function ReportsPreviewTable({
             className={report.summaryCards.length === 3 && idx === 0 ? "col-span-2 sm:col-span-1" : undefined}
             label={card.label}
             value={card.value}
+            valueTone={card.valueTone}
             hint={card.sub}
+            hintTone={card.subTone}
           />
         ))}
       </div>
@@ -142,12 +144,22 @@ export function ReportsPreviewTable({
                     <TableRow key={`${safeCurrentPage}-${rIdx}`}>
                       {row.map((cell, cIdx) => {
                         const isNumeric = numericColumns[cIdx] || isNumericReportCell(cell);
+                        const cellStr = String(cell);
+                        const isNegative = isNumeric && (cellStr.startsWith("-Rp") || (cellStr.startsWith("-") && cellStr !== "-"));
+                        const isPositiveVariance = isNumeric && (cellStr.startsWith("+Rp") || cellStr.startsWith("+"));
                         return (
                           <TableCell
                             key={cIdx}
                             className={cn(
                               isNumeric
-                                ? "whitespace-nowrap text-right font-mono font-medium tabular-nums text-foreground"
+                                ? cn(
+                                    "whitespace-nowrap text-right font-mono font-medium tabular-nums",
+                                    isNegative
+                                      ? "text-destructive"
+                                      : isPositiveVariance
+                                      ? "text-success"
+                                      : "text-foreground"
+                                  )
                                 : "max-w-56 whitespace-normal text-muted-foreground"
                             )}
                           >
@@ -190,7 +202,18 @@ export function ReportsPreviewTable({
                   className="flex items-center justify-between gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs"
                 >
                   <dt className="truncate text-muted-foreground">{rec.label}</dt>
-                  <dd className="font-mono font-medium tabular-nums text-foreground">{rec.value}</dd>
+                  <dd
+                    className={cn(
+                      "font-mono font-medium tabular-nums",
+                      rec.tone === "destructive" && "text-destructive",
+                      rec.tone === "warning" && "text-warning",
+                      rec.tone === "success" && "text-success",
+                      rec.tone === "info" && "text-info",
+                      (!rec.tone || rec.tone === "muted") && "text-foreground"
+                    )}
+                  >
+                    {rec.value}
+                  </dd>
                 </div>
               ))}
             </dl>

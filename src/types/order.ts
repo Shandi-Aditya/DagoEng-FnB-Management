@@ -69,6 +69,10 @@ export interface OrderRecord {
   syncError?: string;
   targetServiceMinutes: number; // Target SLA in minutes (e.g. 10m or 15m)
   notes?: string; // Optional customer / order notes
+  refundReason?: string;
+  refundApprovedBy?: string;
+  refundedAt?: string;
+  refundMethod?: "CASH" | "QRIS";
 
   // Critical Time Tracking Timestamps
   createdAt: string;            // 1. Order Created

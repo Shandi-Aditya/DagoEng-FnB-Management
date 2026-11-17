@@ -20,6 +20,7 @@ import {
   formatReceiptServiceChargeLabel,
 } from "@/features/pos/pos-receipt";
 import type { POSReceiptData } from "@/features/pos/types";
+import type { KitchenTicketData } from "@/types/printer";
 import { usePrinter } from "@/contexts/PrinterContext";
 import { MASTER_HQ_OUTLET } from "@/lib/receipt-publisher";
 import { isAddonActive } from "@/lib/subscription";
@@ -45,7 +46,7 @@ export function ReceiptModal({
   onViewKitchenTicket,
 }: ReceiptModalProps) {
   const receiptData = rawReceiptData || order;
-  const { printCustomerReceipt } = usePrinter();
+  const { printCustomerReceipt, printKitchenOrder, settings: printerSettings } = usePrinter();
 
   if (!isOpen || !receiptData) return null;
 
@@ -54,6 +55,38 @@ export function ReceiptModal({
       await printCustomerReceipt(receiptData, { isManualReprint: true });
     } catch {
       window.print();
+    }
+
+    // Auto-cetak struk kitchen per mitra secara senyap saat kasir mencetak struk (Task V-15)
+    if (printerSettings.autoPrintKitchenOrder) {
+      try {
+        const kitchenTicket: KitchenTicketData = {
+          orderId: receiptData.orderNumber,
+          orderNumber: receiptData.orderNumber,
+          outletId: "outlet-sgr",
+          outletName: receiptData.outletName || "Outlet Singaraja",
+          tableNumber: receiptData.tableNumber || "-",
+          customerName: receiptData.customerName || "Tamu",
+          orderType: (receiptData.orderType?.toUpperCase() === "TAKEAWAY" ? "TAKEAWAY" : "DINE_IN") as "DINE_IN" | "TAKEAWAY",
+          purpose: "NEW_ORDER",
+          items: (receiptData.items || []).map((item, idx) => ({
+            id: `item-${idx}-${Date.now()}`,
+            productName: item.name,
+            quantity: item.quantity,
+            variantName: item.variantName,
+            modifiers: item.modifiers,
+            notes: item.notes,
+            tenantId: item.tenantId,
+            tenantName: item.tenantName,
+          })),
+          cashierName: receiptData.cashierName || "Kasir Bertugas",
+          timestamp: receiptData.date || new Date().toLocaleTimeString("id-ID"),
+          isSilent: true,
+        };
+        await printKitchenOrder(kitchenTicket, "NEW_ORDER", { isSilent: true });
+      } catch (err) {
+        console.error("Gagal auto-cetak nota dapur saat cetak struk kasir:", err);
+      }
     }
   };
 

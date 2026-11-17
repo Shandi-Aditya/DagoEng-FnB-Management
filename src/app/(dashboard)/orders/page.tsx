@@ -34,16 +34,17 @@ import {
 import { OrdersReportPDFModal } from "@/features/orders/OrdersReportPDFModal";
 import { OrdersTable } from "@/features/orders/OrdersTable";
 import { OrdersToolbar } from "@/features/orders/OrdersToolbar";
+import { RefundOrderModal } from "@/features/orders/RefundOrderModal";
 
 export default function OrdersPage() {
   const { user } = useAuth();
-  const { filteredOrders, advanceOrderStatus } = useOrders();
+  const { filteredOrders, advanceOrderStatus, refundOrder } = useOrders();
   const { deductOrderBOM } = useInventory();
-  const { members, addPoints } = useLoyalty();
+  const { members, addPoints, reverseTransactionPoints } = useLoyalty();
   const { releaseTableToAvailable } = useTables();
   const { logActivity } = useActivityLog();
   const { settings } = useSettings();
-  const { recordShiftTransaction } = useEmployeeShift();
+  const { recordShiftTransaction, recordShiftRefund } = useEmployeeShift();
   const { queue } = usePrinter();
 
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
@@ -51,17 +52,17 @@ export default function OrdersPage() {
 
   const roleSlug = user?.role?.slug || (typeof user?.role === "string" ? user.role : "");
   const isKitchenStaff = roleSlug === "KITCHEN_STAFF";
-  const canExportNominalReports =
+  const isSupervisor =
     roleSlug === "SUPER_ADMIN" ||
     roleSlug === "OWNER" ||
-    roleSlug === "MANAGER" ||
+    roleSlug === "MANAGER";
+  const canExportNominalReports =
+    isSupervisor ||
     (user?.scopeLevel === "TENANT" && !!user?.tenant?.id);
   const canViewNominals = !isKitchenStaff;
   const canProcessPayment =
     roleSlug === "CASHIER" ||
-    roleSlug === "SUPER_ADMIN" ||
-    roleSlug === "OWNER" ||
-    roleSlug === "MANAGER";
+    isSupervisor;
 
   // Strict tenant-aware order list
   const displayedOrders = useMemo(() => {
@@ -106,6 +107,8 @@ export default function OrdersPage() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
   const [kitchenModalTicket, setKitchenModalTicket] = useState<KitchenTicketData | null>(null);
   const [isKitchenModalOpen, setIsKitchenModalOpen] = useState<boolean>(false);
+  const [refundOrderTarget, setRefundOrderTarget] = useState<OrderRecord | null>(null);
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState<boolean>(false);
 
   const handleExportOrdersCSV = () => {
     if (!canExportNominalReports) return;
@@ -168,6 +171,7 @@ export default function OrdersPage() {
 
     // 2. Inventory: Deduct ingredients based on Recipe BOM
     const bomItems = paymentOrder.items.map((it) => ({
+      productId: it.productId,
       productName: it.productName,
       quantity: it.quantity,
       modifiers: it.modifiers,
@@ -261,6 +265,86 @@ export default function OrdersPage() {
     setIsKitchenModalOpen(true);
   };
 
+  const handleOpenRefund = (order: OrderRecord) => {
+    if (order.paymentStatus !== "PAID") {
+      notify.warning("Hanya pesanan yang sudah lunas yang dapat di-refund");
+      return;
+    }
+    setRefundOrderTarget(order);
+    setIsRefundModalOpen(true);
+  };
+
+  const handleConfirmRefund = (params: {
+    reason: string;
+    supervisorName: string;
+    supervisorRole?: string;
+  }) => {
+    if (!refundOrderTarget) return;
+
+    const result = refundOrder(refundOrderTarget.id, {
+      reason: params.reason,
+      supervisorName: params.supervisorName,
+      supervisorRole: params.supervisorRole,
+      refundMethod: "CASH",
+    });
+
+    if (!result.success) {
+      notify.error("Gagal melakukan refund", result.error);
+      return;
+    }
+
+    recordShiftRefund(
+      refundOrderTarget.total,
+      refundOrderTarget.id,
+      refundOrderTarget.outletId
+    );
+
+    const matchingMember = members.find(
+      (m) =>
+        m.name.toLowerCase().trim() === refundOrderTarget.customerName.toLowerCase().trim() ||
+        (refundOrderTarget.customerPhone && m.phone === refundOrderTarget.customerPhone)
+    );
+    if (matchingMember) {
+      reverseTransactionPoints(
+        matchingMember.id,
+        refundOrderTarget.id,
+        `Refund pesanan #${refundOrderTarget.orderNumber}: ${params.reason}`
+      );
+    }
+
+    if (
+      refundOrderTarget.orderType === "DINE_IN" &&
+      refundOrderTarget.tableNumber &&
+      refundOrderTarget.tableNumber !== "TAKEAWAY"
+    ) {
+      releaseTableToAvailable(refundOrderTarget.tableNumber);
+    }
+
+    notify.success(
+      `Pesanan ${refundOrderTarget.orderNumber} di-refund`,
+      `Uang tunai ${formatCurrencyIDR(refundOrderTarget.total)} dikembalikan ke pelanggan`
+    );
+
+    if (selectedOrder?.id === refundOrderTarget.id) {
+      setSelectedOrder((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "CANCELLED",
+              paymentStatus: "REFUNDED",
+              refundReason: params.reason,
+              refundApprovedBy: params.supervisorName,
+              refundedAt: new Date().toISOString(),
+              refundMethod: "CASH",
+            }
+          : null
+      );
+    }
+
+    setIsRefundModalOpen(false);
+    setRefundOrderTarget(null);
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <OrdersToolbar
@@ -298,6 +382,7 @@ export default function OrdersPage() {
         onOpenPayment={handleOpenPayment}
         onPrintReceipt={handlePrintReceipt}
         onPrintKitchenTicket={handlePrintKitchenTicket}
+        onOpenRefund={handleOpenRefund}
       />
 
       {/* POS Payment Modal Integration */}
@@ -320,6 +405,20 @@ export default function OrdersPage() {
           />
         );
       })()}
+
+      {/* Refund Order Modal */}
+      <RefundOrderModal
+        isOpen={isRefundModalOpen}
+        onClose={() => {
+          setIsRefundModalOpen(false);
+          setRefundOrderTarget(null);
+        }}
+        order={refundOrderTarget}
+        currentUserName={user?.name}
+        currentUserRole={roleSlug}
+        isSupervisor={isSupervisor}
+        onConfirmRefund={handleConfirmRefund}
+      />
 
       {/* PDF Report Modal */}
       <OrdersReportPDFModal

@@ -49,6 +49,60 @@ export function isJobIdempotentDuplicate(
 }
 
 /**
+ * Memecah tiket pesanan dapur menjadi beberapa tiket per mitra kuliner (Multi-Tenant Isolation).
+ * Sesuai kriteria Task V-15:
+ * Struk kitchen: no. pesanan, meja/takeaway, nama tamu, menu, varian, jumlah, catatan, jam, TANPA harga, per mitra.
+ */
+export function splitKitchenTicketByTenant(ticket: KitchenTicketData): KitchenTicketData[] {
+  if (!ticket.items || ticket.items.length === 0) {
+    return [ticket];
+  }
+
+  // Kelompokkan item berdasarkan tenantId atau tenantName
+  const tenantGroups = new Map<
+    string,
+    { tenantId?: string; tenantName?: string; items: KitchenTicketItem[] }
+  >();
+
+  for (const item of ticket.items) {
+    const key = item.tenantId || item.tenantName || "default";
+    if (!tenantGroups.has(key)) {
+      tenantGroups.set(key, {
+        tenantId: item.tenantId,
+        tenantName: item.tenantName,
+        items: [],
+      });
+    }
+    tenantGroups.get(key)!.items.push(item);
+  }
+
+  // Jika semua item dari tenant yang sama atau tidak ada data tenant spesifik
+  if (tenantGroups.size <= 1) {
+    const firstGroup = tenantGroups.values().next().value;
+    return [
+      {
+        ...ticket,
+        tenantId: ticket.tenantId || firstGroup?.tenantId,
+        tenantName: ticket.tenantName || firstGroup?.tenantName,
+      },
+    ];
+  }
+
+  // Jika multi-mitra, buat satu tiket untuk masing-masing mitra
+  const result: KitchenTicketData[] = [];
+  for (const group of tenantGroups.values()) {
+    result.push({
+      ...ticket,
+      tenantId: group.tenantId,
+      tenantName: group.tenantName,
+      items: group.items,
+    });
+  }
+
+  return result;
+}
+
+/**
  * Generator Nota Pesanan Dapur (Kitchen Order Ticket)
  * PRINSIP MUTLAK:
  * - Tidak boleh menampilkan harga menu
@@ -82,10 +136,12 @@ export function generateKitchenTicketText(
     doubleLine,
     centerText("DAGOENG CREATIVE HUB", width),
     centerText(ticket.outletName ? ticket.outletName.toUpperCase() : "OUTLET SINGARAJA", width),
+    ...(ticket.tenantName ? [centerText(`[ MITRA: ${ticket.tenantName.toUpperCase()} ]`, width)] : []),
     doubleLine,
     centerText(`[ ${headerBadge} ]`, width),
     doubleLine,
     `No. Pesanan : ${ticket.orderNumber}`,
+    ...(ticket.tenantName ? [`Mitra       : ${ticket.tenantName}`] : []),
     `Waktu       : ${ticket.timestamp}`,
     `Meja        : ${ticket.tableNumber || "-"}`,
     `Tipe        : ${ticket.orderType.replace("_", " ")}`,
@@ -313,7 +369,8 @@ export function recoverStalePrintingJobs(queue: PrintJob[]): {
  */
 export async function dispatchPrintJob(
   job: PrintJob,
-  device: PrinterDeviceConfig
+  device: PrinterDeviceConfig,
+  options?: { isSilent?: boolean }
 ): Promise<{ status: PrintJobStatus; errorInfo?: string }> {
   // Jika perangkat nonaktif
   if (!device.isActive) {
@@ -412,7 +469,87 @@ export async function dispatchPrintJob(
     }
   }
 
-  // 3. Jalur Browser / System Print Spooler (Universal Fallback)
+  // 3. Jalur QZ Tray Print Agent (Silent WebSocket / HTTP REST Agent)
+  if (device.connectionType === "QZ_TRAY") {
+    const endpoint = device.bridgeEndpoint || "http://localhost:8182/qz/print";
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          printer: device.name,
+          flavor: "plain",
+          data: [job.payloadText],
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        return { status: "BRIDGE_ACKNOWLEDGED" };
+      } else {
+        return {
+          status: "FAILED",
+          errorInfo: `QZ Tray merespons HTTP ${res.status}: ${res.statusText}`,
+        };
+      }
+    } catch (err: any) {
+      const isTimeout = err?.name === "AbortError";
+      return {
+        status: "OFFLINE",
+        errorInfo: isTimeout
+          ? `Koneksi ke QZ Tray timeout (${endpoint}). Pastikan agen QZ Tray aktif di perangkat dapur.`
+          : `Gagal menghubungi agen QZ Tray di ${endpoint}. Periksa status QZ Tray.`,
+      };
+    }
+  }
+
+  // 4. Jalur PrintNode Cloud / Local Print Agent
+  if (device.connectionType === "PRINTNODE") {
+    const endpoint = device.bridgeEndpoint || "http://localhost:8080/printnode";
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          printerId: device.id,
+          printerName: device.name,
+          title: `${job.receiptType} - ${job.orderNumber || "Kitchen Ticket"}`,
+          contentType: "raw_uri",
+          content: job.payloadText,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        return { status: "BRIDGE_ACKNOWLEDGED" };
+      } else {
+        return {
+          status: "FAILED",
+          errorInfo: `PrintNode merespons HTTP ${res.status}: ${res.statusText}`,
+        };
+      }
+    } catch (err: any) {
+      const isTimeout = err?.name === "AbortError";
+      return {
+        status: "OFFLINE",
+        errorInfo: isTimeout
+          ? `Koneksi ke PrintNode agent timeout (${endpoint}).`
+          : `Gagal menghubungi PrintNode agent di ${endpoint}.`,
+      };
+    }
+  }
+
+  // 5. Jalur Browser / System Print Spooler (Universal Fallback)
   // Menyiapkan isolated invisible iframe untuk mencetak payload thermal tanpa mengganggu UI kasir
   return new Promise<{ status: PrintJobStatus; errorInfo?: string }>((resolve) => {
     try {

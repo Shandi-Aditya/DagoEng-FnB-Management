@@ -79,6 +79,12 @@ export function formatClosingVerificationShortHash(hash?: string): string {
  * Build server endpoint URL for PDF rendering and direct download.
  */
 export function buildClosingReportPdfUrl(report: ClosingReportData): string {
+  const initialCash = report.initialCash ?? 0;
+  const cashSales = report.totalCashSales ?? 0;
+  const expectedCash = report.expectedCash ?? (initialCash + cashSales);
+  const actualCash = report.actualCashEnding ?? 0;
+  const variance = report.cashDifference ?? (actualCash - expectedCash);
+
   const params = new URLSearchParams({
     docNo: report.reportNumber,
     outlet: report.outletName,
@@ -90,10 +96,15 @@ export function buildClosingReportPdfUrl(report: ClosingReportData): string {
     service: String(report.totalServiceCharge || 0),
     net: String(report.totalNetSales),
     qris: String(report.qrisSales),
-    cash: String(report.totalCashSales),
+    cash: String(cashSales),
     edc: String(report.edcSales),
     mitra: String(report.tenantTotalShare),
     dago: String(report.dagoTotalShare),
+    initialCash: String(initialCash),
+    expectedCash: String(expectedCash),
+    actualCash: String(actualCash),
+    variance: String(variance),
+    notes: report.shiftNotes || "",
   });
 
   return `/api/reports/closing/pdf?${params.toString()}`;

@@ -1,10 +1,12 @@
 import type { EmployeeProfile, ShiftRecord, ShiftStatus } from "@/types/shift";
 import type { StatusTone } from "@/components/app/status-badge";
-import type { ClosingReportData } from "@/features/pos/DailyClosingPDFModal";
+import type { ClosingReportData, TenantBreakdownItem } from "@/features/pos/DailyClosingPDFModal";
 import {
   aggregateShiftOrdersTaxAndRevenue,
   computeClosingVerificationHash,
 } from "@/lib/tax-breakdown";
+import { calculateSettlement } from "@/lib/settlement";
+import { extractShiftStartTimeMs } from "@/lib/shift-management";
 
 export type EmployeeDepartment =
   | "Management"
@@ -368,6 +370,63 @@ export function buildClosingReportData(
   const netSalesAfterTax = Math.max(0, shiftGrossSales - storedTaxTotal - storedServiceTotal);
   const verificationHash = computeClosingVerificationHash(shift, closingTaxAgg);
 
+  // Scoped orders for shift
+  const startMs = shift
+    ? extractShiftStartTimeMs(shift) || (shift.startTime ? Date.parse(shift.startTime) : 0)
+    : 0;
+  const rawEnd = shift?.closedAt || shift?.endTime;
+  const parsedEndMs = rawEnd ? Date.parse(rawEnd) : NaN;
+  const endMs = !isNaN(parsedEndMs) && parsedEndMs > 0 ? parsedEndMs : Infinity;
+
+  const shiftOrders = orders.filter((order) => {
+    if (shift?.outletId && shift.outletId !== "ALL" && order.outletId && order.outletId !== shift.outletId) {
+      return false;
+    }
+    if (startMs > 0 && order.createdAt) {
+      const orderMs = Date.parse(order.createdAt);
+      if (!isNaN(orderMs)) {
+        return orderMs >= startMs && orderMs <= endMs;
+      }
+    }
+    return true;
+  });
+
+  const settlements = calculateSettlement(shiftOrders.length > 0 ? shiftOrders : orders);
+  const tenantBreakdowns: TenantBreakdownItem[] = settlements
+    .filter((s) => s.tenantId !== "DAGO_HUB")
+    .map((s) => ({
+      tenantId: s.tenantId,
+      tenantName: s.tenantName,
+      grossRevenue: s.grossRevenue,
+      netSales: s.netSales ?? s.dpp ?? 0,
+      tenantShareAmount: s.tenantShareAmount ?? Math.round((s.netSales ?? s.dpp ?? 0) * 0.85),
+      dagoShareAmount: s.dagoShareAmount ?? Math.round((s.netSales ?? s.dpp ?? 0) * 0.15),
+      tenantSharePercent: s.tenantSharePercent ?? 85,
+      dagoSharePercent: s.dagoSharePercent ?? 15,
+    }));
+
+  const initialCash = shift?.openingCash ?? 500000;
+  const totalCashSales = shift?.cashSales ?? 0;
+  const expectedCash =
+    shift?.expectedCash !== undefined
+      ? shift.expectedCash
+      : initialCash + totalCashSales - (shift?.refundAmount ?? 0);
+  const actualCashEnding = shift?.actualCash !== undefined ? shift.actualCash : expectedCash;
+  const cashDifference =
+    shift?.cashVariance !== undefined ? shift.cashVariance : actualCashEnding - expectedCash;
+  const shiftNotes =
+    shift?.closingNotes ||
+    (cashDifference === 0
+      ? "Kas fisik cocok sempurna dengan sistem POS."
+      : `Selisih kas ${cashDifference >= 0 ? "+" : ""}Rp ${Math.abs(cashDifference).toLocaleString("id-ID")}`);
+
+  // Aggregate tenant shares
+  const totalTenantShare =
+    tenantBreakdowns.length > 0
+      ? tenantBreakdowns.reduce((acc, t) => acc + t.tenantShareAmount, 0)
+      : Math.round(netSalesAfterTax * 0.85);
+  const totalDagoShare = netSalesAfterTax - totalTenantShare;
+
   return {
     reportNumber: `RPT-CLS-${Date.now().toString().slice(-6)}`,
     outletName: outletName || "Singaraja",
@@ -376,8 +435,8 @@ export function buildClosingReportData(
     cashierName: shift?.assignedCashierName || cashierName || "Kasir",
     closingDateTime: new Date().toLocaleString("id-ID"),
     shiftName: shift?.shiftName || "Shift Pagi",
-    initialCash: shift?.openingCash || 500000,
-    totalCashSales: shift?.cashSales || 0,
+    initialCash,
+    totalCashSales,
     qrisSales: shift?.nonCashSales || 0,
     edcSales: 0,
     totalTransactionsCount: closingTaxAgg.orderCount,
@@ -388,19 +447,19 @@ export function buildClosingReportData(
     totalTax: storedTaxTotal,
     totalServiceCharge: storedServiceTotal,
     totalNetSales: netSalesAfterTax,
-    tenantSharePercent: 80,
-    dagoSharePercent: 20,
-    tenantTotalShare: Math.round(netSalesAfterTax * 0.8),
-    dagoTotalShare: Math.round(netSalesAfterTax * 0.2),
-    tenantQrisShare: Math.round((shift?.nonCashSales || 0) * 0.8),
-    dagoQrisShare: Math.round((shift?.nonCashSales || 0) * 0.2),
-    tenantCashShare: Math.round((shift?.cashSales || 0) * 0.8),
-    dagoCashShare: Math.round((shift?.cashSales || 0) * 0.2),
-    actualCashEnding:
-      shift?.actualCash ||
-      (shift?.openingCash || 500000) + (shift?.cashSales || 0),
-    cashDifference: shift?.cashVariance || 0,
-    shiftNotes: shift?.closingNotes || "Kas fisik cocok sempurna dengan sistem POS.",
+    tenantSharePercent: 85,
+    dagoSharePercent: 15,
+    tenantTotalShare: totalTenantShare,
+    dagoTotalShare: totalDagoShare,
+    tenantQrisShare: Math.round((shift?.nonCashSales || 0) * 0.85),
+    dagoQrisShare: Math.round((shift?.nonCashSales || 0) * 0.15),
+    tenantCashShare: Math.round(totalCashSales * 0.85),
+    dagoCashShare: Math.round(totalCashSales * 0.15),
+    expectedCash,
+    actualCashEnding,
+    cashDifference,
+    shiftNotes,
     verificationHash,
+    tenantBreakdowns,
   };
 }

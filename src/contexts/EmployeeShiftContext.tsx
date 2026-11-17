@@ -11,6 +11,7 @@ import {
   getActiveShiftForCashier,
   validateManualShiftOpen,
   recordShiftSaleTransaction,
+  recordShiftRefundTransaction,
   reconcileClientShiftAfterServerOpen,
   hydrateShiftsFromServer,
 } from "@/lib/shift-management";
@@ -32,6 +33,7 @@ interface EmployeeShiftContextType {
   deleteEmployee: (id: string) => void;
   openShift: (shiftName: string, openingCash: number, cashierName?: string) => ShiftRecord;
   recordShiftTransaction: (cashAmount: number, nonCashAmount: number, outletId?: string, saleId?: string) => void;
+  recordShiftRefund: (refundAmount: number, orderId?: string, outletId?: string) => void;
   closeShift: (
     shiftId: string,
     actualCash: number,
@@ -415,6 +417,48 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     }
   };
 
+  const recordShiftRefund = (
+    refundAmount: number,
+    orderId: string = `refund-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    _outletId?: string
+  ) => {
+    const assignedId = user?.id || "emp-002";
+    const targetShiftId = activeShift?.id;
+
+    setShifts((prev) => {
+      const res = recordShiftRefundTransaction({
+        shifts: prev,
+        cashierId: assignedId,
+        shiftId: targetShiftId,
+        refundAmount,
+        orderId,
+      });
+      return res.updatedShifts;
+    });
+
+    if (typeof window !== "undefined") {
+      syncWithOutbox({
+        id: `shift-refund-${orderId}`,
+        endpoint: "/api/shifts",
+        method: "POST",
+        payload: {
+          action: "RECORD_REFUND",
+          shiftId: targetShiftId,
+          cashierId: assignedId,
+          refundAmount,
+          orderId,
+        },
+      }).then((result) => {
+        if (result.data?.shift) {
+          const serverShift: ShiftRecord = result.data.shift;
+          setShifts((prev) =>
+            prev.map((s) => (s.id === serverShift.id ? serverShift : s))
+          );
+        }
+      });
+    }
+  };
+
   const closeShift = (
     shiftId: string,
     actualCash: number,
@@ -535,6 +579,7 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
         deleteEmployee,
         openShift,
         recordShiftTransaction,
+        recordShiftRefund,
         closeShift,
         resetEmployeeShiftData,
       }}

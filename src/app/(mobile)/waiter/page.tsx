@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { UtensilsCrossed } from "lucide-react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import { UtensilsCrossed, Bell } from "lucide-react";
 import { useTables, type TableItem } from "@/contexts/TableContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { useOutlet } from "@/contexts/OutletContext";
@@ -9,23 +9,58 @@ import { EmptyState } from "@/components/app/empty-state";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { UnitScope } from "@/components/app/unit-scope";
 import { Button } from "@/components/ui/button";
+import { soundChime } from "@/lib/audio-chime";
 
 import {
   calculateWaiterFloorSummary,
   findActiveOrderForTable,
+  getReadyWaiterOrders,
 } from "@/features/waiter/waiter-domain";
 import { WaiterHeader } from "@/features/waiter/WaiterHeader";
 import { WaiterSummaryBar } from "@/features/waiter/WaiterSummaryBar";
 import { WaiterAreaTabs } from "@/features/waiter/WaiterAreaTabs";
 import { WaiterTableCard } from "@/features/waiter/WaiterTableCard";
+import { WaiterOrderReadyModal } from "@/features/waiter/WaiterOrderReadyModal";
 
 export default function WaiterMobilePage() {
   const { activeOutlet, activeOutletId } = useOutlet();
   const { areas, updateTableStatus, releaseTableToAvailable } = useTables();
-  const { orders } = useOrders();
+  const { orders, advanceOrderStatus } = useOrders();
 
   const [filterArea, setFilterArea] = useState<string>("ALL");
   const [tableToReset, setTableToReset] = useState<TableItem | null>(null);
+  const [dismissedReadyOrderIds, setDismissedReadyOrderIds] = useState<Set<string>>(new Set());
+  const [isReadyModalOpen, setIsReadyModalOpen] = useState(false);
+
+  // V-14: Detect orders ready from kitchen for this outlet
+  const readyOrders = useMemo(() => {
+    return getReadyWaiterOrders(orders, activeOutletId || "outlet-sgr", dismissedReadyOrderIds);
+  }, [orders, activeOutletId, dismissedReadyOrderIds]);
+
+  const previousReadyCountRef = useRef(0);
+  useEffect(() => {
+    if (readyOrders.length > previousReadyCountRef.current) {
+      soundChime.playKitchenBell();
+      setIsReadyModalOpen(true);
+    }
+    previousReadyCountRef.current = readyOrders.length;
+  }, [readyOrders.length]);
+
+  const handleServeOrder = (orderId: string) => {
+    soundChime.playKitchenBell();
+    advanceOrderStatus(orderId, "SERVED");
+    setDismissedReadyOrderIds((prev) => new Set([...prev, orderId]));
+    if (readyOrders.length <= 1) {
+      setIsReadyModalOpen(false);
+    }
+  };
+
+  const handleDismissReadyOrder = (orderId: string) => {
+    setDismissedReadyOrderIds((prev) => new Set([...prev, orderId]));
+    if (readyOrders.length <= 1) {
+      setIsReadyModalOpen(false);
+    }
+  };
 
   // Filter tables strictly for active outlet
   const currentOutletAreas = useMemo(() => {
@@ -86,6 +121,26 @@ export default function WaiterMobilePage() {
           {/* Floor Occupancy & Status Summary */}
           <WaiterSummaryBar summary={floorSummary} />
 
+          {/* V-14: Banner pemberitahuan pesanan siap disajikan */}
+          {readyOrders.length > 0 ? (
+            <div className="mx-4 sm:mx-6 mt-3 flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-foreground">
+              <div className="flex items-center gap-2">
+                <span className="flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Bell className="size-3.5" />
+                </span>
+                <span className="font-medium">
+                  {readyOrders.length} pesanan siap disajikan dari dapur
+                </span>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => setIsReadyModalOpen(true)}
+              >
+                Lihat pesanan siap
+              </Button>
+            </div>
+          ) : null}
+
           {/* Filter Area Tabs */}
           <WaiterAreaTabs
             areas={currentOutletAreas}
@@ -145,6 +200,15 @@ export default function WaiterMobilePage() {
         confirmLabel="Kosongkan meja"
         destructive
         onConfirm={handleConfirmForceReset}
+      />
+
+      {/* V-14: Waiter Order Ready Modal */}
+      <WaiterOrderReadyModal
+        open={isReadyModalOpen && readyOrders.length > 0}
+        orders={readyOrders}
+        onServe={handleServeOrder}
+        onDismiss={handleDismissReadyOrder}
+        onClose={() => setIsReadyModalOpen(false)}
       />
     </div>
   );

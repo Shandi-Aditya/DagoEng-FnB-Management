@@ -12,6 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { KitchenTicketCard } from "@/features/kitchen/KitchenTicketCard";
+import { KitchenNewOrderModal } from "@/features/kitchen/KitchenNewOrderModal";
 import {
   KDS_COLUMNS,
   type KitchenStation,
@@ -20,6 +21,7 @@ import {
   TYPE_FILTERS,
   buildReprintTicket,
   filterKitchenOrders,
+  getNewIncomingKitchenOrders,
   ticketItems,
 } from "@/features/kitchen/kitchen-board";
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
@@ -78,18 +80,60 @@ export default function KitchenKDSPage() {
     [filteredOrders, effectiveTenantId, typeFilter, station, isMultiStation],
   );
 
-  // Ring the bell when a new ticket arrives
+  // V-14: Track and detect incoming unaccepted new orders for real-time popup
+  const [dismissedNewOrderIds, setDismissedNewOrderIds] = useState<Set<string>>(new Set());
+  const [isNewOrderModalOpen, setIsNewOrderModalOpen] = useState(false);
+
+  const incomingNewOrders = useMemo(() => {
+    return getNewIncomingKitchenOrders(filteredOrders, effectiveTenantId, dismissedNewOrderIds);
+  }, [filteredOrders, effectiveTenantId, dismissedNewOrderIds]);
+
+  const previousIncomingCountRef = useRef(0);
+  useEffect(() => {
+    if (incomingNewOrders.length > previousIncomingCountRef.current) {
+      if (isSoundEnabled) soundChime.playKitchenBell();
+      setIsNewOrderModalOpen(true);
+    }
+    previousIncomingCountRef.current = incomingNewOrders.length;
+  }, [incomingNewOrders.length, isSoundEnabled]);
+
+  // Ring the bell when a new ticket arrives on the board
   const previousCountRef = useRef(activeOrders.length);
   useEffect(() => {
-    if (activeOrders.length > previousCountRef.current && isSoundEnabled) {
+    if (activeOrders.length > previousCountRef.current && isSoundEnabled && !isNewOrderModalOpen) {
       soundChime.playKitchenBell();
     }
     previousCountRef.current = activeOrders.length;
-  }, [activeOrders.length, isSoundEnabled]);
+  }, [activeOrders.length, isSoundEnabled, isNewOrderModalOpen]);
 
   const handleAdvance = (orderId: string, nextStatus: OrderStatus) => {
     if (isSoundEnabled) soundChime.playKitchenBell();
     advanceOrderStatus(orderId, nextStatus);
+  };
+
+  const handleAcceptNewOrder = (orderId: string) => {
+    if (isSoundEnabled) soundChime.playKitchenBell();
+    advanceOrderStatus(orderId, "KITCHEN_RECEIVED");
+    setDismissedNewOrderIds((prev) => new Set([...prev, orderId]));
+    if (incomingNewOrders.length <= 1) {
+      setIsNewOrderModalOpen(false);
+    }
+  };
+
+  const handleAcceptAllNewOrders = (orderIds: string[]) => {
+    if (isSoundEnabled) soundChime.playKitchenBell();
+    for (const id of orderIds) {
+      advanceOrderStatus(id, "KITCHEN_RECEIVED");
+    }
+    setDismissedNewOrderIds((prev) => new Set([...prev, ...orderIds]));
+    setIsNewOrderModalOpen(false);
+  };
+
+  const handleDismissNewOrder = (orderId: string) => {
+    setDismissedNewOrderIds((prev) => new Set([...prev, orderId]));
+    if (incomingNewOrders.length <= 1) {
+      setIsNewOrderModalOpen(false);
+    }
   };
 
   return (
@@ -99,6 +143,17 @@ export default function KitchenKDSPage() {
         description={`${activeOutlet?.name ?? "Singaraja"} · Pesanan juga dicetak ke printer dapur, layar ini cadangan visualnya.`}
         actions={
           <>
+            {incomingNewOrders.length > 0 ? (
+              <Button
+                variant="default"
+                size="sm"
+                className="animate-pulse"
+                onClick={() => setIsNewOrderModalOpen(true)}
+              >
+                <Bell />
+                {incomingNewOrders.length} pesanan baru
+              </Button>
+            ) : null}
             <Badge variant="secondary" className="tabular-nums">
               {activeOrders.length} tiket aktif
             </Badge>
@@ -206,6 +261,16 @@ export default function KitchenKDSPage() {
       </div>
 
       <KitchenOrderReceiptModal isOpen={ticketToPrint !== null} ticketData={ticketToPrint} onClose={() => setTicketToPrint(null)} />
+
+      <KitchenNewOrderModal
+        open={isNewOrderModalOpen && incomingNewOrders.length > 0}
+        orders={incomingNewOrders}
+        tenantId={effectiveTenantId}
+        onAccept={handleAcceptNewOrder}
+        onAcceptAll={handleAcceptAllNewOrders}
+        onDismiss={handleDismissNewOrder}
+        onClose={() => setIsNewOrderModalOpen(false)}
+      />
     </div>
   );
 }

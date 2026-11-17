@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { notify } from "@/components/app/notify";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
@@ -20,6 +20,7 @@ import {
   getReportCategories,
   type ReportType,
 } from "@/features/reports/reports-domain";
+import { analyzeTransactionDiscrepancies } from "@/features/reports/reconciliation-domain";
 import StructuredReportPDFModal from "@/features/reports/StructuredReportPDFModal";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
 import { exportTransactionReportExcel } from "@/lib/transaction-export-template";
@@ -96,6 +97,11 @@ export default function ReportsPage() {
     operatorName: user?.name,
   });
 
+  const reconAnalysis = useMemo(
+    () => analyzeTransactionDiscrepancies({ orders: filteredOrders, shifts: filteredShifts }),
+    [filteredOrders, filteredShifts]
+  );
+
   const categories = getReportCategories({
     ordersCount: filteredOrders.length,
     tenantsCount: calculateSettlement(filteredOrders).length,
@@ -105,6 +111,7 @@ export default function ReportsPage() {
     logsCount: filteredFinanceLogs.length,
     paidEventsCount: eventBookings.filter((b) => b.paymentStatus === "PAID").length,
     canAccessEvents,
+    discrepanciesCount: reconAnalysis.discrepancies.length,
   });
 
   const handleSelectReportType = (nextType: ReportType) => {

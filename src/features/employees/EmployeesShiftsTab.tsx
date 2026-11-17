@@ -252,7 +252,7 @@ export function EmployeesShiftsTab({
 
                       <TableCell>
                         <div className="flex items-center justify-end gap-1.5">
-                          {s.status === "CLOSED" ? (
+                          {s.status === "CLOSED" || s.status === "NEEDS_RECONCILIATION" ? (
                             <Button
                               size="sm"
                               variant="outline"
@@ -262,7 +262,8 @@ export function EmployeesShiftsTab({
                               <Printer />
                               <span className="hidden sm:inline">Struk</span>
                             </Button>
-                          ) : (
+                          ) : null}
+                          {s.status !== "CLOSED" && (
                             <Button
                               size="sm"
                               variant="outline"

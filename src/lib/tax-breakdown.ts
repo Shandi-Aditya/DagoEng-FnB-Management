@@ -135,7 +135,7 @@ export interface AggregatedTaxReport {
  * without recalculating inclusive/exclusive tax from gross totals (POS-34 / TC-K05).
  */
 export function aggregateOrdersTaxAndRevenue(orders: OrderRecord[]): AggregatedTaxReport {
-  const validOrders = orders.filter((o) => o.status !== "CANCELLED");
+  const validOrders = orders.filter((o) => o.status !== "CANCELLED" && o.paymentStatus !== "REFUNDED");
 
   let totalRevenue = 0;
   let totalSubtotal = 0;

@@ -253,6 +253,10 @@ export function printerConnectionLabel(type: PrinterConnectionType | string): st
       return "Bridge lokal";
     case "NETWORK_LAN_VIA_BRIDGE":
       return "LAN via bridge";
+    case "QZ_TRAY":
+      return "QZ Tray agent (Senyap)";
+    case "PRINTNODE":
+      return "PrintNode cloud agent";
     default:
       return type || "—";
   }

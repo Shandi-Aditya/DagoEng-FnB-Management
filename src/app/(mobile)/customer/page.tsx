@@ -280,7 +280,7 @@ function CustomerApp() {
       const order = orders.find((o) => o.id === payload.id) || waitingOrder;
       if (order && order.paymentStatus !== "PAID") {
         advanceOrderStatus(order.id, "CONFIRMED", "Pembayaran lunas via QRIS", { paymentStatus: "PAID", paymentMethod: order.paymentMethod || "QRIS" });
-        deductOrderBOM(order.items.map((item) => ({ productName: item.productName, quantity: item.quantity, modifiers: item.modifiers })));
+        deductOrderBOM(order.items.map((item) => ({ productId: item.productId, productName: item.productName, quantity: item.quantity, modifiers: item.modifiers })));
         if (currentMember) {
           const points = Math.floor(order.total / POINTS_PER_RUPIAH);
           if (points > 0) addPoints(currentMember.id, points, `Pesanan #${order.orderNumber}`, order.id, order.total);

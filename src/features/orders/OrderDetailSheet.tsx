@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Printer } from "lucide-react";
+import { CreditCard, Printer, Undo2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ interface OrderDetailSheetProps {
   onOpenPayment: (order: OrderRecord) => void;
   onPrintReceipt: (order: OrderRecord) => void;
   onPrintKitchenTicket: (order: OrderRecord, purpose: "REPRINT" | "CANCELLATION") => void;
+  onOpenRefund?: (order: OrderRecord) => void;
 }
 
 function Row({ label, value, tone }: { label: string; value: string; tone?: "discount" | "total" }) {
@@ -43,6 +44,7 @@ export function OrderDetailSheet({
   onOpenPayment,
   onPrintReceipt,
   onPrintKitchenTicket,
+  onOpenRefund,
 }: OrderDetailSheetProps) {
   return (
     <Sheet open={order !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
@@ -56,6 +58,7 @@ export function OrderDetailSheet({
             onOpenPayment={onOpenPayment}
             onPrintReceipt={onPrintReceipt}
             onPrintKitchenTicket={onPrintKitchenTicket}
+            onOpenRefund={onOpenRefund}
           />
         ) : null}
       </SheetContent>
@@ -71,6 +74,7 @@ function OrderDetailBody({
   onOpenPayment,
   onPrintReceipt,
   onPrintKitchenTicket,
+  onOpenRefund,
 }: Omit<OrderDetailSheetProps, "order" | "onClose" | "promos"> & { selectedOrder: OrderRecord; promos: Array<{ id: string; name?: string }> }) {
   const metrics = calculateOrderMetrics(selectedOrder);
   const isCancelled = selectedOrder.status === "CANCELLED";
@@ -106,6 +110,46 @@ function OrderDetailBody({
       </SheetHeader>
 
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-6 text-sm">
+        {selectedOrder.paymentStatus === "REFUNDED" ? (
+          <section className="flex flex-col gap-1.5 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs">
+            <span className="font-medium text-destructive">Pesanan telah di-refund</span>
+            <div className="flex flex-col gap-1 text-muted-foreground">
+              <div className="flex justify-between">
+                <span>Pengembalian dana</span>
+                <span className="font-mono font-medium text-foreground tabular-nums">
+                  {formatCurrencyIDR(selectedOrder.total)} (Tunai)
+                </span>
+              </div>
+              {selectedOrder.refundReason ? (
+                <div className="flex justify-between">
+                  <span>Alasan</span>
+                  <span className="text-foreground">{selectedOrder.refundReason}</span>
+                </div>
+              ) : null}
+              {selectedOrder.refundApprovedBy ? (
+                <div className="flex justify-between">
+                  <span>Disetujui oleh</span>
+                  <span className="text-foreground">{selectedOrder.refundApprovedBy}</span>
+                </div>
+              ) : null}
+              {selectedOrder.refundedAt ? (
+                <div className="flex justify-between">
+                  <span>Waktu refund</span>
+                  <span className="font-mono tabular-nums">
+                    {new Date(selectedOrder.refundedAt).toLocaleString("id-ID", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
         <dl className="grid grid-cols-3 gap-2">
           {timing.map((step) => (
             <div key={step.label} className="flex flex-col gap-0.5 rounded-md bg-muted/50 p-2">
@@ -184,6 +228,17 @@ function OrderDetailBody({
           <Button variant="outline" size="lg" onClick={() => onPrintReceipt(selectedOrder)}>
             <Printer />
             Struk
+          </Button>
+        ) : null}
+        {isPaid && selectedOrder.paymentStatus !== "REFUNDED" && onOpenRefund ? (
+          <Button
+            variant="outline"
+            size="lg"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => onOpenRefund(selectedOrder)}
+          >
+            <Undo2 />
+            Refund
           </Button>
         ) : null}
         <Button

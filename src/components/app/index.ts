@@ -8,6 +8,6 @@ export { formatChange } from "./format-change";
 export { notify } from "./notify";
 export { PageHeader, type PageHeaderProps } from "./page-header";
 export { SectionHeader, type SectionHeaderProps } from "./section-header";
-export { StatCard, type StatCardProps, type StatChange } from "./stat-card";
+export { StatCard, type StatCardProps, type StatChange, type StatTone } from "./stat-card";
 export { StatusBadge, type StatusBadgeProps, type StatusTone } from "./status-badge";
 export { UnitDot, UNIT_LABELS, type BusinessUnit, type UnitDotProps } from "./unit-dot";

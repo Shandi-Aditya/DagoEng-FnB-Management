@@ -77,8 +77,34 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       const savedLogs = localStorage.getItem(STORAGE_KEY_LOGS);
       const savedOpnames = localStorage.getItem(STORAGE_KEY_OPNAMES);
 
-      if (savedIng) setIngredients(JSON.parse(savedIng));
-      if (savedRec) setRecipes(JSON.parse(savedRec));
+      if (savedIng) {
+        const parsed = JSON.parse(savedIng);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const savedMap = new Map(parsed.map((i: IngredientItem) => [i.id, i]));
+          const merged = INITIAL_INGREDIENTS.map((initIng) => {
+            const savedItem = savedMap.get(initIng.id);
+            return savedItem ? { ...initIng, ...savedItem } : initIng;
+          });
+          const customIngs = parsed.filter(
+            (p: IngredientItem) => !INITIAL_INGREDIENTS.some((i) => i.id === p.id)
+          );
+          setIngredients([...merged, ...customIngs]);
+        }
+      }
+      if (savedRec) {
+        const parsed = JSON.parse(savedRec);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const savedMap = new Map(parsed.map((r: RecipeBOM) => [r.menuId, r]));
+          const merged = INITIAL_RECIPES.map((initRec) => {
+            const savedItem = savedMap.get(initRec.menuId);
+            return savedItem ? { ...initRec, ...savedItem } : initRec;
+          });
+          const customRecs = parsed.filter(
+            (p: RecipeBOM) => !INITIAL_RECIPES.some((r) => r.menuId === p.menuId)
+          );
+          setRecipes([...merged, ...customRecs]);
+        }
+      }
       if (savedPOs) setPurchaseOrders(JSON.parse(savedPOs));
       if (savedLogs) setLogs(JSON.parse(savedLogs));
       if (savedOpnames) setStockOpnames(JSON.parse(savedOpnames));
@@ -118,13 +144,47 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     productNameOrId: string
   ): { status: "SAFE" | "CRITICAL" | "OUT_OF_STOCK"; label?: string } => {
     const term = productNameOrId.toLowerCase().trim();
-    const recipe = recipes.find(
+    const aliasMap: Record<string, string[]> = {
+      "m-1": ["kopi senja aren", "kopi senja", "senja aren", "prod-101", "prod-1"],
+      "m-2": ["es teh peach", "artisan peach white tea", "peach tea", "teh peach", "prod-102", "prod-2"],
+      "m-3": ["nasi beef bowl sambal matah", "signature wagyu beef bowl", "beef bowl", "wagyu beef bowl", "prod-103", "prod-5"],
+      "m-4": ["butter croissant", "flaky french butter croissant", "plain butter", "croissant", "prod-104", "prod-6", "m-5"],
+      "m-5": ["classic americano", "americano", "prod-105", "prod-3", "m-6"],
+      "m-6": ["truffle parmesan fries", "truffle fries", "prod-106", "prod-7"],
+      "m-7": ["matcha latte", "matcha", "prod-107"],
+      "m-8": ["french fries gurih", "french fries", "fries gurih", "prod-108"],
+      "m-9": ["nasi ayam sambal matah", "ayam sambal matah", "prod-109"],
+      "m-10": ["mie goreng jawa", "mie goreng", "prod-110"],
+      "m-11": ["es jeruk peras", "jeruk peras", "es jeruk", "prod-111"],
+      "m-12": ["chocolate croissant", "pain au chocolat", "choco croissant", "prod-112"],
+      "m-13": ["banana bread slice", "banana bread", "bolu pisang", "prod-113"],
+      "m-14": ["nasi ayam kremes", "ayam kremes", "prod-114"],
+      "m-15": ["tempe mendoan (3 pcs)", "tempe mendoan", "mendoan", "prod-115"],
+      "m-16": ["es teh manis melati", "es teh manis", "teh melati", "prod-116"],
+    };
+
+    let recipe = recipes.find(
       (r) =>
         r.menuId.toLowerCase() === term ||
-        r.menuName.toLowerCase() === term ||
-        r.menuName.toLowerCase().includes(term) ||
-        term.includes(r.menuName.toLowerCase())
+        r.menuName.toLowerCase() === term
     );
+
+    if (!recipe) {
+      for (const [recipeId, aliases] of Object.entries(aliasMap)) {
+        if (aliases.some((al) => al === term || term.includes(al) || al.includes(term))) {
+          recipe = recipes.find((r) => r.menuId === recipeId);
+          if (recipe) break;
+        }
+      }
+    }
+
+    if (!recipe) {
+      recipe = recipes.find(
+        (r) =>
+          r.menuName.toLowerCase().includes(term) ||
+          term.includes(r.menuName.toLowerCase())
+      );
+    }
 
     if (!recipe) return { status: "SAFE" };
 

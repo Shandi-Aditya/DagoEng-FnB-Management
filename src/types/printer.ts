@@ -1,7 +1,9 @@
 export type PrinterConnectionType =
   | "BROWSER_SYSTEM"
   | "LOCAL_BRIDGE"
-  | "NETWORK_LAN_VIA_BRIDGE";
+  | "NETWORK_LAN_VIA_BRIDGE"
+  | "QZ_TRAY"
+  | "PRINTNODE";
 
 export type PrinterPaperWidth = "58mm" | "80mm";
 
@@ -46,6 +48,9 @@ export interface PrinterDeviceConfig {
 export interface POSPrintingSettings {
   autoPrintKitchenOrder: boolean;
   autoPrintCustomerReceipt: boolean;
+  silentKitchenPrint: boolean;
+  splitKitchenTicketPerTenant: boolean;
+  silentPrintMethod?: "KIOSK_PRINTING" | "LOCAL_BRIDGE" | "QZ_TRAY" | "PRINTNODE";
   kitchenCopies: number;
   customerCopies: number;
   kitchenFontSize: "NORMAL" | "LARGE";
@@ -67,6 +72,8 @@ export interface KitchenTicketItem {
   modifiers?: string[];
   notes?: string;
   isAdditional?: boolean;
+  tenantId?: string;
+  tenantName?: string;
 }
 
 export interface KitchenTicketData {
@@ -74,6 +81,8 @@ export interface KitchenTicketData {
   orderNumber: string;
   outletId: string;
   outletName: string;
+  tenantId?: string;
+  tenantName?: string;
   tableNumber: string;
   customerName: string;
   orderType: "DINE_IN" | "TAKEAWAY" | "DELIVERY";
@@ -85,6 +94,7 @@ export interface KitchenTicketData {
   reprintedBy?: string;
   reprintedAt?: string;
   kitchenNotes?: string;
+  isSilent?: boolean;
 }
 
 export interface PrintJob {
@@ -144,6 +154,9 @@ export const DEFAULT_PRINTER_DEVICES: PrinterDeviceConfig[] = [
 export const DEFAULT_PRINTING_SETTINGS: POSPrintingSettings = {
   autoPrintKitchenOrder: true,
   autoPrintCustomerReceipt: false,
+  silentKitchenPrint: true,
+  splitKitchenTicketPerTenant: true,
+  silentPrintMethod: "KIOSK_PRINTING",
   kitchenCopies: 1,
   customerCopies: 1,
   kitchenFontSize: "LARGE",

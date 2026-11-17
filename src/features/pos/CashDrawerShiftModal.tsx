@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Printer } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -132,6 +132,8 @@ export function CashDrawerShiftModal({
   // Generate WhatsApp Message strictly matching standard template
   const generateWhatsAppTemplate = () => {
     const formatNum = (num: number) => num.toLocaleString("id-ID");
+    const expectedCash = initialCash + totalCashSales;
+    const cashVariance = cashInDrawer - expectedCash;
 
     return `*LAPORAN CLOSING SHIFT & REKAP KEUANGAN*
 Outlet: ${outletName}
@@ -150,6 +152,13 @@ Kasir: ${confirmCashierName || cashierName}
 • Tunai (Cash): Rp ${formatNum(totalCashSales)}
 • Kartu EDC: Rp ${formatNum(finalEdcSales)}
 
+*REKONSILIASI KAS LACI (FO)*
+• Modal awal kas: Rp ${formatNum(initialCash)}
+• Penjualan tunai: Rp ${formatNum(totalCashSales)}
+• Kas seharusnya: Rp ${formatNum(expectedCash)}
+• Kas fisik aktual: Rp ${formatNum(cashInDrawer)}
+• Selisih kas: ${cashVariance >= 0 ? "+" : ""}Rp ${formatNum(cashVariance)} (${cashVariance === 0 ? "Seimbang" : cashVariance < 0 ? "Kurang" : "Lebih"})
+
 *ESTIMASI BAGI HASIL*
 • *Mitra / Owner (${tenantSharePercent}%):* Rp ${formatNum(tenantTotalShare)}
 • *Manajemen Dago (${dagoSharePercent}%):* Rp ${formatNum(dagoTotalShare)}
@@ -166,16 +175,25 @@ _Sent via POS DagoEng Platform_`;
     setCashInputDisplay(num > 0 ? num.toLocaleString("id-ID") : "");
   };
 
+  const getClosingPdfUrl = () => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const expectedCash = initialCash + totalCashSales;
+    const cashVariance = cashInDrawer - expectedCash;
+
+    return `${origin}/api/reports/closing/pdf?outlet=${encodeURIComponent(
+      outletName
+    )}&cashier=${encodeURIComponent(confirmCashierName || cashierName)}&transactions=${totalTransactionsCount}&gross=${totalGrossSales}&tax=${estimatedTax}&net=${totalNetSales}&qris=${finalQrisSales}&cash=${totalCashSales}&edc=${finalEdcSales}&mitra=${tenantTotalShare}&dago=${dagoTotalShare}&docNo=${encodeURIComponent(
+      docNo
+    )}&initialCash=${initialCash}&expectedCash=${expectedCash}&actualCash=${cashInDrawer}&variance=${cashVariance}&notes=${encodeURIComponent(
+      `Tutup Sesi Kasir (${docNo})`
+    )}`;
+  };
+
   const handleConfirmCloseSession = async () => {
     if (isClosing) return;
     setIsClosing(true);
 
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const pdfUrl = `${origin}/api/reports/closing/pdf?outlet=${encodeURIComponent(
-      outletName
-    )}&cashier=${encodeURIComponent(confirmCashierName || cashierName)}&transactions=${totalTransactionsCount}&gross=${totalGrossSales}&tax=${estimatedTax}&net=${totalNetSales}&qris=${finalQrisSales}&cash=${totalCashSales}&edc=${finalEdcSales}&mitra=${tenantTotalShare}&dago=${dagoTotalShare}&docNo=${encodeURIComponent(
-      docNo
-    )}`;
+    const pdfUrl = getClosingPdfUrl();
 
     // 1. Trigger local Shift state & closing calculation
     if (onConfirmClose) {
@@ -310,6 +328,21 @@ _Sent via POS DagoEng Platform_`;
 
           {/* Confirm Button */}
           <div className="space-y-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              disabled={isClosing}
+              onClick={() => {
+                const printUrl = getClosingPdfUrl();
+                window.open(printUrl, "_blank");
+              }}
+              className="w-full"
+            >
+              <Printer className="size-4" />
+              <span>Cetak / Pratinjau Laporan FO</span>
+            </Button>
+
             <Button
               type="button"
               size="lg"

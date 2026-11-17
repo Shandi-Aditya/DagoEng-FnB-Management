@@ -31,7 +31,6 @@ export type Employee = EmployeeProfile;
 
 export interface ShiftRecord {
   id: string;
-  recordedSaleIds?: string[];
   shiftName: string; // e.g. "Shift Pagi (08:00 - 16:00)"
   outletId: string;
   outletName: string;
@@ -47,6 +46,8 @@ export interface ShiftRecord {
   expectedCash: number; // openingCash + cashSales - refundAmount
   actualCash: number;
   cashVariance: number; // actualCash - expectedCash
+  recordedSaleIds?: string[];
+  recordedRefundIds?: string[];
   closingNotes?: string;
   closedAt?: string;
   closedBy?: string;

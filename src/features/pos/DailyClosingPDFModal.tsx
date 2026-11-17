@@ -25,6 +25,17 @@ import {
   formatClosingTaxStatus,
 } from "@/features/pos/pos-closing-report";
 
+export interface TenantBreakdownItem {
+  tenantId: string;
+  tenantName: string;
+  grossRevenue: number;
+  netSales: number;
+  tenantShareAmount: number;
+  dagoShareAmount: number;
+  tenantSharePercent: number;
+  dagoSharePercent: number;
+}
+
 export interface ClosingReportData {
   reportNumber: string;
   outletName: string;
@@ -53,10 +64,12 @@ export interface ClosingReportData {
   dagoQrisShare: number;
   tenantCashShare: number;
   dagoCashShare: number;
+  expectedCash?: number;
   actualCashEnding: number;
   cashDifference: number;
   shiftNotes?: string;
   verificationHash: string;
+  tenantBreakdowns?: TenantBreakdownItem[];
 }
 
 interface DailyClosingPDFModalProps {
@@ -440,10 +453,63 @@ export function DailyClosingPDFModal({
                 </div>
               </div>
 
-              {/* Section 3: Split Bagi Hasil */}
+              {/* Section 3: Rekonsiliasi Kas Laci Kasir (Front Office) */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-foreground border-b border-border pb-1.5">
+                  3. Rekonsiliasi kas laci kasir (Front Office)
+                </h3>
+                <div className="rounded-lg border border-border bg-card overflow-hidden text-xs">
+                  <table className="w-full text-left">
+                    <tbody className="divide-y divide-border">
+                      <tr>
+                        <td className="py-2 px-3 text-muted-foreground">Modal awal kasir (kas pembuka)</td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums font-medium text-foreground">
+                          {formatCurrencyIDR(reportData.initialCash)}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-3 text-muted-foreground">Penjualan kas tunai</td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums font-medium text-foreground">
+                          {formatCurrencyIDR(reportData.totalCashSales)}
+                        </td>
+                      </tr>
+                      <tr className="bg-muted/30 font-medium">
+                        <td className="py-2 px-3 text-foreground">Total kas seharusnya di laci</td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums font-semibold text-foreground">
+                          {formatCurrencyIDR(reportData.expectedCash ?? (reportData.initialCash + reportData.totalCashSales))}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 px-3 text-muted-foreground">Kas fisik aktual (setoran kasir)</td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums font-medium text-foreground">
+                          {formatCurrencyIDR(reportData.actualCashEnding)}
+                        </td>
+                      </tr>
+                      <tr className={reportData.cashDifference === 0 ? "bg-success/10 text-success" : reportData.cashDifference < 0 ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}>
+                        <td className="py-2 px-3 font-semibold">
+                          Selisih kas ({reportData.cashDifference === 0 ? "Seimbang" : reportData.cashDifference < 0 ? "Kurang / Tekor" : "Lebih"})
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono tabular-nums font-semibold">
+                          {reportData.cashDifference >= 0 ? "+" : ""}{formatCurrencyIDR(reportData.cashDifference)}
+                        </td>
+                      </tr>
+                      {reportData.shiftNotes && (
+                        <tr className="bg-muted/10">
+                          <td className="py-2 px-3 text-muted-foreground">Keterangan / alasan selisih</td>
+                          <td className="py-2 px-3 text-right text-foreground italic">
+                            {reportData.shiftNotes}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Section 4: Split Bagi Hasil & Rincian per Mitra */}
               <div className="space-y-2 min-w-0">
                 <h3 className="text-xs font-semibold text-foreground border-b border-border pb-1.5">
-                  3. Alokasi bagi hasil pendapatan
+                  4. Alokasi bagi hasil dan rincian per mitra tenant
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
                   {/* Tenant Share */}
@@ -516,9 +582,40 @@ export function DailyClosingPDFModal({
                     </div>
                   </div>
                 </div>
+
+                {/* Per-Mitra Breakdown Table */}
+                {reportData.tenantBreakdowns && reportData.tenantBreakdowns.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-border bg-card p-3 space-y-1.5">
+                    <span className="text-xs font-semibold text-foreground block">
+                      Rincian penjualan dan bagi hasil per mitra F&B
+                    </span>
+                    <table className="w-full text-xs text-left">
+                      <thead>
+                        <tr className="border-b border-border text-muted-foreground">
+                          <th className="py-1.5 font-medium">Mitra tenant</th>
+                          <th className="py-1.5 text-right font-medium">Omset kotor</th>
+                          <th className="py-1.5 text-right font-medium">Omset bersih</th>
+                          <th className="py-1.5 text-right font-medium">Hak mitra</th>
+                          <th className="py-1.5 text-right font-medium">Hak platform</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {reportData.tenantBreakdowns.map((t) => (
+                          <tr key={t.tenantId}>
+                            <td className="py-1.5 font-medium text-foreground">{t.tenantName}</td>
+                            <td className="py-1.5 text-right font-mono tabular-nums text-muted-foreground">{formatCurrencyIDR(t.grossRevenue)}</td>
+                            <td className="py-1.5 text-right font-mono tabular-nums text-foreground">{formatCurrencyIDR(t.netSales)}</td>
+                            <td className="py-1.5 text-right font-mono tabular-nums text-foreground font-medium">{formatCurrencyIDR(t.tenantShareAmount)}</td>
+                            <td className="py-1.5 text-right font-mono tabular-nums text-muted-foreground">{formatCurrencyIDR(t.dagoShareAmount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
-              {/* Section 4: Digital Certification Stamp */}
+              {/* Section 5: Digital Certification Stamp */}
               <div className="pt-3 border-t border-dashed border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 min-w-0">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-border shrink-0">
