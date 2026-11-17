@@ -42,6 +42,57 @@ export async function GET(req: NextRequest) {
   }
 }
 
+function buildTrustedAuditEntry(
+  auth: { userId: string; role: RoleSlug; name?: string | null; email?: string | null; scopeLevel?: string | null; tenantId?: string | null },
+  rawEntry: Partial<ActivityLogEntry> & { action: ActivityLogEntry["action"]; description: string }
+): ActivityLogEntry {
+  const trustedActorName =
+    auth.name ||
+    rawEntry.actorName ||
+    rawEntry.userName ||
+    auth.email ||
+    "Authenticated Staff";
+  const resolvedStatus = rawEntry.status || "SUCCESS";
+
+  return {
+    id: rawEntry.id || `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    timestamp: new Date().toISOString(),
+    formattedTime: rawEntry.formattedTime,
+    userId: auth.userId,
+    userName: trustedActorName,
+    userRole: auth.role,
+    actorId: auth.userId,
+    actorName: trustedActorName,
+    actorRole: auth.role,
+    role: auth.role,
+    organization: rawEntry.organization,
+    organizationName: rawEntry.organizationName,
+    tenantId:
+      auth.scopeLevel === "TENANT" && auth.tenantId ? auth.tenantId : rawEntry.tenantId,
+    tenantName: rawEntry.tenantName,
+    action: rawEntry.action,
+    module: rawEntry.module || "SYSTEM",
+    outletId: rawEntry.outletId,
+    outletName: rawEntry.outletName,
+    description: rawEntry.description,
+    recordId: rawEntry.recordId || rawEntry.referenceId,
+    referenceId: rawEntry.referenceId || rawEntry.recordId,
+    previousValue: rawEntry.previousValue,
+    newValue: rawEntry.newValue,
+    reason: rawEntry.reason,
+    status: resolvedStatus,
+    severity:
+      rawEntry.severity ||
+      (resolvedStatus === "FAILED"
+        ? "HIGH"
+        : resolvedStatus === "WARNING"
+          ? "MEDIUM"
+          : "INFO"),
+    category: rawEntry.category || "OPERATIONAL",
+    metadata: rawEntry.metadata,
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await getRequestAuthUser(req);
@@ -59,21 +110,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Audit entry must contain action and description." }, { status: 400 });
     }
 
-    // Bind actor identity from server session; generate server timestamp if not explicitly provided
-    const entry: ActivityLogEntry = {
-      id: rawEntry.id || `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      timestamp: new Date().toISOString(),
-      userId: auth.userId,
-      userName: auth.name || rawEntry.userName || auth.email || "Authenticated Staff",
-      userRole: auth.role,
-      action: rawEntry.action,
-      module: rawEntry.module || "SYSTEM",
-      outletId: rawEntry.outletId,
-      outletName: rawEntry.outletName,
-      description: rawEntry.description,
-      referenceId: rawEntry.referenceId,
-      metadata: rawEntry.metadata,
-    };
+    const entry = buildTrustedAuditEntry(
+      {
+        userId: auth.userId,
+        role: auth.role,
+        name: auth.name,
+        email: auth.email,
+        scopeLevel: auth.scopeLevel,
+        tenantId: auth.tenantId,
+      },
+      { ...rawEntry, action: rawEntry.action, description: rawEntry.description }
+    );
 
     const saved = await appendAuditLog(entry);
     return NextResponse.json({ success: true, entry: saved });

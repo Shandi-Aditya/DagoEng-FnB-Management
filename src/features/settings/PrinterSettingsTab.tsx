@@ -524,6 +524,24 @@ export function PrinterSettingsTab() {
 
               <label className="flex cursor-pointer items-start justify-between gap-3 rounded-lg border p-3">
                 <div>
+                  <p className="font-medium text-foreground">Pisahkan struk pelanggan per mitra</p>
+                  <p className="text-muted-foreground">Mencetak struk terpisah per mitra saat pesanan berasal dari beberapa mitra F&B.</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={Boolean(localSettings.splitCustomerReceiptPerTenant)}
+                  onChange={(e) =>
+                    setLocalSettings((prev) => ({
+                      ...prev,
+                      splitCustomerReceiptPerTenant: e.target.checked,
+                    }))
+                  }
+                  className="mt-1 rounded border"
+                />
+              </label>
+
+              <label className="flex cursor-pointer items-start justify-between gap-3 rounded-lg border p-3">
+                <div>
                   <p className="font-medium text-foreground">Sertakan catatan khusus di dapur</p>
                   <p className="text-muted-foreground">Mencetak instruksi khusus pesanan tamu.</p>
                 </div>

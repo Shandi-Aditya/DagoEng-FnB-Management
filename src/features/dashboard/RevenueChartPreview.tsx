@@ -14,10 +14,19 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/contexts/AuthContext";
+import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { formatCurrencyIDR } from "@/lib/utils";
 
-import { bucketHourly, bucketLastSevenDays, formatCompactIDR, splitPromoOrders } from "./dashboard-metrics";
+import {
+  bucketHourly,
+  bucketLastSevenDays,
+  formatCompactIDR,
+  projectDashboardOrdersForTenant,
+  scopeDashboardOrders,
+  splitPromoOrders,
+} from "./dashboard-metrics";
 
 type ChartView = "weekly" | "hourly" | "promo";
 
@@ -46,12 +55,27 @@ function Summary({ label, value }: { label: string; value: string }) {
 }
 
 export function RevenueChartPreview() {
+  const { user } = useAuth();
+  const { isDateInRange } = useDateFilter();
   const { filteredOrders } = useOrders();
   const [view, setView] = useState<ChartView>("weekly");
 
-  const weekly = useMemo(() => bucketLastSevenDays(filteredOrders), [filteredOrders]);
-  const hourly = useMemo(() => bucketHourly(filteredOrders), [filteredOrders]);
-  const promo = useMemo(() => splitPromoOrders(filteredOrders), [filteredOrders]);
+  const isTenantOwner = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
+  const tenantId = user?.tenant?.id;
+
+  const scopedOrders = useMemo(() => {
+    const paid = scopeDashboardOrders(filteredOrders, {
+      tenantId,
+      isTenantOwner,
+      isDateInRange,
+      requirePaid: true,
+    });
+    return isTenantOwner && tenantId ? projectDashboardOrdersForTenant(paid, tenantId) : paid;
+  }, [filteredOrders, tenantId, isTenantOwner, isDateInRange]);
+
+  const weekly = useMemo(() => bucketLastSevenDays(scopedOrders), [scopedOrders]);
+  const hourly = useMemo(() => bucketHourly(scopedOrders), [scopedOrders]);
+  const promo = useMemo(() => splitPromoOrders(scopedOrders), [scopedOrders]);
 
   const weeklyRevenue = weekly.reduce((sum, day) => sum + day.revenue, 0);
   const weeklyCost = weekly.reduce((sum, day) => sum + day.cost, 0);

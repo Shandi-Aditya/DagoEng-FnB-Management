@@ -52,6 +52,7 @@ export interface POSPrintingSettings {
   autoPrintCustomerReceipt: boolean;
   silentKitchenPrint: boolean;
   splitKitchenTicketPerTenant: boolean;
+  splitCustomerReceiptPerTenant?: boolean;
   silentPrintMethod?: "KIOSK_PRINTING" | "LOCAL_BRIDGE" | "QZ_TRAY" | "PRINTNODE";
   kitchenCopies: number;
   customerCopies: number;
@@ -160,6 +161,7 @@ export const DEFAULT_PRINTING_SETTINGS: POSPrintingSettings = {
   autoPrintCustomerReceipt: false,
   silentKitchenPrint: true,
   splitKitchenTicketPerTenant: true,
+  splitCustomerReceiptPerTenant: false,
   silentPrintMethod: "KIOSK_PRINTING",
   kitchenCopies: 1,
   customerCopies: 1,

@@ -13,12 +13,43 @@ export interface TableItem {
   status: TableStatus;
   outletId: string;
   outletName: string;
+  area?: string;
   customer?: string;
   total?: string;
+  currentBillTotal?: number;
   time?: string;
   itemsCount?: number;
   activeOrderId?: string;
   paymentStatus?: "UNPAID" | "PAID";
+}
+
+export interface SelectableTableCandidate {
+  status: string;
+  paymentStatus?: string;
+  activeOrderId?: string;
+  currentBillTotal?: number;
+  total?: string;
+}
+
+function parseStoredArray<T>(raw: string): T[] | null {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as T[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function isTableSelectableForPos(table: SelectableTableCandidate): boolean {
+  if (table.status === "AVAILABLE") return true;
+  if (table.status !== "OCCUPIED") return false;
+  if (table.paymentStatus === "PAID" || table.activeOrderId) return false;
+  if (table.currentBillTotal !== undefined && table.currentBillTotal > 0) return false;
+  if (table.total && table.total !== "Rp 0" && !table.total.startsWith("DP Masuk")) {
+    const numericTotal = Number(table.total.replace(/\D/g, ""));
+    if (numericTotal > 0) return false;
+  }
+  return true;
 }
 
 export interface AreaItem {
@@ -151,6 +182,22 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
     }
   }, [areas, reservations, isInitialized]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleStorageSync = (event: StorageEvent) => {
+      if (!event.newValue) return;
+      if (event.key === STORAGE_KEY_AREAS) {
+        const parsed = parseStoredArray<AreaItem>(event.newValue);
+        if (parsed) setAreas(parsed);
+      } else if (event.key === STORAGE_KEY_RESERVATIONS) {
+        const parsed = parseStoredArray<ScheduledReservation>(event.newValue);
+        if (parsed) setReservations(parsed);
+      }
+    };
+    window.addEventListener("storage", handleStorageSync);
+    return () => window.removeEventListener("storage", handleStorageSync);
+  }, []);
+
   // Scoped areas and tables based strictly on activeOutletId
   const filteredAreas = areas.filter((area) => {
     if (isAllOutlets) return true;
@@ -162,13 +209,12 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
     return r.outletId === activeOutletId;
   });
 
-  // Returns only tables that are AVAILABLE for new orders
   const getAvailableTables = (outletId?: string): TableItem[] => {
     const targetOutlet = outletId !== undefined ? outletId : activeOutletId;
     return areas
       .filter((a) => targetOutlet === "ALL" || isAllOutlets || a.outletId === targetOutlet)
-      .flatMap((a) => a.tables)
-      .filter((t) => t.status === "AVAILABLE");
+      .flatMap((a) => a.tables.map((t) => ({ ...t, area: t.area || a.name })))
+      .filter((t) => isTableSelectableForPos(t));
   };
 
   // OCCUPY TABLE ON POS TRANSACTION
@@ -190,6 +236,8 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
 
     if (!targetTable || !targetArea) return;
 
+    const numericBillTotal = Number(orderDetails.totalFormatted.replace(/\D/g, "")) || 0;
+
     setAreas((prev) =>
       prev.map((area) => ({
         ...area,
@@ -200,6 +248,7 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
                 status: "OCCUPIED",
                 customer: orderDetails.customerName,
                 total: orderDetails.totalFormatted,
+                currentBillTotal: numericBillTotal,
                 time: "Baru saja",
                 itemsCount: orderDetails.itemsCount,
                 activeOrderId: orderDetails.orderId,
@@ -250,6 +299,7 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
                 status: "AVAILABLE",
                 customer: undefined,
                 total: undefined,
+                currentBillTotal: undefined,
                 time: undefined,
                 itemsCount: undefined,
                 activeOrderId: undefined,
@@ -290,6 +340,13 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
     if (!targetTable || !targetArea) return;
 
     const isReset = status === "AVAILABLE";
+    const nextCurrentBillTotal = isReset
+      ? undefined
+      : total !== undefined
+        ? total.startsWith("DP Masuk")
+          ? 0
+          : Number(total.replace(/\D/g, "")) || 0
+        : targetTable.currentBillTotal;
 
     setAreas((prev) =>
       prev.map((area) => ({
@@ -301,6 +358,7 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
                 status,
                 customer: isReset ? undefined : (customer !== undefined ? customer : table.customer),
                 total: isReset ? undefined : (total !== undefined ? total : table.total),
+                currentBillTotal: nextCurrentBillTotal,
                 time: isReset ? undefined : (status === "OCCUPIED" ? "Baru saja" : table.time),
                 itemsCount: isReset ? undefined : table.itemsCount,
                 activeOrderId: isReset ? undefined : table.activeOrderId,

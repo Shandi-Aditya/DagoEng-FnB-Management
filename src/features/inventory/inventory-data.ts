@@ -1,4 +1,4 @@
-import { IngredientItem, RecipeBOM, PurchaseOrder, StockAdjustmentLog, StockStatus } from "@/types/inventory";
+import { IngredientItem, RecipeBOM, RecipeIngredient, PurchaseOrder, StockAdjustmentLog, StockStatus } from "@/types/inventory";
 
 export const INITIAL_INGREDIENTS: IngredientItem[] = [
   {
@@ -452,18 +452,29 @@ export interface OrderItemBOMInput {
   modifiers?: string[];
 }
 
-/**
- * Deducts ingredient stock when a menu item is ordered based on its Recipe BOM formula (POS-36 / B4).
- * Supports modifier substitutions such as Oat Milk replacing fresh milk (TC-G02), extra espresso shots,
- * beverage sizing (Large, 1 Liter), and meal portions (Double Meat).
- */
-export function deductRecipeIngredients(
-  currentStock: IngredientItem[],
+const RECIPE_ALIAS_MAP: Record<string, string[]> = {
+  "m-1": ["kopi senja aren", "kopi senja", "senja aren", "prod-101", "prod-1"],
+  "m-2": ["es teh peach", "artisan peach white tea", "peach tea", "teh peach", "prod-102", "prod-2"],
+  "m-3": ["nasi beef bowl sambal matah", "signature wagyu beef bowl", "beef bowl", "wagyu beef bowl", "prod-103", "prod-5"],
+  "m-4": ["butter croissant", "flaky french butter croissant", "plain butter", "croissant", "prod-104", "prod-6", "m-5"],
+  "m-5": ["classic americano", "americano", "prod-105", "prod-3", "m-6"],
+  "m-6": ["truffle parmesan fries", "truffle fries", "prod-106", "prod-7"],
+  "m-7": ["matcha latte", "matcha", "prod-107"],
+  "m-8": ["french fries gurih", "french fries", "fries gurih", "prod-108"],
+  "m-9": ["nasi ayam sambal matah", "ayam sambal matah", "prod-109"],
+  "m-10": ["mie goreng jawa", "mie goreng", "prod-110"],
+  "m-11": ["es jeruk peras", "jeruk peras", "es jeruk", "prod-111"],
+  "m-12": ["chocolate croissant", "pain au chocolat", "choco croissant", "prod-112"],
+  "m-13": ["banana bread slice", "banana bread", "bolu pisang", "prod-113"],
+  "m-14": ["nasi ayam kremes", "ayam kremes", "prod-114"],
+  "m-15": ["tempe mendoan (3 pcs)", "tempe mendoan", "mendoan", "prod-115"],
+  "m-16": ["es teh manis melati", "es teh manis", "teh melati", "prod-116"],
+};
+
+function resolveEffectiveRecipeIngredients(
   recipe: RecipeBOM,
-  quantity: number = 1,
   modifiers?: string[]
-): { updatedStock: IngredientItem[]; logs: StockAdjustmentLog[] } {
-  const logs: StockAdjustmentLog[] = [];
+): RecipeIngredient[] {
   const normalizedMods = (modifiers || []).map((m) => m.toLowerCase());
   const isOatMilk = normalizedMods.some((m) => m.includes("oat"));
   const hasExtraShot = normalizedMods.some((m) => m.includes("extra") && m.includes("shot"));
@@ -472,8 +483,6 @@ export function deductRecipeIngredients(
   const isDoubleMeat = normalizedMods.some((m) => m.includes("double") && (m.includes("beef") || m.includes("meat") || m.includes("wagyu") || m.includes("ayam")));
   const isChocolate = normalizedMods.some((m) => m.includes("chocolate") || m.includes("cokelat"));
 
-  // Build effective ingredient requirements for this item
-  // 1. Substitute Oat Milk if selected (TC-G02)
   let effectiveIngredients = recipe.ingredients.map((ing) => {
     if (isOatMilk && (ing.ingredientId === "ing-1" || ing.ingredientName.toLowerCase().includes("fresh milk") || ing.ingredientName.toLowerCase().includes("susu"))) {
       return {
@@ -485,7 +494,6 @@ export function deductRecipeIngredients(
     return { ...ing };
   });
 
-  // 2. Extra Shot: add 0.018 kg of House Blend (ing-2)
   if (hasExtraShot) {
     const coffeeIndex = effectiveIngredients.findIndex((ing) => ing.ingredientId === "ing-2");
     if (coffeeIndex > -1) {
@@ -504,7 +512,6 @@ export function deductRecipeIngredients(
     }
   }
 
-  // 3. Large variant: scale liquid/powder/coffee ingredients by 1.5x (packaging cup stays 1 pcs)
   if (isLarge) {
     effectiveIngredients = effectiveIngredients.map((ing) => {
       if (ing.ingredientId === "ing-8") return ing;
@@ -515,17 +522,13 @@ export function deductRecipeIngredients(
     });
   }
 
-  // 4. 1 Liter Bottle variant: scale ingredients by 4x
   if (isOneLiter) {
-    effectiveIngredients = effectiveIngredients.map((ing) => {
-      return {
-        ...ing,
-        quantityRequired: Number((ing.quantityRequired * 4).toFixed(3)),
-      };
-    });
+    effectiveIngredients = effectiveIngredients.map((ing) => ({
+      ...ing,
+      quantityRequired: Number((ing.quantityRequired * 4).toFixed(3)),
+    }));
   }
 
-  // 5. Double Meat variant: double meat ingredient (ing-5 or ing-12)
   if (isDoubleMeat) {
     effectiveIngredients = effectiveIngredients.map((ing) => {
       if (ing.ingredientId === "ing-5" || ing.ingredientId === "ing-12" || ing.ingredientName.toLowerCase().includes("daging") || ing.ingredientName.toLowerCase().includes("ayam")) {
@@ -538,7 +541,6 @@ export function deductRecipeIngredients(
     });
   }
 
-  // 6. Chocolate modifier on pastry: add chocolate paste if not already present
   if (isChocolate && !effectiveIngredients.some((ing) => ing.ingredientId === "ing-16")) {
     effectiveIngredients.push({
       ingredientId: "ing-16",
@@ -549,27 +551,105 @@ export function deductRecipeIngredients(
     });
   }
 
+  return effectiveIngredients;
+}
+
+function findRecipeForOrderItem(
+  recipes: RecipeBOM[],
+  item: OrderItemBOMInput
+): RecipeBOM | undefined {
+  const term = item.productName.toLowerCase().trim();
+  const productId = (item.productId || "").toLowerCase().trim();
+
+  let recipe = recipes.find(
+    (r) =>
+      (productId && (r.menuId.toLowerCase() === productId || (r as { productId?: string }).productId === productId)) ||
+      r.menuId.toLowerCase() === term
+  );
+
+  if (!recipe) {
+    recipe = recipes.find((r) => r.menuName.toLowerCase() === term);
+  }
+
+  if (!recipe) {
+    for (const [recipeId, aliases] of Object.entries(RECIPE_ALIAS_MAP)) {
+      if (
+        aliases.some(
+          (al) =>
+            al === term ||
+            term.includes(al) ||
+            al.includes(term) ||
+            (productId && al === productId)
+        )
+      ) {
+        recipe = recipes.find((r) => r.menuId === recipeId);
+        if (recipe) break;
+      }
+    }
+  }
+
+  if (!recipe) {
+    recipe = recipes.find(
+      (r) =>
+        r.menuName.toLowerCase().includes(term) ||
+        term.includes(r.menuName.toLowerCase()) ||
+        (term.includes("croissant") && r.menuName.toLowerCase().includes("croissant")) ||
+        (term.includes("senja") && r.menuName.toLowerCase().includes("senja")) ||
+        (term.includes("americano") && r.menuName.toLowerCase().includes("americano")) ||
+        (term.includes("tea") && r.menuName.toLowerCase().includes("tea")) ||
+        (term.includes("wagyu") && r.menuName.toLowerCase().includes("wagyu"))
+    );
+  }
+
+  return recipe;
+}
+
+function computeStockStatus(stockNumber: number, min: number): StockStatus {
+  if (stockNumber <= min * 0.4) return "CRITICAL";
+  if (stockNumber <= min) return "LOW";
+  return "SAFE";
+}
+
+function applyRecipeStockDelta(
+  currentStock: IngredientItem[],
+  recipe: RecipeBOM,
+  quantity: number,
+  modifiers: string[] | undefined,
+  options: {
+    direction: -1 | 1;
+    reason: StockAdjustmentLog["reason"];
+    user: string;
+    mutateStock?: boolean;
+  }
+): { updatedStock: IngredientItem[]; logs: StockAdjustmentLog[] } {
+  const logs: StockAdjustmentLog[] = [];
+  const effectiveIngredients = resolveEffectiveRecipeIngredients(recipe, modifiers);
+  const mutateStock = options.mutateStock !== false;
+
   const updatedStock = currentStock.map((item) => {
     const matchedIng = effectiveIngredients.find((ing) => ing.ingredientId === item.id);
     if (!matchedIng) return item;
 
-    const totalReduction = Number((matchedIng.quantityRequired * quantity).toFixed(3));
-    const nextStock = Math.max(0, Number((item.stockNumber - totalReduction).toFixed(3)));
-    const nextStatus: StockStatus =
-      nextStock <= item.min * 0.4 ? "CRITICAL" : nextStock <= item.min ? "LOW" : "SAFE";
+    const magnitude = Number((matchedIng.quantityRequired * quantity).toFixed(3));
+    const delta = options.direction * magnitude;
+    const nextStock = mutateStock
+      ? Math.max(0, Number((item.stockNumber + delta).toFixed(3)))
+      : item.stockNumber;
+    const nextStatus = computeStockStatus(nextStock, item.min);
 
     logs.push({
       id: `log-${Date.now()}-${item.id}-${Math.random().toString(36).slice(2, 6)}`,
       ingredientId: item.id,
       ingredientName: item.name,
-      delta: -totalReduction,
+      delta: mutateStock ? delta : 0,
       previousStock: item.stockNumber,
       currentStock: nextStock,
-      reason: "PENJUALAN_RESEP",
+      reason: options.reason,
       timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
-      user: "POS / Order System",
+      user: mutateStock ? options.user : `${options.user} (${magnitude} ${item.unit})`,
     });
 
+    if (!mutateStock) return item;
     return {
       ...item,
       stockNumber: nextStock,
@@ -579,6 +659,24 @@ export function deductRecipeIngredients(
   });
 
   return { updatedStock, logs };
+}
+
+/**
+ * Deducts ingredient stock when a menu item is ordered based on its Recipe BOM formula (POS-36 / B4).
+ * Supports modifier substitutions such as Oat Milk replacing fresh milk (TC-G02), extra espresso shots,
+ * beverage sizing (Large, 1 Liter), and meal portions (Double Meat).
+ */
+export function deductRecipeIngredients(
+  currentStock: IngredientItem[],
+  recipe: RecipeBOM,
+  quantity: number = 1,
+  modifiers?: string[]
+): { updatedStock: IngredientItem[]; logs: StockAdjustmentLog[] } {
+  return applyRecipeStockDelta(currentStock, recipe, quantity, modifiers, {
+    direction: -1,
+    reason: "PENJUALAN_RESEP",
+    user: "POS / Order System",
+  });
 }
 
 /**
@@ -594,73 +692,8 @@ export function deductOrderItemsBOM(
   const allLogs: StockAdjustmentLog[] = [];
   let deductedCount = 0;
 
-  const aliasMap: Record<string, string[]> = {
-    "m-1": ["kopi senja aren", "kopi senja", "senja aren", "prod-101", "prod-1"],
-    "m-2": ["es teh peach", "artisan peach white tea", "peach tea", "teh peach", "prod-102", "prod-2"],
-    "m-3": ["nasi beef bowl sambal matah", "signature wagyu beef bowl", "beef bowl", "wagyu beef bowl", "prod-103", "prod-5"],
-    "m-4": ["butter croissant", "flaky french butter croissant", "plain butter", "croissant", "prod-104", "prod-6", "m-5"],
-    "m-5": ["classic americano", "americano", "prod-105", "prod-3", "m-6"],
-    "m-6": ["truffle parmesan fries", "truffle fries", "prod-106", "prod-7"],
-    "m-7": ["matcha latte", "matcha", "prod-107"],
-    "m-8": ["french fries gurih", "french fries", "fries gurih", "prod-108"],
-    "m-9": ["nasi ayam sambal matah", "ayam sambal matah", "prod-109"],
-    "m-10": ["mie goreng jawa", "mie goreng", "prod-110"],
-    "m-11": ["es jeruk peras", "jeruk peras", "es jeruk", "prod-111"],
-    "m-12": ["chocolate croissant", "pain au chocolat", "choco croissant", "prod-112"],
-    "m-13": ["banana bread slice", "banana bread", "bolu pisang", "prod-113"],
-    "m-14": ["nasi ayam kremes", "ayam kremes", "prod-114"],
-    "m-15": ["tempe mendoan (3 pcs)", "tempe mendoan", "mendoan", "prod-115"],
-    "m-16": ["es teh manis melati", "es teh manis", "teh melati", "prod-116"],
-  };
-
   for (const item of items) {
-    const term = item.productName.toLowerCase().trim();
-    const productId = (item.productId || "").toLowerCase().trim();
-
-    // 1. First attempt: match by productId or menuId
-    let recipe = recipes.find(
-      (r) =>
-        (productId && (r.menuId.toLowerCase() === productId || (r as any).productId === productId)) ||
-        r.menuId.toLowerCase() === term
-    );
-
-    // 2. Second attempt: exact name match
-    if (!recipe) {
-      recipe = recipes.find((r) => r.menuName.toLowerCase() === term);
-    }
-
-    // 3. Third attempt: semantic alias mapping
-    if (!recipe) {
-      for (const [recipeId, aliases] of Object.entries(aliasMap)) {
-        if (
-          aliases.some(
-            (al) =>
-              al === term ||
-              term.includes(al) ||
-              al.includes(term) ||
-              (productId && al === productId)
-          )
-        ) {
-          recipe = recipes.find((r) => r.menuId === recipeId);
-          if (recipe) break;
-        }
-      }
-    }
-
-    // 4. Fourth attempt: generic keyword substring match
-    if (!recipe) {
-      recipe = recipes.find(
-        (r) =>
-          r.menuName.toLowerCase().includes(term) ||
-          term.includes(r.menuName.toLowerCase()) ||
-          (term.includes("croissant") && r.menuName.toLowerCase().includes("croissant")) ||
-          (term.includes("senja") && r.menuName.toLowerCase().includes("senja")) ||
-          (term.includes("americano") && r.menuName.toLowerCase().includes("americano")) ||
-          (term.includes("tea") && r.menuName.toLowerCase().includes("tea")) ||
-          (term.includes("wagyu") && r.menuName.toLowerCase().includes("wagyu"))
-      );
-    }
-
+    const recipe = findRecipeForOrderItem(recipes, item);
     if (recipe) {
       const { updatedStock, logs } = deductRecipeIngredients(
         runningStock,
@@ -675,4 +708,60 @@ export function deductOrderItemsBOM(
   }
 
   return { updatedStock: runningStock, logs: allLogs, deductedCount };
+}
+
+export function restoreOrderItemsBOM(
+  currentStock: IngredientItem[],
+  recipes: RecipeBOM[],
+  items: OrderItemBOMInput[],
+  orderNumber?: string
+): { updatedStock: IngredientItem[]; logs: StockAdjustmentLog[]; restoredCount: number } {
+  let runningStock = [...currentStock];
+  const allLogs: StockAdjustmentLog[] = [];
+  let restoredCount = 0;
+
+  for (const item of items) {
+    const recipe = findRecipeForOrderItem(recipes, item);
+    if (recipe) {
+      const { updatedStock, logs } = applyRecipeStockDelta(runningStock, recipe, item.quantity, item.modifiers, {
+        direction: 1,
+        reason: "MANUAL_ADJUSTMENT",
+        user: orderNumber ? `Pengembalian stok (${orderNumber})` : "Pengembalian stok (Refund/Void)",
+      });
+      runningStock = updatedStock;
+      allLogs.push(...logs);
+      restoredCount++;
+    }
+  }
+
+  return { updatedStock: runningStock, logs: allLogs, restoredCount };
+}
+
+export function recordOrderWasteItemsBOM(
+  currentStock: IngredientItem[],
+  recipes: RecipeBOM[],
+  items: OrderItemBOMInput[],
+  needsDeduction: boolean,
+  orderNumber?: string
+): { updatedStock: IngredientItem[]; logs: StockAdjustmentLog[]; wasteCount: number } {
+  let runningStock = [...currentStock];
+  const allLogs: StockAdjustmentLog[] = [];
+  let wasteCount = 0;
+
+  for (const item of items) {
+    const recipe = findRecipeForOrderItem(recipes, item);
+    if (recipe) {
+      const { updatedStock, logs } = applyRecipeStockDelta(runningStock, recipe, item.quantity, item.modifiers, {
+        direction: -1,
+        reason: "OPNAME_HILANG_RUSAK",
+        user: orderNumber ? `Limbah dapur (${orderNumber})` : "Limbah dapur",
+        mutateStock: needsDeduction,
+      });
+      runningStock = updatedStock;
+      allLogs.push(...logs);
+      wasteCount++;
+    }
+  }
+
+  return { updatedStock: runningStock, logs: allLogs, wasteCount };
 }

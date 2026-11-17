@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   calculateTenantReceiptGroups,
   formatReceiptLoyaltyPoints,
@@ -22,6 +23,7 @@ import {
 import type { POSReceiptData } from "@/features/pos/types";
 import type { KitchenTicketData } from "@/types/printer";
 import { usePrinter } from "@/contexts/PrinterContext";
+import { splitCustomerReceiptByTenant } from "@/lib/printer";
 import { MASTER_HQ_OUTLET } from "@/lib/receipt-publisher";
 import { isAddonActive } from "@/lib/subscription";
 import { DEFAULT_FNB_TENANTS, getAllStoredTenantSettings } from "@/lib/tenant";
@@ -47,8 +49,25 @@ export function ReceiptModal({
 }: ReceiptModalProps) {
   const receiptData = rawReceiptData || order;
   const { printCustomerReceipt, printKitchenOrder, settings: printerSettings } = usePrinter();
+  const [selectedSplitIdx, setSelectedSplitIdx] = React.useState(0);
+
+  const splitReceipts = React.useMemo(() => {
+    if (!receiptData) return [];
+    if (!printerSettings.splitCustomerReceiptPerTenant) return [receiptData];
+    return splitCustomerReceiptByTenant(receiptData);
+  }, [receiptData, printerSettings.splitCustomerReceiptPerTenant]);
+
+  React.useEffect(() => {
+    setSelectedSplitIdx(0);
+  }, [receiptData?.orderNumber, isOpen, printerSettings.splitCustomerReceiptPerTenant]);
 
   if (!isOpen || !receiptData) return null;
+
+  const hasSplitReceipts =
+    Boolean(printerSettings.splitCustomerReceiptPerTenant) && splitReceipts.length > 1;
+  const activeReceipt = hasSplitReceipts
+    ? splitReceipts[Math.min(selectedSplitIdx, splitReceipts.length - 1)] || receiptData
+    : receiptData;
 
   const handlePrint = async () => {
     try {
@@ -57,7 +76,6 @@ export function ReceiptModal({
       window.print();
     }
 
-    // Auto-cetak struk kitchen per mitra secara senyap saat kasir mencetak struk (Task V-15)
     if (printerSettings.autoPrintKitchenOrder) {
       try {
         const kitchenTicket: KitchenTicketData = {
@@ -92,7 +110,7 @@ export function ReceiptModal({
 
   const tenantIdsInItems = Array.from(
     new Set(
-      (receiptData.items || [])
+      (activeReceipt.items || [])
         .map((i) => i.tenantId || (i.tenantName ? DEFAULT_FNB_TENANTS.find((t) => t.name.toLowerCase() === i.tenantName?.toLowerCase())?.id : undefined))
         .filter(Boolean)
     )
@@ -101,10 +119,10 @@ export function ReceiptModal({
   const isMultiTenant = tenantIdsInItems.length > 1;
 
   const primaryTenantId =
-    receiptData.tenantId ||
-    receiptData.items?.find((i) => i.tenantId)?.tenantId ||
-    (receiptData.items?.find((i) => i.tenantName)
-      ? DEFAULT_FNB_TENANTS.find((t) => t.name.toLowerCase() === receiptData.items[0]?.tenantName?.toLowerCase())?.id
+    activeReceipt.tenantId ||
+    activeReceipt.items?.find((i) => i.tenantId)?.tenantId ||
+    (activeReceipt.items?.find((i) => i.tenantName)
+      ? DEFAULT_FNB_TENANTS.find((t) => t.name.toLowerCase() === activeReceipt.items[0]?.tenantName?.toLowerCase())?.id
       : undefined) ||
     "tenant-ks";
 
@@ -115,10 +133,10 @@ export function ReceiptModal({
   const brandName = isMultiTenant
     ? "Dago Creative Hub"
     : (
-        receiptData.receiptHeader ||
+        activeReceipt.receiptHeader ||
         storedTenantSettings?.receiptHeader ||
         storedTenantSettings?.brandName ||
-        receiptData.tenantName ||
+        activeReceipt.tenantName ||
         defaultTenantInfo.name
       );
 
@@ -127,33 +145,33 @@ export function ReceiptModal({
     : (storedTenantSettings?.tagline || defaultTenantInfo.tagline || defaultTenantInfo.badge);
 
   const contactPhone = isMultiTenant
-    ? receiptData.outletPhone || MASTER_HQ_OUTLET.phone || "+62 821-1550-1995"
-    : (storedTenantSettings?.contactPhone || receiptData.outletPhone);
+    ? activeReceipt.outletPhone || MASTER_HQ_OUTLET.phone || "+62 821-1550-1995"
+    : (storedTenantSettings?.contactPhone || activeReceipt.outletPhone);
 
   const footerMessage =
-    receiptData.receiptFooter ||
+    activeReceipt.receiptFooter ||
     (!isMultiTenant ? storedTenantSettings?.receiptFooter : undefined) ||
     "Terima kasih atas kunjungan Anda";
 
-  const groupedItems = calculateTenantReceiptGroups(receiptData.items);
+  const groupedItems = calculateTenantReceiptGroups(activeReceipt.items);
 
   const simulatedWifiVoucher = (() => {
-    if (!receiptData.orderNumber) return null;
+    if (!activeReceipt.orderNumber) return null;
     const calcBasis = getSimulatedWifiCalcBasis();
-    const evaluatedAmount = calcBasis === "NET_SALES" ? (receiptData.subtotal || 0) : (receiptData.grandTotal || 0);
+    const evaluatedAmount = calcBasis === "NET_SALES" ? (activeReceipt.subtotal || 0) : (activeReceipt.grandTotal || 0);
 
     return getOrCreateSimulatedWifiVoucher(
-      receiptData.orderNumber,
-      receiptData.customerName,
+      activeReceipt.orderNumber,
+      activeReceipt.customerName,
       evaluatedAmount,
-      receiptData.outletName,
+      activeReceipt.outletName,
       primaryTenantId,
       brandName
     );
   })();
 
   const serviceChargeLabel = formatReceiptServiceChargeLabel(
-    (receiptData as { serviceChargePercent?: number }).serviceChargePercent
+    (activeReceipt as { serviceChargePercent?: number }).serviceChargePercent
   );
 
   return (
@@ -206,6 +224,23 @@ export function ReceiptModal({
             </div>
           </DialogHeader>
 
+          {hasSplitReceipts ? (
+            <div className="px-4 py-2 bg-muted/30 border-b border-border print:hidden">
+              <Tabs
+                value={String(Math.min(selectedSplitIdx, splitReceipts.length - 1))}
+                onValueChange={(val) => setSelectedSplitIdx(Number(val))}
+              >
+                <TabsList aria-label="Pilih struk mitra" className="w-full overflow-x-auto">
+                  {splitReceipts.map((sub, idx) => (
+                    <TabsTrigger key={sub.orderNumber} value={String(idx)} className="text-xs">
+                      {sub.tenantName || `Mitra ${idx + 1}`}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
+          ) : null}
+
           {/* Scrollable Receipt Preview (Formatted as 80mm Thermal Receipt) */}
           <div className="p-4 sm:p-5 overflow-y-auto overflow-x-hidden flex-1 bg-muted/30 flex justify-center">
             <div
@@ -223,7 +258,7 @@ export function ReceiptModal({
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground leading-tight">
-                  {receiptData.outletAddress || MASTER_HQ_OUTLET.address}
+                  {activeReceipt.outletAddress || MASTER_HQ_OUTLET.address}
                 </p>
                 {contactPhone && <p className="text-xs text-muted-foreground">Telp: {contactPhone}</p>}
               </div>
@@ -232,28 +267,28 @@ export function ReceiptModal({
               <div className="space-y-1 border-b border-dashed border-border pb-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">No. struk:</span>
-                  <span className="font-medium text-foreground">{receiptData.orderNumber}</span>
+                  <span className="font-medium text-foreground">{activeReceipt.orderNumber}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Tanggal:</span>
-                  <span className="text-foreground">{receiptData.date}</span>
+                  <span className="text-foreground">{activeReceipt.date}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Kasir:</span>
-                  <span className="text-foreground">{receiptData.cashierName}</span>
+                  <span className="text-foreground">{activeReceipt.cashierName}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Meja / tipe:</span>
                   <span className="font-medium text-foreground">
-                    {receiptData.orderType === "DINE_IN"
-                      ? `Meja ${receiptData.tableNumber}`
-                      : formatReceiptOrderType(receiptData.orderType)}
+                    {activeReceipt.orderType === "DINE_IN"
+                      ? `Meja ${activeReceipt.tableNumber}`
+                      : formatReceiptOrderType(activeReceipt.orderType)}
                   </span>
                 </div>
-                {receiptData.customerName && (
+                {activeReceipt.customerName && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Pelanggan:</span>
-                    <span className="text-foreground">{receiptData.customerName}</span>
+                    <span className="text-foreground">{activeReceipt.customerName}</span>
                   </div>
                 )}
               </div>
@@ -300,7 +335,7 @@ export function ReceiptModal({
                     </div>
                   ))
                 ) : (
-                  receiptData.items.map((item, idx) => (
+                  activeReceipt.items.map((item, idx) => (
                     <div key={idx} className="space-y-0.5 text-xs">
                       <div className="flex justify-between font-medium">
                         <span className="text-foreground">
@@ -330,43 +365,43 @@ export function ReceiptModal({
               <div className="space-y-1 text-xs border-b border-dashed border-border pb-2">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal:</span>
-                  <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(receiptData.subtotal)}</span>
+                  <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(activeReceipt.subtotal)}</span>
                 </div>
-                {receiptData.loyaltyMember && (
+                {activeReceipt.loyaltyMember && (
                   <div className="p-1.5 bg-muted/40 rounded border border-border text-xs space-y-0.5 my-1">
                     <div className="flex justify-between font-medium text-foreground">
-                      <span>Member: {receiptData.loyaltyMember.name}</span>
-                      <span className="text-primary font-medium">Tier {receiptData.loyaltyMember.tier}</span>
+                      <span>Member: {activeReceipt.loyaltyMember.name}</span>
+                      <span className="text-primary font-medium">Tier {activeReceipt.loyaltyMember.tier}</span>
                     </div>
-                    {receiptData.loyaltyMember.voucherTitle && (
+                    {activeReceipt.loyaltyMember.voucherTitle && (
                       <p className="text-primary text-xs">
-                        • {receiptData.loyaltyMember.voucherTitle} (-{formatReceiptLoyaltyPoints(receiptData.loyaltyMember.pointsUsed)})
+                        • {activeReceipt.loyaltyMember.voucherTitle} (-{formatReceiptLoyaltyPoints(activeReceipt.loyaltyMember.pointsUsed)})
                       </p>
                     )}
                     <p className="text-muted-foreground text-xs">
-                      Sisa poin: <span className="font-mono tabular-nums text-foreground">{formatReceiptLoyaltyPoints(receiptData.loyaltyMember.pointsRemaining)}</span>
+                      Sisa poin: <span className="font-mono tabular-nums text-foreground">{formatReceiptLoyaltyPoints(activeReceipt.loyaltyMember.pointsRemaining)}</span>
                     </p>
                   </div>
                 )}
-                {receiptData.discount > 0 && (
+                {activeReceipt.discount > 0 && (
                   <div className="flex justify-between text-success">
-                    <span>Diskon {receiptData.promoName ? `(${receiptData.promoName})` : "promo / voucher"}:</span>
-                    <span className="font-mono tabular-nums">-{formatCurrencyIDR(receiptData.discount)}</span>
+                    <span>Diskon {activeReceipt.promoName ? `(${activeReceipt.promoName})` : "promo / voucher"}:</span>
+                    <span className="font-mono tabular-nums">-{formatCurrencyIDR(activeReceipt.discount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Pajak restoran (PB1):</span>
-                  <span className="font-mono tabular-nums text-foreground">{receiptData.tax > 0 ? formatCurrencyIDR(receiptData.tax) : "Rp 0"}</span>
+                  <span className="font-mono tabular-nums text-foreground">{activeReceipt.tax > 0 ? formatCurrencyIDR(activeReceipt.tax) : "Rp 0"}</span>
                 </div>
-                {receiptData.serviceCharge > 0 && (
+                {activeReceipt.serviceCharge > 0 && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">{serviceChargeLabel}:</span>
-                    <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(receiptData.serviceCharge)}</span>
+                    <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(activeReceipt.serviceCharge)}</span>
                   </div>
                 )}
                 <div className="flex justify-between font-semibold text-sm pt-1 border-t border-border text-foreground">
                   <span>Total:</span>
-                  <span className="font-mono tabular-nums">{formatCurrencyIDR(receiptData.grandTotal)}</span>
+                  <span className="font-mono tabular-nums">{formatCurrencyIDR(activeReceipt.grandTotal)}</span>
                 </div>
               </div>
 
@@ -374,22 +409,22 @@ export function ReceiptModal({
               <div className="space-y-1 text-xs border-b border-dashed border-border pb-2">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Metode bayar:</span>
-                  <span className="font-medium text-foreground">{receiptData.paymentMethod}</span>
+                  <span className="font-medium text-foreground">{activeReceipt.paymentMethod}</span>
                 </div>
-                {receiptData.qrisVerification && (
+                {activeReceipt.qrisVerification && (
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>
-                      {receiptData.qrisVerification.type === "SUPERVISOR_MANUAL"
+                      {activeReceipt.qrisVerification.type === "SUPERVISOR_MANUAL"
                         ? "Otorisasi manual QRIS:"
                         : "Ref gateway QRIS:"}
                     </span>
-                    <span className="font-mono font-medium text-foreground">{receiptData.qrisVerification.referenceNumber}</span>
+                    <span className="font-mono font-medium text-foreground">{activeReceipt.qrisVerification.referenceNumber}</span>
                   </div>
                 )}
-                {receiptData.splitDetails && receiptData.splitDetails.length > 0 && (
+                {activeReceipt.splitDetails && activeReceipt.splitDetails.length > 0 && (
                   <div className="p-1.5 bg-muted/40 rounded border border-border text-xs space-y-0.5 my-1">
                     <span className="font-medium text-foreground block">Rincian split payment:</span>
-                    {receiptData.splitDetails.map((g, idx) => (
+                    {activeReceipt.splitDetails.map((g, idx) => (
                       <div key={g.id || idx} className="flex justify-between text-muted-foreground">
                         <span>• {g.guestLabel} ({g.paymentMethod}):</span>
                         <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(g.assignedAmount)}</span>
@@ -399,17 +434,17 @@ export function ReceiptModal({
                 )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total dibayar:</span>
-                  <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(receiptData.amountPaid)}</span>
+                  <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(activeReceipt.amountPaid)}</span>
                 </div>
                 <div className="flex justify-between font-medium">
                   <span className="text-muted-foreground">Kembalian:</span>
-                  <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(receiptData.changeDue)}</span>
+                  <span className="font-mono tabular-nums text-foreground">{formatCurrencyIDR(activeReceipt.changeDue)}</span>
                 </div>
                 <div className="flex justify-between font-medium text-success">
                   <span>Status pembayaran:</span>
                   <span>
                     {formatReceiptPaymentStatus(
-                      (receiptData as { paymentStatus?: string }).paymentStatus || "PAID"
+                      (activeReceipt as { paymentStatus?: string }).paymentStatus || "PAID"
                     )}
                   </span>
                 </div>
@@ -432,7 +467,7 @@ export function ReceiptModal({
                       <span>SSID: <strong className="text-foreground">DagoEng-Guest</strong></span>
                     </div>
                     <p className="text-xs text-muted-foreground italic">
-                      *Kode akses resmi terikat struk #{receiptData.orderNumber}
+                      *Kode akses resmi terikat struk #{activeReceipt.orderNumber}
                     </p>
                   </div>
                 )}
@@ -464,7 +499,7 @@ export function ReceiptModal({
               className="w-full"
             >
               <Printer className="size-4" />
-              <span>Cetak thermal</span>
+              <span>{hasSplitReceipts ? `Cetak (${splitReceipts.length} struk)` : "Cetak thermal"}</span>
             </Button>
 
             {onViewKitchenTicket && (
@@ -487,15 +522,15 @@ export function ReceiptModal({
                 variant="outline"
                 size="lg"
                 onClick={() => {
-                  const phone = receiptData.customerPhone ? receiptData.customerPhone.replace(/[^0-9]/g, "") : "";
+                  const phone = activeReceipt.customerPhone ? activeReceipt.customerPhone.replace(/[^0-9]/g, "") : "";
                   const text = encodeURIComponent(
                     `*STRUK PEMBAYARAN ${brandName.toUpperCase()}*\n` +
-                    `No: #${receiptData.orderNumber}\n` +
-                    `Pelanggan: ${receiptData.customerName || "Tamu"}\n` +
-                    `Total: ${formatCurrencyIDR(receiptData.grandTotal)}\n` +
-                    `Metode: ${receiptData.paymentMethod}\n` +
+                    `No: #${activeReceipt.orderNumber}\n` +
+                    `Pelanggan: ${activeReceipt.customerName || "Tamu"}\n` +
+                    `Total: ${formatCurrencyIDR(activeReceipt.grandTotal)}\n` +
+                    `Metode: ${activeReceipt.paymentMethod}\n` +
                     (simulatedWifiVoucher ? `Kode Wi-Fi: ${simulatedWifiVoucher.voucherCode} (${simulatedWifiVoucher.durationFormatted})\n` : "") +
-                    `\nTerima kasih telah berkunjung!`
+                    `\nTerima kasih telah berkunjung`
                   );
                   window.open(`https://wa.me/${phone}?text=${text}`, "_blank");
                 }}

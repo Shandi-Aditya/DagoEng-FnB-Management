@@ -42,8 +42,10 @@ export interface OrderRecord {
   customerName: string;
   /** Phone left by the guest at self-order checkout; the customer app finds "my orders" by this, never by name. */
   customerPhone?: string;
+  cashierName?: string;
   orderType: "DINE_IN" | "TAKEAWAY" | "DELIVERY";
   status: OrderStatus;
+  tenantStatuses?: Record<string, OrderStatus>;
   items: OrderItemRecord[];
   subtotal: number;
   discount?: number;
@@ -56,6 +58,13 @@ export interface OrderRecord {
   paymentStatus: "PENDING" | "PAID" | "REFUNDED";
   paymentMethod?: "CASH" | "QRIS" | "EDC" | "TRANSFER" | "SPLIT";
   paymentReference?: string;
+  splitDetails?: Array<{
+    guestNumber: number;
+    label?: string;
+    amount: number;
+    method: string;
+  }>;
+  supervisorPinVerified?: boolean;
   qrisVerification?: {
     type: "GATEWAY_WEBHOOK" | "SUPERVISOR_MANUAL";
     referenceNumber: string;
@@ -73,6 +82,9 @@ export interface OrderRecord {
   refundApprovedBy?: string;
   refundedAt?: string;
   refundMethod?: "CASH" | "QRIS";
+  voidReason?: string;
+  voidApprovedBy?: string;
+  voidedAt?: string;
 
   // Critical Time Tracking Timestamps
   createdAt: string;            // 1. Order Created

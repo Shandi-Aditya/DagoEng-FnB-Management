@@ -8,6 +8,8 @@ import { useOutlet } from "./OutletContext";
 import { useSettings } from "./SettingsContext";
 import { useActivityLog } from "./ActivityLogContext";
 import { useNotifications } from "./NotificationContext";
+import { getTodayWitaDateString } from "./DateFilterContext";
+import { generateSequentialReceiptNumber } from "@/lib/receipt-publisher";
 import {
   checkCoworkingBookingConflict,
   validateCoworkingDateRange,
@@ -208,6 +210,61 @@ const STORAGE_KEY_BOOKINGS = "dagoeng_cwk_bookings_v3";
 const STORAGE_KEY_MEMBERS = "dagoeng_cwk_members_v3";
 const STORAGE_KEY_LOGS = "dagoeng_cwk_logs_v3";
 
+function syncBookingToServer(booking: typeof INITIAL_BOOKINGS[number], contextLabel: string): void {
+  if (typeof window === "undefined") return;
+  fetch("/api/coworking/bookings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ booking }),
+  }).catch((err) => {
+    console.warn(`[coworking] Persistent sync warning (${contextLabel}):`, err);
+  });
+}
+
+function mergeBookingsFromSource(
+  prev: typeof INITIAL_BOOKINGS,
+  incoming: typeof INITIAL_BOOKINGS
+): { next: typeof INITIAL_BOOKINGS; changed: boolean } {
+  const prevMap = new Map(prev.map((b) => [b.id, b]));
+  let changed = false;
+  for (const incomingBooking of incoming) {
+    const existing = prevMap.get(incomingBooking.id);
+    if (!existing) {
+      prevMap.set(incomingBooking.id, incomingBooking);
+      changed = true;
+    } else if (
+      existing.paymentStatus !== incomingBooking.paymentStatus ||
+      existing.checkInStatus !== incomingBooking.checkInStatus ||
+      existing.paymentMethod !== incomingBooking.paymentMethod ||
+      existing.paymentRef !== incomingBooking.paymentRef ||
+      existing.checkedOutAt !== incomingBooking.checkedOutAt ||
+      existing.checkedInAt !== incomingBooking.checkedInAt ||
+      existing.totalAmount !== incomingBooking.totalAmount
+    ) {
+      prevMap.set(incomingBooking.id, { ...existing, ...incomingBooking });
+      changed = true;
+    }
+  }
+  return { next: changed ? Array.from(prevMap.values()) : prev, changed };
+}
+
+function formatWitaPartsNow() {
+  const now = new Date();
+  const time =
+    now.toLocaleTimeString("id-ID", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Asia/Makassar",
+    }) + " WITA";
+  const date = now.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "Asia/Makassar",
+  });
+  return { now, time, date };
+}
+
 export function CoworkingProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const { activeOutletId, activeOutlet } = useOutlet();
@@ -255,24 +312,51 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       setIsInitialized(true);
     }
 
-    // Sync with persistent backend API to ensure bookings survive browser resets
     if (typeof window !== "undefined") {
-      fetch("/api/coworking/bookings")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && Array.isArray(data.bookings) && data.bookings.length > 0) {
-            setBookings((prev) => {
-              const prevMap = new Map(prev.map((b) => [b.id, b]));
-              for (const serverBooking of data.bookings) {
-                if (!prevMap.has(serverBooking.id)) {
-                  prevMap.set(serverBooking.id, serverBooking);
-                }
-              }
-              return Array.from(prevMap.values());
-            });
+      const hydrateFromServer = () => {
+        fetch("/api/coworking/bookings")
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data && Array.isArray(data.bookings) && data.bookings.length > 0) {
+              setBookings((prev) => mergeBookingsFromSource(prev, data.bookings).next);
+            }
+          })
+          .catch(() => {});
+      };
+
+      hydrateFromServer();
+
+      const handleStorage = (event: StorageEvent) => {
+        if (!event.newValue) return;
+        try {
+          if (event.key === STORAGE_KEY_BOOKINGS) {
+            const parsed = JSON.parse(event.newValue);
+            if (Array.isArray(parsed)) {
+              setBookings((prev) => mergeBookingsFromSource(prev, parsed).next);
+            }
+          } else if (event.key === STORAGE_KEY_SPACES) {
+            const parsed = JSON.parse(event.newValue);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setSpaces(parsed);
+            }
+          } else if (event.key === STORAGE_KEY_LOGS) {
+            const parsed = JSON.parse(event.newValue);
+            if (Array.isArray(parsed)) {
+              setCheckLogs(parsed);
+            }
           }
-        })
-        .catch(() => {});
+        } catch (err) {
+          console.error("Failed to sync coworking storage update", err);
+        }
+      };
+
+      window.addEventListener("storage", handleStorage);
+      const pollInterval = setInterval(hydrateFromServer, 5000);
+
+      return () => {
+        window.removeEventListener("storage", handleStorage);
+        clearInterval(pollInterval);
+      };
     }
   }, []);
 
@@ -376,9 +460,12 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       throw new Error(`DOUBLE_BOOKING_CONFLICT: ${conflict.message}`);
     }
 
-    const bookingCode = `BK-CWK-${Date.now().toString().slice(-5)}`;
-    const nowFormatted = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA";
-    const dateFormatted = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+    const bookingCode = generateSequentialReceiptNumber({
+      prefix: "CWK",
+      publisherCode: "DAGO",
+      existingNumbers: bookings.map((b) => b.bookingCode),
+    });
+    const { now, time: nowFormatted, date: dateFormatted } = formatWitaPartsNow();
     const actorName = user?.name || "Rian Hidayat (Manager Coworking)";
 
     // QRIS cannot be marked PAID immediately without supervisor confirmation (Task V-05)
@@ -390,8 +477,10 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
 
     const newBooking: typeof INITIAL_BOOKINGS[0] = {
       ...bookingData,
-      id: `bk-${Date.now()}`,
+      id: `bk-${now.getTime()}`,
       bookingCode,
+      outletId: bookingData.outletId || (activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr"),
+      createdAt: bookingData.createdAt || now.toISOString(),
       paymentStatus: effectivePaymentStatus,
       paidAmount,
       remainingAmount,
@@ -423,15 +512,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
 
     setBookings((prev) => [newBooking, ...prev]);
 
-    if (typeof window !== "undefined") {
-      fetch("/api/coworking/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ booking: newBooking }),
-      }).catch((err) => {
-        console.warn("[coworking] Persistent sync warning:", err);
-      });
-    }
+    syncBookingToServer(newBooking, "create");
 
     if (isPaid) {
       // Record check-in log
@@ -464,7 +545,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       module: "COWORKING",
       action: "CREATE_BOOKING",
       recordId: bookingCode,
-      newValue: `${bookingData.guestName} - ${bookingData.spaceName} (Rp ${bookingData.totalAmount.toLocaleString()} - ${bookingData.paymentStatus})`,
+      newValue: `${bookingData.guestName} - ${bookingData.spaceName} (Rp ${bookingData.totalAmount.toLocaleString()} - ${effectivePaymentStatus})`,
       description: `Pembuatan booking Co-working: ${bookingCode} (${bookingData.spaceName})`,
       reason: isPaid ? "Booking & Check-in lunas" : "Booking mandiri menunggu pembayaran",
       status: "SUCCESS",
@@ -481,27 +562,23 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     const booking = bookings.find((b) => b.id === bookingId || b.bookingCode === bookingId);
     if (!booking) return;
 
-    const nowFormatted = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA";
-    const dateFormatted = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+    const { time: nowFormatted, date: dateFormatted } = formatWitaPartsNow();
     const method = paymentMethod || booking.paymentMethod || "QRIS";
     const supervisorName = qrisVerification?.supervisorName || user?.name || "Supervisor Coworking";
+    const updatedBooking: typeof INITIAL_BOOKINGS[number] = {
+      ...booking,
+      paymentStatus: "PAID",
+      paymentMethod: method,
+      checkInStatus: "CHECKED_IN",
+      paidAmount: booking.totalAmount,
+      remainingAmount: 0,
+      paymentRef: qrisVerification?.referenceNumber || booking.paymentRef || `PAY-${booking.bookingCode}`,
+      paymentTimestamp: `${dateFormatted} ${nowFormatted}`,
+      qrisVerification: qrisVerification || booking.qrisVerification,
+    };
 
     setBookings((prev) =>
-      prev.map((b) =>
-        b.id === booking.id
-          ? {
-              ...b,
-              paymentStatus: "PAID",
-              paymentMethod: method,
-              checkInStatus: "CHECKED_IN",
-              paidAmount: b.totalAmount,
-              remainingAmount: 0,
-              paymentRef: qrisVerification?.referenceNumber || b.paymentRef || `PAY-CWK-${Date.now().toString().slice(-6)}`,
-              paymentTimestamp: `${dateFormatted} ${nowFormatted}`,
-              qrisVerification: qrisVerification || b.qrisVerification,
-            }
-          : b
-      )
+      prev.map((b) => (b.id === booking.id ? updatedBooking : b))
     );
 
     // Update space status to OCCUPIED
@@ -537,26 +614,7 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     };
     setCheckLogs((prev) => [newLog, ...prev]);
 
-    if (typeof window !== "undefined") {
-      const updatedBooking = {
-        ...booking,
-        paymentStatus: "PAID" as const,
-        paymentMethod: method,
-        checkInStatus: "CHECKED_IN" as const,
-        paidAmount: booking.totalAmount,
-        remainingAmount: 0,
-        paymentRef: qrisVerification?.referenceNumber || booking.paymentRef || `PAY-CWK-${Date.now().toString().slice(-6)}`,
-        paymentTimestamp: `${dateFormatted} ${nowFormatted}`,
-        qrisVerification: qrisVerification || booking.qrisVerification,
-      };
-      fetch("/api/coworking/bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ booking: updatedBooking }),
-      }).catch((err) => {
-        console.warn("[coworking] Persistent sync warning on confirm:", err);
-      });
-    }
+    syncBookingToServer(updatedBooking, "confirm");
 
     addNotification({
       type: "PAYMENT_RECEIVED",
@@ -595,15 +653,13 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     const booking = bookings.find((b) => b.id === bookingId || b.bookingCode === bookingId);
     if (!booking) return;
 
+    const cancelledBooking: typeof INITIAL_BOOKINGS[number] = {
+      ...booking,
+      checkInStatus: "CANCELLED",
+    };
+
     setBookings((prev) =>
-      prev.map((b) =>
-        b.id === booking.id
-          ? {
-              ...b,
-              checkInStatus: "CANCELLED",
-            }
-          : b
-      )
+      prev.map((b) => (b.id === booking.id ? cancelledBooking : b))
     );
 
     setSpaces((prev) =>
@@ -617,6 +673,8 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
           : s
       )
     );
+
+    syncBookingToServer(cancelledBooking, "cancel");
 
     logActivity({
       module: "COWORKING",
@@ -633,21 +691,17 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
     const booking = bookings.find((b) => b.id === bookingId);
     if (!booking) return;
 
-    const nowFormatted = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA";
-    const dateFormatted = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+    const { time: nowFormatted, date: dateFormatted } = formatWitaPartsNow();
     const actorName = user?.name || "Rian Hidayat";
+    const checkedInBooking: typeof INITIAL_BOOKINGS[number] = {
+      ...booking,
+      checkInStatus: "CHECKED_IN",
+      checkedInAt: `${dateFormatted} ${nowFormatted}`,
+      checkedInBy: actorName,
+    };
 
     setBookings((prev) =>
-      prev.map((b) =>
-        b.id === bookingId
-          ? {
-              ...b,
-              checkInStatus: "CHECKED_IN",
-              checkedInAt: `${dateFormatted} ${nowFormatted}`,
-              checkedInBy: actorName,
-            }
-          : b
-      )
+      prev.map((b) => (b.id === bookingId ? checkedInBooking : b))
     );
 
     setSpaces((prev) =>
@@ -668,6 +722,8 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       )
     );
 
+    syncBookingToServer(checkedInBooking, "checkin");
+
     logActivity({
       module: "COWORKING",
       action: "CHECKIN_SPACE",
@@ -683,13 +739,17 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
   const checkoutSpace = (spaceIdOrBookingId: string) => {
     const space = spaces.find((s) => s.id === spaceIdOrBookingId || s.currentSession?.bookingCode === spaceIdOrBookingId);
     const bookingCode = space?.currentSession?.bookingCode || spaceIdOrBookingId;
-    const booking = bookings.find((b) => b.bookingCode === bookingCode || b.id === spaceIdOrBookingId || b.spaceId === spaceIdOrBookingId);
+    const booking = bookings.find(
+      (b) =>
+        b.bookingCode === bookingCode ||
+        b.id === spaceIdOrBookingId ||
+        (b.spaceId === spaceIdOrBookingId &&
+          (b.checkInStatus === "CHECKED_IN" || b.checkInStatus === "RESERVED"))
+    );
 
-    const nowFormatted = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA";
-    const dateFormatted = new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
+    const { time: nowFormatted, date: dateFormatted } = formatWitaPartsNow();
     const actorName = user?.name || "Rian Hidayat (Manager Coworking)";
 
-    // Update space
     if (space) {
       setSpaces((prev) =>
         prev.map((s) =>
@@ -704,23 +764,19 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
       );
     }
 
-    // Update booking lifecycle strictly: CHECKED_IN ➔ CHECKED_OUT / COMPLETED
     if (booking) {
+      const completedBooking: typeof INITIAL_BOOKINGS[number] = {
+        ...booking,
+        checkInStatus: "COMPLETED",
+        checkedOutAt: `${dateFormatted} ${nowFormatted}`,
+        checkedOutBy: actorName,
+      };
       setBookings((prev) =>
-        prev.map((b) =>
-          b.id === booking.id
-            ? {
-                ...b,
-                checkInStatus: "COMPLETED",
-                checkedOutAt: `${dateFormatted} ${nowFormatted}`,
-                checkedOutBy: actorName,
-              }
-            : b
-        )
+        prev.map((b) => (b.id === booking.id ? completedBooking : b))
       );
+      syncBookingToServer(completedBooking, "checkout");
     }
 
-    // Update Check-out log
     setCheckLogs((prev) =>
       prev.map((l) =>
         l.bookingCode === bookingCode

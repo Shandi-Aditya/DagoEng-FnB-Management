@@ -31,7 +31,7 @@ import {
 export interface EmployeesShiftsTabProps {
   shifts: ShiftRecord[];
   activeShift: ShiftRecord | null;
-  onOpenCloseShiftModal: () => void;
+  onOpenCloseShiftModal: (shift: ShiftRecord) => void;
   onOpenStartShiftModal: () => void;
   onOpenClosingPDF: (shift: ShiftRecord) => void;
 }
@@ -87,7 +87,7 @@ export function EmployeesShiftsTab({
               <Button
                 size="sm"
                 variant="outline"
-                onClick={onOpenCloseShiftModal}
+                onClick={() => onOpenCloseShiftModal(activeShift)}
                 className="self-start sm:self-auto"
               >
                 Tutup shift
@@ -267,7 +267,7 @@ export function EmployeesShiftsTab({
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={onOpenCloseShiftModal}
+                              onClick={() => onOpenCloseShiftModal(s)}
                             >
                               Tutup
                             </Button>

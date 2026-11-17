@@ -65,7 +65,7 @@ export default function EmployeesPage() {
   const [deletingEmp, setDeletingEmp] = useState<EmployeeProfile | null>(null);
 
   const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState(false);
-  const [isCloseShiftModalOpen, setIsCloseShiftModalOpen] = useState(false);
+  const [closingShiftTarget, setClosingShiftTarget] = useState<ShiftRecord | null>(null);
   const [isHRReportPDFOpen, setIsHRReportPDFOpen] = useState(false);
   const [selectedShiftForClosingPDF, setSelectedShiftForClosingPDF] = useState<ShiftRecord | null>(null);
   const [isClosingPDFModalOpen, setIsClosingPDFModalOpen] = useState(false);
@@ -183,12 +183,14 @@ export default function EmployeesPage() {
   };
 
   const handleCloseShiftSubmit = (params: { actualCash: number; closingNotes?: string }) => {
-    if (!activeShift) return;
+    const target = closingShiftTarget || activeShift;
+    if (!target) return;
     closeShift(
-      activeShift.id,
+      target.id,
       params.actualCash,
       params.closingNotes
     );
+    setClosingShiftTarget(null);
     notify.success("Shift ditutup", "Selisih kas sudah tercatat.");
   };
 
@@ -265,7 +267,7 @@ export default function EmployeesPage() {
           <EmployeesShiftsTab
             shifts={displayedShifts}
             activeShift={activeShift}
-            onOpenCloseShiftModal={() => setIsCloseShiftModalOpen(true)}
+            onOpenCloseShiftModal={(shift) => setClosingShiftTarget(shift)}
             onOpenStartShiftModal={() => setIsOpenShiftModalOpen(true)}
             onOpenClosingPDF={handleOpenClosingPDF}
           />
@@ -334,9 +336,9 @@ export default function EmployeesPage() {
       />
 
       <CloseShiftModal
-        shift={activeShift}
-        isOpen={isCloseShiftModalOpen}
-        onClose={() => setIsCloseShiftModalOpen(false)}
+        shift={closingShiftTarget}
+        isOpen={Boolean(closingShiftTarget)}
+        onClose={() => setClosingShiftTarget(null)}
         onSubmit={handleCloseShiftSubmit}
       />
 

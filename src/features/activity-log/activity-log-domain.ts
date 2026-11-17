@@ -111,13 +111,22 @@ export function auditModuleLabel(module: string): string {
 
 const AUDIT_ACTION_LABEL: Record<string, string> = {
   VOID_ITEM: "Void item",
+  VOID_ORDER: "Pembatalan pesanan",
+  REFUND_ORDER: "Pengembalian dana",
+  PAID_ORDER_CHANGED_BY_SUPERVISOR: "Perubahan pesanan lunas",
   ORDER_VOIDED: "Pembatalan pesanan",
   ORDER_CREATED: "Pesanan dibuat",
   ORDER_CANCELLED: "Pesanan dibatalkan",
   ORDER_PAYMENT_AND_COMPLETED: "Pembayaran pesanan",
   PAYMENT_CONFIRMED: "Pembayaran dikonfirmasi",
+  QRIS_WEBHOOK_SETTLED: "Pembayaran QRIS webhook",
+  QRIS_SUPERVISOR_MANUAL_OVERRIDE: "Verifikasi QRIS supervisor",
   STOCK_ADJUSTMENT: "Penyesuaian stok",
+  STOCK_WASTE_RECORDED: "Pencatatan limbah dapur",
   STOCK_OPNAME: "Opname stok",
+  CREATE_PRODUCT: "Tambah produk",
+  UPDATE_PRODUCT: "Ubah produk",
+  DELETE_PRODUCT: "Hapus produk",
   OPEN_SHIFT: "Buka shift",
   CLOSE_SHIFT: "Tutup shift",
   UPDATE_CONFIG: "Ubah konfigurasi",
@@ -128,6 +137,22 @@ const AUDIT_ACTION_LABEL: Record<string, string> = {
   LEASE_PAYMENT: "Pembayaran sewa",
   LEASE_STATUS_CHANGED: "Ubah status kontrak",
 };
+
+export function resolveLogActorName(log: ActivityLogEntry): string {
+  return log.actorName || log.userName || "";
+}
+
+export function resolveLogActorRole(log: ActivityLogEntry): string {
+  return log.actorRole || log.role || log.userRole || "";
+}
+
+export function resolveLogRecordId(log: ActivityLogEntry): string {
+  return log.recordId || log.referenceId || "";
+}
+
+export function resolveLogStatus(log: ActivityLogEntry): AuditStatus {
+  return log.status ?? "SUCCESS";
+}
 
 export function auditActionLabel(action: string): string {
   if (!action) return "—";
@@ -187,7 +212,8 @@ export function getPeriodLabel(dateFilter: DateFilterType): string {
 export function getUniqueRoles(logs: ActivityLogEntry[]): string[] {
   const rolesSet = new Set<string>();
   for (const log of logs) {
-    if (log.actorRole) rolesSet.add(log.actorRole);
+    const resolved = resolveLogActorRole(log);
+    if (resolved) rolesSet.add(resolved);
     if (log.role) rolesSet.add(log.role);
   }
   return Array.from(rolesSet).filter(Boolean).sort();
@@ -199,7 +225,8 @@ export function getUniqueRoles(logs: ActivityLogEntry[]): string[] {
 export function getUniqueActors(logs: ActivityLogEntry[]): string[] {
   const actorsSet = new Set<string>();
   for (const log of logs) {
-    if (log.actorName) actorsSet.add(log.actorName);
+    const resolved = resolveLogActorName(log);
+    if (resolved) actorsSet.add(resolved);
   }
   return Array.from(actorsSet).filter(Boolean).sort();
 }
@@ -228,48 +255,45 @@ export function filterActivityLogs(
   const search = searchTerm.trim().toLowerCase();
 
   return logs.filter((log) => {
-    // Tenant isolation
+    const actorName = resolveLogActorName(log);
+    const actorRole = resolveLogActorRole(log);
+    const recordId = resolveLogRecordId(log);
+    const status = resolveLogStatus(log);
+
     if (isTenantOwner && tenantId) {
       if (log.tenantId && log.tenantId !== tenantId) {
         return false;
       }
     }
 
-    // Outlet filter
     if (activeOutletId !== "ALL" && log.outletId && log.outletId !== activeOutletId) {
       return false;
     }
 
-    // Module filter
     if (selectedModule !== "ALL" && log.module !== selectedModule) {
       return false;
     }
 
-    // Status filter
-    if (selectedStatus !== "ALL" && log.status !== selectedStatus) {
+    if (selectedStatus !== "ALL" && status !== selectedStatus) {
       return false;
     }
 
-    // Severity filter
-    if (selectedSeverity !== "ALL" && log.severity !== selectedSeverity) {
+    if (selectedSeverity !== "ALL" && (log.severity ?? "INFO") !== selectedSeverity) {
       return false;
     }
 
-    // Role filter
     if (
       selectedRole !== "ALL" &&
-      log.actorRole !== selectedRole &&
+      actorRole !== selectedRole &&
       log.role !== selectedRole
     ) {
       return false;
     }
 
-    // Actor filter
-    if (selectedActor !== "ALL" && log.actorName !== selectedActor) {
+    if (selectedActor !== "ALL" && actorName !== selectedActor) {
       return false;
     }
 
-    // Date range filter
     const logTime = new Date(log.timestamp).getTime();
     if (dateFilter === "TODAY") {
       const startOfDay = new Date();
@@ -283,14 +307,13 @@ export function filterActivityLogs(
       if (logTime < thirtyDaysAgo) return false;
     }
 
-    // Search query matching
     if (search) {
-      const matchActor = log.actorName?.toLowerCase().includes(search);
-      const matchRole = log.actorRole?.toLowerCase().includes(search);
+      const matchActor = actorName.toLowerCase().includes(search);
+      const matchRole = actorRole.toLowerCase().includes(search);
       const matchAction = log.action?.toLowerCase().includes(search);
       const matchDesc = log.description?.toLowerCase().includes(search);
       const matchReason = log.reason?.toLowerCase().includes(search);
-      const matchRecord = log.recordId?.toLowerCase().includes(search);
+      const matchRecord = recordId.toLowerCase().includes(search);
       const matchPrev = log.previousValue?.toLowerCase().includes(search);
       const matchNext = log.newValue?.toLowerCase().includes(search);
 
@@ -317,9 +340,9 @@ export function filterActivityLogs(
  */
 export function computeActivityLogStats(logs: ActivityLogEntry[]): ActivityLogStats {
   const totalCount = logs.length;
-  const successCount = logs.filter((l) => l.status === "SUCCESS").length;
-  const warningCount = logs.filter((l) => l.status === "WARNING").length;
-  const failedCount = logs.filter((l) => l.status === "FAILED").length;
+  const successCount = logs.filter((l) => resolveLogStatus(l) === "SUCCESS").length;
+  const warningCount = logs.filter((l) => resolveLogStatus(l) === "WARNING").length;
+  const failedCount = logs.filter((l) => resolveLogStatus(l) === "FAILED").length;
   const highSeverityCount = logs.filter(
     (l) => l.severity === "HIGH" || l.severity === "CRITICAL"
   ).length;
@@ -361,13 +384,13 @@ export function buildActivityLogExportRows(logs: ActivityLogEntry[]): {
 
   const rows = logs.map((l) => [
     new Date(l.timestamp).toLocaleString("id-ID", { timeZone: "Asia/Makassar" }),
-    l.actorName || "-",
-    l.actorRole || "-",
+    resolveLogActorName(l) || "-",
+    resolveLogActorRole(l) || "-",
     l.outletName || "-",
     l.module,
     l.action,
-    l.recordId || "-",
-    l.status || "SUCCESS",
+    resolveLogRecordId(l) || "-",
+    resolveLogStatus(l),
     l.severity || "INFO",
     l.previousValue || "-",
     l.newValue || "-",

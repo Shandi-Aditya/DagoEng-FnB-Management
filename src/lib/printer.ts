@@ -10,6 +10,8 @@ import {
   PrinterPaperWidth,
 } from "@/types/printer";
 import { POSReceiptData } from "@/features/pos/types";
+import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
+import { DEFAULT_FNB_TENANTS, getTenantName, getTenantProfile } from "@/lib/tenant";
 import { formatCurrencyIDR } from "@/lib/utils";
 
 export const STORAGE_KEY_PRINT_QUEUE = "dagoeng_print_queue_v1";
@@ -197,6 +199,180 @@ export function generateKitchenTicketText(
   return lines.join("\n");
 }
 
+type ReceiptLineItem = POSReceiptData["items"][number];
+
+interface ReceiptTenantGroup {
+  tenantId: string;
+  tenantName: string;
+  items: ReceiptLineItem[];
+  subtotal: number;
+}
+
+function resolveReceiptItemTenantKey(item: ReceiptLineItem): { tenantId: string; tenantName: string } {
+  const matchedByName = !item.tenantId && item.tenantName
+    ? DEFAULT_FNB_TENANTS.find((t) => t.name.toLowerCase() === item.tenantName?.toLowerCase())?.id
+    : undefined;
+  const tenantId = item.tenantId || matchedByName || "default";
+  const tenantName =
+    item.tenantName ||
+    (tenantId !== "default" ? getTenantName(tenantId) : undefined) ||
+    "Mitra F&B";
+  return { tenantId, tenantName };
+}
+
+function groupReceiptItemsByTenant(items: readonly ReceiptLineItem[] = []): ReceiptTenantGroup[] {
+  const groups = new Map<string, ReceiptTenantGroup>();
+  for (const item of items) {
+    const { tenantId, tenantName } = resolveReceiptItemTenantKey(item);
+    const existing = groups.get(tenantId);
+    if (existing) {
+      existing.items.push(item);
+      existing.subtotal += item.subtotal;
+    } else {
+      groups.set(tenantId, {
+        tenantId,
+        tenantName,
+        items: [item],
+        subtotal: item.subtotal,
+      });
+    }
+  }
+  return Array.from(groups.values());
+}
+
+function appendReceiptItemLines(lines: string[], item: ReceiptLineItem, width: number): void {
+  const itemSub = formatCurrencyIDR(item.subtotal);
+  lines.push(`${item.quantity}x ${item.name}`);
+  lines.push(padBetween(`   @ ${formatCurrencyIDR(item.unitPrice)}`, itemSub, width));
+  if (item.variantName) {
+    lines.push(`   Varian: ${item.variantName}`);
+  }
+  if (item.modifiers && item.modifiers.length > 0) {
+    lines.push(`   Opsi: ${item.modifiers.join(", ")}`);
+  }
+  if (item.notes) {
+    lines.push(`   *Catatan: ${item.notes}`);
+  }
+}
+
+function extractBranchName(outletName?: string): string | undefined {
+  if (!outletName) return undefined;
+  const parts = outletName.split(" — ");
+  return parts.length > 1 ? parts[parts.length - 1].trim() : outletName;
+}
+
+function allocateProRataValues(
+  totalAmount: number,
+  groupSubtotals: readonly number[],
+  totalSubtotal: number
+): number[] {
+  const count = groupSubtotals.length;
+  if (count === 0) return [];
+  if (count === 1) return [totalAmount];
+
+  const denominator = totalSubtotal > 0 ? totalSubtotal : count;
+  let allocated = 0;
+  return groupSubtotals.map((sub, idx) => {
+    if (idx === count - 1) {
+      return Math.max(0, totalAmount - allocated);
+    }
+    const ratio = totalSubtotal > 0 ? sub / denominator : 1 / count;
+    const share = Math.round(totalAmount * ratio);
+    allocated += share;
+    return Math.max(0, share);
+  });
+}
+
+export function splitCustomerReceiptByTenant(receipt: POSReceiptData): POSReceiptData[] {
+  if (!receipt.items || receipt.items.length === 0) {
+    return [receipt];
+  }
+
+  const groups = groupReceiptItemsByTenant(receipt.items);
+  if (groups.length <= 1) {
+    return [receipt];
+  }
+
+  const groupSubtotals = groups.map((g) => g.subtotal);
+  const totalItemsSubtotal = groupSubtotals.reduce((sum, val) => sum + val, 0);
+  const discounts = allocateProRataValues(receipt.discount || 0, groupSubtotals, totalItemsSubtotal);
+  const taxes = allocateProRataValues(receipt.tax || 0, groupSubtotals, totalItemsSubtotal);
+  const serviceCharges = allocateProRataValues(
+    receipt.serviceCharge || 0,
+    groupSubtotals,
+    totalItemsSubtotal
+  );
+
+  const branchName = extractBranchName(receipt.outletName);
+  const outletFallback = {
+    name: branchName,
+    address: receipt.outletAddress,
+    phone: receipt.outletPhone,
+  };
+
+  let paidAllocated = 0;
+  let changeAllocated = 0;
+
+  return groups.map((group, idx) => {
+    const resolvedTenantId = group.tenantId === "default" ? undefined : group.tenantId;
+    const publisher = resolvePosReceiptPublisher(
+      group.items.map((item) => ({
+        tenantId: item.tenantId || resolvedTenantId,
+        tenantName: item.tenantName || group.tenantName,
+      })),
+      outletFallback,
+      resolvedTenantId
+    );
+    const tenantProfile = resolvedTenantId ? getTenantProfile(resolvedTenantId) : null;
+
+    const groupSubtotal = group.subtotal;
+    const groupDiscount = Math.min(groupSubtotal, discounts[idx] ?? 0);
+    const groupTax = taxes[idx] ?? 0;
+    const groupService = serviceCharges[idx] ?? 0;
+    const groupGrandTotal = Math.max(0, groupSubtotal - groupDiscount) + groupTax + groupService;
+
+    const isLast = idx === groups.length - 1;
+    let groupAmountPaid: number;
+    let groupChangeDue: number;
+
+    if ((receipt.amountPaid || 0) >= (receipt.grandTotal || 0)) {
+      groupAmountPaid = isLast
+        ? Math.max(groupGrandTotal, (receipt.amountPaid || 0) - paidAllocated)
+        : groupGrandTotal;
+      groupChangeDue = isLast
+        ? Math.max(0, (receipt.changeDue || 0) - changeAllocated)
+        : 0;
+    } else {
+      groupAmountPaid = isLast
+        ? Math.max(0, (receipt.amountPaid || 0) - paidAllocated)
+        : Math.round(((receipt.amountPaid || 0) * groupSubtotal) / (totalItemsSubtotal || 1));
+      groupChangeDue = 0;
+    }
+    paidAllocated += groupAmountPaid;
+    changeAllocated += groupChangeDue;
+
+    return {
+      ...receipt,
+      orderNumber: `${receipt.orderNumber}-${idx + 1}`,
+      tenantId: publisher.tenantId || resolvedTenantId,
+      tenantName: publisher.brandName,
+      receiptHeader: tenantProfile?.receiptHeader || publisher.brandName,
+      receiptFooter: tenantProfile?.receiptFooter || receipt.receiptFooter,
+      outletName: publisher.outletName,
+      outletAddress: publisher.outletAddress,
+      outletPhone: tenantProfile?.contactPhone || publisher.outletPhone,
+      items: group.items,
+      subtotal: groupSubtotal,
+      discount: groupDiscount,
+      tax: groupTax,
+      serviceCharge: groupService,
+      grandTotal: groupGrandTotal,
+      amountPaid: groupAmountPaid,
+      changeDue: groupChangeDue,
+    };
+  });
+}
+
 /**
  * Generator Struk Pelanggan (Customer Receipt)
  * Memuat informasi finansial lengkap.
@@ -222,20 +398,19 @@ export function generateCustomerReceiptText(
     line,
   ];
 
-  (receipt.items || []).forEach((item) => {
-    const itemSub = formatCurrencyIDR(item.subtotal);
-    lines.push(`${item.quantity}x ${item.name}`);
-    lines.push(padBetween(`   @ ${formatCurrencyIDR(item.unitPrice)}`, itemSub, width));
-    if (item.variantName) {
-      lines.push(`   Varian: ${item.variantName}`);
-    }
-    if (item.modifiers && item.modifiers.length > 0) {
-      lines.push(`   Opsi: ${item.modifiers.join(", ")}`);
-    }
-    if (item.notes) {
-      lines.push(`   *Catatan: ${item.notes}`);
-    }
-  });
+  const tenantGroups = groupReceiptItemsByTenant(receipt.items || []);
+  if (tenantGroups.length > 1) {
+    tenantGroups.forEach((group, groupIdx) => {
+      if (groupIdx > 0) {
+        lines.push("");
+      }
+      lines.push(centerText(`--- ${group.tenantName} ---`, width));
+      group.items.forEach((item) => appendReceiptItemLines(lines, item, width));
+      lines.push(padBetween(`Subtotal (${group.tenantName})`, formatCurrencyIDR(group.subtotal), width));
+    });
+  } else {
+    (receipt.items || []).forEach((item) => appendReceiptItemLines(lines, item, width));
+  }
 
   lines.push(line);
   lines.push(padBetween("Subtotal", formatCurrencyIDR(receipt.subtotal), width));

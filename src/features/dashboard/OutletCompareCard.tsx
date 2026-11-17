@@ -2,15 +2,24 @@
 
 import { StatusBadge } from "@/components/app/status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
+import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { formatCurrencyIDR } from "@/lib/utils";
+
+import { computeDashboardFnbRevenue, scopeDashboardOrders } from "./dashboard-metrics";
 
 // Only physical outlets that are operating (no Denpasar/Ubud dummies)
 const OUTLETS = [{ id: "outlet-sgr", name: "Singaraja (Pusat)", code: "KS-SGR" }];
 
 /** Revenue and transactions per outlet. */
 export function OutletCompareCard() {
+  const { user } = useAuth();
+  const { isDateInRange } = useDateFilter();
   const { orders } = useOrders();
+
+  const isTenantOwner = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
+  const tenantId = user?.tenant?.id;
 
   return (
     <Card className="h-full">
@@ -21,8 +30,11 @@ export function OutletCompareCard() {
       <CardContent>
         <ul className="flex flex-col divide-y">
           {OUTLETS.map((outlet) => {
-            const outletOrders = orders.filter((order) => order.outletId === outlet.id);
-            const revenue = outletOrders.reduce((sum, order) => sum + order.total, 0);
+            const outletOrders = scopeDashboardOrders(
+              orders.filter((order) => order.outletId === outlet.id),
+              { tenantId, isTenantOwner, isDateInRange, requirePaid: true }
+            );
+            const revenue = computeDashboardFnbRevenue(outletOrders, { isTenantOwner, tenantId });
             return (
               <li key={outlet.id} className="flex items-center justify-between gap-3 py-2.5 first:pt-0 last:pb-0">
                 <div className="flex flex-col gap-0.5">

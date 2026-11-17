@@ -61,6 +61,14 @@ export interface CoworkingBooking {
   startTime: string;
   endTime?: string;
   duration: number; // in hours or days
+  price?: number;
+  discount?: number;
+  promoTitle?: string;
+  tax?: number;
+  taxType?: string;
+  taxRatePercent?: number;
+  outletId?: string;
+  createdAt?: string;
   totalAmount: number;
   paymentStatus: "PAID" | "PENDING";
   paymentMethod?: string;

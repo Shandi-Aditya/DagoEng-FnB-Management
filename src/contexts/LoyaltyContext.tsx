@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { LoyaltyMember, LoyaltyTier, LoyaltyPointTransaction, LoyaltyTierChangeLog } from "@/types/loyalty";
 import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
@@ -18,8 +18,8 @@ interface LoyaltyContextType {
   createMember: (memberData: { name: string; phone: string; email?: string; identityNo?: string; initialPoints?: number }) => LoyaltyMember;
   getOrCreateMember: (memberData: { name: string; phone: string; email?: string; identityNo?: string; initialPoints?: number }) => LoyaltyMember;
   addPoints: (memberId: string, points: number, reason: string, transactionId?: string, spendAmount?: number) => void;
-  reverseTransactionPoints: (memberId: string, transactionId: string, reason?: string) => void;
-  redeemPoints: (memberId: string, points: number, reason: string) => boolean;
+  reverseTransactionPoints: (memberId: string, transactionId: string, reason?: string, exactRefundAmount?: number) => void;
+  redeemPoints: (memberId: string, points: number, reason: string, relatedTransactionId?: string) => boolean;
   manualOverrideTier: (memberId: string, newTier: LoyaltyTier, reason: string) => void;
   resetLoyaltyData: () => void;
 }
@@ -35,7 +35,27 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
   const { addNotification } = useNotifications();
 
   const [members, setMembers] = useState<LoyaltyMember[]>(INITIAL_MEMBERS);
+  const membersRef = useRef<LoyaltyMember[]>(INITIAL_MEMBERS);
+  const syncChainRef = useRef<Map<string, Promise<void>>>(new Map());
   const [isInitialized, setIsInitialized] = useState(false);
+
+  const commitMembers = (updater: (prev: LoyaltyMember[]) => LoyaltyMember[]): LoyaltyMember[] => {
+    const next = updater(membersRef.current);
+    membersRef.current = next;
+    setMembers(next);
+    return next;
+  };
+
+  const enqueueMemberSync = (
+    memberId: string,
+    params: Parameters<typeof syncWithOutbox>[0]
+  ) => {
+    const prevChain = syncChainRef.current.get(memberId) || Promise.resolve();
+    const nextChain = prevChain
+      .then(() => syncWithOutbox(params).then(() => undefined))
+      .catch(() => undefined);
+    syncChainRef.current.set(memberId, nextChain);
+  };
 
   // Calculate Tier dynamically based on configurable point settings
   const calculateTierForPoints = (points: number): LoyaltyTier => {
@@ -46,22 +66,26 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     return "Bronze";
   };
 
+  const normalizeLoadedMembers = (list: LoyaltyMember[]): LoyaltyMember[] =>
+    list.map((m) => {
+      const hasManualOverride = m.tierHistory?.some((th) => th.isManualOverride);
+      if (!hasManualOverride) {
+        const expectedTier = calculateTierForPoints(m.points);
+        if (m.tier !== expectedTier) {
+          return { ...m, tier: expectedTier };
+        }
+      }
+      return m;
+    });
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_LOYALTY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const sanitized = parsed.map((m: LoyaltyMember) => {
-            const hasManualOverride = m.tierHistory?.some((th) => th.isManualOverride);
-            if (!hasManualOverride) {
-              const expectedTier = calculateTierForPoints(m.points);
-              if (m.tier !== expectedTier) {
-                return { ...m, tier: expectedTier };
-              }
-            }
-            return m;
-          });
+          const sanitized = normalizeLoadedMembers(parsed);
+          membersRef.current = sanitized;
           setMembers(sanitized);
         }
       }
@@ -71,30 +95,37 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       setIsInitialized(true);
     }
 
-    // Hydrate authoritative loyalty members from server storage (V-06)
     if (typeof window !== "undefined") {
       fetch("/api/loyalty/members")
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && Array.isArray(data.members) && data.members.length > 0) {
-            setMembers((prev) => {
+            commitMembers((prev) => {
               const serverMap = new Map(data.members.map((m: LoyaltyMember) => [m.id, m]));
               const localCustom = prev.filter((m) => !serverMap.has(m.id));
-              const combined: LoyaltyMember[] = [...data.members, ...localCustom];
-              return combined.map((m: LoyaltyMember) => {
-                const hasManualOverride = m.tierHistory?.some((th: LoyaltyTierChangeLog) => th.isManualOverride);
-                if (!hasManualOverride) {
-                  const expectedTier = calculateTierForPoints(m.points);
-                  if (m.tier !== expectedTier) {
-                    return { ...m, tier: expectedTier };
-                  }
-                }
-                return m;
-              });
+              return normalizeLoadedMembers([...data.members, ...localCustom]);
             });
           }
         })
         .catch(() => {});
+
+      const handleStorage = (event: StorageEvent) => {
+        if (event.key === STORAGE_KEY_LOYALTY && event.newValue) {
+          try {
+            const parsed = JSON.parse(event.newValue);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              const normalized = normalizeLoadedMembers(parsed);
+              membersRef.current = normalized;
+              setMembers(normalized);
+            }
+          } catch (e) {
+            console.error("Failed to sync loyalty storage update", e);
+          }
+        }
+      };
+
+      window.addEventListener("storage", handleStorage);
+      return () => window.removeEventListener("storage", handleStorage);
     }
   }, []);
 
@@ -120,9 +151,8 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     identityNo?: string;
     initialPoints?: number;
   }): LoyaltyMember => {
-    // POS-09 / TC-D04: Deduplication guard preventing duplicate customer records
     const normPhone = normalizeLoyaltyPhone(memberData.phone);
-    const existing = members.find((m) => {
+    const existing = membersRef.current.find((m) => {
       const mNorm = normalizeLoyaltyPhone(m.phone);
       return normPhone && mNorm && normPhone === mNorm;
     });
@@ -132,6 +162,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     }
 
     const nowIso = new Date().toISOString();
+    const newId = `mem-${Date.now()}`;
     const points = memberData.initialPoints || 0;
     const computedTier = calculateTierForPoints(points);
 
@@ -139,7 +170,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     const targetOutletName = activeOutlet?.name || "Singaraja";
 
     const newMember: LoyaltyMember = {
-      id: `mem-${Date.now()}`,
+      id: newId,
       name: memberData.name.trim(),
       phone: memberData.phone.trim(),
       email: memberData.email?.trim() || undefined,
@@ -157,7 +188,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       pointHistory: points > 0 ? [
         {
           id: `ptx-${Date.now()}`,
-          memberId: `mem-${Date.now()}`,
+          memberId: newId,
           type: "EARN",
           points,
           balanceAfter: points,
@@ -170,7 +201,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       tierHistory: [],
     };
 
-    setMembers((prev) => [newMember, ...prev]);
+    commitMembers((prev) => [newMember, ...prev]);
 
     logActivity({
       module: "LOYALTY",
@@ -184,12 +215,12 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       outletName: targetOutletName,
     });
 
-    syncWithOutbox({
+    enqueueMemberSync(newMember.id, {
       id: newMember.id,
       endpoint: "/api/loyalty/members",
       method: "POST",
       payload: { member: newMember },
-    }).catch(() => {});
+    });
 
     return newMember;
   };
@@ -204,8 +235,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     const normPhone = normalizeLoyaltyPhone(memberData.phone);
     const cleanEmail = memberData.email?.trim().toLowerCase();
 
-    // Deduplication: Check if member already exists by phone or email
-    const existing = members.find((m) => {
+    const existing = membersRef.current.find((m) => {
       const mPhone = normalizeLoyaltyPhone(m.phone);
       const mEmail = m.email?.trim().toLowerCase();
       if (normPhone && mPhone && normPhone === mPhone) return true;
@@ -227,13 +257,17 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     transactionId?: string,
     spendAmount?: number
   ) => {
-    const target = members.find((m) => m.id === memberId);
-    if (!target || pointsEarned <= 0) return;
+    const target = membersRef.current.find((m) => m.id === memberId);
+    if (!target || pointsEarned < 0) return;
 
-    // Idempotency: prevent double awarding for the same transaction
+    const hasSpendUpdate = Boolean(transactionId) && spendAmount !== undefined && spendAmount >= 0;
+    if (pointsEarned === 0 && !hasSpendUpdate) return;
+
     if (
       transactionId &&
-      target.pointHistory.some((ptx) => ptx.relatedTransactionId === transactionId)
+      target.pointHistory.some(
+        (ptx) => ptx.type === "EARN" && ptx.relatedTransactionId === transactionId
+      )
     ) {
       console.warn(`[Loyalty] Points for transaction ${transactionId} already awarded to member ${memberId}. Skipping duplicate.`);
       return;
@@ -244,15 +278,21 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     const tierChanged = newTier !== target.tier;
     const nowIso = new Date().toISOString();
     const effectiveSpend =
-      spendAmount !== undefined && spendAmount > 0
+      spendAmount !== undefined && spendAmount >= 0
         ? Math.round(spendAmount)
         : pointsEarned * 1000;
+    const lastVisitStr = new Date().toLocaleDateString("id-ID", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
 
     const ptx: LoyaltyPointTransaction = {
-      id: `ptx-${Date.now()}`,
+      id: `ptx-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
       memberId,
       type: "EARN",
       points: pointsEarned,
+      spendAmount: effectiveSpend,
       balanceAfter: newPoints,
       reason,
       relatedTransactionId: transactionId,
@@ -276,11 +316,10 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       };
       newTierHistory = [th, ...newTierHistory];
 
-      // Send system notification
       addNotification({
         type: "TIER_UPGRADE",
         title: "Kenaikan Loyalty Tier Member",
-        detail: `Member ${target.name} otomatis naik dari tier ${target.tier} ke ${newTier} (${newPoints} Poin)!`,
+        detail: `Member ${target.name} otomatis naik dari tier ${target.tier} ke ${newTier} (${newPoints} Poin)`,
         relatedModule: "LOYALTY",
         actionUrl: "/customers",
         outletId: target.registeredOutletId,
@@ -301,18 +340,21 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    // POS-08 / TC-D03: Atomically increment totalSpend, totalVisits, and lastVisit alongside points and tier
-    setMembers((prev) =>
+    const updatedPointHistory = [ptx, ...target.pointHistory];
+    const nextSpend = (target.totalSpend || 0) + effectiveSpend;
+    const nextVisits = (target.totalVisits || 0) + 1;
+
+    commitMembers((prev) =>
       prev.map((m) =>
         m.id === memberId
           ? {
               ...m,
               points: newPoints,
               tier: newTier,
-              totalSpend: (m.totalSpend || 0) + effectiveSpend,
-              totalVisits: (m.totalVisits || 0) + 1,
-              lastVisit: new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }),
-              pointHistory: [ptx, ...m.pointHistory],
+              totalSpend: nextSpend,
+              totalVisits: nextVisits,
+              lastVisit: lastVisitStr,
+              pointHistory: updatedPointHistory,
               tierHistory: newTierHistory,
             }
           : m
@@ -332,7 +374,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       outletName: target.registeredOutletName,
     });
 
-    syncWithOutbox({
+    enqueueMemberSync(memberId, {
       id: memberId,
       endpoint: "/api/loyalty/members",
       method: "PUT",
@@ -341,48 +383,81 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         updates: {
           points: newPoints,
           tier: newTier,
-          totalSpend: (target.totalSpend || 0) + effectiveSpend,
-          totalVisits: (target.totalVisits || 0) + 1,
-          lastVisit: new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }),
-          pointHistory: [ptx, ...target.pointHistory],
+          totalSpend: nextSpend,
+          totalVisits: nextVisits,
+          lastVisit: lastVisitStr,
+          pointHistory: updatedPointHistory,
           tierHistory: newTierHistory,
         },
       },
-    }).catch(() => {});
+    });
   };
 
-  const reverseTransactionPoints = (memberId: string, transactionId: string, reason?: string) => {
-    const target = members.find((m) => m.id === memberId);
+  const reverseTransactionPoints = (
+    memberId: string,
+    transactionId: string,
+    reason?: string,
+    exactRefundAmount?: number
+  ) => {
+    const target = membersRef.current.find((m) => m.id === memberId);
     if (!target) return;
 
     const earnTx = target.pointHistory.find(
       (ptx) => ptx.type === "EARN" && ptx.relatedTransactionId === transactionId
     );
-    if (!earnTx) return;
+    const redeemTx = target.pointHistory.find(
+      (ptx) => ptx.type === "REDEEM" && ptx.relatedTransactionId === transactionId
+    );
 
     const revTxId = `rev-${transactionId}`;
-    if (target.pointHistory.some((ptx) => ptx.relatedTransactionId === revTxId)) {
-      return;
-    }
+    const revRedeemTxId = `rev-redeem-${transactionId}`;
+    const alreadyReversedEarn = target.pointHistory.some(
+      (ptx) => ptx.relatedTransactionId === revTxId
+    );
+    const alreadyReversedRedeem = target.pointHistory.some(
+      (ptx) => ptx.relatedTransactionId === revRedeemTxId
+    );
 
-    const pointsToDeduct = earnTx.points;
-    const newPoints = Math.max(0, target.points - pointsToDeduct);
+    const canReverseEarn = Boolean(earnTx && !alreadyReversedEarn);
+    const canReverseRedeem = Boolean(redeemTx && !alreadyReversedRedeem);
+    if (!canReverseEarn && !canReverseRedeem) return;
+
+    const pointsToDeduct = canReverseEarn && earnTx ? earnTx.points : 0;
+    const pointsToRestore = canReverseRedeem && redeemTx ? Math.abs(redeemTx.points) : 0;
+    const newPoints = Math.max(0, target.points - pointsToDeduct + pointsToRestore);
     const newTier = calculateTierForPoints(newPoints);
     const tierChanged = newTier !== target.tier;
     const nowIso = new Date().toISOString();
 
-    const ptx: LoyaltyPointTransaction = {
-      id: `ptx-${Date.now()}`,
-      memberId,
-      type: "ADJUSTMENT",
-      points: -pointsToDeduct,
-      balanceAfter: newPoints,
-      reason: reason || `Pembatalan/Refund transaksi #${transactionId}`,
-      relatedTransactionId: revTxId,
-      timestamp: nowIso,
-      actorName: user?.name || "Sistem Loyalty",
-      outletId: target.registeredOutletId,
-    };
+    const appendedEntries: LoyaltyPointTransaction[] = [];
+    if (canReverseRedeem && redeemTx) {
+      appendedEntries.push({
+        id: `ptx-${Date.now()}-redeem-rev`,
+        memberId,
+        type: "ADJUSTMENT",
+        points: pointsToRestore,
+        balanceAfter: newPoints,
+        reason: reason || `Pengembalian poin voucher transaksi #${transactionId}`,
+        relatedTransactionId: revRedeemTxId,
+        timestamp: nowIso,
+        actorName: user?.name || "Sistem Loyalty",
+        outletId: target.registeredOutletId,
+      });
+    }
+    if (canReverseEarn && earnTx) {
+      appendedEntries.push({
+        id: `ptx-${Date.now()}-earn-rev`,
+        memberId,
+        type: "ADJUSTMENT",
+        points: -pointsToDeduct,
+        balanceAfter: newPoints,
+        reason: reason || `Pembatalan/Refund transaksi #${transactionId}`,
+        relatedTransactionId: revTxId,
+        timestamp: nowIso,
+        actorName: user?.name || "Sistem Loyalty",
+        outletId: target.registeredOutletId,
+      });
+    }
 
     let newTierHistory = [...target.tierHistory];
     if (tierChanged) {
@@ -400,18 +475,23 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       newTierHistory = [th, ...newTierHistory];
     }
 
-    const refundedSpend = earnTx.points * 1000;
+    const refundedSpend = canReverseEarn
+      ? exactRefundAmount ?? earnTx?.spendAmount ?? (earnTx ? earnTx.points * 1000 : 0)
+      : 0;
+    const nextSpend = Math.max(0, (target.totalSpend || 0) - refundedSpend);
+    const nextVisits = Math.max(0, (target.totalVisits || 0) - (canReverseEarn ? 1 : 0));
+    const updatedPointHistory = [...appendedEntries, ...target.pointHistory];
 
-    setMembers((prev) =>
+    commitMembers((prev) =>
       prev.map((m) =>
         m.id === memberId
           ? {
               ...m,
               points: newPoints,
               tier: newTier,
-              totalSpend: Math.max(0, (m.totalSpend || 0) - refundedSpend),
-              totalVisits: Math.max(0, (m.totalVisits || 0) - 1),
-              pointHistory: [ptx, ...m.pointHistory],
+              totalSpend: nextSpend,
+              totalVisits: nextVisits,
+              pointHistory: updatedPointHistory,
               tierHistory: newTierHistory,
             }
           : m
@@ -423,15 +503,15 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       action: "REVERSE_POINTS",
       recordId: memberId,
       previousValue: `Poin: ${target.points}`,
-      newValue: `Poin: ${newPoints} (-${pointsToDeduct})`,
-      description: `Penarikan kembali ${pointsToDeduct} poin transaksi ${transactionId} untuk member ${target.name}`,
+      newValue: `Poin: ${newPoints} (${pointsToRestore - pointsToDeduct >= 0 ? "+" : ""}${pointsToRestore - pointsToDeduct})`,
+      description: `Penarikan/penyesuaian poin transaksi ${transactionId} untuk member ${target.name}`,
       reason: reason || "Pembatalan / Refund Transaksi",
       status: "SUCCESS",
       outletId: target.registeredOutletId,
       outletName: target.registeredOutletName,
     });
 
-    syncWithOutbox({
+    enqueueMemberSync(memberId, {
       id: memberId,
       endpoint: "/api/loyalty/members",
       method: "PUT",
@@ -440,18 +520,23 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         updates: {
           points: newPoints,
           tier: newTier,
-          totalSpend: Math.max(0, (target.totalSpend || 0) - refundedSpend),
-          totalVisits: Math.max(0, (target.totalVisits || 0) - 1),
-          pointHistory: [ptx, ...target.pointHistory],
+          totalSpend: nextSpend,
+          totalVisits: nextVisits,
+          pointHistory: updatedPointHistory,
           tierHistory: newTierHistory,
         },
       },
-    }).catch(() => {});
+    });
   };
 
-  const redeemPoints = (memberId: string, pointsToRedeem: number, reason: string): boolean => {
-    const target = members.find((m) => m.id === memberId);
-    if (!target || target.points < pointsToRedeem) return false;
+  const redeemPoints = (
+    memberId: string,
+    pointsToRedeem: number,
+    reason: string,
+    relatedTransactionId?: string
+  ): boolean => {
+    const target = membersRef.current.find((m) => m.id === memberId);
+    if (!target || pointsToRedeem <= 0 || target.points < pointsToRedeem) return false;
 
     const newPoints = target.points - pointsToRedeem;
     const newTier = calculateTierForPoints(newPoints);
@@ -459,12 +544,13 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     const nowIso = new Date().toISOString();
 
     const ptx: LoyaltyPointTransaction = {
-      id: `ptx-${Date.now()}`,
+      id: `ptx-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
       memberId,
       type: "REDEEM",
       points: -pointsToRedeem,
       balanceAfter: newPoints,
       reason,
+      relatedTransactionId,
       timestamp: nowIso,
       actorName: user?.name || "Kasir POS",
       outletId: target.registeredOutletId,
@@ -486,14 +572,16 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       newTierHistory = [th, ...newTierHistory];
     }
 
-    setMembers((prev) =>
+    const updatedPointHistory = [ptx, ...target.pointHistory];
+
+    commitMembers((prev) =>
       prev.map((m) =>
         m.id === memberId
           ? {
               ...m,
               points: newPoints,
               tier: newTier,
-              pointHistory: [ptx, ...m.pointHistory],
+              pointHistory: updatedPointHistory,
               tierHistory: newTierHistory,
             }
           : m
@@ -513,7 +601,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       outletName: target.registeredOutletName,
     });
 
-    syncWithOutbox({
+    enqueueMemberSync(memberId, {
       id: memberId,
       endpoint: "/api/loyalty/members",
       method: "PUT",
@@ -522,17 +610,17 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         updates: {
           points: newPoints,
           tier: newTier,
-          pointHistory: [ptx, ...target.pointHistory],
+          pointHistory: updatedPointHistory,
           tierHistory: newTierHistory,
         },
       },
-    }).catch(() => {});
+    });
 
     return true;
   };
 
   const manualOverrideTier = (memberId: string, newTier: LoyaltyTier, reason: string) => {
-    const target = members.find((m) => m.id === memberId);
+    const target = membersRef.current.find((m) => m.id === memberId);
     if (!target) return;
 
     const nowIso = new Date().toISOString();
@@ -548,13 +636,15 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       timestamp: nowIso,
     };
 
-    setMembers((prev) =>
+    const updatedTierHistory = [th, ...target.tierHistory];
+
+    commitMembers((prev) =>
       prev.map((m) =>
         m.id === memberId
           ? {
               ...m,
               tier: newTier,
-              tierHistory: [th, ...m.tierHistory],
+              tierHistory: updatedTierHistory,
             }
           : m
       )
@@ -573,7 +663,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       outletName: target.registeredOutletName,
     });
 
-    syncWithOutbox({
+    enqueueMemberSync(memberId, {
       id: memberId,
       endpoint: "/api/loyalty/members",
       method: "PUT",
@@ -581,13 +671,14 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         id: memberId,
         updates: {
           tier: newTier,
-          tierHistory: [th, ...target.tierHistory],
+          tierHistory: updatedTierHistory,
         },
       },
-    }).catch(() => {});
+    });
   };
 
   const resetLoyaltyData = () => {
+    membersRef.current = INITIAL_MEMBERS;
     setMembers(INITIAL_MEMBERS);
     try {
       localStorage.removeItem(STORAGE_KEY_LOYALTY);

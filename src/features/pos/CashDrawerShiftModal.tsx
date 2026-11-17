@@ -16,6 +16,101 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
+import { extractShiftStartTimeMs } from "@/lib/shift-management";
+import { aggregateShiftOrdersTaxAndRevenue } from "@/lib/tax-breakdown";
+import { formatCurrencyIDR } from "@/lib/utils";
+import type { OrderRecord } from "@/types/order";
+import type { ShiftRecord } from "@/types/shift";
+
+export interface CashDrawerShiftSummary {
+  initialCash: number;
+  cashSales: number;
+  qrisSales: number;
+  edcSales: number;
+  nonCashSales: number;
+  transactionsCount: number;
+  discounts: number;
+  refundAmount: number;
+  storedTax: number;
+  storedServiceCharge: number;
+}
+
+export function buildCashDrawerShiftSummary(
+  orders: OrderRecord[],
+  activeShift?: ShiftRecord | null
+): CashDrawerShiftSummary {
+  if (!activeShift) {
+    return {
+      initialCash: 0,
+      cashSales: 0,
+      qrisSales: 0,
+      edcSales: 0,
+      nonCashSales: 0,
+      transactionsCount: 0,
+      discounts: 0,
+      refundAmount: 0,
+      storedTax: 0,
+      storedServiceCharge: 0,
+    };
+  }
+
+  const taxAgg = aggregateShiftOrdersTaxAndRevenue(orders, activeShift);
+  const startMs =
+    extractShiftStartTimeMs(activeShift) ||
+    (activeShift.startTime ? Date.parse(activeShift.startTime) : 0);
+  const rawEnd = activeShift.closedAt || activeShift.endTime;
+  const parsedEndMs = rawEnd ? Date.parse(rawEnd) : NaN;
+  const endMs = !Number.isNaN(parsedEndMs) && parsedEndMs > 0 ? parsedEndMs : Infinity;
+
+  const shiftPaidOrders = orders.filter((order) => {
+    if (order.paymentStatus !== "PAID" || order.status === "CANCELLED") return false;
+    if (
+      activeShift.outletId &&
+      activeShift.outletId !== "ALL" &&
+      order.outletId &&
+      order.outletId !== activeShift.outletId
+    ) {
+      return false;
+    }
+    if (startMs > 0 && order.createdAt) {
+      const orderMs = Date.parse(order.createdAt);
+      if (!Number.isNaN(orderMs) && (orderMs < startMs || orderMs > endMs)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  let edcSalesFromOrders = 0;
+  for (const order of shiftPaidOrders) {
+    if (order.paymentMethod === "EDC") {
+      edcSalesFromOrders += order.total || 0;
+    } else if (order.paymentMethod === "SPLIT" && order.splitDetails) {
+      edcSalesFromOrders += order.splitDetails
+        .filter((g) => g.method === "EDC")
+        .reduce((sum, g) => sum + (g.amount || 0), 0);
+    }
+  }
+
+  const cashSales = activeShift.cashSales || 0;
+  const nonCashSales = activeShift.nonCashSales || 0;
+  const edcSales = Math.min(nonCashSales, edcSalesFromOrders);
+  const qrisSales = Math.max(0, nonCashSales - edcSales);
+
+  return {
+    initialCash: activeShift.openingCash ?? 0,
+    cashSales,
+    qrisSales,
+    edcSales,
+    nonCashSales,
+    transactionsCount: taxAgg.orderCount,
+    discounts: taxAgg.totalDiscounts,
+    refundAmount: activeShift.refundAmount || 0,
+    storedTax: taxAgg.totalTaxPB1,
+    storedServiceCharge: taxAgg.totalServiceCharge,
+  };
+}
 
 interface CashDrawerShiftModalProps {
   isOpen: boolean;
@@ -30,6 +125,9 @@ interface CashDrawerShiftModalProps {
   qrisSales?: number;
   edcSales?: number;
   totalDiscounts?: number;
+  refundAmount?: number;
+  storedTax?: number;
+  storedServiceCharge?: number;
   isTaxEnabled?: boolean;
   taxRatePercent?: number;
   tenantName?: string;
@@ -49,6 +147,9 @@ export function CashDrawerShiftModal({
   totalTransactionsCount,
   qrisSales,
   edcSales,
+  refundAmount = 0,
+  storedTax,
+  storedServiceCharge,
   isTaxEnabled = true,
   taxRatePercent = 10,
   onConfirmClose,
@@ -57,19 +158,23 @@ export function CashDrawerShiftModal({
   const { user, logout } = useAuth();
 
   const [confirmCashierName, setConfirmCashierName] = useState<string>(cashierName || user?.name || "");
-  const [cashInDrawer, setCashInDrawer] = useState<number>(initialCash + totalCashSales);
+  const [cashInDrawer, setCashInDrawer] = useState<number>(initialCash + totalCashSales - refundAmount);
   const [cashInputDisplay, setCashInputDisplay] = useState<string>(
-    (initialCash + totalCashSales).toLocaleString("id-ID")
+    (initialCash + totalCashSales - refundAmount).toLocaleString("id-ID")
   );
+  const [varianceNotes, setVarianceNotes] = useState<string>("");
   const [isClosing, setIsClosing] = useState<boolean>(false);
   const [currentTimeStr, setCurrentTimeStr] = useState<string>("");
 
   useEffect(() => {
     setConfirmCashierName(cashierName || user?.name || "");
-    const expected = initialCash + totalCashSales;
+    const expected = initialCash + totalCashSales - refundAmount;
     setCashInDrawer(expected);
     setCashInputDisplay(expected.toLocaleString("id-ID"));
-  }, [cashierName, user?.name, initialCash, totalCashSales, isOpen]);
+    if (isOpen) {
+      setVarianceNotes("");
+    }
+  }, [cashierName, user?.name, initialCash, totalCashSales, refundAmount, isOpen]);
 
   useEffect(() => {
     const updateTime = () => {
@@ -93,21 +198,27 @@ export function CashDrawerShiftModal({
 
   if (!isOpen) return null;
 
-  // 1. Calculations
   const totalGrossSales = totalCashSales + totalNonCashSales;
-  const estimatedTax = isTaxEnabled
-    ? Math.round(totalGrossSales * (taxRatePercent / (100 + taxRatePercent)))
-    : 0;
-  const totalNetSales = totalGrossSales - estimatedTax;
+  const finalTax =
+    storedTax !== undefined
+      ? storedTax
+      : isTaxEnabled
+        ? Math.round(totalGrossSales * (taxRatePercent / (100 + taxRatePercent)))
+        : 0;
+  const finalServiceCharge = storedServiceCharge ?? 0;
+  const totalNetSales = Math.max(0, totalGrossSales - finalTax - finalServiceCharge);
 
   const finalQrisSales = qrisSales !== undefined ? qrisSales : Math.round(totalNonCashSales * 0.85);
   const finalEdcSales = edcSales !== undefined ? edcSales : totalNonCashSales - finalQrisSales;
 
-  // Revenue Sharing (Fixed 85% Mitra, 15% Dago Hub Platform)
   const tenantSharePercent = 85;
-  const dagoSharePercent = 15;
   const tenantTotalShare = Math.round((totalNetSales * tenantSharePercent) / 100);
   const dagoTotalShare = totalNetSales - tenantTotalShare;
+
+  const expectedCash = initialCash + totalCashSales - refundAmount;
+  const cashVariance = cashInDrawer - expectedCash;
+  const hasCashVariance = cashVariance !== 0;
+  const isVarianceReasonMissing = hasCashVariance && !varianceNotes.trim();
 
   const dateNow = new Date();
   const docNo = `EOD-${dateNow.getFullYear()}${(dateNow.getMonth() + 1)
@@ -120,28 +231,28 @@ export function CashDrawerShiftModal({
     const rawVal = e.target.value.replace(/\D/g, "");
     const num = parseInt(rawVal, 10) || 0;
     setCashInDrawer(num);
-    setCashInputDisplay(num > 0 ? num.toLocaleString("id-ID") : "");
+    setCashInputDisplay(num > 0 ? num.toLocaleString("id-ID") : "0");
   };
+
+  const resolvedClosingNote = varianceNotes.trim() || `Tutup Sesi Kasir (${docNo})`;
 
   const getClosingPdfUrl = () => {
     const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const expectedCash = initialCash + totalCashSales;
-    const cashVariance = cashInDrawer - expectedCash;
 
     return `${origin}/api/reports/closing/pdf?outlet=${encodeURIComponent(
       outletName
-    )}&cashier=${encodeURIComponent(confirmCashierName || cashierName)}&transactions=${totalTransactionsCount}&gross=${totalGrossSales}&tax=${estimatedTax}&net=${totalNetSales}&qris=${finalQrisSales}&cash=${totalCashSales}&edc=${finalEdcSales}&mitra=${tenantTotalShare}&dago=${dagoTotalShare}&docNo=${encodeURIComponent(
+    )}&cashier=${encodeURIComponent(confirmCashierName || cashierName)}&transactions=${totalTransactionsCount}&gross=${totalGrossSales}&tax=${finalTax}&service=${finalServiceCharge}&net=${totalNetSales}&qris=${finalQrisSales}&cash=${totalCashSales}&edc=${finalEdcSales}&mitra=${tenantTotalShare}&dago=${dagoTotalShare}&docNo=${encodeURIComponent(
       docNo
     )}&initialCash=${initialCash}&expectedCash=${expectedCash}&actualCash=${cashInDrawer}&variance=${cashVariance}&notes=${encodeURIComponent(
-      `Tutup Sesi Kasir (${docNo})`
+      resolvedClosingNote
     )}`;
   };
 
   const handleConfirmCloseSession = async () => {
-    if (isClosing) return;
+    if (isClosing || isVarianceReasonMissing) return;
     setIsClosing(true);
 
-    const closingNote = `Tutup Sesi Kasir (${docNo})`;
+    const closingNote = resolvedClosingNote;
 
     if (onConfirmClose) {
       onConfirmClose(cashInDrawer, closingNote);
@@ -190,7 +301,7 @@ export function CashDrawerShiftModal({
         </DialogHeader>
 
         {/* Content Body */}
-        <div className="space-y-4 p-6 text-xs text-foreground">
+        <div className="flex-1 space-y-4 overflow-y-auto p-6 text-xs text-foreground">
           {/* Warning Banner */}
           <Alert className="border-warning/40 bg-warning/10 text-xs">
             <AlertTriangle className="size-4 text-warning shrink-0" />
@@ -198,6 +309,49 @@ export function CashDrawerShiftModal({
               Pastikan semua transaksi sudah selesai. Anda tidak dapat mengubah transaksi yang sudah dicatat setelah menutup sesi kasir.
             </AlertDescription>
           </Alert>
+
+          <div className="space-y-1.5 rounded-lg border bg-muted/30 p-3 text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Modal awal</span>
+              <span className="font-mono tabular-nums text-foreground">
+                {formatCurrencyIDR(initialCash)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Penjualan tunai</span>
+              <span className="font-mono tabular-nums text-foreground">
+                {formatCurrencyIDR(totalCashSales)}
+              </span>
+            </div>
+            {refundAmount > 0 ? (
+              <div className="flex justify-between text-destructive">
+                <span>Refund tunai</span>
+                <span className="font-mono tabular-nums">-{formatCurrencyIDR(refundAmount)}</span>
+              </div>
+            ) : null}
+            <div className="flex justify-between border-t pt-1.5 font-medium">
+              <span className="text-foreground">Kas seharusnya</span>
+              <span className="font-mono tabular-nums text-foreground">
+                {formatCurrencyIDR(expectedCash)}
+              </span>
+            </div>
+            <div className="flex justify-between font-medium">
+              <span className="text-muted-foreground">Selisih kas</span>
+              <span
+                className={
+                  cashVariance === 0
+                    ? "font-mono tabular-nums text-success"
+                    : cashVariance < 0
+                      ? "font-mono tabular-nums text-destructive"
+                      : "font-mono tabular-nums text-warning"
+                }
+              >
+                {cashVariance === 0
+                  ? "Sesuai (Rp 0)"
+                  : `${cashVariance > 0 ? "+" : "-"}${formatCurrencyIDR(Math.abs(cashVariance))}`}
+              </span>
+            </div>
+          </div>
 
           {/* Form Fields */}
           <div className="space-y-3 pt-1">
@@ -236,6 +390,28 @@ export function CashDrawerShiftModal({
                 />
               </div>
             </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="close-variance-notes" className="text-xs font-medium text-foreground">
+                Alasan selisih kas
+                {hasCashVariance ? <span className="text-destructive"> *</span> : " (opsional)"}
+              </Label>
+              <Textarea
+                id="close-variance-notes"
+                rows={2}
+                value={varianceNotes}
+                onChange={(e) => setVarianceNotes(e.target.value)}
+                placeholder="Jelaskan penyebab selisih uang fisik atau catatan tutup shift"
+                disabled={isClosing}
+                aria-invalid={isVarianceReasonMissing}
+                className="text-xs"
+              />
+              {isVarianceReasonMissing ? (
+                <p className="text-xs text-destructive">
+                  Isi alasan selisih kas sebelum menutup sesi.
+                </p>
+              ) : null}
+            </div>
           </div>
 
           {/* Server Timestamp */}
@@ -269,7 +445,7 @@ export function CashDrawerShiftModal({
             <Button
               type="button"
               size="lg"
-              disabled={isClosing || !confirmCashierName.trim()}
+              disabled={isClosing || !confirmCashierName.trim() || isVarianceReasonMissing}
               onClick={handleConfirmCloseSession}
               className="w-full"
             >

@@ -21,6 +21,10 @@ import {
   auditStatusLabel,
   getSeverityTone,
   getStatusTone,
+  resolveLogActorName,
+  resolveLogActorRole,
+  resolveLogRecordId,
+  resolveLogStatus,
 } from "@/features/activity-log/activity-log-domain";
 import type { ActivityLogEntry } from "@/types/audit";
 
@@ -48,6 +52,11 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
     setTimeout(() => setCopiedJson(false), 2000);
   };
 
+  const actorName = log ? resolveLogActorName(log) : "";
+  const actorRole = log ? resolveLogActorRole(log) : "";
+  const recordId = log ? resolveLogRecordId(log) : "";
+  const status = log ? resolveLogStatus(log) : "SUCCESS";
+
   return (
     <Sheet open={log !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <SheetContent side="right" className="w-full gap-0 sm:max-w-md">
@@ -58,8 +67,8 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
                 <SheetTitle className="text-base font-medium">
                   {auditActionLabel(log.action)}
                 </SheetTitle>
-                <StatusBadge status={getStatusTone(log.status)}>
-                  {auditStatusLabel(log.status)}
+                <StatusBadge status={getStatusTone(status)}>
+                  {auditStatusLabel(status)}
                 </StatusBadge>
               </div>
               <SheetDescription className="font-mono text-xs">
@@ -78,9 +87,9 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
                 <div className="flex items-start justify-between gap-3">
                   <dt className="text-muted-foreground">Pelaku</dt>
                   <dd className="text-right font-medium text-foreground">
-                    {log.actorName || "—"}
-                    {log.actorRole ? (
-                      <span className="font-normal text-muted-foreground"> ({log.actorRole})</span>
+                    {actorName || "—"}
+                    {actorRole ? (
+                      <span className="font-normal text-muted-foreground"> ({actorRole})</span>
                     ) : null}
                   </dd>
                 </div>
@@ -94,10 +103,10 @@ export function ActivityLogDetailModal({ log, onClose }: ActivityLogDetailModalP
                   <dt className="text-muted-foreground">Modul</dt>
                   <dd className="text-right text-foreground">{auditModuleLabel(log.module)}</dd>
                 </div>
-                {log.recordId ? (
+                {recordId ? (
                   <div className="flex items-start justify-between gap-3">
                     <dt className="text-muted-foreground">ID data</dt>
-                    <dd className="text-right font-mono text-foreground">{log.recordId}</dd>
+                    <dd className="text-right font-mono text-foreground">{recordId}</dd>
                   </div>
                 ) : null}
                 <div className="flex items-center justify-between gap-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Printer, Undo2 } from "lucide-react";
+import { Ban, CreditCard, Printer, Undo2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ interface OrderDetailSheetProps {
   onPrintReceipt: (order: OrderRecord) => void;
   onPrintKitchenTicket: (order: OrderRecord, purpose: "REPRINT" | "CANCELLATION") => void;
   onOpenRefund?: (order: OrderRecord) => void;
+  onOpenVoid?: (order: OrderRecord) => void;
 }
 
 function Row({ label, value, tone }: { label: string; value: string; tone?: "discount" | "total" }) {
@@ -49,6 +50,7 @@ export function OrderDetailSheet({
   onPrintReceipt,
   onPrintKitchenTicket,
   onOpenRefund,
+  onOpenVoid,
 }: OrderDetailSheetProps) {
   return (
     <Sheet open={order !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
@@ -65,6 +67,7 @@ export function OrderDetailSheet({
             onPrintReceipt={onPrintReceipt}
             onPrintKitchenTicket={onPrintKitchenTicket}
             onOpenRefund={onOpenRefund}
+            onOpenVoid={onOpenVoid}
           />
         ) : null}
       </SheetContent>
@@ -83,6 +86,7 @@ function OrderDetailBody({
   onPrintReceipt,
   onPrintKitchenTicket,
   onOpenRefund,
+  onOpenVoid,
 }: Omit<OrderDetailSheetProps, "order" | "onClose" | "promos"> & {
   selectedOrder: OrderRecord;
   canPrintCashierReceipt: boolean;
@@ -130,7 +134,7 @@ function OrderDetailBody({
               <div className="flex justify-between">
                 <span>Pengembalian dana</span>
                 <span className="font-mono font-medium text-foreground tabular-nums">
-                  {formatCurrencyIDR(selectedOrder.total)} (Tunai)
+                  {canViewNominals ? `${formatCurrencyIDR(selectedOrder.total)} (Tunai)` : "—"}
                 </span>
               </div>
               {selectedOrder.refundReason ? (
@@ -163,6 +167,47 @@ function OrderDetailBody({
           </section>
         ) : null}
 
+        {isCancelled && selectedOrder.paymentStatus !== "REFUNDED" ? (
+          <section className="flex flex-col gap-1.5 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs">
+            <span className="font-medium text-destructive">Pesanan dibatalkan</span>
+            <div className="flex flex-col gap-1 text-muted-foreground">
+              {selectedOrder.voidReason ? (
+                <div className="flex justify-between gap-2">
+                  <span>Alasan</span>
+                  <span className="text-right text-foreground">{selectedOrder.voidReason}</span>
+                </div>
+              ) : null}
+              {selectedOrder.voidApprovedBy ? (
+                <div className="flex justify-between gap-2">
+                  <span>Disetujui oleh</span>
+                  <span className="text-right text-foreground">{selectedOrder.voidApprovedBy}</span>
+                </div>
+              ) : null}
+              {selectedOrder.voidedAt ? (
+                <div className="flex justify-between gap-2">
+                  <span>Waktu pembatalan</span>
+                  <span className="font-mono tabular-nums">
+                    {new Date(selectedOrder.voidedAt).toLocaleString("id-ID", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {selectedOrder.notes ? (
+          <section className="flex flex-col gap-1 rounded-lg border bg-muted/40 p-3 text-xs">
+            <span className="font-medium text-foreground">Catatan pesanan</span>
+            <p className="text-muted-foreground">{selectedOrder.notes}</p>
+          </section>
+        ) : null}
+
         <dl className="grid grid-cols-3 gap-2">
           {timing.map((step) => (
             <div key={step.label} className="flex flex-col gap-0.5 rounded-md bg-muted/50 p-2">
@@ -182,6 +227,7 @@ function OrderDetailBody({
                   <span className="flex flex-col">
                     {item.productName}
                     {item.modifiers?.length ? <span className="text-xs text-muted-foreground">{item.modifiers.join(", ")}</span> : null}
+                    {item.notes ? <span className="text-xs text-muted-foreground">Catatan: {item.notes}</span> : null}
                   </span>
                 </span>
                 <span className="font-mono tabular-nums">
@@ -243,7 +289,7 @@ function OrderDetailBody({
             Struk
           </Button>
         ) : null}
-        {isPaid && selectedOrder.paymentStatus !== "REFUNDED" && onOpenRefund ? (
+        {isPaid && selectedOrder.paymentStatus !== "REFUNDED" && canViewNominals && onOpenRefund ? (
           <Button
             variant="outline"
             size="lg"
@@ -252,6 +298,17 @@ function OrderDetailBody({
           >
             <Undo2 />
             Refund
+          </Button>
+        ) : null}
+        {!isPaid && !isCancelled && canViewNominals && onOpenVoid ? (
+          <Button
+            variant="outline"
+            size="lg"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => onOpenVoid(selectedOrder)}
+          >
+            <Ban />
+            Batalkan
           </Button>
         ) : null}
         {canPrintKitchenReceipt ? (

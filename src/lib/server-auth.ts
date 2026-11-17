@@ -156,7 +156,7 @@ export const TRUSTED_PERSONAS: Record<
     email: "owner.kopisenja@dagoeng.com",
     name: "I Wayan Pratama (Owner Kopi Senja)",
     permissions: ["dashboard:view", "pos:operate", "orders:view", "tables:view", "menu:view"],
-    tenantId: "tenant-kopi-senja",
+    tenantId: "tenant-ks",
     businessModule: "FNB",
   },
   TENANT_OWNER_KITCHEN: {
@@ -166,7 +166,7 @@ export const TRUSTED_PERSONAS: Record<
     email: "owner.dapurmama@dagoeng.com",
     name: "Dapur Mama Owner",
     permissions: ["dashboard:view", "orders:view", "kitchen:kds", "menu:view"],
-    tenantId: "tenant-dapur-mama",
+    tenantId: "tenant-kitchen",
     businessModule: "FNB",
   },
   TENANT_OWNER_BAKERY: {
@@ -176,7 +176,7 @@ export const TRUSTED_PERSONAS: Record<
     email: "owner.manisbakery@dagoeng.com",
     name: "Manis Bakery Owner",
     permissions: ["dashboard:view", "orders:view", "menu:view"],
-    tenantId: "tenant-manis-bakery",
+    tenantId: "tenant-bakery",
     businessModule: "FNB",
   },
   TENANT_OWNER_TEA: {
@@ -186,7 +186,7 @@ export const TRUSTED_PERSONAS: Record<
     email: "owner.warungbunarti@dagoeng.com",
     name: "Teh Nusantara Owner",
     permissions: ["dashboard:view", "orders:view", "menu:view"],
-    tenantId: "tenant-teh-nusantara",
+    tenantId: "tenant-tea",
     businessModule: "FNB",
   },
   CASHIER_SGR: {
@@ -196,7 +196,7 @@ export const TRUSTED_PERSONAS: Record<
     email: "cashier.sgr@kopisenja.com",
     name: "Ni Kadek Sri (Kasir)",
     permissions: ["pos:operate", "orders:view", "tables:view"],
-    tenantId: "tenant-kopi-senja",
+    tenantId: "tenant-ks",
     businessModule: "FNB",
   },
   KITCHEN_SGR: {
@@ -206,7 +206,7 @@ export const TRUSTED_PERSONAS: Record<
     email: "kitchen.sgr@kopisenja.com",
     name: "Kitchen Staff",
     permissions: ["kitchen:kds", "orders:view"],
-    tenantId: "tenant-kopi-senja",
+    tenantId: "tenant-ks",
     businessModule: "FNB",
   },
   WAITER_SGR: {
@@ -216,7 +216,7 @@ export const TRUSTED_PERSONAS: Record<
     email: "waiter.sgr@kopisenja.com",
     name: "Waiter",
     permissions: ["tables:view", "tables:manage", "orders:view"],
-    tenantId: "tenant-kopi-senja",
+    tenantId: "tenant-ks",
     businessModule: "FNB",
   },
   CUSTOMER_DEMO: {
@@ -299,7 +299,7 @@ export const TRUSTED_PERSONAS: Record<
     email: "owner.kopisenja@dagoeng.com",
     name: "I Wayan Pratama (Owner Kopi Senja)",
     permissions: ["dashboard:view", "pos:operate", "orders:view", "menu:view"],
-    tenantId: "tenant-kopi-senja",
+    tenantId: "tenant-ks",
     businessModule: "FNB",
   },
   CASHIER: {
@@ -309,7 +309,7 @@ export const TRUSTED_PERSONAS: Record<
     email: "cashier.sgr@kopisenja.com",
     name: "Ni Kadek Sri (Kasir)",
     permissions: ["pos:operate", "orders:view"],
-    tenantId: "tenant-kopi-senja",
+    tenantId: "tenant-ks",
     businessModule: "FNB",
   },
   CUSTOMER: {
@@ -371,6 +371,21 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
         }
 
         if (session.user.isActive) {
+          const revokedAt = await getLatestRevocation(session.user.id, session.user.email);
+          if (revokedAt > 0 && session.createdAt.getTime() <= revokedAt) {
+            return {
+              isAuthenticated: false,
+              role: null,
+              userId: null,
+              email: null,
+              scopeLevel: null,
+              permissions: [],
+              tenantId: null,
+              businessModule: null,
+              error: "SESSION_REVOKED",
+            };
+          }
+
           const primaryRole = session.user.userRoles[0];
           const scopeLevel: ScopeLevel =
             (primaryRole?.scopeLevel as ScopeLevel) ||
@@ -465,15 +480,23 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
       };
     }
     if (verification.valid && verification.payload) {
+      const matchedPersona = Object.values(TRUSTED_PERSONAS).find(
+        (p) =>
+          p.role === verification.payload!.role &&
+          (p.userId === verification.payload!.userId ||
+            (verification.payload!.email &&
+              p.email.toLowerCase() === verification.payload!.email.toLowerCase()))
+      );
       return {
         isAuthenticated: true,
         role: verification.payload.role,
         userId: verification.payload.userId,
-        email: verification.payload.email || null,
-        scopeLevel: verification.payload.scopeLevel || "OUTLET",
-        permissions: [],
-        tenantId: null,
-        businessModule: null,
+        email: verification.payload.email || matchedPersona?.email || null,
+        name: matchedPersona?.name,
+        scopeLevel: verification.payload.scopeLevel || matchedPersona?.scopeLevel || "OUTLET",
+        permissions: matchedPersona?.permissions || [],
+        tenantId: verification.payload.tenantId ?? matchedPersona?.tenantId ?? null,
+        businessModule: matchedPersona?.businessModule ?? null,
       };
     }
   }
@@ -494,6 +517,24 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
         businessModule: null,
         error: "UNAUTHORIZED: Simulasi persona administratif tidak diizinkan di production. Gunakan sesi kredensial resmi.",
       };
+    }
+
+    const personaExpRaw = req.cookies.get("dagoeng_persona_exp")?.value;
+    if (personaExpRaw !== undefined) {
+      const personaExpMs = Number(personaExpRaw);
+      if (!Number.isFinite(personaExpMs) || personaExpMs <= Date.now()) {
+        return {
+          isAuthenticated: false,
+          role: null,
+          userId: null,
+          email: null,
+          scopeLevel: null,
+          permissions: [],
+          tenantId: null,
+          businessModule: null,
+          error: "SESSION_EXPIRED",
+        };
+      }
     }
 
     const revokedAt = await getLatestRevocation(persona.userId, persona.email);

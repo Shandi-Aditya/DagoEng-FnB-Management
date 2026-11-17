@@ -8,6 +8,7 @@ export interface LoyaltyPointTransaction {
   balanceAfter: number;
   reason: string;
   relatedTransactionId?: string;
+  spendAmount?: number;
   timestamp: string;
   actorName: string;
   outletId: string;

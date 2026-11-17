@@ -4,9 +4,88 @@ import {
   savePersistentEmployee,
   deletePersistentEmployee,
 } from "@/lib/persistent-storage";
+import { getRequestAuthUser, TRUSTED_PERSONAS } from "@/lib/server-auth";
+import { revokeUserSessionsAfter } from "@/lib/session-revocation";
+import {
+  findUnifiedUserByEmail,
+  updateUnifiedUserCredentialsOrRole,
+} from "@/lib/unified-account";
+import { RoleSlug } from "@/types/auth";
 import { EmployeeProfile } from "@/types/shift";
 
 export const dynamic = "force-dynamic";
+
+const EMPLOYEE_ADMIN_ROLES: readonly RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
+
+async function assertEmployeeAdminAuth(req: NextRequest): Promise<NextResponse | null> {
+  const auth = await getRequestAuthUser(req);
+  if (!auth.isAuthenticated || !auth.role) {
+    return NextResponse.json(
+      { success: false, error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
+      { status: 401 }
+    );
+  }
+  if (!EMPLOYEE_ADMIN_ROLES.includes(auth.role)) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `FORBIDDEN: Role [${auth.role}] tidak memiliki izin mengelola data karyawan.`,
+      },
+      { status: 403 }
+    );
+  }
+  if (auth.role === "OWNER" && auth.scopeLevel === "TENANT") {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "FORBIDDEN: Tenant OWNER tidak memiliki izin mengelola karyawan hub.",
+      },
+      { status: 403 }
+    );
+  }
+  return null;
+}
+
+function mapEmployeeToUnifiedRole(employee: EmployeeProfile): "CUSTOMER" | "STAFF" | "ADMIN" {
+  if (employee.status === "NON-AKTIF") return "CUSTOMER";
+  if (/owner|admin|manager/i.test(`${employee.role} ${employee.department}`)) return "ADMIN";
+  return "STAFF";
+}
+
+function hasSecurityRelevantEmployeeChange(prev: EmployeeProfile, next: EmployeeProfile): boolean {
+  const prevEmail = (prev.email || "").trim().toLowerCase();
+  const nextEmail = (next.email || "").trim().toLowerCase();
+  return (
+    prev.role !== next.role ||
+    prev.department !== next.department ||
+    prevEmail !== nextEmail ||
+    (prev.status !== next.status && next.status !== "AKTIF") ||
+    JSON.stringify(prev.permissions || []) !== JSON.stringify(next.permissions || [])
+  );
+}
+
+async function revokeEmployeeSessions(
+  emails: Array<string | undefined | null>,
+  employee?: EmployeeProfile
+): Promise<void> {
+  const uniqueEmails = Array.from(
+    new Set(emails.map((e) => (e || "").trim().toLowerCase()).filter(Boolean))
+  );
+
+  for (const email of uniqueEmails) {
+    await revokeUserSessionsAfter(email);
+    for (const persona of Object.values(TRUSTED_PERSONAS)) {
+      if (persona.email.toLowerCase() === email) {
+        await revokeUserSessionsAfter(persona.userId);
+      }
+    }
+    if (employee && findUnifiedUserByEmail(email)) {
+      await updateUnifiedUserCredentialsOrRole(email, {
+        newRole: mapEmployeeToUnifiedRole(employee),
+      });
+    }
+  }
+}
 
 /**
  * GET /api/employees
@@ -45,6 +124,9 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
+    const authError = await assertEmployeeAdminAuth(req);
+    if (authError) return authError;
+
     const body = await req.json().catch(() => ({}));
     const employeeData = body.employee || body;
 
@@ -54,6 +136,11 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    const existingList = employeeData.id ? await getPersistentEmployees() : [];
+    const existing = employeeData.id
+      ? existingList.find((e) => e.id === employeeData.id)
+      : undefined;
 
     const employee: EmployeeProfile = {
       id: employeeData.id || `emp-${Date.now()}`,
@@ -77,6 +164,10 @@ export async function POST(req: NextRequest) {
 
     const saved = await savePersistentEmployee(employee);
 
+    if (existing && hasSecurityRelevantEmployeeChange(existing, saved)) {
+      await revokeEmployeeSessions([existing.email, saved.email], saved);
+    }
+
     return NextResponse.json({
       success: true,
       employee: saved,
@@ -95,6 +186,9 @@ export async function POST(req: NextRequest) {
  */
 export async function PUT(req: NextRequest) {
   try {
+    const authError = await assertEmployeeAdminAuth(req);
+    if (authError) return authError;
+
     const body = await req.json().catch(() => ({}));
     const id = body.id || body.employee?.id;
     const updates = body.updates || body.employee || body;
@@ -124,6 +218,10 @@ export async function PUT(req: NextRequest) {
 
     const saved = await savePersistentEmployee(merged);
 
+    if (hasSecurityRelevantEmployeeChange(target, saved)) {
+      await revokeEmployeeSessions([target.email, saved.email], saved);
+    }
+
     return NextResponse.json({
       success: true,
       employee: saved,
@@ -142,6 +240,9 @@ export async function PUT(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
+    const authError = await assertEmployeeAdminAuth(req);
+    if (authError) return authError;
+
     const { searchParams } = new URL(req.url);
     const idFromQuery = searchParams.get("id");
     let id = idFromQuery;
@@ -158,7 +259,14 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
+    const existingList = await getPersistentEmployees();
+    const target = existingList.find((e) => e.id === id);
+
     await deletePersistentEmployee(id);
+
+    if (target?.email) {
+      await revokeEmployeeSessions([target.email]);
+    }
 
     return NextResponse.json({
       success: true,

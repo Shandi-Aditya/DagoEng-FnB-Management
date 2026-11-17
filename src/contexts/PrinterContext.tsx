@@ -38,7 +38,9 @@ import {
   recoverStalePrintingJobs,
   dispatchPrintJob,
   splitKitchenTicketByTenant,
+  splitCustomerReceiptByTenant,
 } from "@/lib/printer";
+import { getTenantName } from "@/lib/tenant";
 
 interface PrinterContextType {
   devices: PrinterDeviceConfig[];
@@ -58,7 +60,7 @@ interface PrinterContextType {
   printCustomerReceipt: (
     receipt: POSReceiptData,
     options?: { isManualReprint?: boolean }
-  ) => Promise<{ success: boolean; job: PrintJob; message: string }>;
+  ) => Promise<{ success: boolean; job: PrintJob; jobs?: PrintJob[]; message: string }>;
   printFromOrderRecord: (
     order: OrderRecord,
     purpose: PrintPurpose,
@@ -524,63 +526,96 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     async (
       receipt: POSReceiptData,
       options?: { isManualReprint?: boolean }
-    ): Promise<{ success: boolean; job: PrintJob; message: string }> => {
+    ): Promise<{ success: boolean; job: PrintJob; jobs?: PrintJob[]; message: string }> => {
       const targetPrinter = activeCustomerPrinter || DEFAULT_PRINTER_DEVICES[0];
-      const payloadText = generateCustomerReceiptText(receipt, {
-        paperWidth: targetPrinter.paperWidth,
-      });
+      const shouldSplit = Boolean(settings.splitCustomerReceiptPerTenant);
+      const receiptsToPrint = shouldSplit ? splitCustomerReceiptByTenant(receipt) : [receipt];
 
-      const nowIso = new Date().toISOString();
-      const jobId = `job-cust-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+      const createdJobs: PrintJob[] = [];
+      let allSuccess = true;
+      let lastErrorInfo: string | undefined;
 
-      const newJob: PrintJob = {
-        id: jobId,
-        orderNumber: receipt.orderNumber,
+      for (let i = 0; i < receiptsToPrint.length; i++) {
+        const subReceipt = receiptsToPrint[i];
+        const payloadText = generateCustomerReceiptText(subReceipt, {
+          paperWidth: targetPrinter.paperWidth,
+        });
+
+        const nowIso = new Date().toISOString();
+        const jobId = `job-cust-${Date.now()}-${i}-${Math.floor(100 + Math.random() * 900)}`;
+
+        const newJob: PrintJob = {
+          id: jobId,
+          orderNumber: subReceipt.orderNumber,
+          outletId: activeOutletId || "outlet-sgr",
+          printerId: targetPrinter.id,
+          printerName: targetPrinter.name,
+          receiptType: "CUSTOMER_RECEIPT",
+          purpose: options?.isManualReprint ? "REPRINT" : "NEW_ORDER",
+          payloadText,
+          status: "PRINTING",
+          attempts: 1,
+          lastAttemptAt: nowIso,
+          createdAt: nowIso,
+        };
+
+        setQueue((prev) => {
+          const updated = [newJob, ...prev];
+          saveStoredPrintQueue(updated);
+          return updated;
+        });
+
+        const result = await dispatchPrintJob(newJob, targetPrinter);
+
+        const finalizedJob: PrintJob = {
+          ...newJob,
+          status: result.status,
+          errorInfo: result.errorInfo,
+          completedAt:
+            result.status !== "FAILED" && result.status !== "OFFLINE" ? new Date().toISOString() : undefined,
+        };
+
+        setQueue((prev) => {
+          const updated = prev.map((j) => (j.id === jobId ? finalizedJob : j));
+          saveStoredPrintQueue(updated);
+          return updated;
+        });
+
+        createdJobs.push(finalizedJob);
+
+        const isSuccessfulStatus =
+          result.status === "BRIDGE_ACKNOWLEDGED" || result.status === "SENT_TO_SPOOLER";
+        if (!isSuccessfulStatus) {
+          allSuccess = false;
+          lastErrorInfo = result.errorInfo;
+        }
+      }
+
+      const primaryJob = createdJobs[0] || {
+        id: "job-cust-empty",
         outletId: activeOutletId || "outlet-sgr",
         printerId: targetPrinter.id,
         printerName: targetPrinter.name,
-        receiptType: "CUSTOMER_RECEIPT",
-        purpose: options?.isManualReprint ? "REPRINT" : "NEW_ORDER",
-        payloadText,
-        status: "PRINTING",
+        receiptType: "CUSTOMER_RECEIPT" as const,
+        purpose: options?.isManualReprint ? ("REPRINT" as const) : ("NEW_ORDER" as const),
+        payloadText: "",
+        status: "FAILED" as const,
         attempts: 1,
-        lastAttemptAt: nowIso,
-        createdAt: nowIso,
+        createdAt: new Date().toISOString(),
       };
 
-      setQueue((prev) => {
-        const updated = [newJob, ...prev];
-        saveStoredPrintQueue(updated);
-        return updated;
-      });
-
-      const result = await dispatchPrintJob(newJob, targetPrinter);
-
-      const finalizedJob: PrintJob = {
-        ...newJob,
-        status: result.status,
-        errorInfo: result.errorInfo,
-        completedAt: result.status !== "FAILED" && result.status !== "OFFLINE" ? new Date().toISOString() : undefined,
-      };
-
-      setQueue((prev) => {
-        const updated = prev.map((j) => (j.id === jobId ? finalizedJob : j));
-        saveStoredPrintQueue(updated);
-        return updated;
-      });
-
-      const isSuccessfulStatus =
-        result.status === "BRIDGE_ACKNOWLEDGED" || result.status === "SENT_TO_SPOOLER";
+      const countMsg = receiptsToPrint.length > 1 ? ` (${receiptsToPrint.length} mitra)` : "";
 
       return {
-        success: isSuccessfulStatus,
-        job: finalizedJob,
-        message: isSuccessfulStatus
-          ? "Struk pelanggan berhasil diteruskan ke printer kasir."
-          : result.errorInfo || "Gagal mencetak struk kasir.",
+        success: allSuccess,
+        job: primaryJob,
+        jobs: createdJobs,
+        message: allSuccess
+          ? `Struk pelanggan${countMsg} diteruskan ke printer kasir.`
+          : lastErrorInfo || "Gagal mencetak struk kasir.",
       };
     },
-    [activeCustomerPrinter, activeOutletId]
+    [activeCustomerPrinter, activeOutletId, settings.splitCustomerReceiptPerTenant]
   );
 
   // 8. Helper to print from an OrderRecord (used by Orders page & KDS)
@@ -600,6 +635,7 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         orderType: order.orderType,
         purpose,
         sequenceNumber: options?.sequenceNumber,
+        kitchenNotes: order.notes,
         items: (order.items || []).map((i) => ({
           id: i.id,
           productName: i.productName,
@@ -607,8 +643,9 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
           modifiers: i.modifiers,
           notes: i.notes,
           tenantId: i.tenantId,
+          tenantName: getTenantName(i.tenantId),
         })),
-        cashierName: options?.cashierName || "Kasir / Staff",
+        cashierName: options?.cashierName || order.cashierName || "Kasir / Staff",
         timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
         reprintedBy: options?.reprintedBy,
       };

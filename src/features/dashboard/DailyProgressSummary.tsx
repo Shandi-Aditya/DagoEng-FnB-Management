@@ -3,8 +3,12 @@
 import { EmptyState } from "@/components/app/empty-state";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { useAuth } from "@/contexts/AuthContext";
+import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { formatCurrencyIDR } from "@/lib/utils";
+
+import { computeDashboardFnbRevenue, scopeDashboardOrders } from "./dashboard-metrics";
 
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -18,11 +22,23 @@ function Metric({ label, value, hint }: { label: string; value: string; hint?: s
 
 /** Order processing progress for the selected period. */
 export function DailyProgressSummary() {
+  const { user } = useAuth();
+  const { isDateInRange } = useDateFilter();
   const { filteredOrders } = useOrders();
 
-  const revenue = filteredOrders.reduce((sum, order) => sum + order.total, 0);
-  const total = filteredOrders.length;
-  const completed = filteredOrders.filter((order) => order.status === "COMPLETED" || order.status === "SERVED").length;
+  const isTenantOwner = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
+  const tenantId = user?.tenant?.id;
+
+  const scopedOrders = scopeDashboardOrders(filteredOrders, {
+    tenantId,
+    isTenantOwner,
+    isDateInRange,
+    requirePaid: true,
+  });
+
+  const revenue = computeDashboardFnbRevenue(scopedOrders, { isTenantOwner, tenantId });
+  const total = scopedOrders.length;
+  const completed = scopedOrders.filter((order) => order.status === "COMPLETED" || order.status === "SERVED").length;
   const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (

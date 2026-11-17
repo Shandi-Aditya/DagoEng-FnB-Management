@@ -1,10 +1,46 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AuthenticatedUser, RoleSlug, BusinessModuleCode, ScopeLevel, PersonaKey } from "@/types/auth";
 import { getTenantName } from "@/lib/tenant";
 
 export type { PersonaKey } from "@/types/auth";
+
+export const STAFF_IDLE_TIMEOUT_MS = 8 * 60 * 60 * 1000;
+export const STAFF_ACTIVITY_STORAGE_KEY = "dagoeng_last_activity_at";
+
+export function isStaffRole(role: RoleSlug | string | null | undefined): boolean {
+  return Boolean(role && role !== "CUSTOMER");
+}
+
+export function isStaffIdleExpired(
+  lastActivityAtMs: number | null | undefined,
+  nowMs: number = Date.now(),
+  timeoutMs: number = STAFF_IDLE_TIMEOUT_MS
+): boolean {
+  if (lastActivityAtMs === null || lastActivityAtMs === undefined || !Number.isFinite(lastActivityAtMs)) {
+    return false;
+  }
+  return nowMs - lastActivityAtMs >= timeoutMs;
+}
+
+export function getCookieValue(name: string, cookieString?: string): string | null {
+  const rawCookie =
+    cookieString !== undefined
+      ? cookieString
+      : typeof document !== "undefined"
+        ? document.cookie
+        : "";
+  if (!rawCookie) return null;
+  const prefix = `${name}=`;
+  for (const part of rawCookie.split(";")) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(prefix)) {
+      return decodeURIComponent(trimmed.slice(prefix.length));
+    }
+  }
+  return null;
+}
 
 interface AuthContextType {
   user: AuthenticatedUser | null;
@@ -293,40 +329,129 @@ function syncPersonaCookie(personaKey: string | null) {
   }
 }
 
+function ensurePersonaCookieSynced(
+  personaKey: string,
+  currentCookie: string | null,
+  currentExpCookie: string | null
+) {
+  if (currentCookie !== personaKey || !currentExpCookie) {
+    syncPersonaCookie(personaKey);
+  }
+}
+
+function syncStaffActivityKey(roleSlug: RoleSlug | string | undefined): void {
+  if (isStaffRole(roleSlug)) {
+    localStorage.setItem(STAFF_ACTIVITY_STORAGE_KEY, String(Date.now()));
+  } else {
+    localStorage.removeItem(STAFF_ACTIVITY_STORAGE_KEY);
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Default perspective: null (Guest / Unauthenticated until explicit login or saved session)
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
-  // Default Active Modules in Organization: F&B + Co-working (Commercial is INACTIVE by default)
   const [activeOrgModules, setActiveOrgModules] = useState<BusinessModuleCode[]>(["CORE", "FNB", "CO_WORKING"]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
+
+  const clearClientSessionStorage = useCallback(() => {
+    localStorage.removeItem("dagoeng_active_persona");
+    localStorage.removeItem("dagoeng_custom_customer");
+    localStorage.removeItem(STAFF_ACTIVITY_STORAGE_KEY);
+    syncPersonaCookie(null);
+  }, []);
+
+  const logout = useCallback(async () => {
+    setIsLoggingOut(true);
+    setUser(null);
+    clearClientSessionStorage();
+    localStorage.setItem("dagoeng_is_logged_out", "true");
+
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        keepalive: true,
+      });
+    } catch (e) {
+      console.error("Logout network call error:", e);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }, [clearClientSessionStorage]);
 
   useEffect(() => {
     const isLoggedOut = localStorage.getItem("dagoeng_is_logged_out") === "true";
     if (isLoggedOut) {
       setUser(null);
-      syncPersonaCookie(null);
+      clearClientSessionStorage();
       setIsLoading(false);
       return;
     }
+
+    const params = new URLSearchParams(window.location.search);
+    const authReason = params.get("reason");
+    const personaCookie = getCookieValue("dagoeng_active_persona");
+    const personaExpCookie = getCookieValue("dagoeng_persona_exp");
+    const hasExpiredPersonaExp =
+      personaExpCookie !== null &&
+      (!Number.isFinite(Number(personaExpCookie)) || Number(personaExpCookie) <= Date.now());
+    const savedKey = localStorage.getItem("dagoeng_active_persona") as PersonaKey | null;
+    const isMissingPersonaCookie = Boolean(savedKey) && !personaCookie;
+
+    const hasInvalidatedSessionSignal =
+      authReason === "expired" ||
+      authReason === "revoked" ||
+      hasExpiredPersonaExp ||
+      isMissingPersonaCookie;
+
+    if (hasInvalidatedSessionSignal) {
+      setUser(null);
+      clearClientSessionStorage();
+      setIsLoading(false);
+      return;
+    }
+
+    const abortIfStaffIdleExpired = (roleSlug: RoleSlug | string | undefined): boolean => {
+      if (!isStaffRole(roleSlug)) return false;
+      const lastActivityRaw = localStorage.getItem(STAFF_ACTIVITY_STORAGE_KEY);
+      if (
+        lastActivityRaw &&
+        isStaffIdleExpired(Number(lastActivityRaw), Date.now(), STAFF_IDLE_TIMEOUT_MS)
+      ) {
+        setUser(null);
+        clearClientSessionStorage();
+        localStorage.setItem("dagoeng_is_logged_out", "true");
+        void fetch("/api/auth/logout", { method: "POST", keepalive: true }).catch(() => {});
+        setIsLoading(false);
+        if (window.location.pathname !== "/login") {
+          window.location.assign("/login?reason=expired");
+        }
+        return true;
+      }
+      if (!lastActivityRaw) {
+        localStorage.setItem(STAFF_ACTIVITY_STORAGE_KEY, String(Date.now()));
+      }
+      return false;
+    };
+
     const savedCustom = localStorage.getItem("dagoeng_custom_customer");
     if (savedCustom) {
       try {
         const parsed = JSON.parse(savedCustom);
         if (parsed) {
-          // If this was actually a demo persona saved to custom_customer, resolve to canonical persona
           const personaMatch = Object.entries(DEMO_PERSONAS).find(
             ([_, p]) => p.email.toLowerCase() === parsed.email?.toLowerCase()
           );
           if (personaMatch) {
-            setUser(personaMatch[1]);
+            const matchedUser = personaMatch[1];
+            if (abortIfStaffIdleExpired(matchedUser.role.slug)) return;
+            setUser(matchedUser);
             localStorage.setItem("dagoeng_active_persona", personaMatch[0]);
             localStorage.removeItem("dagoeng_custom_customer");
-            syncPersonaCookie(personaMatch[0]);
+            ensurePersonaCookieSynced(personaMatch[0], personaCookie, personaExpCookie);
             setIsLoading(false);
             return;
           }
 
-          // Normalize role if stored as string
           if (typeof parsed.role === "string") {
             const rSlug = parsed.role as RoleSlug;
             parsed.role = {
@@ -336,8 +461,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             };
           }
 
+          if (abortIfStaffIdleExpired(parsed.role?.slug)) return;
+
           setUser(parsed);
-          // Do not poison custom user session with CUSTOMER_DEMO persona; rely on verified session
           syncPersonaCookie(null);
           setIsLoading(false);
           return;
@@ -346,9 +472,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error(e);
       }
     }
-    const savedKey = localStorage.getItem("dagoeng_active_persona") as PersonaKey | null;
+
     if (savedKey && DEMO_PERSONAS[savedKey]) {
       let initialUser = DEMO_PERSONAS[savedKey];
+      if (abortIfStaffIdleExpired(initialUser.role.slug)) return;
       if (initialUser?.tenant?.id) {
         const freshName = getTenantName(initialUser.tenant.id);
         if (freshName && freshName !== initialUser.tenant.name) {
@@ -359,13 +486,126 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       setUser(initialUser);
-      syncPersonaCookie(savedKey);
+      ensurePersonaCookieSynced(savedKey, personaCookie, personaExpCookie);
     } else {
       setUser(null);
       syncPersonaCookie(null);
     }
     setIsLoading(false);
-  }, []);
+  }, [clearClientSessionStorage]);
+
+  useEffect(() => {
+    if (isLoading || !user || !isStaffRole(user.role.slug)) return;
+    if (typeof window === "undefined") return;
+
+    let cancelled = false;
+    const recordActivity = () => {
+      try {
+        localStorage.setItem(STAFF_ACTIVITY_STORAGE_KEY, String(Date.now()));
+      } catch {}
+    };
+
+    if (!localStorage.getItem(STAFF_ACTIVITY_STORAGE_KEY)) {
+      recordActivity();
+    }
+
+    const checkIdleTimeout = () => {
+      if (cancelled) return;
+      const raw = localStorage.getItem(STAFF_ACTIVITY_STORAGE_KEY);
+      const lastMs = raw ? Number(raw) : NaN;
+      if (Number.isFinite(lastMs) && isStaffIdleExpired(lastMs, Date.now(), STAFF_IDLE_TIMEOUT_MS)) {
+        cancelled = true;
+        void logout().finally(() => {
+          if (window.location.pathname !== "/login") {
+            window.location.assign("/login?reason=expired");
+          }
+        });
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        checkIdleTimeout();
+      }
+    };
+
+    window.addEventListener("pointerdown", recordActivity, { passive: true });
+    window.addEventListener("keydown", recordActivity, { passive: true });
+    window.addEventListener("focus", checkIdleTimeout);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const intervalId = window.setInterval(checkIdleTimeout, 30_000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("pointerdown", recordActivity);
+      window.removeEventListener("keydown", recordActivity);
+      window.removeEventListener("focus", checkIdleTimeout);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.clearInterval(intervalId);
+    };
+  }, [user, isLoading, logout]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "test") return;
+    if (isLoading || !user) return;
+    if (typeof window === "undefined") return;
+
+    let cancelled = false;
+    let isChecking = false;
+
+    const verifyServerSession = async () => {
+      if (cancelled || isChecking) return;
+      isChecking = true;
+      try {
+        let res: Response;
+        try {
+          res = await fetch("/api/auth/session", {
+            method: "GET",
+            cache: "no-store",
+            credentials: "same-origin",
+          });
+        } catch {
+          return;
+        }
+        if (cancelled) return;
+        if (res.status === 401) {
+          const data = await res.json().catch(() => ({}));
+          const reason = data?.code === "SESSION_EXPIRED" ? "expired" : "revoked";
+          cancelled = true;
+          await logout();
+          if (window.location.pathname !== "/login") {
+            window.location.assign(`/login?reason=${reason}`);
+          }
+        }
+      } finally {
+        isChecking = false;
+      }
+    };
+
+    void verifyServerSession();
+
+    const handleFocus = () => {
+      void verifyServerSession();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void verifyServerSession();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const intervalId = window.setInterval(() => {
+      void verifyServerSession();
+    }, 60_000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.clearInterval(intervalId);
+    };
+  }, [user, isLoading, logout]);
 
   useEffect(() => {
     const handleTenantUpdated = () => {
@@ -411,6 +651,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("dagoeng_is_logged_out");
       localStorage.removeItem("dagoeng_custom_customer");
       localStorage.setItem("dagoeng_active_persona", matchedKey);
+      syncStaffActivityKey(targetUser.role.slug);
       if (typeof document !== "undefined") {
         document.cookie = "dagoeng_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
       }
@@ -440,6 +681,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("dagoeng_is_logged_out");
       localStorage.setItem("dagoeng_custom_customer", JSON.stringify(normalizedUser));
       localStorage.removeItem("dagoeng_active_persona");
+      syncStaffActivityKey(normalizedUser.role.slug);
       syncPersonaCookie(null);
       if (normalizedUser.email) {
         localStorage.setItem("dago_organizer_email", normalizedUser.email);
@@ -466,30 +708,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     setUser(customCustomer);
     localStorage.removeItem("dagoeng_is_logged_out");
+    localStorage.removeItem(STAFF_ACTIVITY_STORAGE_KEY);
     localStorage.setItem("dagoeng_custom_customer", JSON.stringify(customCustomer));
     localStorage.setItem("dagoeng_active_persona", "CUSTOMER_DEMO");
     syncPersonaCookie("CUSTOMER_DEMO");
     setIsLoading(false);
     return customCustomer;
-  };
-
-  const logout = async () => {
-    // Immediate, clean client state reset (best practice)
-    setUser(null);
-    localStorage.removeItem("dagoeng_active_persona");
-    localStorage.removeItem("dagoeng_custom_customer");
-    localStorage.setItem("dagoeng_is_logged_out", "true");
-    syncPersonaCookie(null);
-
-    // Server-side session invalidation with keepalive so network doesn't delay UI
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        keepalive: true,
-      });
-    } catch (e) {
-      console.error("Logout network call error:", e);
-    }
   };
 
   const switchPersona = async (personaKey: PersonaKey) => {
@@ -499,6 +723,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("dagoeng_is_logged_out");
       localStorage.removeItem("dagoeng_custom_customer");
       localStorage.setItem("dagoeng_active_persona", personaKey);
+      syncStaffActivityKey(target.role.slug);
       if (typeof document !== "undefined") {
         document.cookie = "dagoeng_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
       }
@@ -516,7 +741,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         activeOrgModules,
         toggleOrgModule,
         isLoading,
-        isLoggingOut: false,
+        isLoggingOut,
         login,
         loginCustomer,
         logout,

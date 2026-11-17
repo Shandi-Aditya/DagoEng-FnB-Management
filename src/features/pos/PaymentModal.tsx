@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Banknote,
@@ -108,6 +108,8 @@ export function PaymentModal({
   // Split bill tab state
   const [splitGuestCount, setSplitGuestCount] = useState<number>(2);
   const [splitGuests, setSplitGuests] = useState<SplitGuestBill[]>([]);
+  const isSubmittingRef = useRef<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -116,6 +118,7 @@ export function PaymentModal({
       setCashGiven(0);
       setCashInputRaw("");
       setQrisSecondsLeft(120);
+      setIsQrisProcessing(false);
       setIsGatewayVerified(false);
       setGatewayTxId(newTxId);
       setIsSimulatingWebhook(false);
@@ -126,6 +129,8 @@ export function PaymentModal({
       setSupervisorAuthError(null);
       setSupervisorOverrideData(null);
       setApprovalCode(`APP-${Math.floor(100000 + Math.random() * 900000)}`);
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
 
       if (grandTotal > 0) {
         fetch("/api/pos/qris/verify", {
@@ -141,17 +146,33 @@ export function PaymentModal({
 
       setSplitGuests(generateEqualSplitGuests(grandTotal, 2));
       setSplitGuestCount(2);
+    } else {
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
   }, [isOpen, grandTotal]);
 
   // QRIS countdown timer
+  const hasSplitQris = useMemo(
+    () => splitGuests.some((g) => g.paymentMethod === "QRIS"),
+    [splitGuests]
+  );
+
+  const splitQrisAmount = useMemo(
+    () =>
+      splitGuests
+        .filter((g) => g.paymentMethod === "QRIS")
+        .reduce((sum, g) => sum + (g.assignedAmount || 0), 0),
+    [splitGuests]
+  );
+
   useEffect(() => {
-    if (!isOpen || activeTab !== "QRIS") return;
+    if (!isOpen || (activeTab !== "QRIS" && !(activeTab === "SPLIT" && hasSplitQris))) return;
     const timer = setInterval(() => {
       setQrisSecondsLeft((prev) => (prev > 0 ? prev - 1 : 0));
     }, 1000);
     return () => clearInterval(timer);
-  }, [isOpen, activeTab]);
+  }, [isOpen, activeTab, hasSplitQris]);
 
   const quickDenominations = useMemo(
     () => generateCashSuggestions(grandTotal),
@@ -172,7 +193,8 @@ export function PaymentModal({
 
   // Poll server-side QRIS gateway status while waiting for webhook
   useEffect(() => {
-    if (!isOpen || activeTab !== "QRIS" || isQrisVerified || !gatewayTxId) return;
+    const needsQris = activeTab === "QRIS" || (activeTab === "SPLIT" && hasSplitQris);
+    if (!isOpen || !needsQris || isQrisVerified || !gatewayTxId) return;
     const pollInterval = setInterval(async () => {
       try {
         const res = await fetch(
@@ -197,7 +219,7 @@ export function PaymentModal({
       } catch {}
     }, 3000);
     return () => clearInterval(pollInterval);
-  }, [isOpen, activeTab, isQrisVerified, gatewayTxId, grandTotal]);
+  }, [isOpen, activeTab, hasSplitQris, isQrisVerified, gatewayTxId, grandTotal]);
 
   if (!isOpen) return null;
 
@@ -300,8 +322,12 @@ export function PaymentModal({
   };
 
   const handleCompletePayment = () => {
+    if (isSubmittingRef.current || isQrisProcessing) return;
+
     if (activeTab === "CASH") {
       if (!isCashSufficient) return;
+      isSubmittingRef.current = true;
+      setIsSubmitting(true);
       onPaymentSuccess({
         method: "CASH",
         amountPaid: cashGiven,
@@ -309,6 +335,8 @@ export function PaymentModal({
       });
     } else if (activeTab === "QRIS") {
       if (!isQrisVerified) return;
+      isSubmittingRef.current = true;
+      setIsSubmitting(true);
       setIsQrisProcessing(true);
       setTimeout(() => {
         setIsQrisProcessing(false);
@@ -327,6 +355,8 @@ export function PaymentModal({
         });
       }, 400);
     } else if (activeTab === "EDC") {
+      isSubmittingRef.current = true;
+      setIsSubmitting(true);
       onPaymentSuccess({
         method: "EDC",
         amountPaid: grandTotal,
@@ -334,14 +364,218 @@ export function PaymentModal({
       });
     } else if (activeTab === "SPLIT") {
       if (!splitBalance.isValid) return;
+      if (hasSplitQris && !isQrisVerified) return;
+      isSubmittingRef.current = true;
+      setIsSubmitting(true);
+      const splitQrisData: QRISVerificationDetail | undefined = hasSplitQris
+        ? supervisorOverrideData || {
+            type: "GATEWAY_WEBHOOK",
+            referenceNumber: gatewayTxId,
+            invoiceNumber: gatewayTxId,
+            verifiedAt: new Date().toISOString(),
+            note: "Terverifikasi otomatis via gateway QRIS (Bagi tagihan)",
+          }
+        : undefined;
       onPaymentSuccess({
         method: "SPLIT",
         amountPaid: grandTotal,
         changeDue: 0,
         splitDetails: splitGuests,
+        qrisVerification: splitQrisData,
       });
     }
   };
+
+  const renderQrisVerificationBlock = (displayAmount: number, titleLabel?: string) => (
+    <div className="flex flex-col items-center justify-center space-y-4 py-2 text-center">
+      {titleLabel ? (
+        <div className="w-full rounded-lg border bg-muted/30 px-3 py-2 text-left">
+          <p className="font-medium text-foreground">{titleLabel}</p>
+          <p className="text-muted-foreground">
+            Nominal QRIS:{" "}
+            <span className="font-mono font-medium tabular-nums text-foreground">
+              {formatCurrencyIDR(displayAmount)}
+            </span>
+          </p>
+        </div>
+      ) : null}
+
+      <div className="relative rounded-2xl border-2 border-dashed border-primary/40 bg-card p-4 shadow-xs">
+        <div className="relative flex size-44 flex-col items-center justify-center overflow-hidden rounded-xl border bg-white p-2 text-foreground">
+          <img
+            src="/images/qris/qris-dago.jpeg"
+            alt="QRIS Statis Dago"
+            className="size-full object-contain"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground font-medium">
+          <Clock className="size-3.5 text-primary" />
+          <span>
+            Masa berlaku QR:{" "}
+            <strong className="font-mono text-foreground">
+              {formatQrisCountdown(qrisSecondsLeft)} ({qrisSecondsLeft}s)
+            </strong>
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Didukung oleh QRIS Nasional &bull; Invoice ID: {gatewayTxId}
+        </p>
+      </div>
+
+      {!isQrisVerified ? (
+        <div className="w-full max-w-md space-y-2 rounded-xl border border-warning/40 bg-warning/10 p-3.5 text-left">
+          <div className="flex items-start gap-2">
+            <Clock className="mt-0.5 size-4 shrink-0 text-warning animate-pulse" />
+            <div>
+              <h4 className="text-xs font-semibold text-foreground">
+                Menunggu notifikasi gateway QRIS
+              </h4>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Kasir dilarang menandai lunas manual tanpa webhook gateway atau otorisasi PIN supervisor.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 border-t border-warning/20 pt-2 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isSimulatingWebhook}
+              onClick={handleCheckGatewayStatus}
+              className="w-full justify-center"
+            >
+              <RefreshCw className={cn("size-3.5", isSimulatingWebhook && "animate-spin")} />
+              <span>{isSimulatingWebhook ? "Memeriksa..." : "Cek status gateway"}</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSupervisorAuth((prev) => !prev)}
+              className="w-full justify-center"
+            >
+              <Lock className="size-3.5" />
+              <span>{showSupervisorAuth ? "Tutup otorisasi" : "Otorisasi manual PIN"}</span>
+            </Button>
+          </div>
+        </div>
+      ) : isGatewayVerified ? (
+        <div className="flex w-full max-w-md items-start gap-2.5 rounded-xl border border-success/40 bg-success/10 p-3.5 text-left">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
+          <div className="flex-1 text-xs">
+            <span className="block font-semibold text-foreground">
+              Pembayaran QRIS terverifikasi gateway
+            </span>
+            <span className="block font-mono text-xs text-muted-foreground">
+              Ref: {gatewayTxId} &bull; Status: Lunas
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="flex w-full max-w-md items-start gap-2.5 rounded-xl border border-info/40 bg-info/10 p-3.5 text-left">
+          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-info" />
+          <div className="flex-1 text-xs">
+            <span className="block font-semibold text-foreground">
+              Otorisasi QRIS statis disetujui (PIN supervisor OK)
+            </span>
+            <span className="block font-mono text-xs text-muted-foreground">
+              Ref RRN: {supervisorOverrideData?.referenceNumber} &bull; Tercatat di audit log
+            </span>
+          </div>
+        </div>
+      )}
+
+      {showSupervisorAuth && !isQrisVerified && (
+        <form
+          onSubmit={handleAuthorizeSupervisor}
+          className="w-full max-w-md space-y-3 rounded-xl border bg-muted/30 p-4 text-left shadow-xs"
+        >
+          <div className="flex items-center gap-2 border-b border-border pb-2">
+            <KeyRound className="size-4 text-primary" />
+            <h4 className="text-xs font-semibold text-foreground">
+              Otorisasi QRIS statis oleh supervisor
+            </h4>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Gunakan bila tamu membayar via QRIS statis kasir/meja. Membutuhkan PIN supervisor dan nomor referensi struk bank.
+          </p>
+
+          {supervisorAuthError ? (
+            <Alert variant="destructive">
+              <AlertTriangle className="size-4" />
+              <AlertDescription>{supervisorAuthError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <Label htmlFor="supervisor-pin" className="text-xs font-medium text-foreground">
+                PIN supervisor
+              </Label>
+              <Input
+                id="supervisor-pin"
+                type="password"
+                maxLength={6}
+                required
+                value={supervisorPin}
+                onChange={(e) => setSupervisorPin(e.target.value)}
+                placeholder="Masukkan PIN supervisor"
+                className="font-mono text-xs"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="supervisor-rrn" className="text-xs font-medium text-foreground">
+                Nomor referensi bank (RRN / Ref ID)
+              </Label>
+              <Input
+                id="supervisor-rrn"
+                type="text"
+                required
+                value={referenceNumber}
+                onChange={(e) => setReferenceNumber(e.target.value)}
+                placeholder="Contoh: RRN-20261114-001"
+                className="font-mono text-xs"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="supervisor-note" className="text-xs font-medium text-foreground">
+                Catatan otorisasi (opsional)
+              </Label>
+              <Input
+                id="supervisor-note"
+                type="text"
+                value={supervisorNote}
+                onChange={(e) => setSupervisorNote(e.target.value)}
+                placeholder="Misalnya: QRIS statis meja kasir"
+                className="text-xs"
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSupervisorAuth(false)}
+            >
+              Batal
+            </Button>
+            <Button type="submit" size="sm">
+              Verifikasi & setujui
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -401,186 +635,7 @@ export function PaymentModal({
         {/* Tab Body */}
         <div className="flex-1 space-y-4 overflow-y-auto p-6 text-xs text-foreground">
           {/* TAB 1: QRIS */}
-          {activeTab === "QRIS" && (
-            <div className="flex flex-col items-center justify-center space-y-4 py-2 text-center">
-              <div className="relative rounded-2xl border-2 border-dashed border-primary/40 bg-card p-4 shadow-xs">
-                <div className="relative flex size-44 flex-col items-center justify-center overflow-hidden rounded-xl border bg-white p-2 text-foreground">
-                  <img
-                    src="/images/qris/qris-dago.jpeg"
-                    alt="QRIS Statis Dago"
-                    className="size-full object-contain"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground font-medium">
-                  <Clock className="size-3.5 text-primary" />
-                  <span>
-                    Masa berlaku QR:{" "}
-                    <strong className="font-mono text-foreground">
-                      {formatQrisCountdown(qrisSecondsLeft)} ({qrisSecondsLeft}s)
-                    </strong>
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Didukung oleh QRIS Nasional &bull; Invoice ID: {gatewayTxId}
-                </p>
-              </div>
-
-              {/* Status Box */}
-              {!isQrisVerified ? (
-                <div className="w-full max-w-md space-y-2 rounded-xl border border-warning/40 bg-warning/10 p-3.5 text-left">
-                  <div className="flex items-start gap-2">
-                    <Clock className="mt-0.5 size-4 shrink-0 text-warning animate-pulse" />
-                    <div>
-                      <h4 className="text-xs font-semibold text-foreground">
-                        Menunggu notifikasi gateway QRIS
-                      </h4>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        Kasir dilarang menandai lunas manual tanpa webhook gateway atau otorisasi PIN supervisor.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2 border-t border-warning/20 pt-2 sm:grid-cols-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={isSimulatingWebhook}
-                      onClick={handleCheckGatewayStatus}
-                      className="w-full justify-center"
-                    >
-                      <RefreshCw className={cn("size-3.5", isSimulatingWebhook && "animate-spin")} />
-                      <span>{isSimulatingWebhook ? "Memeriksa..." : "Cek status gateway"}</span>
-                    </Button>
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowSupervisorAuth((prev) => !prev)}
-                      className="w-full justify-center"
-                    >
-                      <Lock className="size-3.5" />
-                      <span>{showSupervisorAuth ? "Tutup otorisasi" : "Otorisasi manual PIN"}</span>
-                    </Button>
-                  </div>
-                </div>
-              ) : isGatewayVerified ? (
-                <div className="flex w-full max-w-md items-start gap-2.5 rounded-xl border border-success/40 bg-success/10 p-3.5 text-left">
-                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
-                  <div className="flex-1 text-xs">
-                    <span className="block font-semibold text-foreground">
-                      Pembayaran QRIS terverifikasi gateway
-                    </span>
-                    <span className="block font-mono text-xs text-muted-foreground">
-                      Ref: {gatewayTxId} &bull; Status: Lunas
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex w-full max-w-md items-start gap-2.5 rounded-xl border border-info/40 bg-info/10 p-3.5 text-left">
-                  <ShieldCheck className="mt-0.5 size-4 shrink-0 text-info" />
-                  <div className="flex-1 text-xs">
-                    <span className="block font-semibold text-foreground">
-                      Otorisasi QRIS statis disetujui (PIN supervisor OK)
-                    </span>
-                    <span className="block font-mono text-xs text-muted-foreground">
-                      Ref RRN: {supervisorOverrideData?.referenceNumber} &bull; Tercatat di audit log
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {/* Form Input Otorisasi Supervisor */}
-              {showSupervisorAuth && !isQrisVerified && (
-                <form
-                  onSubmit={handleAuthorizeSupervisor}
-                  className="w-full max-w-md space-y-3 rounded-xl border bg-muted/30 p-4 text-left shadow-xs"
-                >
-                  <div className="flex items-center gap-2 border-b border-border pb-2">
-                    <KeyRound className="size-4 text-primary" />
-                    <h4 className="text-xs font-semibold text-foreground">
-                      Otorisasi QRIS statis oleh supervisor
-                    </h4>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Gunakan bila tamu membayar via QRIS statis kasir/meja. Membutuhkan PIN supervisor dan nomor referensi struk bank.
-                  </p>
-
-                  {supervisorAuthError ? (
-                    <Alert variant="destructive">
-                      <AlertTriangle className="size-4" />
-                      <AlertDescription>{supervisorAuthError}</AlertDescription>
-                    </Alert>
-                  ) : null}
-
-                  <div className="space-y-2">
-                    <div className="space-y-1">
-                      <Label htmlFor="supervisor-pin" className="text-xs font-medium text-foreground">
-                        PIN supervisor
-                      </Label>
-                      <Input
-                        id="supervisor-pin"
-                        type="password"
-                        maxLength={6}
-                        required
-                        value={supervisorPin}
-                        onChange={(e) => setSupervisorPin(e.target.value)}
-                        placeholder="Masukkan PIN supervisor"
-                        className="font-mono text-xs"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label htmlFor="supervisor-rrn" className="text-xs font-medium text-foreground">
-                        Nomor referensi bank (RRN / Ref ID)
-                      </Label>
-                      <Input
-                        id="supervisor-rrn"
-                        type="text"
-                        required
-                        value={referenceNumber}
-                        onChange={(e) => setReferenceNumber(e.target.value)}
-                        placeholder="Contoh: RRN-20261114-001"
-                        className="font-mono text-xs"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label htmlFor="supervisor-note" className="text-xs font-medium text-foreground">
-                        Catatan otorisasi (opsional)
-                      </Label>
-                      <Input
-                        id="supervisor-note"
-                        type="text"
-                        value={supervisorNote}
-                        onChange={(e) => setSupervisorNote(e.target.value)}
-                        placeholder="Misalnya: QRIS statis meja kasir"
-                        className="text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowSupervisorAuth(false)}
-                    >
-                      Batal
-                    </Button>
-                    <Button type="submit" size="sm">
-                      Verifikasi & setujui
-                    </Button>
-                  </div>
-                </form>
-              )}
-            </div>
-          )}
+          {activeTab === "QRIS" && renderQrisVerificationBlock(grandTotal)}
 
           {/* TAB 2: TUNAI */}
           {activeTab === "CASH" && (
@@ -846,6 +901,15 @@ export function PaymentModal({
                   </div>
                 ))}
               </div>
+
+              {hasSplitQris ? (
+                <div className="border-t border-border pt-3">
+                  {renderQrisVerificationBlock(
+                    splitQrisAmount,
+                    "Verifikasi pembayaran QRIS pada bagi tagihan"
+                  )}
+                </div>
+              ) : null}
             </div>
           )}
         </div>
@@ -856,6 +920,7 @@ export function PaymentModal({
             type="button"
             variant="outline"
             size="lg"
+            disabled={isQrisProcessing || isSubmitting}
             onClick={onClose}
             className="w-24 shrink-0 sm:w-28"
           >
@@ -867,16 +932,17 @@ export function PaymentModal({
             size="lg"
             disabled={
               (activeTab === "CASH" && !isCashSufficient) ||
-              (activeTab === "SPLIT" && !splitBalance.isValid) ||
+              (activeTab === "SPLIT" && (!splitBalance.isValid || (hasSplitQris && !isQrisVerified))) ||
               (activeTab === "QRIS" && !isQrisVerified) ||
-              isQrisProcessing
+              isQrisProcessing ||
+              isSubmitting
             }
             onClick={handleCompletePayment}
             className="flex-1 min-w-0"
           >
-            {isQrisProcessing ? (
+            {isQrisProcessing || isSubmitting ? (
               <span>Memproses transaksi...</span>
-            ) : activeTab === "QRIS" && !isQrisVerified ? (
+            ) : (activeTab === "QRIS" || (activeTab === "SPLIT" && hasSplitQris)) && !isQrisVerified ? (
               <span className="flex items-center justify-center gap-2 truncate">
                 <Clock className="size-4 animate-spin text-warning shrink-0" />
                 <span className="truncate">Menunggu pembayaran QRIS</span>

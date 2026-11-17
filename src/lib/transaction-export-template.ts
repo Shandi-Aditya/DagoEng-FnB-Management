@@ -1,5 +1,9 @@
 import ExcelJS from "exceljs";
-import { format } from "date-fns";
+import {
+  formatWitaDateTime,
+  getTodayWitaDateString,
+  toWitaDateKey,
+} from "@/contexts/DateFilterContext";
 import type { OrderRecord } from "@/types/order";
 import type { MasterProduct } from "@/types/product";
 import {
@@ -94,35 +98,38 @@ export function formatPeriodRange(
   endDate?: Date | string
 ): string {
   if (startDate && endDate) {
-    const s = typeof startDate === "string" ? new Date(startDate) : startDate;
-    const e = typeof endDate === "string" ? new Date(endDate) : endDate;
-    if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
-      return `${format(s, "dd/MM/yyyy")} s/d ${format(e, "dd/MM/yyyy")}`;
+    const startFormatted = formatWitaDateTime(startDate, "dd/MM/yyyy");
+    const endFormatted = formatWitaDateTime(endDate, "dd/MM/yyyy");
+    if (startFormatted && endFormatted) {
+      return `${startFormatted} s/d ${endFormatted}`;
     }
   }
 
   if (orders.length > 0) {
-    const timestamps = orders
-      .map((o) => new Date(o.createdAt).getTime())
-      .filter((t) => !isNaN(t))
-      .sort((a, b) => a - b);
-    if (timestamps.length > 0) {
-      const first = new Date(timestamps[0]);
-      const last = new Date(timestamps[timestamps.length - 1]);
-      return `${format(first, "dd/MM/yyyy")} s/d ${format(last, "dd/MM/yyyy")}`;
+    const dateKeys = orders
+      .map((o) => toWitaDateKey(o.createdAt))
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+    if (dateKeys.length > 0) {
+      const first = formatWitaDateTime(dateKeys[0], "dd/MM/yyyy");
+      const last = formatWitaDateTime(dateKeys[dateKeys.length - 1], "dd/MM/yyyy");
+      if (first && last) {
+        return `${first} s/d ${last}`;
+      }
     }
   }
 
-  const today = new Date();
-  return `${format(today, "dd/MM/yyyy")} s/d ${format(today, "dd/MM/yyyy")}`;
+  const today = formatWitaDateTime(getTodayWitaDateString(), "dd/MM/yyyy");
+  return `${today} s/d ${today}`;
 }
 
 export async function buildTransactionTemplateWorkbook(
   params: TransactionExportParams
 ): Promise<ExcelJS.Workbook> {
   const { orders, products = [], startDate, endDate, tenantSplits } = params;
+  const paidOrders = orders.filter((o) => o.paymentStatus === "PAID" && o.status !== "CANCELLED");
   const activeSplits = tenantSplits || getAllTenantRevenueSplits();
-  const periodLabel = formatPeriodRange(orders, startDate, endDate);
+  const periodLabel = formatPeriodRange(paidOrders, startDate, endDate);
 
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Dago POS";
@@ -205,7 +212,7 @@ export async function buildTransactionTemplateWorkbook(
   }
 
   // Data rows
-  orders.forEach((o) => {
+  paidOrders.forEach((o) => {
     const isQris = o.paymentMethod === "QRIS";
     const subTotal = o.subtotal || 0;
     const taxTotal = o.tax || 0;
@@ -237,7 +244,7 @@ export async function buildTransactionTemplateWorkbook(
         : o.orderType || "dineIn";
 
     const paymentStatus = (o.paymentMethod || o.paymentStatus || "cash").toLowerCase();
-    const dt = format(new Date(o.createdAt), "dd/MM/yyyy HH:mm");
+    const dt = formatWitaDateTime(o.createdAt, "dd/MM/yyyy HH:mm");
 
     ws1.addRow([
       dt,
@@ -359,10 +366,10 @@ export async function buildTransactionTemplateWorkbook(
     }
   });
 
-  orders.forEach((o) => {
+  paidOrders.forEach((o) => {
     const isQris = o.paymentMethod === "QRIS";
     const payment = (o.paymentMethod || o.paymentStatus || "cash").toLowerCase();
-    const dt = format(new Date(o.createdAt), "dd/MM/yyyy HH:mm");
+    const dt = formatWitaDateTime(o.createdAt, "dd/MM/yyyy HH:mm");
 
     let orderValidGross = 0;
     o.items.forEach((item) => {

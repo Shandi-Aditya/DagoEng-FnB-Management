@@ -1,9 +1,23 @@
-import { RoleSlug } from "@/types/auth";
+import { RoleSlug, ScopeLevel } from "@/types/auth";
 
 export interface RouteAccessEvaluation {
   allowed: boolean;
   redirectTo?: string;
   reason?: string;
+}
+
+export const TENANT_OWNER_BLOCKED_PREFIXES: readonly string[] = [
+  "/coworking",
+  "/commercial",
+  "/employees",
+  "/events-admin",
+  "/activity-log",
+  "/customers",
+  "/events/checkin",
+];
+
+function matchesPrefix(pathname: string, prefix: string): boolean {
+  return pathname === prefix || pathname.startsWith(prefix + "/");
 }
 
 /**
@@ -66,6 +80,22 @@ export const ROUTE_PERMISSIONS: { prefix: string; allowedRoles: RoleSlug[] }[] =
     prefix: "/orders",
     allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER", "WAITER", "KITCHEN_STAFF"],
   },
+  {
+    prefix: "/customers",
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+  },
+  {
+    prefix: "/activity-log",
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+  },
+  {
+    prefix: "/ai-insight",
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+  },
+  {
+    prefix: "/menu",
+    allowedRoles: ["SUPER_ADMIN", "OWNER"],
+  },
 ];
 
 /**
@@ -101,10 +131,12 @@ export function isPublicRoute(pathname: string): boolean {
     pathname === "/login" ||
     pathname === "/register" ||
     pathname.startsWith("/api/auth/") ||
-    pathname.startsWith("/customer") ||
+    pathname === "/customer" ||
+    pathname.startsWith("/customer/") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/images") ||
-    pathname.startsWith("/api/system/health") ||
+    pathname === "/api/system/health" ||
+    pathname.startsWith("/api/system/health/") ||
     pathname === "/favicon.ico"
   ) {
     return true;
@@ -112,19 +144,41 @@ export function isPublicRoute(pathname: string): boolean {
   return false;
 }
 
-/**
- * Evaluates route access for a requested pathname and role.
- */
 export function evaluateRouteAccess(
   pathname: string,
   role: RoleSlug | null,
-  isSessionExpired: boolean = false
+  scopeLevel?: ScopeLevel | null,
+  isSessionExpired?: boolean
+): RouteAccessEvaluation;
+export function evaluateRouteAccess(
+  pathname: string,
+  role: RoleSlug | null,
+  isSessionExpired?: boolean,
+  scopeLevel?: ScopeLevel | null
+): RouteAccessEvaluation;
+export function evaluateRouteAccess(
+  pathname: string,
+  role: RoleSlug | null,
+  scopeOrExpired?: ScopeLevel | boolean | null,
+  expiredOrScope?: boolean | ScopeLevel | null
 ): RouteAccessEvaluation {
+  const isSessionExpired =
+    typeof scopeOrExpired === "boolean"
+      ? scopeOrExpired
+      : typeof expiredOrScope === "boolean"
+        ? expiredOrScope
+        : false;
+  const scopeLevel: ScopeLevel | null =
+    typeof scopeOrExpired === "string"
+      ? scopeOrExpired
+      : typeof expiredOrScope === "string"
+        ? expiredOrScope
+        : null;
+
   if (isPublicRoute(pathname)) {
     return { allowed: true };
   }
 
-  // Handle expired sessions
   if (isSessionExpired) {
     return {
       allowed: false,
@@ -133,7 +187,6 @@ export function evaluateRouteAccess(
     };
   }
 
-  // Handle unauthenticated requests
   if (!role) {
     return {
       allowed: false,
@@ -142,18 +195,25 @@ export function evaluateRouteAccess(
     };
   }
 
-  // SUPER_ADMIN has platform-wide unrestricted access
   if (role === "SUPER_ADMIN") {
     return { allowed: true };
   }
 
-  // Check matching route configuration
-  const matchingRule = ROUTE_PERMISSIONS.find((rule) => {
-    return pathname === rule.prefix || pathname.startsWith(rule.prefix + "/");
-  });
+  if (
+    role === "OWNER" &&
+    scopeLevel === "TENANT" &&
+    TENANT_OWNER_BLOCKED_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix))
+  ) {
+    return {
+      allowed: false,
+      redirectTo: "/dashboard",
+      reason: `FORBIDDEN: Tenant OWNER is not authorized to access ${pathname}`,
+    };
+  }
+
+  const matchingRule = ROUTE_PERMISSIONS.find((rule) => matchesPrefix(pathname, rule.prefix));
 
   if (!matchingRule) {
-    // Unmatched routes inside dashboard layout default to authenticated access
     return { allowed: true };
   }
 
@@ -161,7 +221,6 @@ export function evaluateRouteAccess(
     return { allowed: true };
   }
 
-  // Role is not permitted for this route: redirect to their default home
   const fallback = getDefaultRouteForRole(role);
   return {
     allowed: false,

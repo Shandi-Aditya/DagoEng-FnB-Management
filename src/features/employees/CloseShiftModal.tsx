@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Clock } from "lucide-react";
 import type { ShiftRecord } from "@/types/shift";
 import { formatCurrencyIDR } from "@/lib/utils";
@@ -38,12 +38,22 @@ export function CloseShiftModal({
     return (shift.openingCash || 0) + (shift.cashSales || 0) - (shift.refundAmount || 0);
   }, [shift]);
 
+  useEffect(() => {
+    if (isOpen) {
+      setActualCash(expectedCash);
+      setNotes("");
+    }
+  }, [isOpen, expectedCash, shift?.id]);
+
   const variance = actualCash - expectedCash;
+  const requiresVarianceNote = variance !== 0;
+  const isNoteMissing = requiresVarianceNote && !notes.trim();
 
   if (!shift) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isNoteMissing) return;
     onSubmit({
       actualCash: Math.max(0, actualCash),
       closingNotes: notes.trim() || undefined,
@@ -60,7 +70,7 @@ export function CloseShiftModal({
             <span>Tutup shift</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Pencocokan saldo uang tunai fisik di laci kas dengan kalkulasi sistem.
+            {shift.shiftName} · {shift.assignedCashierName}
           </DialogDescription>
         </DialogHeader>
 
@@ -79,6 +89,14 @@ export function CloseShiftModal({
                 {formatCurrencyIDR(shift.cashSales)}
               </span>
             </div>
+            {(shift.refundAmount || 0) > 0 ? (
+              <div className="flex justify-between text-destructive">
+                <span>Refund tunai</span>
+                <span className="font-mono font-medium tabular-nums">
+                  -{formatCurrencyIDR(shift.refundAmount)}
+                </span>
+              </div>
+            ) : null}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Penjualan nontunai</span>
               <span className="font-mono tabular-nums text-muted-foreground">
@@ -104,50 +122,56 @@ export function CloseShiftModal({
               step={1000}
               required
               value={actualCash}
-              onChange={(e) => setActualCash(Number(e.target.value))}
+              onChange={(e) => setActualCash(Math.max(0, Number(e.target.value) || 0))}
               className="text-xs font-mono font-medium"
             />
           </div>
 
           {/* Variance Indicator */}
-          {actualCash > 0 && (
-            <div
-              className={`flex items-center justify-between rounded-lg border p-3 text-xs ${
-                variance === 0
-                  ? "border-success/30 bg-success/10 text-success"
+          <div
+            className={`flex items-center justify-between rounded-lg border p-3 text-xs ${
+              variance === 0
+                ? "border-success/30 bg-success/10 text-success"
+                : variance < 0
+                ? "border-destructive/30 bg-destructive/10 text-destructive"
+                : "border-warning/30 bg-warning/10 text-warning"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="size-4 shrink-0" />
+              <span className="font-medium">
+                {variance === 0
+                  ? "Kas fisik cocok sempurna"
                   : variance < 0
-                  ? "border-destructive/30 bg-destructive/10 text-destructive"
-                  : "border-warning/30 bg-warning/10 text-warning"
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="size-4 shrink-0" />
-                <span className="font-medium">
-                  {variance === 0
-                    ? "Kas fisik cocok sempurna"
-                    : variance < 0
-                    ? "Selisih kurang (kas tekor)"
-                    : "Selisih lebih (kas berlebih)"}
-                </span>
-              </div>
-              <span className="font-mono font-semibold tabular-nums">
-                {formatCurrencyIDR(Math.abs(variance))}
+                  ? "Selisih kurang (kas tekor)"
+                  : "Selisih lebih (kas berlebih)"}
               </span>
             </div>
-          )}
+            <span className="font-mono font-semibold tabular-nums">
+              {formatCurrencyIDR(Math.abs(variance))}
+            </span>
+          </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="closing-notes" className="text-xs font-medium text-foreground">
-              Catatan closing
+              Catatan closing / alasan selisih
+              {requiresVarianceNote ? <span className="text-destructive"> *</span> : null}
             </Label>
             <Textarea
               id="closing-notes"
               rows={2}
-              placeholder="Catatan kendala shift atau penjelasan selisih..."
+              required={requiresVarianceNote}
+              placeholder="Catatan kendala shift atau penjelasan selisih kas"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
+              aria-invalid={isNoteMissing}
               className="text-xs"
             />
+            {isNoteMissing ? (
+              <p className="text-xs text-destructive">
+                Isi alasan selisih kas sebelum menutup shift.
+              </p>
+            ) : null}
           </div>
 
           <DialogFooter className="border-t pt-3">
@@ -159,7 +183,7 @@ export function CloseShiftModal({
             >
               Batal
             </Button>
-            <Button type="submit" size="lg">
+            <Button type="submit" size="lg" disabled={isNoteMissing}>
               Tutup shift
             </Button>
           </DialogFooter>
