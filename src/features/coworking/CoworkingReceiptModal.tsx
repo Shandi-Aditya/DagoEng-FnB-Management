@@ -246,7 +246,7 @@ export function CoworkingReceiptModal({
                   </div>
                 ) : (
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Pajak (bebas PB1 / non-pajak):</span>
+                    <span>Pajak (bebas PB1):</span>
                     <span className="tabular-nums">Rp 0</span>
                   </div>
                 )}

@@ -312,12 +312,12 @@ export function getReportCategories(params: {
 }
 
 /**
- * Mencari produk terlaris berdasarkan kuantitas pesanan.
+ * Mencari produk terlaris berdasarkan kuantitas pesanan yang berstatus lunas (PAID).
  */
-function findTopProduct(orders: OrderRecord[]): string {
+export function findTopProduct(orders: OrderRecord[]): string {
   const quantities: Record<string, number> = {};
   for (const order of orders) {
-    if (order.status === "CANCELLED") continue;
+    if (order.status === "CANCELLED" || order.paymentStatus !== "PAID") continue;
     for (const item of order.items) {
       quantities[item.productName] = (quantities[item.productName] || 0) + item.quantity;
     }
@@ -482,7 +482,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     case "PRODUCTS": {
       let totalMarginPctSum = 0;
       const tableRows = products.map((p) => {
-        const hpp = Math.round(p.basePrice * 0.28);
+        const hpp = p.cogsEstimate !== undefined && p.cogsEstimate > 0 ? p.cogsEstimate : Math.round(p.basePrice * 0.28);
         const marginRp = p.basePrice - hpp;
         const marginPct = p.basePrice > 0 ? (marginRp / p.basePrice) * 100 : 0;
         totalMarginPctSum += marginPct;

@@ -175,9 +175,11 @@ export default function EventDetailPage() {
     if (!event) return;
 
     const maxTickets = event.maxTicketsPerBooking || 5;
+    const hasTiers = Boolean(event.ticketTiers && event.ticketTiers.length > 0);
     const validation = validateBookingInput({
       ...bookingForm,
       maxTickets,
+      hasTiers,
     });
 
     if (!validation.isValid) {
@@ -479,27 +481,43 @@ export default function EventDetailPage() {
       </main>
 
       {/* Mobile Sticky Bottom CTA Bar */}
-      {!isPast && !event.availability?.isSoldOut && (
-        <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-background/95 backdrop-blur border-t p-3.5 px-4 flex items-center justify-between gap-4 shadow-lg">
-          <div>
-            <span className="text-xs text-muted-foreground block">Harga tiket</span>
-            <span className="font-mono tabular-nums font-medium text-sm text-foreground">
-              {event.isPaid ? formatCurrencyIDR(event.price) : "Gratis"}
-            </span>
-          </div>
+      {!isPast && !event.availability?.isSoldOut && (() => {
+        const hasTiers = Boolean(event.ticketTiers && event.ticketTiers.length > 0);
+        const tiers = event.ticketTiers || [];
+        const minPrice = hasTiers ? Math.min(...tiers.map((t) => Number(t.price || 0))) : event.price;
+        const maxPrice = hasTiers ? Math.max(...tiers.map((t) => Number(t.price || 0))) : event.price;
+        const mobilePrice = hasTiers
+          ? minPrice === 0 && maxPrice === 0
+            ? "Gratis"
+            : minPrice === maxPrice
+            ? formatCurrencyIDR(minPrice)
+            : `Mulai dari ${formatCurrencyIDR(minPrice)}`
+          : event.isPaid
+          ? formatCurrencyIDR(event.price)
+          : "Gratis";
 
-          <Button
-            size="lg"
-            onClick={() => {
-              setBookingError(null);
-              setIsBookingModalOpen(true);
-            }}
-          >
-            <Ticket className="size-3.5" />
-            <span>{event.isPaid ? "Pesan tiket" : "Daftar gratis"}</span>
-          </Button>
-        </div>
-      )}
+        return (
+          <div className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-background/95 backdrop-blur border-t p-3.5 px-4 flex items-center justify-between gap-4 shadow-lg">
+            <div>
+              <span className="text-xs text-muted-foreground block">Harga tiket</span>
+              <span className="font-mono tabular-nums font-medium text-sm text-foreground">
+                {mobilePrice}
+              </span>
+            </div>
+
+            <Button
+              size="lg"
+              onClick={() => {
+                setBookingError(null);
+                setIsBookingModalOpen(true);
+              }}
+            >
+              <Ticket className="size-3.5" />
+              <span>{event.isPaid || (hasTiers && maxPrice > 0) ? "Pesan tiket" : "Daftar gratis"}</span>
+            </Button>
+          </div>
+        );
+      })()}
 
       {/* Dialogs */}
       <EventBookingDialog

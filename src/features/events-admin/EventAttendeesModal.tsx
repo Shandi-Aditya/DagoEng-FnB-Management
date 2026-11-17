@@ -206,6 +206,11 @@ export function EventAttendeesModal({
                             <span className="font-mono text-xs font-medium text-foreground">
                               {b.ticketCode}
                             </span>
+                            {b.ticketTierName ? (
+                              <span className="text-xs text-muted-foreground font-medium">
+                                {b.ticketTierName}
+                              </span>
+                            ) : null}
                             {b.checkInTime ? (
                               <span className="text-xs text-muted-foreground">
                                 {new Date(b.checkInTime).toLocaleTimeString("id-ID", {
@@ -231,8 +236,8 @@ export function EventAttendeesModal({
                         </TableCell>
 
                         <TableCell className="hidden md:table-cell">
-                          <Badge variant={b.paymentStatus === "PAID" ? "default" : "secondary"}>
-                            {b.paymentStatus === "PAID" ? "Lunas" : "Menunggu"}
+                          <Badge variant={b.isInvitation || b.paymentMethod === "INVITATION" ? "outline" : b.paymentStatus === "PAID" ? "default" : "secondary"}>
+                            {b.isInvitation || b.paymentMethod === "INVITATION" ? "Undangan" : b.paymentStatus === "PAID" ? "Lunas" : "Menunggu"}
                           </Badge>
                         </TableCell>
 

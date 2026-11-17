@@ -52,7 +52,14 @@ interface CoworkingBookingPanelProps {
   onRemoveVoucher: () => void;
   cwAppliedPromo: PromoConfig | null;
   cwVoucherValidationMsg: { type: "SUCCESS" | "ERROR"; text: string } | null;
-  cwPricing: { originalSubtotal: number; discountAmount: number; tax: number; total: number };
+  cwPricing: {
+    originalSubtotal: number;
+    discountAmount: number;
+    tax: number;
+    total: number;
+    taxType?: string;
+    taxRatePercent?: number;
+  };
   isTaxEnabled: boolean;
   taxRatePercent: number;
   cwPaymentMethod: POSPaymentMethod;
@@ -436,14 +443,16 @@ export function CoworkingBookingPanel({
             </span>
           </div>
         )}
-        {isTaxEnabled && (
-          <div className="flex justify-between text-muted-foreground">
-            <span>Pajak PB1 ({taxRatePercent}%)</span>
-            <span className="font-mono tabular-nums">
-              {formatCurrencyIDR(cwPricing.tax)}
-            </span>
-          </div>
-        )}
+        <div className="flex justify-between text-muted-foreground">
+          <span>
+            {cwPricing.tax > 0
+              ? `Pajak (${cwPricing.taxType || "PPN"} ${cwPricing.taxRatePercent}%)`
+              : "Pajak (bebas PB1)"}
+          </span>
+          <span className="font-mono tabular-nums">
+            {formatCurrencyIDR(cwPricing.tax)}
+          </span>
+        </div>
         <div className="flex justify-between border-t border-border pt-1.5 text-sm font-medium text-foreground">
           <span>Total tagihan</span>
           <span className="font-mono tabular-nums text-foreground">

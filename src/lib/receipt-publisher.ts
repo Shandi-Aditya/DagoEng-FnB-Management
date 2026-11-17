@@ -16,8 +16,8 @@ export const DEMO_OUTLETS: OutletItem[] = [
     id: "outlet-sgr",
     name: "Singaraja (Pusat)",
     code: "KS-SGR",
-    address: "Jl. Ngurah Rai No. 45, Singaraja, Bali",
-    phone: "(0362) 23456",
+    address: "Jl. Teleng No. 1, Banyuasri, Kec. Buleleng, Kabupaten Buleleng, Bali 81116",
+    phone: "+62 821-1550-1995",
     status: "ACTIVE",
     badgeLabel: "● Beroperasi Aktif",
     isComingSoon: false,
@@ -57,7 +57,7 @@ export interface MasterOutletInfo {
 export const MASTER_HQ_OUTLET: MasterOutletInfo = {
   name: DEMO_OUTLETS[0].name,
   address: DEMO_OUTLETS[0].address,
-  phone: DEMO_OUTLETS[0].phone || "(0362) 23456",
+  phone: DEMO_OUTLETS[0].phone || "+62 821-1550-1995",
 };
 
 export interface ReceiptPublisherInfo {

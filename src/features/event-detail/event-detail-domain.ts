@@ -6,6 +6,9 @@ export interface BookingValidationInput {
   guestPhone: string;
   ticketCount: number;
   maxTickets: number;
+  ticketTierId?: string;
+  hasTiers?: boolean;
+  promoCode?: string;
 }
 
 export interface BookingValidationResult {
@@ -46,6 +49,10 @@ export function validateBookingInput(input: BookingValidationInput): BookingVali
   const phone = input.guestPhone.trim();
   if (!phone) {
     return { isValid: false, error: "Nomor WhatsApp wajib diisi." };
+  }
+
+  if (input.hasTiers && !input.ticketTierId) {
+    return { isValid: false, error: "Silakan pilih jenis tiket yang diinginkan." };
   }
 
   if (input.ticketCount < 1) {

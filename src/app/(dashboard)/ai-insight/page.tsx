@@ -42,7 +42,11 @@ export default function AIInsightPage() {
   );
   const scopedMaterials = filteredIngredients;
   const scopedProducts = products.filter(
-    (p) => activeOutletId === "ALL" || p.outletId === activeOutletId || !p.outletId
+    (p) =>
+      activeOutletId === "ALL" ||
+      p.outletId === "ALL" ||
+      p.outletId === activeOutletId ||
+      !p.outletId
   );
   const scopedBookings = bookings.filter(
     (b: any) => activeOutletId === "ALL" || !b.outletId || b.outletId === activeOutletId

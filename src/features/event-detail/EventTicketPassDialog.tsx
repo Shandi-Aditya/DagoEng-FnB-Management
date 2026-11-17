@@ -78,7 +78,11 @@ export function EventTicketPassDialog({
               E-Tiket Acara Komunitas
             </DialogTitle>
             <Badge variant={isPaid ? "default" : "secondary"} className="text-xs">
-              {isPaid ? "Lunas" : (ticket.paymentProofUrl ? "Menunggu verifikasi" : "Menunggu bayar")}
+              {ticket.isInvitation || ticket.paymentMethod === "INVITATION"
+                ? "Tiket Undangan"
+                : isPaid
+                ? "Lunas"
+                : (ticket.paymentProofUrl ? "Menunggu verifikasi" : "Menunggu bayar")}
             </Badge>
           </div>
           <DialogDescription className="text-xs text-muted-foreground truncate">
@@ -116,14 +120,24 @@ export function EventTicketPassDialog({
                 <span className="text-muted-foreground block text-xs truncate">
                   {ticket.guestEmail}
                 </span>
+                {ticket.ticketTierName && (
+                  <Badge variant="outline" className="mt-1 text-xs font-medium">
+                    {ticket.ticketTierName}
+                  </Badge>
+                )}
               </div>
               <div>
                 <span className="text-muted-foreground block text-xs">Jumlah & biaya</span>
                 <span className="font-mono font-medium text-foreground block text-xs">
-                  {ticket.ticketCount} tiket &bull; {ticket.totalPrice > 0 ? formatCurrencyIDR(ticket.totalPrice) : "Gratis"}
+                  {ticket.ticketCount} tiket &bull;{" "}
+                  {ticket.isInvitation || ticket.paymentMethod === "INVITATION"
+                    ? "Undangan"
+                    : ticket.totalPrice > 0
+                    ? formatCurrencyIDR(ticket.totalPrice)
+                    : "Gratis"}
                 </span>
                 <span className="text-muted-foreground block text-xs capitalize">
-                  {ticket.paymentMethod?.toLowerCase() || "—"}
+                  {ticket.isInvitation ? "Undangan resmi" : ticket.paymentMethod?.toLowerCase() || "—"}
                 </span>
               </div>
             </div>

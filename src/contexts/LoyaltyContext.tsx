@@ -37,13 +37,32 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
   const [members, setMembers] = useState<LoyaltyMember[]>(INITIAL_MEMBERS);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  // Calculate Tier dynamically based on configurable point settings
+  const calculateTierForPoints = (points: number): LoyaltyTier => {
+    const config = settings.loyaltyTiers;
+    if (points >= config.platinumMin) return "Platinum";
+    if (points >= config.goldMin) return "Gold";
+    if (points >= config.silverMin) return "Silver";
+    return "Bronze";
+  };
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_LOYALTY);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setMembers(parsed);
+          const sanitized = parsed.map((m: LoyaltyMember) => {
+            const hasManualOverride = m.tierHistory?.some((th) => th.isManualOverride);
+            if (!hasManualOverride) {
+              const expectedTier = calculateTierForPoints(m.points);
+              if (m.tier !== expectedTier) {
+                return { ...m, tier: expectedTier };
+              }
+            }
+            return m;
+          });
+          setMembers(sanitized);
         }
       }
     } catch (e) {
@@ -61,7 +80,17 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
             setMembers((prev) => {
               const serverMap = new Map(data.members.map((m: LoyaltyMember) => [m.id, m]));
               const localCustom = prev.filter((m) => !serverMap.has(m.id));
-              return [...data.members, ...localCustom];
+              const combined: LoyaltyMember[] = [...data.members, ...localCustom];
+              return combined.map((m: LoyaltyMember) => {
+                const hasManualOverride = m.tierHistory?.some((th: LoyaltyTierChangeLog) => th.isManualOverride);
+                if (!hasManualOverride) {
+                  const expectedTier = calculateTierForPoints(m.points);
+                  if (m.tier !== expectedTier) {
+                    return { ...m, tier: expectedTier };
+                  }
+                }
+                return m;
+              });
             });
           }
         })
@@ -77,15 +106,6 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to save loyalty members", e);
     }
   }, [members, isInitialized]);
-
-  // Calculate Tier dynamically based on configurable point settings
-  const calculateTierForPoints = (points: number): LoyaltyTier => {
-    const config = settings.loyaltyTiers;
-    if (points >= config.platinumMin) return "Platinum";
-    if (points >= config.goldMin) return "Gold";
-    if (points >= config.silverMin) return "Silver";
-    return "Bronze";
-  };
 
   const filteredMembers = members.filter((m) => {
     if (isAllOutlets) return true;

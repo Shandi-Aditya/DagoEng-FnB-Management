@@ -23,6 +23,7 @@ import {
   computeBookingPricing,
   calculateHourlyEndTime,
   spaceTypeLabel,
+  getTodayWitaDateString,
   type DailyPreset,
 } from "./coworking-domain";
 
@@ -73,7 +74,7 @@ export function NewBookingModal({
   defaultSpaceId,
   onSubmit,
 }: NewBookingModalProps) {
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const todayStr = useMemo(() => getTodayWitaDateString(), []);
 
   const [bookSpaceId, setBookSpaceId] = useState(defaultSpaceId || spaces[0]?.id || "");
   const [bookType, setBookType] = useState<"HOURLY" | "DAILY" | "MONTHLY">("HOURLY");

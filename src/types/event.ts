@@ -14,6 +14,51 @@ export type EventCategory =
   | "SEMINAR"
   | "OTHER";
 
+export interface EventTicketTier {
+  id: string;
+  name: string;
+  price: number;
+  quota: number;
+  description?: string;
+  salesStartDate?: string;
+  salesEndDate?: string;
+  isActive?: boolean;
+}
+
+export interface EventTicketTierAvailability {
+  tierId: string;
+  name: string;
+  price: number;
+  quota: number;
+  booked: number;
+  remaining: number;
+  isSoldOut: boolean;
+  salesStatus: "UPCOMING" | "ON_SALE" | "ENDED";
+  salesStartDate?: string;
+  salesEndDate?: string;
+  description?: string;
+}
+
+export type PromoDiscountType = "PERCENT" | "NOMINAL";
+
+export interface EventPromoCode {
+  id: string;
+  eventId: string;
+  code: string;
+  discountType: PromoDiscountType;
+  discountValue: number;
+  maxDiscountAmount?: number;
+  minOrderAmount?: number;
+  quota: number;
+  usedCount: number;
+  validFrom?: string;
+  validUntil?: string;
+  isActive: boolean;
+  applicableTierIds?: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CommunityEvent {
   id: string;
   title: string;
@@ -42,6 +87,8 @@ export interface CommunityEvent {
   maxCapacity?: number;
   maxTicketsPerBooking?: number; // Override batas pembelian tiket khusus event
   destinationBankId?: string | null; // Override rekening bank tujuan khusus event
+  ticketTiers?: EventTicketTier[];
+  promoCodes?: EventPromoCode[];
 
   // Collaboration requirements
   collaborationFacilities?: string[] | string | null;
@@ -156,6 +203,9 @@ export interface PublicCommunityEvent {
   organizerName: string;
   status: "APPROVED";
   guidelines?: string[] | null;
+  ticketTiers?: EventTicketTier[];
+  tierAvailability?: EventTicketTierAvailability[];
+  promoCodes?: Pick<EventPromoCode, "code" | "discountType" | "discountValue" | "maxDiscountAmount" | "minOrderAmount" | "validFrom" | "validUntil" | "isActive" | "applicableTierIds">[];
   availability?: EventTicketAvailability;
   createdAt: string;
 }
@@ -175,6 +225,7 @@ export interface EventSubmissionPayload {
   destinationBankId?: string;
   isPaid: boolean;
   price?: number;
+  ticketTiers?: EventTicketTier[];
   posterUrl: string;
   externalRegistrationUrl?: string;
   guidelines?: string[] | string | null;
@@ -192,7 +243,7 @@ export interface EventSubmissionPayload {
   revenueSplitReason?: string;
 }
 
-export type TicketPaymentMethod = "FREE" | "QRIS" | "CASH" | "TRANSFER" | "DOKU_CHECKOUT" | "MANUAL_TRANSFER";
+export type TicketPaymentMethod = "FREE" | "QRIS" | "CASH" | "TRANSFER" | "DOKU_CHECKOUT" | "MANUAL_TRANSFER" | "INVITATION";
 export type TicketPaymentStatus = "PAID" | "PENDING" | "CANCELLED" | "EXPIRED";
 export type AttendeeCheckInStatus = "REGISTERED" | "PARTIALLY_CHECKED_IN" | "CHECKED_IN";
 
@@ -239,6 +290,7 @@ export interface EventTicketAvailability {
   capacitySource: string;
   capacityDescription: string;
   isSoldOut: boolean;
+  tiers?: EventTicketTierAvailability[];
 }
 
 export interface EventTicketOrder {
@@ -252,12 +304,19 @@ export interface EventTicketOrder {
   guestEmail: string;
   guestPhone: string;
   institution?: string | null;
+  ticketTierId?: string;
+  ticketTierName?: string;
   ticketCount: number;
   checkedInQty?: number; // Jumlah tiket yang sudah check-in (0 <= checkedInQty <= ticketCount)
   checkedInSeats?: number[]; // Daftar nomor index tiket (1..ticketCount) yang sudah check-in
   seatCheckInTimes?: Record<string, string>; // Catatan timestamp waktu check-in per sub-tiket (key: seat number "1", "2")
   unitPrice: number;
+  subtotalPrice?: number;
+  discountAmount?: number;
   totalPrice: number;
+  promoCode?: string | null;
+  isInvitation?: boolean;
+  invitationNote?: string | null;
   platformFeePercent: number; // e.g. 20%
   platformFeeAmount: number;
   organizerRevenueAmount: number;
@@ -288,11 +347,24 @@ export interface EventBookingPayload {
   guestEmail: string;
   guestPhone: string;
   institution?: string;
+  ticketTierId?: string;
   ticketCount: number;
+  promoCode?: string;
   paymentMethod?: TicketPaymentMethod;
   destinationBankId?: string;
   honeypot?: string;
   enforceOfficialBank?: boolean;
+}
+
+export interface CreateInvitationPayload {
+  eventId: string;
+  guestName: string;
+  guestEmail: string;
+  guestPhone?: string;
+  institution?: string;
+  ticketTierId?: string;
+  ticketCount?: number;
+  invitationNote?: string;
 }
 
 export interface EventOperationalStats {
