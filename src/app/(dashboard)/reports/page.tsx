@@ -65,7 +65,11 @@ export default function ReportsPage() {
     (o) => activeOutletId === "ALL" || o.outletId === activeOutletId || !o.outletId
   );
   const filteredProducts = products.filter(
-    (p) => activeOutletId === "ALL" || p.outletId === activeOutletId || !p.outletId
+    (p) =>
+      activeOutletId === "ALL" ||
+      p.outletId === "ALL" ||
+      p.outletId === activeOutletId ||
+      !p.outletId
   );
   const filteredShifts = shifts.filter(
     (s) => activeOutletId === "ALL" || s.outletId === activeOutletId || !s.outletId
