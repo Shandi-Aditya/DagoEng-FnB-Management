@@ -14,6 +14,8 @@ import { CustomerHistoryModal } from "@/features/customers/CustomerHistoryModal"
 import {
   buildCustomerExportData,
   calculateCustomerKPIs,
+  canUserExportCustomers,
+  canUserViewFullCustomerContacts,
   filterMembers,
 } from "@/features/customers/customers-domain";
 import { CustomersReportPDFModal } from "@/features/customers/CustomersReportPDFModal";
@@ -33,10 +35,10 @@ export default function CustomersPage() {
   const [selectedMemberForHistory, setSelectedMemberForHistory] = useState<LoyaltyMember | null>(null);
   const [selectedMemberForOverride, setSelectedMemberForOverride] = useState<LoyaltyMember | null>(null);
 
-  const isOwnerOrAdmin =
-    user?.role.slug === "OWNER" ||
-    user?.role.slug === "SUPER_ADMIN" ||
-    user?.role.slug === "MANAGER";
+  const roleSlug = user?.role?.slug;
+  const isOwnerOrAdmin = canUserExportCustomers(roleSlug);
+  const canExport = isOwnerOrAdmin;
+  const canViewFullContact = canUserViewFullCustomerContacts(roleSlug);
 
   const kpis = useMemo(() => calculateCustomerKPIs(filteredMembers), [filteredMembers]);
 
@@ -46,6 +48,10 @@ export default function CustomersPage() {
   );
 
   const handleExportCSV = () => {
+    if (!canExport) {
+      notify.error("Akses ditolak", "Hanya Owner dan Manager yang dapat mengekspor data pelanggan.");
+      return;
+    }
     const { headers, rows } = buildCustomerExportData(filteredMembers);
     downloadCSV(
       `Data_Pelanggan_CRM_${activeOutlet?.name || "All"}_${Date.now()}`,
@@ -56,6 +62,10 @@ export default function CustomersPage() {
   };
 
   const handleExportExcel = () => {
+    if (!canExport) {
+      notify.error("Akses ditolak", "Hanya Owner dan Manager yang dapat mengekspor data pelanggan.");
+      return;
+    }
     const { headers, rows } = buildCustomerExportData(filteredMembers);
     downloadExcel(
       `Data_Pelanggan_CRM_${activeOutlet?.name || "All"}_${Date.now()}`,
@@ -92,9 +102,13 @@ export default function CustomersPage() {
       <CustomersToolbar
         outletName={activeOutlet?.name || "Singaraja Hub"}
         totalMembers={filteredMembers.length}
+        canExport={canExport}
         onExportExcel={handleExportExcel}
         onExportCSV={handleExportCSV}
-        onOpenPDF={() => setIsPDFModalOpen(true)}
+        onOpenPDF={() => {
+          if (!canExport) return;
+          setIsPDFModalOpen(true);
+        }}
         onOpenAddModal={() => setIsAddModalOpen(true)}
       />
 
@@ -130,6 +144,7 @@ export default function CustomersPage() {
         tierFilter={tierFilter}
         onTierFilterChange={setTierFilter}
         isOwnerOrAdmin={isOwnerOrAdmin}
+        canViewFullContact={canViewFullContact}
         onSelectMemberHistory={setSelectedMemberForHistory}
         onSelectMemberOverride={setSelectedMemberForOverride}
         onAddPointsQuick={handleAddPointsQuick}
@@ -153,12 +168,14 @@ export default function CustomersPage() {
         onSubmit={handleManualOverride}
       />
 
-      <CustomersReportPDFModal
-        isOpen={isPDFModalOpen}
-        onClose={() => setIsPDFModalOpen(false)}
-        members={filteredMembers}
-        outletName={activeOutlet?.name || "Semua Outlet"}
-      />
+      {canExport && (
+        <CustomersReportPDFModal
+          isOpen={isPDFModalOpen}
+          onClose={() => setIsPDFModalOpen(false)}
+          members={filteredMembers}
+          outletName={activeOutlet?.name || "Semua Outlet"}
+        />
+      )}
     </div>
   );
 }

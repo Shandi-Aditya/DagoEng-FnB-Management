@@ -435,7 +435,7 @@ export const INITIAL_MEMBERS: LoyaltyMember[] = [
     phone: "+62 819-1122-3344",
     email: "ketut.dian@gmail.com",
     identityNo: "NIK-510801990001",
-    tier: "Silver",
+    tier: "Bronze",
     points: 55,
     totalSpend: 550000,
     totalVisits: 5,

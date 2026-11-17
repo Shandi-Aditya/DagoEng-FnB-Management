@@ -14,6 +14,7 @@ import {
 export interface CustomersToolbarProps {
   outletName: string;
   totalMembers: number;
+  canExport?: boolean;
   onExportExcel: () => void;
   onExportCSV: () => void;
   onOpenPDF: () => void;
@@ -23,6 +24,7 @@ export interface CustomersToolbarProps {
 export function CustomersToolbar({
   outletName,
   totalMembers,
+  canExport = true,
   onExportExcel,
   onExportCSV,
   onOpenPDF,
@@ -34,26 +36,28 @@ export function CustomersToolbar({
       description={`${totalMembers} member terdaftar di ${outletName}.`}
       actions={
         <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
-              Ekspor
-              <ChevronDown className="text-muted-foreground" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={onExportExcel}>
-                <FileSpreadsheet />
-                Excel
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onExportCSV}>
-                <Download />
-                CSV
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={onOpenPDF}>
-                <FileText />
-                Laporan PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {canExport ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
+                Ekspor
+                <ChevronDown className="text-muted-foreground" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onExportExcel}>
+                  <FileSpreadsheet />
+                  Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onExportCSV}>
+                  <Download />
+                  CSV
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onOpenPDF}>
+                  <FileText />
+                  Laporan PDF
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
 
           <Button size="lg" onClick={onOpenAddModal}>
             <Plus />

@@ -29,6 +29,8 @@ import type { LoyaltyMember } from "@/types/loyalty";
 import {
   emptyCustomerMessage,
   getTierTone,
+  maskCustomerEmail,
+  maskCustomerPhone,
   TIER_OPTIONS,
 } from "./customers-domain";
 
@@ -39,6 +41,7 @@ export interface CustomersTableProps {
   tierFilter?: string;
   onTierFilterChange?: (tier: string) => void;
   isOwnerOrAdmin: boolean;
+  canViewFullContact?: boolean;
   onSelectMemberHistory: (member: LoyaltyMember) => void;
   onSelectMemberOverride: (member: LoyaltyMember) => void;
   onAddPointsQuick: (id: string, name: string) => void;
@@ -51,6 +54,7 @@ export function CustomersTable({
   tierFilter = "ALL",
   onTierFilterChange,
   isOwnerOrAdmin,
+  canViewFullContact = isOwnerOrAdmin,
   onSelectMemberHistory,
   onSelectMemberOverride,
   onAddPointsQuick,
@@ -134,6 +138,12 @@ export function CustomersTable({
                 {paginatedMembers.map((c) => {
                   const historyCount = c.pointHistory.length + c.tierHistory.length;
                   const tone = getTierTone(c.tier);
+                  const phoneDisplay = canViewFullContact ? c.phone : maskCustomerPhone(c.phone);
+                  const emailDisplay = c.email
+                    ? canViewFullContact
+                      ? c.email
+                      : maskCustomerEmail(c.email)
+                    : null;
 
                   return (
                     <TableRow key={c.id}>
@@ -141,10 +151,10 @@ export function CustomersTable({
                         <div className="flex flex-col gap-0.5">
                           <span className="font-medium text-foreground">{c.name}</span>
                           <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                            {c.phone}
+                            {phoneDisplay}
                           </span>
-                          {c.email ? (
-                            <span className="text-xs text-muted-foreground">{c.email}</span>
+                          {emailDisplay ? (
+                            <span className="text-xs text-muted-foreground">{emailDisplay}</span>
                           ) : null}
                           <span className="text-xs text-muted-foreground sm:hidden">
                             {c.tier} · {c.totalVisits} kunjungan
@@ -193,31 +203,31 @@ export function CustomersTable({
                             <span className="hidden sm:inline">Riwayat ({historyCount})</span>
                           </Button>
 
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              render={
-                                <Button
-                                  variant="ghost"
-                                  size="icon-sm"
-                                  aria-label={`Aksi lain untuk ${c.name}`}
-                                />
-                              }
-                            >
-                              <MoreHorizontal />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => onAddPointsQuick(c.id, c.name)}>
-                                <Star />
-                                Tambah 20 poin
-                              </DropdownMenuItem>
-                              {isOwnerOrAdmin ? (
+                          {isOwnerOrAdmin ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                render={
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`Aksi lain untuk ${c.name}`}
+                                  />
+                                }
+                              >
+                                <MoreHorizontal />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => onAddPointsQuick(c.id, c.name)}>
+                                  <Star />
+                                  Tambah 20 poin
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => onSelectMemberOverride(c)}>
                                   <ShieldAlert />
                                   Ubah tier
                                 </DropdownMenuItem>
-                              ) : null}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : null}
                         </div>
                       </TableCell>
                     </TableRow>

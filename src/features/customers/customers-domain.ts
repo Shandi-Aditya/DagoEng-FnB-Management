@@ -165,3 +165,41 @@ export function isEligibleForTierPromotion(
   return TIER_RANK[calculatedTier] > TIER_RANK[currentTier];
 }
 
+export function canUserExportCustomers(roleSlug?: string): boolean {
+  if (!roleSlug) return false;
+  return roleSlug === "SUPER_ADMIN" || roleSlug === "OWNER" || roleSlug === "MANAGER";
+}
+
+export function canUserViewFullCustomerContacts(roleSlug?: string): boolean {
+  if (!roleSlug) return false;
+  return roleSlug === "SUPER_ADMIN" || roleSlug === "OWNER" || roleSlug === "MANAGER";
+}
+
+export function maskCustomerPhone(phone: string): string {
+  if (!phone) return "";
+  const trimmed = phone.trim();
+  if (trimmed.startsWith("+62 ")) {
+    const rest = trimmed.slice(4);
+    const parts = rest.split("-");
+    if (parts.length === 3) {
+      return `+62 ${parts[0]}-****-${parts[2]}`;
+    }
+  }
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length < 8) return trimmed;
+  return `${digits.slice(0, 4)}****${digits.slice(-4)}`;
+}
+
+export function maskCustomerEmail(email?: string | null): string {
+  if (!email || !email.trim()) return "";
+  const trimmed = email.trim();
+  const parts = trimmed.split("@");
+  if (parts.length !== 2) return trimmed;
+  const [local, domain] = parts;
+  if (local.length <= 2) {
+    return `${local[0]}***@${domain}`;
+  }
+  return `${local.slice(0, 2)}***${local.slice(-1)}@${domain}`;
+}
+
+
