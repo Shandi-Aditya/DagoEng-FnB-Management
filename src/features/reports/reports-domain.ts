@@ -9,6 +9,7 @@
  * - tests/reports-domain.test.ts
  */
 
+import type { StatTone } from "@/components/app/stat-card";
 import type { StatusTone } from "@/components/app/status-badge";
 import { ingredientCategoryLabel } from "@/features/inventory/inventory-reorder";
 import { orderStatusLabel, paymentMethodLabel } from "@/features/orders/orders-domain";
@@ -20,6 +21,7 @@ import type { IngredientItem } from "@/types/inventory";
 import type { OrderItemRecord, OrderRecord } from "@/types/order";
 import type { MasterProduct } from "@/types/product";
 import type { ShiftRecord } from "@/types/shift";
+import { analyzeTransactionDiscrepancies } from "./reconciliation-domain";
 
 export type ReportType =
   | "SALES"
@@ -28,7 +30,8 @@ export type ReportType =
   | "INVENTORY"
   | "FINANCE_AUDIT"
   | "SETTLEMENT"
-  | "EVENTS";
+  | "EVENTS"
+  | "RECONCILIATION";
 
 export function getReportTypeBadgeTone(type: ReportType): StatusTone {
   switch (type) {
@@ -39,6 +42,7 @@ export function getReportTypeBadgeTone(type: ReportType): StatusTone {
       return "info";
     case "EVENTS":
     case "INVENTORY":
+    case "RECONCILIATION":
       return "warning";
     case "CLOSING":
     case "FINANCE_AUDIT":
@@ -201,12 +205,15 @@ function formatMakassarDate(iso: string): string {
 export interface ReportSummaryCard {
   label: string;
   value: string;
+  valueTone?: StatTone;
   sub?: string;
+  subTone?: StatTone;
 }
 
 export interface ReportReconciliationItem {
   label: string;
   value: string;
+  tone?: StatTone;
 }
 
 export interface ReportDataset {
@@ -255,6 +262,7 @@ export function getReportCategories(params: {
   logsCount: number;
   paidEventsCount?: number;
   canAccessEvents?: boolean;
+  discrepanciesCount?: number;
 }): ReportCategoryMeta[] {
   const categories: ReportCategoryMeta[] = [
     {
@@ -262,6 +270,12 @@ export function getReportCategories(params: {
       label: "Penjualan POS",
       count: `${params.ordersCount} Trx`,
       rawCount: params.ordersCount,
+    },
+    {
+      id: "RECONCILIATION",
+      label: "Rekonsiliasi & selisih",
+      count: `${params.discrepanciesCount ?? 0} Selisih`,
+      rawCount: params.discrepanciesCount ?? 0,
     },
     {
       id: "SETTLEMENT",
@@ -728,6 +742,134 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         tableRows,
         reconciliationInfo: [
           { label: "Bagi hasil", value: "20% DAGO, 80% komunitas" },
+        ],
+      };
+    }
+
+    case "RECONCILIATION": {
+      const reconResult = analyzeTransactionDiscrepancies({
+        orders,
+        shifts,
+      });
+      const { summary, discrepancies } = reconResult;
+
+      const tableRows = discrepancies.map((d) => [
+        d.referenceNo,
+        formatMakassarDate(d.timestamp),
+        d.cashierOrStaff,
+        d.typeLabel,
+        d.financialImpact,
+        d.reason,
+        d.formattedAmount,
+      ]);
+
+      const formattedVariance =
+        summary.totalCashVariance < 0
+          ? `-Rp ${Math.abs(summary.totalCashVariance).toLocaleString("id-ID")}`
+          : summary.totalCashVariance > 0
+          ? `+Rp ${summary.totalCashVariance.toLocaleString("id-ID")}`
+          : "Rp 0";
+      const isCashShortage = summary.totalCashierActual < summary.totalCashierExpected;
+      const isCashSurplus = summary.totalCashierActual > summary.totalCashierExpected;
+      const hasCashVariance = summary.totalCashVariance !== 0;
+
+      return {
+        title: "Laporan rekonsiliasi & pelacakan selisih",
+        subtitle: `Perbandingan tripartit kasir, struk, dan settlement beserta rincian transaksi penyebab di ${scopeName}`,
+        summaryCards: [
+          {
+            label: "Total kasir fisik",
+            value: `Rp ${summary.totalCashierActual.toLocaleString("id-ID")}`,
+            valueTone: isCashShortage ? "destructive" : isCashSurplus ? "warning" : undefined,
+            sub: `Seharusnya Rp ${summary.totalCashierExpected.toLocaleString("id-ID")}`,
+            subTone: isCashShortage ? "destructive" : isCashSurplus ? "warning" : "success",
+          },
+          {
+            label: "Total struk bersih",
+            value: `Rp ${summary.totalReceiptsNet.toLocaleString("id-ID")}`,
+            sub: `Kotor Rp ${summary.totalReceiptsGross.toLocaleString("id-ID")}`,
+            subTone: "muted",
+          },
+          {
+            label: "Total settlement",
+            value: `Rp ${summary.totalSettlementNet.toLocaleString("id-ID")}`,
+            sub: `Mitra Rp ${summary.totalTenantShare.toLocaleString("id-ID")}`,
+            subTone: "info",
+          },
+          {
+            label: "Selisih kas shift",
+            value: formattedVariance,
+            valueTone: !hasCashVariance
+              ? "success"
+              : summary.totalCashVariance < 0
+              ? "destructive"
+              : "warning",
+            sub:
+              summary.status === "BALANCED"
+                ? "Kasir seimbang"
+                : summary.totalCashVariance < 0
+                ? "Ada selisih kas fisik"
+                : "Ada kelebihan kas fisik",
+            subTone: !hasCashVariance
+              ? "success"
+              : summary.totalCashVariance < 0
+              ? "destructive"
+              : "warning",
+          },
+          {
+            label: "Transaksi bermasalah",
+            value: `${summary.discrepanciesCount} transaksi`,
+            valueTone:
+              summary.discrepanciesCount === 0
+                ? "success"
+                : summary.totalRefundAmount > 0
+                ? "destructive"
+                : "warning",
+            sub:
+              summary.discrepanciesCount === 0
+                ? "Semua klop"
+                : summary.totalRefundAmount > 0
+                ? "Terdapat refund"
+                : `${summary.discrepanciesCount} anomali tercatat`,
+            subTone:
+              summary.discrepanciesCount === 0
+                ? "success"
+                : summary.totalRefundAmount > 0
+                ? "destructive"
+                : "warning",
+          },
+        ],
+        tableHeaders: [
+          "Referensi",
+          "Waktu",
+          "Petugas / Kasir",
+          "Kategori selisih",
+          "Dampak finansial",
+          "Keterangan / alasan",
+          "Nilai selisih (Rp)",
+        ],
+        tableRows,
+        reconciliationInfo: [
+          {
+            label: "Status audit",
+            value: summary.status === "BALANCED" ? "Seimbang" : "Perlu verifikasi",
+            tone: summary.status === "BALANCED" ? "success" : "destructive",
+          },
+          {
+            label: "Pending QRIS",
+            value: `Rp ${summary.totalPendingAmount.toLocaleString("id-ID")}`,
+            tone: summary.totalPendingAmount > 0 ? "warning" : "muted",
+          },
+          {
+            label: "Total refund",
+            value: `Rp ${summary.totalRefundAmount.toLocaleString("id-ID")}`,
+            tone: summary.totalRefundAmount > 0 ? "destructive" : "muted",
+          },
+          {
+            label: "Total diskon",
+            value: `Rp ${summary.totalDiscountAmount.toLocaleString("id-ID")}`,
+            tone: summary.totalDiscountAmount > 0 ? "info" : "muted",
+          },
         ],
       };
     }

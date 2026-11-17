@@ -248,7 +248,7 @@ export function printerRoleLabel(role: PrinterRole | string): string {
 export function printerConnectionLabel(type: PrinterConnectionType | string): string {
   switch (type) {
     case "BROWSER_SYSTEM":
-      return "Dialog cetak browser / Kiosk";
+      return "Dialog cetak browser";
     case "LOCAL_BRIDGE":
       return "Bridge lokal";
     case "NETWORK_LAN_VIA_BRIDGE":

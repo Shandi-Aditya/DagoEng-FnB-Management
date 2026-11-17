@@ -60,6 +60,8 @@ export function formatReportHeaderBadge(type: ReportType): string {
       return "Laporan Settlement";
     case "EVENTS":
       return "Laporan Acara";
+    case "RECONCILIATION":
+      return "Laporan Rekonsiliasi";
     default:
       return "Laporan Sistem";
   }
