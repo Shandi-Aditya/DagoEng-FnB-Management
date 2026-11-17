@@ -19,6 +19,12 @@ export async function GET(req: NextRequest) {
   const mitraShare = Number(searchParams.get("mitra")) || Math.round(net * 0.85);
   const dagoShare = Number(searchParams.get("dago")) || (net - mitraShare);
 
+  const initialCash = Number(searchParams.get("initialCash")) || 0;
+  const expectedCash = searchParams.get("expectedCash") !== null ? Number(searchParams.get("expectedCash")) : (initialCash + cash);
+  const actualCash = searchParams.get("actualCash") !== null ? Number(searchParams.get("actualCash")) : expectedCash;
+  const variance = searchParams.get("variance") !== null ? Number(searchParams.get("variance")) : (actualCash - expectedCash);
+  const notes = searchParams.get("notes") || "";
+
   const formatIDR = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
 
   const html = `<!DOCTYPE html>
@@ -158,7 +164,45 @@ export async function GET(req: NextRequest) {
     </table>
 
     <div class="section-title">
-      <span>3. Estimasi Bagi Hasil Pendapatan</span>
+      <span>3. Rekonsiliasi Kas Laci Kasir (Front Office)</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Komponen Kasir</th>
+          <th class="text-right">Nominal</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Modal Awal Kas (Kas Pembuka)</td>
+          <td class="text-right font-mono">${formatIDR(initialCash)}</td>
+        </tr>
+        <tr>
+          <td>Penjualan Kas Tunai</td>
+          <td class="text-right font-mono">${formatIDR(cash)}</td>
+        </tr>
+        <tr style="background: #f8fafc; font-weight: 600;">
+          <td>Total Kas Seharusnya di Laci</td>
+          <td class="text-right font-mono">${formatIDR(expectedCash)}</td>
+        </tr>
+        <tr>
+          <td>Kas Fisik Aktual (Setoran Kasir)</td>
+          <td class="text-right font-mono font-semibold">${formatIDR(actualCash)}</td>
+        </tr>
+        <tr class="highlight-row" style="${variance === 0 ? 'background: #f0fdf4; color: #15803d;' : variance < 0 ? 'background: #fef2f2; color: #b91c1c;' : 'background: #fffbeb; color: #b45309;'}">
+          <td>Selisih Kas (${variance === 0 ? "Seimbang / Sesuai" : variance < 0 ? "Kurang / Tekor" : "Lebih"})</td>
+          <td class="text-right font-mono font-semibold">${variance >= 0 ? "+" : ""}${formatIDR(variance)}</td>
+        </tr>
+        ${notes ? `<tr>
+          <td>Keterangan / Alasan Selisih</td>
+          <td class="text-right" style="font-style: italic; color: #475569;">${notes}</td>
+        </tr>` : ""}
+      </tbody>
+    </table>
+
+    <div class="section-title">
+      <span>4. Estimasi Bagi Hasil Pendapatan</span>
     </div>
     <div class="share-box">
       <div class="share-card mitra">

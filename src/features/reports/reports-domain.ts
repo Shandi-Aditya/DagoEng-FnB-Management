@@ -439,6 +439,8 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
     case "CLOSING": {
       const closedShifts = shifts.filter((s) => s.status === "CLOSED");
+      const needsReconShifts = shifts.filter((s) => s.status === "NEEDS_RECONCILIATION");
+      const completedShiftsCount = closedShifts.length + needsReconShifts.length;
       const totalActualCash = shifts.reduce((s, sh) => s + (sh.actualCash || 0), 0);
       const totalVariance = shifts.reduce((s, sh) => s + (sh.cashVariance || 0), 0);
 
@@ -451,13 +453,30 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         `Rp ${s.expectedCash.toLocaleString("id-ID")}`,
         `Rp ${(s.actualCash || 0).toLocaleString("id-ID")}`,
         `${(s.cashVariance || 0) >= 0 ? "+" : ""}Rp ${(s.cashVariance || 0).toLocaleString("id-ID")}`,
+        s.status === "NEEDS_RECONCILIATION"
+          ? "Perlu rekonsiliasi"
+          : s.status === "CLOSED"
+          ? "Ditutup"
+          : s.status,
       ]);
+
+      const shiftSummaryValue =
+        needsReconShifts.length > 0
+          ? `${completedShiftsCount} shift (${needsReconShifts.length} perlu rekonsiliasi)`
+          : `${closedShifts.length} shift`;
+
+      const cashStatusValue =
+        needsReconShifts.length > 0
+          ? "Perlu rekonsiliasi"
+          : totalVariance === 0
+          ? "Seimbang"
+          : "Ada selisih";
 
       return {
         title: "Laporan closing kasir",
         subtitle: `Modal awal, penjualan tunai, dan kas fisik per shift di ${scopeName}`,
         summaryCards: [
-          { label: "Shift ditutup", value: `${closedShifts.length} shift` },
+          { label: "Shift ditutup", value: shiftSummaryValue },
           { label: "Kas fisik", value: `Rp ${totalActualCash.toLocaleString("id-ID")}` },
           { label: "Selisih kas", value: `Rp ${totalVariance.toLocaleString("id-ID")}` },
         ],
@@ -470,10 +489,11 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           "Kas seharusnya",
           "Kas fisik",
           "Selisih",
+          "Status",
         ],
         tableRows,
         reconciliationInfo: [
-          { label: "Status kas", value: totalVariance === 0 ? "Seimbang" : "Ada selisih" },
+          { label: "Status kas", value: cashStatusValue },
           { label: "Dibuat oleh", value: operatorName || "Staf" },
         ],
       };
