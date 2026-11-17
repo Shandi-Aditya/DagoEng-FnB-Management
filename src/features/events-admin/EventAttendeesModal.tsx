@@ -236,8 +236,8 @@ export function EventAttendeesModal({
                         </TableCell>
 
                         <TableCell className="hidden md:table-cell">
-                          <Badge variant={b.paymentStatus === "PAID" ? "default" : "secondary"}>
-                            {b.paymentStatus === "PAID" ? "Lunas" : "Menunggu"}
+                          <Badge variant={b.isInvitation || b.paymentMethod === "INVITATION" ? "outline" : b.paymentStatus === "PAID" ? "default" : "secondary"}>
+                            {b.isInvitation || b.paymentMethod === "INVITATION" ? "Undangan" : b.paymentStatus === "PAID" ? "Lunas" : "Menunggu"}
                           </Badge>
                         </TableCell>
 

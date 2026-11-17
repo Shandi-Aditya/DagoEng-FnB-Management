@@ -8,6 +8,7 @@ export interface BookingValidationInput {
   maxTickets: number;
   ticketTierId?: string;
   hasTiers?: boolean;
+  promoCode?: string;
 }
 
 export interface BookingValidationResult {

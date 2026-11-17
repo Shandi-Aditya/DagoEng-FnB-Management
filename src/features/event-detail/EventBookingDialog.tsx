@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AlertCircle, Minus, Plus, Ticket } from "lucide-react";
+import { AlertCircle, CheckCircle2, Minus, Plus, Ticket } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,7 @@ export interface BookingFormData {
   institution: string;
   ticketCount: number;
   ticketTierId?: string;
+  promoCode?: string;
 }
 
 interface EventBookingDialogProps {
@@ -77,8 +78,8 @@ export function EventBookingDialog({
   const tierRemaining = selectedTierAvail
     ? selectedTierAvail.remaining
     : selectedTier
-    ? selectedTier.quota
-    : overallRemainingTickets;
+      ? selectedTier.quota
+      : overallRemainingTickets;
 
   const effectiveMaxTickets = Math.min(
     maxAllowedPerTx,
@@ -88,9 +89,41 @@ export function EventBookingDialog({
   const unitPrice = selectedTier
     ? Number(selectedTier.price || 0)
     : event.isPaid
-    ? Number(event.price || 0)
-    : 0;
-  const totalPrice = unitPrice * form.ticketCount;
+      ? Number(event.price || 0)
+      : 0;
+
+  const subtotalPrice = unitPrice * form.ticketCount;
+
+  // Promo code calculation
+  const cleanPromoInput = (form.promoCode || "").trim().toUpperCase();
+  const matchedPromo = (event.promoCodes || []).find(
+    (p) => p.code.trim().toUpperCase() === cleanPromoInput && p.isActive !== false
+  );
+
+  let appliedDiscount = 0;
+  if (matchedPromo && subtotalPrice > 0) {
+    const isTierEligible =
+      !matchedPromo.applicableTierIds ||
+      matchedPromo.applicableTierIds.length === 0 ||
+      (form.ticketTierId && matchedPromo.applicableTierIds.includes(form.ticketTierId));
+
+    const isMinOrderMet = !matchedPromo.minOrderAmount || subtotalPrice >= matchedPromo.minOrderAmount;
+
+    if (isTierEligible && isMinOrderMet) {
+      if (matchedPromo.discountType === "PERCENT") {
+        const raw = Math.round((subtotalPrice * matchedPromo.discountValue) / 100);
+        appliedDiscount =
+          matchedPromo.maxDiscountAmount && matchedPromo.maxDiscountAmount > 0
+            ? Math.min(raw, matchedPromo.maxDiscountAmount)
+            : raw;
+      } else {
+        appliedDiscount = matchedPromo.discountValue;
+      }
+      appliedDiscount = Math.min(appliedDiscount, subtotalPrice);
+    }
+  }
+
+  const totalPrice = Math.max(0, subtotalPrice - appliedDiscount);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,13 +175,12 @@ export function EventBookingDialog({
                           ticketCount: 1,
                         }));
                       }}
-                      className={`w-full text-left p-3 rounded-lg border transition-colors flex flex-col gap-1.5 ${
-                        isSelected
-                          ? "border-primary bg-primary/5 ring-1 ring-primary"
-                          : isUnavailable
+                      className={`w-full text-left p-3 rounded-lg border transition-colors flex flex-col gap-1.5 ${isSelected
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : isUnavailable
                           ? "border-muted bg-muted/40 opacity-60 cursor-not-allowed"
                           : "border-border hover:border-primary/50 bg-card hover:bg-muted/10 cursor-pointer"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-medium text-foreground text-xs">{tier.name}</span>
@@ -166,12 +198,12 @@ export function EventBookingDialog({
                           {isSoldOut
                             ? "Habis terjual"
                             : isUpcoming
-                            ? "Penjualan belum dibuka"
-                            : isEnded
-                            ? "Penjualan telah berakhir"
-                            : avail
-                            ? `Sisa ${avail.remaining} tiket`
-                            : `Kuota ${tier.quota} tiket`}
+                              ? "Penjualan belum dibuka"
+                              : isEnded
+                                ? "Penjualan telah berakhir"
+                                : avail
+                                  ? `Sisa ${avail.remaining} tiket`
+                                  : `Kuota ${tier.quota} tiket`}
                         </span>
                         {isSelected && (
                           <span className="text-primary font-medium text-xs">Dipilih</span>
@@ -280,13 +312,51 @@ export function EventBookingDialog({
             </div>
           </div>
 
+          {/* Promo Code Input (for paid bookings) */}
+          {subtotalPrice > 0 && (
+            <div className="space-y-1.5">
+              <label className="font-medium text-foreground block">
+                Kode promo (opsional)
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={form.promoCode || ""}
+                  onChange={(e) => {
+                    const val = e.target.value.toUpperCase();
+                    setForm((prev) => ({ ...prev, promoCode: val }));
+                  }}
+                  placeholder="Contoh: DISKON10 / VIPGUEST"
+                  className="w-full h-9 rounded-md border bg-background px-3 text-xs font-mono text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              {matchedPromo && appliedDiscount > 0 ? (
+                <span className="text-xs text-success flex items-center gap-1 font-medium">
+                  <CheckCircle2 className="size-3.5" />
+                  <span>Hemat {formatCurrencyIDR(appliedDiscount)} ({matchedPromo.code})</span>
+                </span>
+              ) : form.promoCode && cleanPromoInput !== "" ? (
+                <span className="text-xs text-muted-foreground block">
+                  Kode promo akan divalidasi saat pemrosesan tiket.
+                </span>
+              ) : null}
+            </div>
+          )}
+
           {/* Total Price */}
           <div className="pt-2 border-t flex items-center justify-between">
             <div>
               <span className="text-xs text-muted-foreground block">Total biaya tiket</span>
-              <span className="font-mono tabular-nums font-medium text-base text-foreground">
-                {totalPrice > 0 ? formatCurrencyIDR(totalPrice) : "Gratis"}
-              </span>
+              <div className="flex items-baseline gap-2">
+                <span className="font-mono tabular-nums font-medium text-base text-foreground">
+                  {totalPrice > 0 ? formatCurrencyIDR(totalPrice) : "Gratis"}
+                </span>
+                {appliedDiscount > 0 && (
+                  <span className="font-mono text-xs text-muted-foreground line-through">
+                    {formatCurrencyIDR(subtotalPrice)}
+                  </span>
+                )}
+              </div>
             </div>
 
             <DialogFooter className="gap-2">
@@ -306,8 +376,8 @@ export function EventBookingDialog({
                 {isSubmitting
                   ? "Memproses..."
                   : totalPrice > 0
-                  ? "Lanjut ke pembayaran"
-                  : "Dapatkan tiket"}
+                    ? "Lanjut ke pembayaran"
+                    : "Dapatkan tiket"}
               </Button>
             </DialogFooter>
           </div>
