@@ -15,7 +15,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
 import {
-  validateCoworkingDateRange,
+  COWORKING_MAX_HOURS,
+  getCoworkingStartSlots,
+  getNextOpenCoworkingDate,
+  isCoworkingDateOpen,
+  validateCoworkingBookingSchedule,
   checkCoworkingBookingConflict,
   type CoworkingHolidayConfig,
 } from "@/lib/operating-hours";
@@ -52,18 +56,7 @@ export interface NewBookingModalProps {
   }) => void;
 }
 
-const OPERATIONAL_TIME_SLOTS = [
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "13:00",
-  "14:00",
-  "15:00",
-  "16:00",
-  "17:00",
-  "18:00",
-];
+const OPERATIONAL_TIME_SLOTS = getCoworkingStartSlots(2);
 
 export function NewBookingModal({
   isOpen,
@@ -74,7 +67,10 @@ export function NewBookingModal({
   defaultSpaceId,
   onSubmit,
 }: NewBookingModalProps) {
-  const todayStr = useMemo(() => getTodayWitaDateString(), []);
+  const todayStr = useMemo(
+    () => getNextOpenCoworkingDate(getTodayWitaDateString(), coworkingHolidays),
+    [coworkingHolidays]
+  );
 
   const [bookSpaceId, setBookSpaceId] = useState(defaultSpaceId || spaces[0]?.id || "");
   const [bookType, setBookType] = useState<"HOURLY" | "DAILY" | "MONTHLY">("HOURLY");
@@ -154,21 +150,24 @@ export function NewBookingModal({
       return;
     }
 
-    // 1. Holiday & operating hours validation
-    const holidayCheck = validateCoworkingDateRange(
-      bookStartDate,
-      pricing.computedEndDate,
+    const scheduleCheck = validateCoworkingBookingSchedule(
+      {
+        bookingType: bookType,
+        date: bookStartDate,
+        endDate:
+          bookType === "DAILY" && bookDailyPreset === "1_DAY"
+            ? bookStartDate
+            : pricing.computedEndDate,
+        startTime: bookType === "HOURLY" ? bookStartTime : "09:00",
+        duration: bookType === "HOURLY" ? pricing.computedDuration : undefined,
+      },
       coworkingHolidays
     );
-    if (!holidayCheck.isValid) {
-      const firstClosed = holidayCheck.closedDates[0];
-      setErrorMessage(
-        `Booking ditolak: ${firstClosed.reason} (${firstClosed.date}). Co-working tutup kecuali dibuka via override di Pengaturan.`
-      );
+    if (!scheduleCheck.isValid) {
+      setErrorMessage(`Booking ditolak: ${scheduleCheck.reason}`);
       return;
     }
 
-    // 2. Double-booking conflict validation
     const conflict = checkCoworkingBookingConflict(bookings, {
       spaceId: selectedSpace.id,
       spaceName: selectedSpace.name,
@@ -183,13 +182,17 @@ export function NewBookingModal({
       return;
     }
 
-    const dateFormatted = new Date(bookStartDate).toLocaleDateString("id-ID", {
+    const parseLocalWitaDate = (ymd: string) =>
+      /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? new Date(`${ymd}T00:00:00+08:00`) : new Date(ymd);
+    const dateFormatted = parseLocalWitaDate(bookStartDate).toLocaleDateString("id-ID", {
+      timeZone: "Asia/Makassar",
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
     const endDateFormatted = pricing.computedEndDate
-      ? new Date(pricing.computedEndDate).toLocaleDateString("id-ID", {
+      ? parseLocalWitaDate(pricing.computedEndDate).toLocaleDateString("id-ID", {
+          timeZone: "Asia/Makassar",
           day: "2-digit",
           month: "short",
           year: "numeric",
@@ -216,6 +219,8 @@ export function NewBookingModal({
     handleClose();
   };
 
+  const startDateStatus = isCoworkingDateOpen(bookStartDate, coworkingHolidays);
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
       <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-lg">
@@ -225,7 +230,7 @@ export function NewBookingModal({
             <span>Buat booking</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Pilih paket durasi, slot jam operasional, atau rentang tanggal sewa.
+            Operasional kantor dan co-working: Senin sampai Jumat, pukul 09.00 sampai 18.00 WITA.
           </DialogDescription>
         </DialogHeader>
 
@@ -353,9 +358,11 @@ export function NewBookingModal({
                     id="hourly-dur"
                     type="number"
                     min={2}
-                    max={12}
+                    max={COWORKING_MAX_HOURS}
                     value={bookDurationHours}
-                    onChange={(e) => setBookDurationHours(Math.max(2, Number(e.target.value)))}
+                    onChange={(e) =>
+                      setBookDurationHours(Math.min(COWORKING_MAX_HOURS, Math.max(2, Number(e.target.value))))
+                    }
                     className="text-xs font-mono"
                     required
                   />
@@ -367,7 +374,7 @@ export function NewBookingModal({
                 <div className="flex items-center justify-between">
                   <Label className="flex items-center gap-1 text-xs text-foreground">
                     <Clock className="size-3.5 text-primary" />
-                    <span>Jam mulai (09:00–18:00)</span>
+                    <span>Jam mulai (jam operasional 09:00–18:00 WITA)</span>
                   </Label>
                   <span className="font-mono text-xs tabular-nums text-muted-foreground">
                     Selesai: {calculateHourlyEndTime(bookStartTime, bookDurationHours)} WITA
@@ -424,7 +431,13 @@ export function NewBookingModal({
                     id="daily-start"
                     type="date"
                     value={bookStartDate}
-                    onChange={(e) => setBookStartDate(e.target.value)}
+                    onChange={(e) => {
+                      const nextStart = e.target.value;
+                      setBookStartDate(nextStart);
+                      if (nextStart && bookEndDate && nextStart > bookEndDate) {
+                        setBookEndDate(nextStart);
+                      }
+                    }}
                     className="text-xs font-mono"
                     required
                   />
@@ -461,6 +474,15 @@ export function NewBookingModal({
               <p className="text-xs text-muted-foreground">
                 Termasuk dedicated desk, loker pribadi, dan kuota ruang rapat.
               </p>
+            </div>
+          )}
+
+          {!startDateStatus.isOpen && (
+            <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs font-medium text-destructive">
+              <AlertTriangle className="size-4 shrink-0" />
+              <span>
+                {startDateStatus.reason}. Pilih hari kerja Senin sampai Jumat (09:00–18:00 WITA).
+              </span>
             </div>
           )}
 
@@ -584,7 +606,7 @@ export function NewBookingModal({
             >
               Batal
             </Button>
-            <Button type="submit" size="lg">
+            <Button type="submit" size="lg" disabled={!startDateStatus.isOpen}>
               {bookIsImmediateCheckIn ? "Simpan dan check-in" : "Simpan booking"}
             </Button>
           </DialogFooter>

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DateRangePicker } from "@/features/dashboard/DateRangePicker";
 
 import { ORDER_QUEUES, type OrderQueueId } from "./orders-queue";
 
@@ -22,6 +23,7 @@ interface OrdersToolbarProps {
   counts: Record<OrderQueueId, number>;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  onResetFilters?: () => void;
   canExport: boolean;
   onExportExcel: () => void;
   onExportCSV: () => void;
@@ -34,6 +36,7 @@ export function OrdersToolbar({
   counts,
   searchQuery,
   onSearchChange,
+  onResetFilters,
   canExport,
   onExportExcel,
   onExportCSV,
@@ -47,29 +50,32 @@ export function OrdersToolbar({
           counts.UNPAID > 0 ? `${counts.UNPAID} pesanan menunggu pembayaran` : "Semua pesanan aktif sudah dibayar"
         }
         actions={
-          canExport ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
-                <Download />
-                Ekspor
-                <ChevronDown className="text-muted-foreground" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onExportExcel}>
-                  <FileSpreadsheet />
-                  Excel
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onExportCSV}>
+          <>
+            <DateRangePicker />
+            {canExport ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>
                   <Download />
-                  CSV
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onOpenPDF}>
-                  <FileText />
-                  Laporan PDF
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null
+                  Ekspor
+                  <ChevronDown className="text-muted-foreground" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={onExportExcel}>
+                    <FileSpreadsheet />
+                    Excel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onExportCSV}>
+                    <Download />
+                    CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={onOpenPDF}>
+                    <FileText />
+                    Laporan PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </>
         }
       />
 
@@ -88,18 +94,25 @@ export function OrdersToolbar({
             </TabsList>
           </Tabs>
         </div>
-        <InputGroup className="xl:max-w-xs">
-          <InputGroupAddon>
-            <Search />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Cari nomor, meja, atau nama"
-            aria-label="Cari pesanan"
-          />
-        </InputGroup>
+        <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+          <InputGroup className="xl:max-w-xs">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Cari nomor, meja, atau nama"
+              aria-label="Cari pesanan"
+            />
+          </InputGroup>
+          {searchQuery.trim() !== "" && onResetFilters ? (
+            <Button type="button" variant="ghost" size="sm" onClick={onResetFilters}>
+              Reset filter
+            </Button>
+          ) : null}
+        </div>
       </div>
     </div>
   );

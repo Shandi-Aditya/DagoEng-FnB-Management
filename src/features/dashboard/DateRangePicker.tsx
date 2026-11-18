@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useId, useState, type FormEvent } from "react";
 import { Calendar, Check, ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { type DateShortcut, useDateFilter } from "@/contexts/DateFilterContext";
+import { normalizeDateRange, type DateShortcut, useDateFilter } from "@/contexts/DateFilterContext";
 import { cn } from "@/lib/utils";
 
 const SHORTCUTS: { key: Exclude<DateShortcut, "CUSTOM">; label: string }[] = [
@@ -18,21 +18,38 @@ const SHORTCUTS: { key: Exclude<DateShortcut, "CUSTOM">; label: string }[] = [
   { key: "THIS_MONTH", label: "Bulan ini" },
 ];
 
-/** Period filter shared by the dashboard and reports. */
 export function DateRangePicker() {
   const { startDate, endDate, shortcut, setShortcut, setCustomRange, formattedRangeLabel } = useDateFilter();
+  const startId = useId();
+  const endId = useId();
   const [open, setOpen] = useState(false);
   const [customStart, setCustomStart] = useState(startDate);
   const [customEnd, setCustomEnd] = useState(endDate);
 
+  useEffect(() => {
+    setCustomStart(startDate);
+    setCustomEnd(endDate);
+  }, [startDate, endDate]);
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setCustomStart(startDate);
+      setCustomEnd(endDate);
+    }
+    setOpen(nextOpen);
+  };
+
   const applyCustom = (event: FormEvent) => {
     event.preventDefault();
-    setCustomRange(customStart, customEnd);
+    const normalized = normalizeDateRange(customStart, customEnd);
+    setCustomStart(normalized.startDate);
+    setCustomEnd(normalized.endDate);
+    setCustomRange(normalized.startDate, normalized.endDate);
     setOpen(false);
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger render={<Button variant="outline" size="lg" />}>
         <Calendar />
         <span className="tabular-nums">{formattedRangeLabel}</span>
@@ -66,12 +83,12 @@ export function DateRangePicker() {
           <span className="text-xs text-muted-foreground">Rentang khusus</span>
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1">
-              <Label htmlFor="range-start">Mulai</Label>
-              <Input id="range-start" type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} required />
+              <Label htmlFor={startId}>Mulai</Label>
+              <Input id={startId} type="date" value={customStart} onChange={(e) => setCustomStart(e.target.value)} required />
             </div>
             <div className="flex flex-col gap-1">
-              <Label htmlFor="range-end">Sampai</Label>
-              <Input id="range-end" type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} required />
+              <Label htmlFor={endId}>Sampai</Label>
+              <Input id={endId} type="date" value={customEnd} onChange={(e) => setCustomEnd(e.target.value)} required />
             </div>
           </div>
           <Button type="submit" size="sm" className="self-end">

@@ -15,7 +15,14 @@ import {
   reconcileClientShiftAfterServerOpen,
   hydrateShiftsFromServer,
 } from "@/lib/shift-management";
-import { syncWithOutbox, getOutboxItems, flushOutbox } from "@/lib/sync-outbox";
+import {
+  ensureGlobalOutboxAutoFlush,
+  flushOutbox,
+  getOutboxItems,
+  OUTBOX_FLUSHED_EVENT,
+  reconcileCollectionWithOutbox,
+  syncWithOutbox,
+} from "@/lib/sync-outbox";
 import { INITIAL_EMPLOYEES } from "@/lib/master-data-defaults";
 export { INITIAL_EMPLOYEES } from "@/lib/master-data-defaults";
 
@@ -61,14 +68,15 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     try {
       const savedEmp = localStorage.getItem(STORAGE_KEY_EMPLOYEES);
       const savedShf = localStorage.getItem(STORAGE_KEY_SHIFTS);
-      if (savedEmp) setEmployees(JSON.parse(savedEmp));
-      if (savedShf) {
-        const parsed = JSON.parse(savedShf);
-        if (Array.isArray(parsed)) {
-          setShifts(parsed);
-        } else {
-          setShifts([]);
-        }
+      if (savedEmp !== null) {
+        const parsedEmp = JSON.parse(savedEmp);
+        setEmployees(Array.isArray(parsedEmp) ? parsedEmp : INITIAL_EMPLOYEES);
+      } else {
+        setEmployees(INITIAL_EMPLOYEES);
+      }
+      if (savedShf !== null) {
+        const parsedShf = JSON.parse(savedShf);
+        setShifts(Array.isArray(parsedShf) ? parsedShf : []);
       } else {
         setShifts([]);
       }
@@ -77,13 +85,48 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
     } finally {
       setIsInitialized(true);
     }
+    ensureGlobalOutboxAutoFlush();
+  }, []);
 
-    // Flush any queued outbox items first, then hydrate authoritative shifts from server (R1)
-    if (typeof window !== "undefined") {
-      flushOutbox()
-        .then(({ rejected }) => {
-          for (const { item, error } of rejected) {
-            if (item.endpoint !== "/api/shifts") continue;
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+
+    const hydrateFromServer = () => {
+      fetch("/api/shifts")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (cancelled || !data || !Array.isArray(data.shifts)) return;
+          const pendingShiftIds = getOutboxItems()
+            .filter((item) => item.endpoint === "/api/shifts")
+            .map((item) => String(item.payload.shiftId || item.id));
+          setShifts((prev) =>
+            hydrateShiftsFromServer(prev, data.shifts, pendingShiftIds)
+          );
+        })
+        .catch(() => {});
+
+      fetch("/api/employees")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (cancelled || !data || !Array.isArray(data.employees)) return;
+          setEmployees((prev) =>
+            reconcileCollectionWithOutbox({
+              serverItems: data.employees,
+              localItems: prev,
+              endpoint: "/api/employees",
+              getId: (e) => e.id,
+            })
+          );
+        })
+        .catch(() => {});
+    };
+
+    flushOutbox()
+      .then(({ rejected }) => {
+        if (cancelled) return;
+        for (const { item, error } of rejected) {
+          if (item.endpoint === "/api/shifts") {
             addNotification({
               type: "SYSTEM_ALERT",
               title: `Sinkronisasi shift (${String(item.payload.action || "-")}) ditolak server`,
@@ -93,40 +136,62 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
               outletId: String(item.payload.outletId || "outlet-sgr"),
               outletName: String(item.payload.outletName || ""),
             });
+          } else if (item.endpoint === "/api/employees") {
+            const empPayload = (item.payload.employee || item.payload) as Partial<EmployeeProfile>;
+            addNotification({
+              type: "SYSTEM_ALERT",
+              title: `Sinkronisasi data karyawan (${empPayload.name || item.id}) ditolak server`,
+              detail: error,
+              relatedModule: "EMPLOYEES_SHIFT",
+              actionUrl: "/employees",
+              outletId: String(empPayload.outletId || "outlet-sgr"),
+              outletName: String(empPayload.outletName || ""),
+            });
           }
-        })
-        .catch(() => {})
-        .finally(() => {
-          fetch("/api/shifts")
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data) => {
-              if (data && Array.isArray(data.shifts)) {
-                const pendingShiftIds = getOutboxItems()
-                  .filter((item) => item.endpoint === "/api/shifts")
-                  .map((item) => String(item.payload.shiftId || item.id));
-                setShifts((prev) =>
-                  hydrateShiftsFromServer(prev, data.shifts, pendingShiftIds)
-                );
-              }
-            })
-            .catch(() => {});
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) {
+          hydrateFromServer();
+        }
+      });
 
-          // Hydrate employees from server storage (V-06)
-          fetch("/api/employees")
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data) => {
-              if (data && Array.isArray(data.employees) && data.employees.length > 0) {
-                setEmployees((prev) => {
-                  const serverMap = new Map(data.employees.map((e: EmployeeProfile) => [e.id, e]));
-                  const pendingEmp = prev.filter((e) => !serverMap.has(e.id));
-                  return [...data.employees, ...pendingEmp];
-                });
-              }
-            })
-            .catch(() => {});
-        });
-    }
-  }, []);
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY_EMPLOYEES) {
+        if (event.newValue === null) {
+          setEmployees(INITIAL_EMPLOYEES);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(event.newValue);
+          if (Array.isArray(parsed)) setEmployees(parsed);
+        } catch {}
+      } else if (event.key === STORAGE_KEY_SHIFTS) {
+        if (event.newValue === null) {
+          setShifts([]);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(event.newValue);
+          if (Array.isArray(parsed)) setShifts(parsed);
+        } catch {}
+      }
+    };
+
+    const handleOutboxFlushed = () => {
+      hydrateFromServer();
+    };
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(OUTBOX_FLUSHED_EVENT, handleOutboxFlushed);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(OUTBOX_FLUSHED_EVENT, handleOutboxFlushed);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -191,7 +256,8 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       id: newEmp.id,
       endpoint: "/api/employees",
       method: "POST",
-      payload: { employee: newEmp },
+      isCreate: true,
+      payload: { id: newEmp.id, employee: newEmp },
     }).catch(() => {});
 
     return newEmp;
@@ -225,7 +291,7 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       id: updatedEmployee.id,
       endpoint: "/api/employees",
       method: "PUT",
-      payload: { employee: updatedEmployee },
+      payload: { id: updatedEmployee.id, employee: updatedEmployee },
     }).catch(() => {});
   };
 
@@ -251,7 +317,7 @@ export function EmployeeShiftProvider({ children }: { children: React.ReactNode 
       id,
       endpoint: "/api/employees",
       method: "PUT",
-      payload: { employee: updatedEmployee },
+      payload: { id, employee: updatedEmployee, updates },
     }).catch(() => {});
   };
 

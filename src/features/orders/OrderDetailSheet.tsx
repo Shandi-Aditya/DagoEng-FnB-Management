@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Printer, Undo2 } from "lucide-react";
+import { Ban, CreditCard, Printer, Undo2 } from "lucide-react";
 
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
@@ -18,11 +18,14 @@ interface OrderDetailSheetProps {
   onClose: () => void;
   canViewNominals: boolean;
   canProcessPayment: boolean;
+  canPrintCashierReceipt?: boolean;
+  canPrintKitchenReceipt?: boolean;
   promos?: Array<{ id: string; name?: string }>;
   onOpenPayment: (order: OrderRecord) => void;
   onPrintReceipt: (order: OrderRecord) => void;
   onPrintKitchenTicket: (order: OrderRecord, purpose: "REPRINT" | "CANCELLATION") => void;
   onOpenRefund?: (order: OrderRecord) => void;
+  onOpenVoid?: (order: OrderRecord) => void;
 }
 
 function Row({ label, value, tone }: { label: string; value: string; tone?: "discount" | "total" }) {
@@ -40,11 +43,14 @@ export function OrderDetailSheet({
   onClose,
   canViewNominals,
   canProcessPayment,
+  canPrintCashierReceipt = true,
+  canPrintKitchenReceipt = true,
   promos = [],
   onOpenPayment,
   onPrintReceipt,
   onPrintKitchenTicket,
   onOpenRefund,
+  onOpenVoid,
 }: OrderDetailSheetProps) {
   return (
     <Sheet open={order !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
@@ -54,11 +60,14 @@ export function OrderDetailSheet({
             selectedOrder={order}
             canViewNominals={canViewNominals}
             canProcessPayment={canProcessPayment}
+            canPrintCashierReceipt={canPrintCashierReceipt}
+            canPrintKitchenReceipt={canPrintKitchenReceipt}
             promos={promos}
             onOpenPayment={onOpenPayment}
             onPrintReceipt={onPrintReceipt}
             onPrintKitchenTicket={onPrintKitchenTicket}
             onOpenRefund={onOpenRefund}
+            onOpenVoid={onOpenVoid}
           />
         ) : null}
       </SheetContent>
@@ -70,12 +79,20 @@ function OrderDetailBody({
   selectedOrder,
   canViewNominals,
   canProcessPayment,
+  canPrintCashierReceipt,
+  canPrintKitchenReceipt,
   promos,
   onOpenPayment,
   onPrintReceipt,
   onPrintKitchenTicket,
   onOpenRefund,
-}: Omit<OrderDetailSheetProps, "order" | "onClose" | "promos"> & { selectedOrder: OrderRecord; promos: Array<{ id: string; name?: string }> }) {
+  onOpenVoid,
+}: Omit<OrderDetailSheetProps, "order" | "onClose" | "promos"> & {
+  selectedOrder: OrderRecord;
+  canPrintCashierReceipt: boolean;
+  canPrintKitchenReceipt: boolean;
+  promos: Array<{ id: string; name?: string }>;
+}) {
   const metrics = calculateOrderMetrics(selectedOrder);
   const isCancelled = selectedOrder.status === "CANCELLED";
   const isPaid = selectedOrder.paymentStatus === "PAID";
@@ -117,7 +134,7 @@ function OrderDetailBody({
               <div className="flex justify-between">
                 <span>Pengembalian dana</span>
                 <span className="font-mono font-medium text-foreground tabular-nums">
-                  {formatCurrencyIDR(selectedOrder.total)} (Tunai)
+                  {canViewNominals ? `${formatCurrencyIDR(selectedOrder.total)} (Tunai)` : "—"}
                 </span>
               </div>
               {selectedOrder.refundReason ? (
@@ -137,6 +154,7 @@ function OrderDetailBody({
                   <span>Waktu refund</span>
                   <span className="font-mono tabular-nums">
                     {new Date(selectedOrder.refundedAt).toLocaleString("id-ID", {
+                      timeZone: "Asia/Makassar",
                       day: "2-digit",
                       month: "short",
                       year: "numeric",
@@ -147,6 +165,48 @@ function OrderDetailBody({
                 </div>
               ) : null}
             </div>
+          </section>
+        ) : null}
+
+        {isCancelled && selectedOrder.paymentStatus !== "REFUNDED" ? (
+          <section className="flex flex-col gap-1.5 rounded-lg border border-destructive/20 bg-destructive/5 p-3 text-xs">
+            <span className="font-medium text-destructive">Pesanan dibatalkan</span>
+            <div className="flex flex-col gap-1 text-muted-foreground">
+              {selectedOrder.voidReason ? (
+                <div className="flex justify-between gap-2">
+                  <span>Alasan</span>
+                  <span className="text-right text-foreground">{selectedOrder.voidReason}</span>
+                </div>
+              ) : null}
+              {selectedOrder.voidApprovedBy ? (
+                <div className="flex justify-between gap-2">
+                  <span>Disetujui oleh</span>
+                  <span className="text-right text-foreground">{selectedOrder.voidApprovedBy}</span>
+                </div>
+              ) : null}
+              {selectedOrder.voidedAt ? (
+                <div className="flex justify-between gap-2">
+                  <span>Waktu pembatalan</span>
+                  <span className="font-mono tabular-nums">
+                    {new Date(selectedOrder.voidedAt).toLocaleString("id-ID", {
+                      timeZone: "Asia/Makassar",
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+
+        {selectedOrder.notes ? (
+          <section className="flex flex-col gap-1 rounded-lg border bg-muted/40 p-3 text-xs">
+            <span className="font-medium text-foreground">Catatan pesanan</span>
+            <p className="text-muted-foreground">{selectedOrder.notes}</p>
           </section>
         ) : null}
 
@@ -169,6 +229,7 @@ function OrderDetailBody({
                   <span className="flex flex-col">
                     {item.productName}
                     {item.modifiers?.length ? <span className="text-xs text-muted-foreground">{item.modifiers.join(", ")}</span> : null}
+                    {item.notes ? <span className="text-xs text-muted-foreground">Catatan: {item.notes}</span> : null}
                   </span>
                 </span>
                 <span className="font-mono tabular-nums">
@@ -206,7 +267,11 @@ function OrderDetailBody({
                 <span className="flex items-baseline gap-2">
                   <span className="font-medium">{orderStatusLabel(step.toStatus as OrderRecord["status"])}</span>
                   <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                    {new Date(step.timestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(step.timestamp).toLocaleTimeString("id-ID", {
+                      timeZone: "Asia/Makassar",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </span>
                 </span>
                 {step.actorName ? <span className="text-xs text-muted-foreground">oleh {step.actorName}</span> : null}
@@ -224,13 +289,13 @@ function OrderDetailBody({
             Bayar
           </Button>
         ) : null}
-        {isPaid ? (
+        {isPaid && canPrintCashierReceipt ? (
           <Button variant="outline" size="lg" onClick={() => onPrintReceipt(selectedOrder)}>
             <Printer />
             Struk
           </Button>
         ) : null}
-        {isPaid && selectedOrder.paymentStatus !== "REFUNDED" && onOpenRefund ? (
+        {isPaid && selectedOrder.paymentStatus !== "REFUNDED" && canViewNominals && onOpenRefund ? (
           <Button
             variant="outline"
             size="lg"
@@ -241,14 +306,27 @@ function OrderDetailBody({
             Refund
           </Button>
         ) : null}
-        <Button
-          variant="outline"
-          size="lg"
-          onClick={() => onPrintKitchenTicket(selectedOrder, isCancelled ? "CANCELLATION" : "REPRINT")}
-        >
-          <Printer />
-          {isCancelled ? "Slip batal" : "Nota dapur"}
-        </Button>
+        {!isPaid && !isCancelled && canViewNominals && onOpenVoid ? (
+          <Button
+            variant="outline"
+            size="lg"
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => onOpenVoid(selectedOrder)}
+          >
+            <Ban />
+            Batalkan
+          </Button>
+        ) : null}
+        {canPrintKitchenReceipt ? (
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => onPrintKitchenTicket(selectedOrder, isCancelled ? "CANCELLATION" : "REPRINT")}
+          >
+            <Printer />
+            {isCancelled ? "Slip batal" : "Nota dapur"}
+          </Button>
+        ) : null}
       </SheetFooter>
     </>
   );

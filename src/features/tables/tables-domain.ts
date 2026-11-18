@@ -124,11 +124,21 @@ export function reservationStatusLabel(status: ScheduledReservation["status"]): 
   }
 }
 
+export function getWitaDatePlusDays(daysAhead: number = 0, now: Date = new Date()): string {
+  const todayWita = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Makassar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  if (daysAhead === 0) return todayWita;
+  const [y, m, d] = todayWita.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + daysAhead)).toISOString().slice(0, 10);
+}
+
 export function formatReservationDateTime(dateStr: string, timeStr: string): string {
-  const todayStr = new Date().toISOString().split("T")[0];
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split("T")[0];
+  const todayStr = getWitaDatePlusDays(0);
+  const tomorrowStr = getWitaDatePlusDays(1);
 
   let formattedDateLabel = "";
   if (dateStr === todayStr) {
@@ -136,8 +146,11 @@ export function formatReservationDateTime(dateStr: string, timeStr: string): str
   } else if (dateStr === tomorrowStr) {
     formattedDateLabel = "Besok";
   } else {
-    const d = new Date(dateStr);
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(dateStr)
+      ? new Date(`${dateStr}T00:00:00+08:00`)
+      : new Date(dateStr);
     formattedDateLabel = d.toLocaleDateString("id-ID", {
+      timeZone: "Asia/Makassar",
       day: "2-digit",
       month: "short",
       year: "numeric",

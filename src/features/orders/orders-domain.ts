@@ -1,10 +1,86 @@
 import type { StatusTone } from "@/components/app/status-badge";
-import type { POSReceiptData } from "@/features/pos/types";
+import type { POSReceiptData, SplitGuestBill } from "@/features/pos/types";
 import { resolvePosReceiptPublisher } from "@/lib/receipt-publisher";
+import { resolveItemTenantId } from "@/lib/settlement";
 import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import { getTenantName } from "@/lib/tenant";
-import type { OrderRecord } from "@/types/order";
+import type { OrderItemRecord, OrderRecord, OrderStatus } from "@/types/order";
 import type { KitchenTicketData, PrintPurpose } from "@/types/printer";
+
+const TENANT_ID_ALIASES: Record<string, string> = {
+  "tenant-kopi-senja": "tenant-ks",
+  "tenant-dapur-mama": "tenant-kitchen",
+  "tenant-manis-bakery": "tenant-bakery",
+  "tenant-teh-nusantara": "tenant-tea",
+};
+
+export function normalizeTenantId(tenantId?: string | null): string | undefined {
+  const trimmed = tenantId?.trim();
+  if (!trimmed) return undefined;
+  return TENANT_ID_ALIASES[trimmed] ?? trimmed;
+}
+
+export function resolveNormalizedItemTenantId(
+  item: { tenantId?: string; productId?: string; productName?: string },
+  orderFallbackTenantId?: string
+): string {
+  const resolved = resolveItemTenantId(item, orderFallbackTenantId);
+  return normalizeTenantId(resolved) ?? resolved;
+}
+
+export function projectOrderForTenant(
+  order: OrderRecord,
+  tenantId: string
+): OrderRecord | null {
+  const normTenant = normalizeTenantId(tenantId);
+  if (!normTenant) return order;
+
+  const orderFallback = (order as { tenantId?: string }).tenantId;
+  const matchingItems = order.items.filter(
+    (it) => resolveNormalizedItemTenantId(it, orderFallback) === normTenant
+  );
+  if (matchingItems.length === 0) return null;
+
+  const projectedStatus: OrderStatus =
+    order.status !== "CANCELLED" &&
+    order.status !== "COMPLETED" &&
+    order.tenantStatuses?.[normTenant]
+      ? order.tenantStatuses[normTenant]
+      : order.status;
+
+  if (matchingItems.length === order.items.length) {
+    return projectedStatus === order.status ? order : { ...order, status: projectedStatus };
+  }
+
+  const totalGross = order.items.reduce(
+    (sum, it) => sum + (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0),
+    0
+  );
+  const tenantSubtotal = Math.round(
+    matchingItems.reduce(
+      (sum, it) => sum + (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0),
+      0
+    )
+  );
+  const ratio = totalGross > 0 ? tenantSubtotal / totalGross : 0;
+  const breakdown = getOrderTaxBreakdown(order);
+  const tenantDiscount = Math.round(breakdown.discount * ratio);
+  const tenantTax = Math.round(breakdown.pb1 * ratio);
+  const tenantServiceCharge = Math.round(breakdown.serviceCharge * ratio);
+  const tenantTotal =
+    Math.max(0, tenantSubtotal - tenantDiscount) + tenantTax + tenantServiceCharge;
+
+  return {
+    ...order,
+    status: projectedStatus,
+    items: matchingItems,
+    subtotal: tenantSubtotal,
+    discount: order.discount !== undefined ? tenantDiscount : undefined,
+    tax: tenantTax,
+    serviceCharge: order.serviceCharge !== undefined ? tenantServiceCharge : undefined,
+    total: tenantTotal,
+  };
+}
 
 export function filterOrdersByTenant(
   orders: OrderRecord[],
@@ -12,7 +88,9 @@ export function filterOrdersByTenant(
   isTenantOwner?: boolean
 ): OrderRecord[] {
   if (!isTenantOwner || !userTenantId) return orders;
-  return orders.filter((o) => o.items.some((it) => it.tenantId === userTenantId));
+  return orders
+    .map((o) => projectOrderForTenant(o, userTenantId))
+    .filter((o): o is OrderRecord => o !== null);
 }
 
 const ORDER_STATUS_LABEL: Partial<Record<OrderRecord["status"], string>> = {
@@ -112,8 +190,17 @@ export function paymentMethodLabel(method: OrderRecord["paymentMethod"] | undefi
 export function buildReprintKitchenTicket(
   order: OrderRecord,
   purpose: PrintPurpose = "REPRINT",
-  cashierName?: string
+  cashierName?: string,
+  tenantId?: string
 ): KitchenTicketData {
+  const normTenant = normalizeTenantId(tenantId);
+  const orderFallback = (order as { tenantId?: string }).tenantId;
+  const scopedItems: OrderItemRecord[] = normTenant
+    ? (order.items || []).filter(
+        (i) => resolveNormalizedItemTenantId(i, orderFallback) === normTenant
+      )
+    : order.items || [];
+
   return {
     orderId: order.id,
     orderNumber: order.orderNumber,
@@ -123,38 +210,56 @@ export function buildReprintKitchenTicket(
     customerName: order.customerName,
     orderType: order.orderType,
     purpose,
-    items: (order.items || []).map((i) => ({
-      id: i.id,
-      productName: i.productName,
-      quantity: i.quantity,
-      modifiers: i.modifiers,
-      notes: i.notes,
-    })),
-    cashierName: cashierName || "Kasir / Petugas",
-    timestamp: `${new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WITA`,
+    items: scopedItems.map((i) => {
+      const resolvedTenant = resolveNormalizedItemTenantId(i, orderFallback);
+      return {
+        id: i.id,
+        productName: i.productName,
+        quantity: i.quantity,
+        modifiers: i.modifiers,
+        notes: i.notes,
+        tenantId: resolvedTenant,
+        tenantName: getTenantName(resolvedTenant),
+      };
+    }),
+    cashierName: cashierName || order.cashierName || "Kasir / Petugas",
+    timestamp: `${new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar", hour: "2-digit", minute: "2-digit" })} WITA`,
     reprintedBy: purpose === "REPRINT" ? cashierName || "Petugas" : undefined,
     kitchenNotes: order.notes,
   };
 }
 
 export function buildOrderReceiptData(order: OrderRecord): POSReceiptData {
-  const primaryTenantId = order.items[0]?.tenantId || "tenant-ks";
+  const primaryTenantId =
+    resolveNormalizedItemTenantId(order.items[0] || {}, (order as { tenantId?: string }).tenantId) ||
+    "tenant-ks";
   const posPublisher = resolvePosReceiptPublisher(
-    order.items.map((i) => ({ tenantId: i.tenantId })),
+    order.items.map((i) => ({ tenantId: resolveNormalizedItemTenantId(i) })),
     { name: order.outletName || "Singaraja (Pusat)" },
     primaryTenantId
   );
 
+  const splitDetails: SplitGuestBill[] | undefined = order.splitDetails?.length
+    ? order.splitDetails.map((s, idx) => ({
+        id: `split-${idx + 1}`,
+        guestLabel: s.label || `Tamu ${s.guestNumber}`,
+        assignedAmount: s.amount,
+        paymentMethod: (s.method === "CASH" || s.method === "EDC" ? s.method : "QRIS") as SplitGuestBill["paymentMethod"],
+        isPaid: true,
+      }))
+    : undefined;
+
   return {
     orderNumber: order.orderNumber,
     date: new Date(order.createdAt).toLocaleDateString("id-ID", {
+      timeZone: "Asia/Makassar",
       day: "numeric",
       month: "short",
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
     }),
-    cashierName: "Kasir",
+    cashierName: order.cashierName || "Kasir",
     tenantId: posPublisher.tenantId || primaryTenantId,
     tenantName: posPublisher.brandName,
     outletName: posPublisher.outletName,
@@ -162,26 +267,41 @@ export function buildOrderReceiptData(order: OrderRecord): POSReceiptData {
     outletPhone: posPublisher.outletPhone,
     tableNumber: order.tableNumber,
     customerName: order.customerName,
-    orderType: (order.orderType as any) || "DINE_IN",
-    items: order.items.map((i) => ({
-      name: i.productName,
-      quantity: i.quantity,
-      unitPrice: i.unitPrice,
-      subtotal: i.quantity * i.unitPrice,
-      modifiers: i.modifiers,
-      notes: i.notes,
-      tenantId: i.tenantId,
-      tenantName: getTenantName(i.tenantId),
-    })),
+    customerPhone: order.customerPhone,
+    orderType: (order.orderType as POSReceiptData["orderType"]) || "DINE_IN",
+    items: order.items.map((i) => {
+      const resolvedTenant = resolveNormalizedItemTenantId(i);
+      return {
+        name: i.productName,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        subtotal: i.quantity * i.unitPrice,
+        modifiers: i.modifiers,
+        notes: i.notes,
+        tenantId: resolvedTenant,
+        tenantName: getTenantName(resolvedTenant),
+      };
+    }),
     subtotal: order.subtotal,
     tax: getOrderTaxBreakdown(order).pb1,
     serviceCharge: getOrderTaxBreakdown(order).serviceCharge,
     promoName: order.promoId,
     discount: getOrderTaxBreakdown(order).discount,
     grandTotal: order.total,
-    paymentMethod: (order.paymentMethod as any) || "QRIS",
+    paymentMethod: (order.paymentMethod as POSReceiptData["paymentMethod"]) || "QRIS",
     amountPaid: order.total,
     changeDue: 0,
+    splitDetails,
+    qrisVerification: order.qrisVerification
+      ? {
+          type: order.qrisVerification.type,
+          referenceNumber: order.qrisVerification.referenceNumber,
+          invoiceNumber: order.qrisVerification.invoiceNumber,
+          supervisorPinVerified: order.qrisVerification.supervisorPinVerified,
+          verifiedAt: order.qrisVerification.verifiedAt,
+          note: order.qrisVerification.note,
+        }
+      : undefined,
   };
 }
 
@@ -212,9 +332,9 @@ export function buildOrderExportData(
     const payStatusLabel = paymentStatusLabel(o.paymentStatus);
 
     const settlementTime = o.completedAt
-      ? new Date(o.completedAt).toLocaleString("id-ID")
+      ? new Date(o.completedAt).toLocaleString("id-ID", { timeZone: "Asia/Makassar" })
       : o.paymentStatus === "PAID"
-        ? new Date(o.createdAt).toLocaleString("id-ID")
+        ? new Date(o.createdAt).toLocaleString("id-ID", { timeZone: "Asia/Makassar" })
         : "-";
 
     return [
@@ -229,7 +349,7 @@ export function buildOrderExportData(
       payStatusLabel,
       o.paymentMethod || "-",
       o.items.length,
-      new Date(o.createdAt).toLocaleString("id-ID"),
+      new Date(o.createdAt).toLocaleString("id-ID", { timeZone: "Asia/Makassar" }),
       settlementTime,
     ];
   });

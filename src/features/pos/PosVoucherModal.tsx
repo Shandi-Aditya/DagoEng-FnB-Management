@@ -19,17 +19,32 @@ interface PosVoucherModalProps {
   onClose: () => void;
   memberName?: string;
   memberPoints: number;
+  memberTier?: string;
   vouchers: readonly LoyaltyVoucher[];
   appliedVoucherId?: string;
   onApplyVoucher: (voucher: LoyaltyVoucher) => void;
 }
 
-/** Modal to claim and apply loyalty vouchers against member points. */
+const TIER_RANK: Record<string, number> = {
+  bronze: 1,
+  silver: 2,
+  gold: 3,
+  platinum: 4,
+};
+
+export function isVoucherTierEligible(memberTier?: string, minTier?: string): boolean {
+  if (!minTier) return true;
+  const currentRank = TIER_RANK[(memberTier || "bronze").toLowerCase()] ?? 0;
+  const requiredRank = TIER_RANK[minTier.toLowerCase()] ?? 0;
+  return currentRank >= requiredRank;
+}
+
 export function PosVoucherModal({
   isOpen,
   onClose,
   memberName,
   memberPoints,
+  memberTier,
   vouchers,
   appliedVoucherId,
   onApplyVoucher,
@@ -58,7 +73,8 @@ export function PosVoucherModal({
 
         <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
           {vouchers.map((voucher) => {
-            const canAfford = memberPoints >= voucher.pointsCost;
+            const tierOk = isVoucherTierEligible(memberTier, voucher.minTier);
+            const canAfford = memberPoints >= voucher.pointsCost && tierOk;
             const isSelected = appliedVoucherId === voucher.id;
 
             return (
@@ -77,6 +93,7 @@ export function PosVoucherModal({
                   <p className="text-muted-foreground">{voucher.description}</p>
                   <p className="font-mono text-muted-foreground">
                     Biaya: {voucher.pointsCost} poin
+                    {voucher.minTier ? ` · Minimal tier ${voucher.minTier}` : ""}
                   </p>
                 </div>
 

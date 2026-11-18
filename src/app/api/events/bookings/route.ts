@@ -16,12 +16,17 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(req: NextRequest) {
   try {
+    const { searchParams } = new URL(req.url);
+    const eventId = searchParams.get("eventId") || undefined;
+    const includeStats = searchParams.get("includeStats") === "true";
+    const allowUnmasked = searchParams.get("unmasked") === "true";
+
     const adminAuth = await assertEventAdmin(req);
     let isAuthorized = adminAuth.authorized;
     let authRole = adminAuth.role;
 
     if (!isAuthorized) {
-      const checkInAuth = await assertCheckInAuth(req);
+      const checkInAuth = await assertCheckInAuth(req, eventId);
       if (checkInAuth.authorized) {
         isAuthorized = true;
         authRole = checkInAuth.role;
@@ -35,13 +40,9 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const { searchParams } = new URL(req.url);
-    const eventId = searchParams.get("eventId") || undefined;
-    const includeStats = searchParams.get("includeStats") === "true";
-    const allowUnmasked = searchParams.get("unmasked") === "true";
-
     const canViewUnmasked =
-      allowUnmasked && (authRole === "SUPER_ADMIN" || authRole === "OWNER");
+      allowUnmasked &&
+      (authRole === "SUPER_ADMIN" || authRole === "OWNER" || authRole === "MANAGER");
 
     const rawBookings = await getEventBookings(eventId);
 

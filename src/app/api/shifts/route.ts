@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  getPersistentOrders,
   getPersistentShifts,
   savePersistentShift,
 } from "@/lib/persistent-storage";
+import { dispatchShiftClosingChatbot } from "@/lib/closing-chatbot";
 import { getRequestAuthUser } from "@/lib/server-auth";
 import { RoleSlug } from "@/types/auth";
 import {
@@ -50,11 +52,16 @@ export async function GET(req: NextRequest) {
 
     let shifts = await loadAndReconcileServerShifts();
 
-    if (status) {
-      shifts = shifts.filter((s) => s.status === status);
+    if (status && status !== "ALL") {
+      const target = status.toUpperCase();
+      shifts = shifts.filter((s) =>
+        target === "ACTIVE" || target === "OPEN"
+          ? s.status === "ACTIVE" || s.status === "OPEN"
+          : s.status === target
+      );
     }
     if (outletId && outletId !== "ALL") {
-      shifts = shifts.filter((s) => s.outletId === outletId);
+      shifts = shifts.filter((s) => !s.outletId || s.outletId === outletId);
     }
     if (cashierId) {
       shifts = shifts.filter((s) => s.assignedCashierId === cashierId);
@@ -224,7 +231,18 @@ export async function POST(req: NextRequest) {
       }
 
       await savePersistentShift(closeResult.shift);
-      return NextResponse.json({ success: true, shift: closeResult.shift });
+      const allOrders = await getPersistentOrders();
+      const chatbotDispatch = await dispatchShiftClosingChatbot({
+        shift: closeResult.shift,
+        orders: allOrders,
+      }).catch((e) => ({
+        error: e?.message || "Gagal mengirim ringkasan chatbot.",
+      }));
+      return NextResponse.json({
+        success: true,
+        shift: closeResult.shift,
+        chatbotDispatch,
+      });
     }
 
     return NextResponse.json(

@@ -21,6 +21,10 @@ import {
   auditStatusLabel,
   getSeverityTone,
   getStatusTone,
+  resolveLogActorName,
+  resolveLogActorRole,
+  resolveLogRecordId,
+  resolveLogStatus,
 } from "@/features/activity-log/activity-log-domain";
 import type { ActivityLogEntry } from "@/types/audit";
 
@@ -102,6 +106,10 @@ export function ActivityLogTableView({
           <TableBody>
             {paginatedLogs.map((log) => {
               const showSeverity = log.severity === "HIGH" || log.severity === "CRITICAL";
+              const actorName = resolveLogActorName(log);
+              const actorRole = resolveLogActorRole(log);
+              const recordId = resolveLogRecordId(log);
+              const status = resolveLogStatus(log);
               return (
                 <TableRow
                   key={log.id}
@@ -117,8 +125,8 @@ export function ActivityLogTableView({
 
                   <TableCell className="hidden md:table-cell whitespace-normal">
                     <div className="flex flex-col">
-                      <span className="font-medium text-foreground">{log.actorName || "—"}</span>
-                      <span className="text-xs text-muted-foreground">{log.actorRole || "—"}</span>
+                      <span className="font-medium text-foreground">{actorName || "—"}</span>
+                      <span className="text-xs text-muted-foreground">{actorRole || "—"}</span>
                     </div>
                   </TableCell>
 
@@ -136,12 +144,12 @@ export function ActivityLogTableView({
                       </button>
                       <span className="text-xs text-muted-foreground">
                         {auditModuleLabel(log.module)} · {auditActionLabel(log.action)}
-                        {log.recordId ? (
-                          <span className="font-mono"> · #{log.recordId}</span>
+                        {recordId ? (
+                          <span className="font-mono"> · #{recordId}</span>
                         ) : null}
                       </span>
                       <span className="text-xs text-muted-foreground md:hidden">
-                        {log.actorName || "—"}
+                        {actorName || "—"}
                         <span className="sm:hidden font-mono tabular-nums">
                           {" "}
                           · {formatTime(log.timestamp)}
@@ -163,8 +171,8 @@ export function ActivityLogTableView({
 
                   <TableCell>
                     <div className="flex flex-col items-start gap-1">
-                      <StatusBadge status={getStatusTone(log.status)}>
-                        {auditStatusLabel(log.status)}
+                      <StatusBadge status={getStatusTone(status)}>
+                        {auditStatusLabel(status)}
                       </StatusBadge>
                       {showSeverity ? (
                         <StatusBadge status={getSeverityTone(log.severity)}>

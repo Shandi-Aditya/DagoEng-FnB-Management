@@ -2,15 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { registerUnifiedUser } from "@/lib/unified-account";
 import { createOrganizerSession } from "@/lib/organizer-activation";
 import { SESSION_COOKIE_NAME } from "@/lib/session";
+import {
+  getPersistentLoyaltyMembers,
+  savePersistentLoyaltyMember,
+} from "@/lib/persistent-storage";
+import { normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
+import type { LoyaltyMember } from "@/types/loyalty";
 
 export const dynamic = "force-dynamic";
 
-/**
- * POST /api/auth/register
- * Unified registration endpoint for DagoEng accounts.
- * Allows users to register once and access Customer Portal, F&B, Co-working, and Events.
- * Deduplicates by email: returns existing account without creating duplicate identities.
- */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -50,9 +50,52 @@ export async function POST(req: NextRequest) {
       phone: phone.trim(),
       password: password.trim(),
       role: "CUSTOMER",
+      enforceUniquePhone: true,
     });
 
-    // Automatically establish a session for the registered user
+    const normPhone = normalizeLoyaltyPhone(user.phone);
+    const existingMembers = await getPersistentLoyaltyMembers();
+    const existingMember = existingMembers.find(
+      (m) =>
+        (normPhone && normalizeLoyaltyPhone(m.phone) === normPhone) ||
+        (m.email && m.email.toLowerCase() === user.email.toLowerCase())
+    );
+
+    if (existingMember) {
+      if (!existingMember.email && user.email) {
+        await savePersistentLoyaltyMember({
+          ...existingMember,
+          email: user.email,
+        });
+      }
+    } else {
+      const joinedLabel = new Date().toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        timeZone: "Asia/Makassar",
+      });
+      const newMember: LoyaltyMember = {
+        id: `mem-${Date.now()}`,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        tier: "Bronze",
+        points: 0,
+        totalSpend: 0,
+        totalVisits: 0,
+        favoriteItem: "-",
+        registeredOutletId: "outlet-sgr",
+        registeredOutletName: "Singaraja",
+        status: "ACTIVE",
+        joinedDate: joinedLabel,
+        lastVisit: "-",
+        pointHistory: [],
+        tierHistory: [],
+      };
+      await savePersistentLoyaltyMember(newMember);
+    }
+
     const session = await createOrganizerSession(
       user.email,
       req.headers.get("user-agent") || undefined,
@@ -65,7 +108,7 @@ export async function POST(req: NextRequest) {
         isExisting,
         message: isExisting
           ? "Akun Anda sudah terdaftar. Berhasil masuk ke sesi DagoEng."
-          : "Pendaftaran akun terpadu DagoEng berhasil!",
+          : "Pendaftaran akun terpadu DagoEng berhasil.",
         user: {
           id: user.id,
           name: user.name,
@@ -90,6 +133,15 @@ export async function POST(req: NextRequest) {
 
     return res;
   } catch (err: any) {
+    if (typeof err?.message === "string" && err.message.startsWith("PHONE_CONFLICT:")) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: err.message.replace("PHONE_CONFLICT:", "").trim(),
+        },
+        { status: 409 }
+      );
+    }
     console.error("POST /api/auth/register error:", err);
     return NextResponse.json(
       { success: false, error: err.message || "Gagal memproses pendaftaran akun." },

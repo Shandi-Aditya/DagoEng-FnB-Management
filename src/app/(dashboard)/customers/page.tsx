@@ -52,7 +52,7 @@ export default function CustomersPage() {
       notify.error("Akses ditolak", "Hanya Owner dan Manager yang dapat mengekspor data pelanggan.");
       return;
     }
-    const { headers, rows } = buildCustomerExportData(filteredMembers);
+    const { headers, rows } = buildCustomerExportData(displayedMembers);
     downloadCSV(
       `Data_Pelanggan_CRM_${activeOutlet?.name || "All"}_${Date.now()}`,
       headers,
@@ -66,7 +66,7 @@ export default function CustomersPage() {
       notify.error("Akses ditolak", "Hanya Owner dan Manager yang dapat mengekspor data pelanggan.");
       return;
     }
-    const { headers, rows } = buildCustomerExportData(filteredMembers);
+    const { headers, rows } = buildCustomerExportData(displayedMembers);
     downloadExcel(
       `Data_Pelanggan_CRM_${activeOutlet?.name || "All"}_${Date.now()}`,
       "Database Pelanggan CRM",
@@ -172,7 +172,7 @@ export default function CustomersPage() {
         <CustomersReportPDFModal
           isOpen={isPDFModalOpen}
           onClose={() => setIsPDFModalOpen(false)}
-          members={filteredMembers}
+          members={displayedMembers}
           outletName={activeOutlet?.name || "Semua Outlet"}
         />
       )}

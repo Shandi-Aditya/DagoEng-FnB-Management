@@ -36,35 +36,41 @@ export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   let userRole: RoleSlug | null = null;
+  let userScope: ScopeLevel | null = null;
   let isSessionExpired = false;
 
-  // 1. Check cryptographically signed edge session token first
   const edgeToken = request.cookies.get(EDGE_SESSION_COOKIE_NAME)?.value;
   if (edgeToken) {
     const verification = verifyEdgeSessionToken(edgeToken);
     if (verification.valid && verification.payload) {
       userRole = verification.payload.role;
+      userScope = verification.payload.scopeLevel || null;
     } else if (verification.expired) {
       isSessionExpired = true;
     }
   }
 
-  // 2. Fallback to demo persona cookie ONLY when allowed in current environment
-  // Never trust unsigned dagoeng_session_role cookie.
   if (!userRole && !isSessionExpired) {
     const personaCookie = request.cookies.get("dagoeng_active_persona")?.value;
     const personaEntry = personaCookie ? PERSONA_ROLE_MAP[personaCookie] : undefined;
     if (personaEntry && isPersonaCookieAllowedInEnv(personaEntry.role, personaEntry.scopeLevel)) {
       const personaExpCookie = request.cookies.get("dagoeng_persona_exp")?.value;
-      if (personaExpCookie && Number(personaExpCookie) <= Date.now()) {
-        isSessionExpired = true;
+      if (personaExpCookie !== undefined) {
+        const expMs = Number(personaExpCookie);
+        if (!Number.isFinite(expMs) || expMs <= Date.now()) {
+          isSessionExpired = true;
+        } else {
+          userRole = personaEntry.role;
+          userScope = personaEntry.scopeLevel;
+        }
       } else {
         userRole = personaEntry.role;
+        userScope = personaEntry.scopeLevel;
       }
     }
   }
 
-  const evaluation = evaluateRouteAccess(pathname, userRole, isSessionExpired);
+  const evaluation = evaluateRouteAccess(pathname, userRole, userScope, isSessionExpired);
 
   if (!evaluation.allowed) {
     const redirectUrl = new URL(evaluation.redirectTo || "/login", request.url);
@@ -90,5 +96,9 @@ export const config = {
     "/employees/:path*",
     "/settings/:path*",
     "/inventory/:path*",
+    "/customers/:path*",
+    "/activity-log/:path*",
+    "/ai-insight/:path*",
+    "/menu/:path*",
   ],
 };

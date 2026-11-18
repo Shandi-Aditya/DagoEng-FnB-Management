@@ -27,6 +27,10 @@ export function SiteHeader() {
 
   const navItems = getAuthorizedNavItems(user, activeOrgModules);
   const pageTitle = findActiveNavItem(navItems, pathname)?.name ?? "Dago Creative Hub";
+  const usesGlobalDateFilter =
+    pathname === "/dashboard" ||
+    pathname.startsWith("/reports") ||
+    pathname.startsWith("/orders");
 
   return (
     <header className="sticky top-0 z-30 flex h-(--header-height) shrink-0 items-center gap-2 rounded-t-xl border-b bg-background/95 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
@@ -39,13 +43,15 @@ export function SiteHeader() {
           <div className="hidden sm:block">
             <RoleAwareStatusPill />
           </div>
-          {isMounted && formattedRangeLabel ? (
+          {isMounted && usesGlobalDateFilter && formattedRangeLabel ? (
             <span className="hidden items-center gap-1.5 text-xs text-muted-foreground tabular-nums md:flex">
               <Calendar className="size-3.5" />
               {formattedRangeLabel}
             </span>
           ) : null}
-          <Separator orientation="vertical" className="mx-1 hidden h-4 data-vertical:self-auto md:block" />
+          {isMounted && usesGlobalDateFilter ? (
+            <Separator orientation="vertical" className="mx-1 hidden h-4 data-vertical:self-auto md:block" />
+          ) : null}
           <ModeToggle />
           <NotificationMenu />
         </div>

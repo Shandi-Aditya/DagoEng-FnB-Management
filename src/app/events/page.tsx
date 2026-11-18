@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { HomeNav } from "@/features/landing/home/HomeNav";
 import type { AuthenticatedUser } from "@/types/auth";
 import type { PublicCommunityEvent } from "@/types/event";
+import type { DateRange } from "@/components/events/EventDateRangeFilter";
 
 import { EventsCatalogToolbar } from "@/features/events-catalog/EventsCatalogToolbar";
 import { EventsCatalogGrid } from "@/features/events-catalog/EventsCatalogGrid";
@@ -77,13 +78,12 @@ export default function EventsListingPage() {
   const [events, setEvents] = useState<PublicCommunityEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Filters & Tabs
   const [viewTab, setViewTab] = useState<EventTimeTab>("UPCOMING");
   const [selectedCategory, setSelectedCategory] = useState("ALL");
   const [priceFilter, setPriceFilter] = useState<EventPriceFilter>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | null>(null);
 
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(9);
 
@@ -106,14 +106,12 @@ export default function EventsListingPage() {
     fetchEvents();
   }, [fetchEvents]);
 
-  // Reset to page 1 on filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedCategory, priceFilter, viewTab, pageSize]);
+  }, [searchQuery, selectedCategory, priceFilter, dateRange, viewTab, pageSize]);
 
-  const nowMs = useMemo(() => Date.now(), []);
+  const nowMs = useMemo(() => Date.now(), [events]);
 
-  // Counts for upcoming vs past
   const upcomingCount = useMemo(() => {
     return sortPublicEvents(events, "UPCOMING", nowMs).length;
   }, [events, nowMs]);
@@ -122,7 +120,6 @@ export default function EventsListingPage() {
     return sortPublicEvents(events, "PAST", nowMs).length;
   }, [events, nowMs]);
 
-  // Filtered pool
   const filteredEvents = useMemo(() => {
     return filterPublicEvents(
       events,
@@ -130,24 +127,25 @@ export default function EventsListingPage() {
       selectedCategory,
       priceFilter,
       searchQuery,
-      nowMs
+      nowMs,
+      dateRange
     );
-  }, [events, viewTab, selectedCategory, priceFilter, searchQuery, nowMs]);
+  }, [events, viewTab, selectedCategory, priceFilter, searchQuery, nowMs, dateRange]);
 
-  // Paginated events
   const paginatedEvents = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filteredEvents.slice(start, start + pageSize);
   }, [filteredEvents, currentPage, pageSize]);
 
   const hasFilterActive = Boolean(
-    searchQuery.trim() || selectedCategory !== "ALL" || priceFilter !== "ALL"
+    searchQuery.trim() || selectedCategory !== "ALL" || priceFilter !== "ALL" || dateRange
   );
 
   const handleResetFilter = () => {
     setSearchQuery("");
     setSelectedCategory("ALL");
     setPriceFilter("ALL");
+    setDateRange(null);
     setCurrentPage(1);
   };
 
@@ -174,7 +172,6 @@ export default function EventsListingPage() {
           </p>
         </div>
 
-        {/* Toolbar & Filters */}
         <EventsCatalogToolbar
           viewTab={viewTab}
           onViewTabChange={setViewTab}
@@ -186,6 +183,10 @@ export default function EventsListingPage() {
           onPriceFilterChange={setPriceFilter}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+          hasFilterActive={hasFilterActive}
+          onResetFilter={handleResetFilter}
         />
 
         {/* Grid & Pagination */}

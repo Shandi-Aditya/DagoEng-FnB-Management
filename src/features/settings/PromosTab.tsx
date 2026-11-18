@@ -337,6 +337,8 @@ export function PromosTab(props: PromosTabProps) {
                           onChange={(e) =>
                             updatePromo(promo.id, {
                               targetType: e.target.value as PromoConfig["targetType"],
+                              targetId: "",
+                              applicableProductIds: [],
                             })
                           }
                         >
@@ -355,7 +357,16 @@ export function PromosTab(props: PromosTabProps) {
                       <Input
                         type="date"
                         value={promo.validFrom ? promo.validFrom.slice(0, 10) : ""}
-                        onChange={(e) => updatePromo(promo.id, { validFrom: e.target.value })}
+                        onChange={(e) => {
+                          const nextFrom = e.target.value;
+                          const currUntil = promo.validUntil ? promo.validUntil.slice(0, 10) : "";
+                          updatePromo(promo.id, {
+                            validFrom: nextFrom,
+                            ...(nextFrom && currUntil && nextFrom > currUntil
+                              ? { validUntil: nextFrom }
+                              : {}),
+                          });
+                        }}
                       />
                     </div>
 
@@ -363,8 +374,18 @@ export function PromosTab(props: PromosTabProps) {
                       <Label className="text-xs">Berakhir pada</Label>
                       <Input
                         type="date"
+                        min={promo.validFrom ? promo.validFrom.slice(0, 10) : undefined}
                         value={promo.validUntil ? promo.validUntil.slice(0, 10) : ""}
-                        onChange={(e) => updatePromo(promo.id, { validUntil: e.target.value })}
+                        onChange={(e) => {
+                          const nextUntil = e.target.value;
+                          const currFrom = promo.validFrom ? promo.validFrom.slice(0, 10) : "";
+                          updatePromo(promo.id, {
+                            validUntil: nextUntil,
+                            ...(nextUntil && currFrom && nextUntil < currFrom
+                              ? { validFrom: nextUntil }
+                              : {}),
+                          });
+                        }}
                       />
                     </div>
                   </div>

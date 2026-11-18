@@ -1,4 +1,5 @@
 import type { EmployeeProfile, ShiftRecord, ShiftStatus } from "@/types/shift";
+import { formatWitaDateTime, toWitaDateKey } from "@/contexts/DateFilterContext";
 import type { StatusTone } from "@/components/app/status-badge";
 import type { ClosingReportData, TenantBreakdownItem } from "@/features/pos/DailyClosingPDFModal";
 import {
@@ -136,6 +137,12 @@ export function calculateEmployeeKPIs(
   };
 }
 
+export function formatShiftWitaTimestamp(raw?: string): string {
+  if (!raw) return "Belum ditutup";
+  const formatted = formatWitaDateTime(raw, "dd MMM yyyy HH:mm");
+  return formatted ? `${formatted} WITA` : raw;
+}
+
 export function filterEmployees(
   employees: EmployeeProfile[],
   deptFilter: string,
@@ -143,14 +150,24 @@ export function filterEmployees(
   rawSearchQuery: string
 ): EmployeeProfile[] {
   const query = rawSearchQuery.trim().toLowerCase();
+  const qDigits = query.replace(/\D+/g, "");
 
   return employees.filter((e) => {
+    const pDigits = (e.contact || "").replace(/\D+/g, "");
+    const matchPhone =
+      qDigits.length >= 3 &&
+      (pDigits.includes(qDigits) ||
+        (qDigits.startsWith("0") && pDigits.includes(`62${qDigits.slice(1)}`)));
+
     const matchQuery =
       !query ||
       e.name.toLowerCase().includes(query) ||
       e.role.toLowerCase().includes(query) ||
       e.employeeNumber.toLowerCase().includes(query) ||
-      e.department.toLowerCase().includes(query);
+      e.department.toLowerCase().includes(query) ||
+      Boolean(e.contact && e.contact.toLowerCase().includes(query)) ||
+      matchPhone ||
+      Boolean(e.email && e.email.toLowerCase().includes(query));
     const matchDept = deptFilter === "ALL" || e.department === deptFilter;
     const matchStatus = statusFilter === "ALL" || e.status === statusFilter;
     return matchQuery && matchDept && matchStatus;
@@ -160,11 +177,21 @@ export function filterEmployees(
 export function filterShifts(
   shifts: ShiftRecord[],
   rawSearchQuery: string,
-  statusFilter = "ALL"
+  statusFilter = "ALL",
+  dateFilter = ""
 ): ShiftRecord[] {
   const query = rawSearchQuery.trim().toLowerCase();
+  const targetDateKey = dateFilter.trim() ? toWitaDateKey(dateFilter.trim()) : "";
 
   return shifts.filter((s) => {
+    if (targetDateKey) {
+      const startKey = toWitaDateKey(s.startTime || "");
+      const closeKey = toWitaDateKey(s.closedAt || s.endTime || s.startTime || "");
+      if (startKey !== targetDateKey && closeKey !== targetDateKey) {
+        return false;
+      }
+    }
+
     const matchQuery =
       !query ||
       s.shiftName.toLowerCase().includes(query) ||
@@ -305,8 +332,8 @@ export function buildEmployeeExportData(
       s.id,
       s.shiftName,
       s.assignedCashierName,
-      s.startTime,
-      s.closedAt || s.endTime || "Belum ditutup",
+      formatShiftWitaTimestamp(s.startTime),
+      s.closedAt || s.endTime ? formatShiftWitaTimestamp(s.closedAt || s.endTime) : "Belum ditutup",
       `Rp ${(s.openingCash || 0).toLocaleString("id-ID")}`,
       `Rp ${(s.cashSales || 0).toLocaleString("id-ID")}`,
       `Rp ${(s.nonCashSales || 0).toLocaleString("id-ID")}`,
@@ -391,7 +418,7 @@ export function buildClosingReportData(
     return true;
   });
 
-  const settlements = calculateSettlement(shiftOrders.length > 0 ? shiftOrders : orders);
+  const settlements = calculateSettlement(shift ? shiftOrders : orders);
   const tenantBreakdowns: TenantBreakdownItem[] = settlements
     .filter((s) => s.tenantId !== "DAGO_HUB")
     .map((s) => ({

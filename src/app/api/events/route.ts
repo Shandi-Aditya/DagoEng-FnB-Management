@@ -43,10 +43,10 @@ export async function GET(req: NextRequest) {
     if (search) {
       events = events.filter(
         (e) =>
-          e.title.toLowerCase().includes(search) ||
-          e.description.toLowerCase().includes(search) ||
-          e.location.toLowerCase().includes(search) ||
-          e.organizerName.toLowerCase().includes(search)
+          (e.title || "").toLowerCase().includes(search) ||
+          (e.description || "").toLowerCase().includes(search) ||
+          (e.location || "").toLowerCase().includes(search) ||
+          (e.organizerName || "").toLowerCase().includes(search)
       );
     }
 

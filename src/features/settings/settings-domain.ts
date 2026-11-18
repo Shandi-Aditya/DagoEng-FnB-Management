@@ -118,8 +118,24 @@ export function filterPartners(
     if (type !== "ALL" && item.type !== type) return false;
     if (status !== "ALL" && item.status !== status) return false;
     if (needle) {
-      const haystacks = [item.name, item.contactPerson, item.email, item.serviceModule];
-      if (!haystacks.some((value) => value.toLowerCase().includes(needle))) return false;
+      const normalizedNeedleDigits = needle.replace(/\D+/g, "");
+      const phoneDigits = (item.phone || "").replace(/\D+/g, "");
+      const matchPhoneDigits =
+        normalizedNeedleDigits.length >= 3 &&
+        (phoneDigits.includes(normalizedNeedleDigits) ||
+          (normalizedNeedleDigits.startsWith("0") &&
+            phoneDigits.includes(`62${normalizedNeedleDigits.slice(1)}`)));
+      const haystacks = [
+        item.name,
+        item.contactPerson,
+        item.email,
+        item.phone || "",
+        item.categoryOrBadge || "",
+        item.serviceModule,
+      ];
+      if (!matchPhoneDigits && !haystacks.some((value) => value.toLowerCase().includes(needle))) {
+        return false;
+      }
     }
     return true;
   });
@@ -364,9 +380,14 @@ export function promoStatusTone(status: PromoComputedStatus | string): SettingsB
 export function organizerActivationLabel(status?: string): string {
   switch (status) {
     case "ACTIVE":
+    case "ACTIVATED":
       return "Aktif";
     case "PENDING_ACTIVATION":
       return "Menunggu aktivasi";
+    case "NOT_INVITED":
+      return "Belum diundang";
+    case "EXPIRED":
+      return "Undangan kedaluwarsa";
     case "INACTIVE":
       return "Nonaktif";
     default:
@@ -377,9 +398,12 @@ export function organizerActivationLabel(status?: string): string {
 export function organizerActivationTone(status?: string): SettingsBadgeTone {
   switch (status) {
     case "ACTIVE":
+    case "ACTIVATED":
       return "success";
     case "PENDING_ACTIVATION":
+    case "NOT_INVITED":
       return "warning";
+    case "EXPIRED":
     case "INACTIVE":
       return "neutral";
     default:

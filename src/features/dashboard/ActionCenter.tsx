@@ -22,18 +22,17 @@ const ACTION_ITEMS: ActionItem[] = [
   { key: "manualPayments", label: "Verifikasi tiket", unit: "bukti transfer", href: "/events-admin?section=PAYMENTS", icon: <CreditCard /> },
 ];
 
-/** Items that need an admin decision. Hidden when nothing is pending. */
 export function ActionCenter({ actions }: { actions: PendingActions }) {
   const items = ACTION_ITEMS.filter((item) => actions[item.key] > 0);
   const total = items.reduce((sum, item) => sum + actions[item.key], 0);
   if (total === 0) return null;
 
   return (
-    <Card>
+    <Card className="bg-unit-loyalty/12 ring-unit-loyalty/40">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-sm font-medium">
           Perlu tindakan
-          <Badge variant="secondary" className="tabular-nums">
+          <Badge className="bg-unit-loyalty text-(--unit-loyalty-foreground) tabular-nums">
             {total}
           </Badge>
         </CardTitle>
@@ -50,7 +49,7 @@ export function ActionCenter({ actions }: { actions: PendingActions }) {
             <li key={item.key}>
               <Link
                 href={item.href}
-                className="flex items-center gap-3 rounded-md border px-3 py-2.5 transition-colors hover:bg-accent [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground"
+                className="flex items-center gap-3 rounded-md border border-unit-loyalty/30 bg-card px-3 py-2.5 transition-colors hover:border-unit-loyalty/60 hover:bg-accent [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground"
               >
                 {item.icon}
                 <span className="flex min-w-0 flex-1 flex-col">

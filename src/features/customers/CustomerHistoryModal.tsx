@@ -1,6 +1,7 @@
 "use client";
 
 import { Crown, History, Star } from "lucide-react";
+import { toWitaDateKey } from "@/contexts/DateFilterContext";
 import type { LoyaltyMember } from "@/types/loyalty";
 import {
   Dialog,
@@ -74,7 +75,7 @@ export function CustomerHistoryModal({
                         <span className="font-semibold text-primary">{th.newTier}</span>
                       </p>
                       <span className="font-mono text-xs text-muted-foreground">
-                        {th.timestamp.slice(0, 10)}
+                        {toWitaDateKey(th.timestamp) || th.timestamp.slice(0, 10)}
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground">{th.reason}</p>
@@ -106,7 +107,7 @@ export function CustomerHistoryModal({
                     <div className="min-w-0 space-y-0.5">
                       <p className="truncate font-medium text-foreground">{ptx.reason}</p>
                       <p className="text-xs text-muted-foreground">
-                        {ptx.actorName} · {ptx.timestamp.slice(0, 10)}
+                        {ptx.actorName} · {toWitaDateKey(ptx.timestamp) || ptx.timestamp.slice(0, 10)}
                       </p>
                     </div>
 

@@ -8,6 +8,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOptGroup, NativeSelectOption } from "@/components/ui/native-select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { isTableSelectableForPos } from "@/contexts/TableContext";
 
 export type PosOrderType = "DINE_IN" | "TAKEAWAY";
 
@@ -15,7 +16,18 @@ export interface TableAreaOption {
   id: string;
   name: string;
   outletName?: string;
-  tables: { id: string; number?: string; cap?: number; status: string }[];
+  tables: {
+    id: string;
+    number?: string;
+    cap?: number;
+    status: string;
+    area?: string;
+    customer?: string;
+    total?: string;
+    activeOrderId?: string;
+    paymentStatus?: string;
+    currentBillTotal?: number;
+  }[];
 }
 
 export interface MemberOption {
@@ -81,14 +93,15 @@ export function CartOrderSetup({
               <NativeSelect id="pos-table" className="w-full" value={selectedTable} onChange={(e) => onTableChange(e.target.value)}>
                 <NativeSelectOption value="">Pilih meja</NativeSelectOption>
                 {areas.map((area) => {
-                  const free = area.tables.filter((table) => table.status === "AVAILABLE");
-                  if (free.length === 0) return null;
+                  const selectable = area.tables.filter(isTableSelectableForPos);
+                  if (selectable.length === 0) return null;
                   return (
                     <NativeSelectOptGroup key={area.id} label={area.outletName ? `${area.name} · ${area.outletName}` : area.name}>
-                      {free.map((table) => (
+                      {selectable.map((table) => (
                         <NativeSelectOption key={table.id} value={table.number || table.id}>
-                          Meja {table.number || table.id}
-                          {table.cap ? ` · ${table.cap} orang` : ""}
+                          {table.status === "OCCUPIED"
+                            ? `${table.number || table.id} (${table.area || area.name} - Tamu duduk)`
+                            : `Meja ${table.number || table.id}${table.cap ? ` · ${table.cap} orang` : ""}`}
                         </NativeSelectOption>
                       ))}
                     </NativeSelectOptGroup>

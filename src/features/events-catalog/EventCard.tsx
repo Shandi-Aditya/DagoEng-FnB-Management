@@ -23,7 +23,7 @@ interface EventCardProps {
 export function EventCard({ event, isPast }: EventCardProps) {
   const dateBadge = parseEventDateBadge(event.startDate);
   const scheduleFormatted = formatEventSchedule(event.startDate, event.endDate);
-  const priceDisplay = eventPriceLabel(event.isPaid, event.price);
+  const priceDisplay = eventPriceLabel(event.isPaid, event.price, event.ticketTiers);
 
   return (
     <Card className={`group flex flex-col justify-between overflow-hidden pt-0 transition-colors ${

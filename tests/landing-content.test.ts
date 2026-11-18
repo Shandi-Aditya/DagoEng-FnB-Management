@@ -1,6 +1,16 @@
+import { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 
-import { HERO } from "@/features/landing/landing-content";
+import { POST as postCoworkingBookings } from "@/app/api/coworking/bookings/route";
+import { CONTACT, HERO } from "@/features/landing/landing-content";
+import { HOURS } from "@/features/landing/home/home-content";
+import { INITIAL_SPACES, MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
+import {
+  getCoworkingStartSlots,
+  getNextOpenCoworkingDate,
+  isWithinCoworkingHours,
+  validateCoworkingBookingSchedule,
+} from "@/lib/operating-hours";
 import { accountRoleLabel, canOpenDashboard, eventCategoryLabel, eventNoticeRow, selectUpcomingEvents } from "@/features/landing/landing-logic";
 import type { PublicCommunityEvent } from "@/types/event";
 
@@ -104,6 +114,114 @@ describe("HERO copywriting", () => {
   it("uses 'event' instead of 'kumpul' in the hero headline", () => {
     expect(HERO.title.toLowerCase()).toContain("event");
     expect(HERO.title.toLowerCase()).not.toContain("kumpul");
+  });
+});
+
+describe("Dago Creative Hub and coworking office hours", () => {
+  it("displays Monday to Friday 09.00 to 18.00 WITA office hours in landing content and footer", () => {
+    expect(HOURS).toBe("Senin sampai Jumat, 09.00 sampai 18.00 WITA");
+    expect(CONTACT.hours).toBe("Senin sampai Jumat, 09.00 sampai 18.00 WITA");
+  });
+
+  it("aligns coworking plans and dedicated desk amenities with Senin - Jumat 09:00 - 18:00 WITA", () => {
+    const nomadPlan = MEMBERSHIP_PLANS.find((plan) => plan.id === "plan-nomad");
+    const flexiPlan = MEMBERSHIP_PLANS.find((plan) => plan.id === "plan-flexi");
+    const residentPlan = MEMBERSHIP_PLANS.find((plan) => plan.id === "plan-resident");
+    expect(nomadPlan?.deskAccess).toContain("Senin - Jumat");
+    expect(nomadPlan?.deskAccess).toContain("09:00 - 18:00 WITA");
+    expect(flexiPlan?.deskAccess).toContain("Senin - Jumat");
+    expect(residentPlan?.deskAccess).toContain("Senin - Jumat");
+    expect(residentPlan?.deskAccess).not.toContain("24/7");
+
+    for (const space of INITIAL_SPACES) {
+      expect(space.amenities.join(" ")).not.toContain("24/7");
+    }
+  });
+
+  it("enforces Monday-Friday workdays and 09:00 to 18:00 WITA coworking bounds across helpers and API", async () => {
+    expect(getCoworkingStartSlots(1)).toEqual([
+      "09:00",
+      "10:00",
+      "11:00",
+      "12:00",
+      "13:00",
+      "14:00",
+      "15:00",
+      "16:00",
+      "17:00",
+    ]);
+    expect(getCoworkingStartSlots(2)).toEqual([
+      "09:00",
+      "10:00",
+      "11:00",
+      "12:00",
+      "13:00",
+      "14:00",
+      "15:00",
+      "16:00",
+    ]);
+    expect(isWithinCoworkingHours("09:00", 9)).toBe(true);
+    expect(isWithinCoworkingHours("17:00", 1)).toBe(true);
+    expect(isWithinCoworkingHours("08:00", 1)).toBe(false);
+    expect(isWithinCoworkingHours("17:00", 2)).toBe(false);
+    expect(isWithinCoworkingHours("18:00", 1)).toBe(false);
+
+    expect(getNextOpenCoworkingDate("2026-11-18")).toBe("2026-11-18");
+    expect(getNextOpenCoworkingDate("2026-11-21")).toBe("2026-11-23");
+    expect(getNextOpenCoworkingDate("2026-11-22")).toBe("2026-11-23");
+
+    expect(
+      validateCoworkingBookingSchedule({
+        bookingType: "HOURLY",
+        date: "2026-11-21",
+        startTime: "10:00",
+        duration: 2,
+      }).isValid
+    ).toBe(false);
+
+    expect(
+      validateCoworkingBookingSchedule({
+        bookingType: "MONTHLY",
+        date: "2026-11-18",
+        endDate: "2026-12-17",
+      }).isValid
+    ).toBe(true);
+
+    const saturdayReq = new NextRequest("http://localhost:3000/api/coworking/bookings", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: "dagoeng_active_persona=CUSTOMER_DEMO",
+      },
+      body: JSON.stringify({
+        spaceId: "sp-hot-1",
+        guestName: "Weekend Caller",
+        bookingType: "HOURLY",
+        date: "2026-11-21",
+        startTime: "10:00 WITA",
+        duration: 2,
+        totalAmount: 30000,
+      }),
+    });
+    expect((await postCoworkingBookings(saturdayReq)).status).toBe(400);
+
+    const afterHoursReq = new NextRequest("http://localhost:3000/api/coworking/bookings", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: "dagoeng_active_persona=CUSTOMER_DEMO",
+      },
+      body: JSON.stringify({
+        spaceId: "sp-hot-1",
+        guestName: "Evening Caller",
+        bookingType: "HOURLY",
+        date: "2026-11-18",
+        startTime: "17:00 WITA",
+        duration: 2,
+        totalAmount: 30000,
+      }),
+    });
+    expect((await postCoworkingBookings(afterHoursReq)).status).toBe(400);
   });
 });
 

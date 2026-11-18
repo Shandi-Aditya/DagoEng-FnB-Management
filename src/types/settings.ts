@@ -1,4 +1,5 @@
 export type LanguageCode = "id" | "en";
+import type { BusinessModuleCode } from "./auth";
 import { PromoConfig } from "../lib/promo";
 import {
   CoworkingHolidayConfig,
@@ -100,6 +101,7 @@ export interface PlatformSettings {
   tenantOperations: Record<string, TenantOperationConfig>;
   eventRevenueSharing: EventMarketplaceRevenuePolicy;
   categoryTax?: CategoryTaxConfig;
+  activeOrgModules?: BusinessModuleCode[];
 }
 
 export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
@@ -116,6 +118,7 @@ export const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   tenantOperations: DEFAULT_TENANT_OPERATIONS,
   eventRevenueSharing: DEFAULT_EVENT_REVENUE_POLICY,
   categoryTax: DEFAULT_CATEGORY_TAX_CONFIG,
+  activeOrgModules: ["CORE", "FNB", "CO_WORKING"],
   loyaltyTiers: {
     bronzeMin: 0,
     bronzeMax: 499,

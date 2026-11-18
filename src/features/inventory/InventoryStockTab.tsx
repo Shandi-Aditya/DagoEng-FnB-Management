@@ -223,7 +223,13 @@ export function InventoryStockTab({
                     <span className="hidden text-xs text-muted-foreground sm:inline">{adjustmentReasonLabel(log.reason)}</span>
                   </span>
                   <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                    {new Date(log.timestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                    {Number.isNaN(new Date(log.timestamp).getTime())
+                      ? log.timestamp
+                      : new Date(log.timestamp).toLocaleTimeString("id-ID", {
+                          timeZone: "Asia/Makassar",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                   </span>
                 </li>
               ))}

@@ -21,8 +21,15 @@ import type { CoworkingSpaceItem } from "@/types/coworking";
 import type { PromoConfig } from "@/lib/promo";
 
 import {
+  COWORKING_CLOSE_MINUTES,
+  isCoworkingDateOpen,
+  isWithinCoworkingHours,
+  type CoworkingHolidayConfig,
+} from "@/lib/operating-hours";
+import {
   calculateEndTime,
   getAvailableTimeSlots,
+  parseTimeToMinutes,
   spaceTypeLabel,
 } from "./customer-domain";
 
@@ -58,6 +65,7 @@ export interface CustomerBookingModalProps {
   // Submit
   isSubmitting: boolean;
   onSubmitBooking: (e: React.FormEvent) => void;
+  coworkingHolidays?: CoworkingHolidayConfig;
 }
 
 export function CustomerBookingModal({
@@ -89,6 +97,7 @@ export function CustomerBookingModal({
   voucherSuccess,
   isSubmitting,
   onSubmitBooking,
+  coworkingHolidays,
 }: CustomerBookingModalProps) {
   if (!space) return null;
 
@@ -108,6 +117,9 @@ export function CustomerBookingModal({
 
   const finalCost = Math.max(0, baseCost - discount);
   const endTime = calculateEndTime(bookingStartTime, bookingDurationHours);
+  const dateStatus = isCoworkingDateOpen(bookingDate, coworkingHolidays);
+  const isPastClosing =
+    isHourly && !isWithinCoworkingHours(bookingStartTime, bookingDurationHours);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -146,7 +158,7 @@ export function CustomerBookingModal({
           {/* 2. Tanggal & Jam */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="bookDate">Tanggal sewa</Label>
+              <Label htmlFor="bookDate">Tanggal sewa (Senin–Jumat)</Label>
               <Input
                 id="bookDate"
                 type="date"
@@ -154,15 +166,28 @@ export function CustomerBookingModal({
                 value={bookingDate}
                 onChange={(e) => onBookingDateChange(e.target.value)}
               />
+              {!dateStatus.isOpen ? (
+                <p className="text-xs text-destructive">{dateStatus.reason}</p>
+              ) : null}
             </div>
 
             {isHourly ? (
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="bookStartTime">Jam mulai</Label>
+                <Label htmlFor="bookStartTime">Jam mulai (09:00–18:00 WITA)</Label>
                 <NativeSelect
                   id="bookStartTime"
                   value={bookingStartTime}
-                  onChange={(e) => onBookingStartTimeChange(e.target.value)}
+                  onChange={(e) => {
+                    const nextStart = e.target.value;
+                    onBookingStartTimeChange(nextStart);
+                    const maxAvailableHours = Math.max(
+                      1,
+                      Math.floor((COWORKING_CLOSE_MINUTES - parseTimeToMinutes(nextStart)) / 60)
+                    );
+                    if (bookingDurationHours > maxAvailableHours) {
+                      onBookingDurationHoursChange(maxAvailableHours);
+                    }
+                  }}
                 >
                   {getAvailableTimeSlots().map((slot) => (
                     <NativeSelectOption key={slot} value={slot}>
@@ -183,17 +208,21 @@ export function CustomerBookingModal({
                 </span>
               </div>
               <div className="grid grid-cols-4 gap-2">
-                {[1, 2, 4, 8].map((hrs) => (
-                  <Button
-                    key={hrs}
-                    type="button"
-                    size="sm"
-                    variant={bookingDurationHours === hrs ? "default" : "outline"}
-                    onClick={() => onBookingDurationHoursChange(hrs)}
-                  >
-                    {hrs} jam
-                  </Button>
-                ))}
+                {[1, 2, 4, 8].map((hrs) => {
+                  const exceedsClosing = !isWithinCoworkingHours(bookingStartTime, hrs);
+                  return (
+                    <Button
+                      key={hrs}
+                      type="button"
+                      size="sm"
+                      disabled={exceedsClosing}
+                      variant={bookingDurationHours === hrs ? "default" : "outline"}
+                      onClick={() => onBookingDurationHoursChange(hrs)}
+                    >
+                      {hrs} jam
+                    </Button>
+                  );
+                })}
               </div>
             </div>
           ) : null}
@@ -326,7 +355,7 @@ export function CustomerBookingModal({
             <Button type="button" variant="outline" size="lg" onClick={() => onOpenChange(false)}>
               Batal
             </Button>
-            <Button type="submit" size="lg" disabled={isSubmitting}>
+            <Button type="submit" size="lg" disabled={isSubmitting || isPastClosing || !dateStatus.isOpen}>
               {isSubmitting ? "Memproses..." : `Konfirmasi sewa (${formatCurrencyIDR(finalCost)})`}
             </Button>
           </DialogFooter>

@@ -4,6 +4,7 @@ import type {
   CoworkingMember,
   SpaceStatus,
 } from "@/types/coworking";
+import { toWitaDateKey } from "@/contexts/DateFilterContext";
 import type { StatusTone } from "@/components/app/status-badge";
 
 export interface CoworkingKPIs {
@@ -147,6 +148,18 @@ export function computeBookingPricing(params: {
   };
 }
 
+function matchesNormalizedPhone(phoneValue: string | undefined, rawQuery: string): boolean {
+  if (!phoneValue || !rawQuery) return false;
+  if (phoneValue.toLowerCase().includes(rawQuery)) return true;
+  const qDigits = rawQuery.replace(/\D+/g, "");
+  if (qDigits.length < 3) return false;
+  const pDigits = phoneValue.replace(/\D+/g, "");
+  return (
+    pDigits.includes(qDigits) ||
+    (qDigits.startsWith("0") && pDigits.includes(`62${qDigits.slice(1)}`))
+  );
+}
+
 export function filterCoworkingMembers(
   members: CoworkingMember[],
   statusFilter: "ALL" | "ACTIVE" | "EXPIRED",
@@ -159,7 +172,8 @@ export function filterCoworkingMembers(
     const matchQuery =
       !q ||
       m.name.toLowerCase().includes(q) ||
-      m.contact.includes(q) ||
+      matchesNormalizedPhone(m.contact, q) ||
+      Boolean(m.email && m.email.toLowerCase().includes(q)) ||
       m.memberId.toLowerCase().includes(q) ||
       m.packageName.toLowerCase().includes(q);
     return matchStatus && matchQuery;
@@ -169,19 +183,33 @@ export function filterCoworkingMembers(
 export function filterCoworkingBookings(
   bookings: readonly CoworkingBooking[],
   statusFilter: string,
-  query: string
+  query: string,
+  dateFilter = ""
 ): CoworkingBooking[] {
   const q = query.trim().toLowerCase();
+  const targetDateKey = dateFilter.trim() ? toWitaDateKey(dateFilter.trim()) : "";
 
   return bookings.filter((b) => {
     const matchStatus = statusFilter === "ALL" || b.checkInStatus === statusFilter;
+    if (!matchStatus) return false;
+
+    if (targetDateKey) {
+      const startKey = toWitaDateKey(b.date || b.createdAt || "");
+      const endKey = b.endDate ? toWitaDateKey(b.endDate) : startKey;
+      if (!startKey || targetDateKey < startKey || targetDateKey > (endKey || startKey)) {
+        return false;
+      }
+    }
+
     const matchQuery =
       !q ||
       b.guestName.toLowerCase().includes(q) ||
       Boolean(b.bookingCode && b.bookingCode.toLowerCase().includes(q)) ||
-      Boolean(b.guestPhone && b.guestPhone.includes(q)) ||
+      matchesNormalizedPhone(b.guestPhone, q) ||
+      Boolean(b.company && b.company.toLowerCase().includes(q)) ||
+      Boolean(b.date && b.date.toLowerCase().includes(q)) ||
       Boolean(b.spaceName && b.spaceName.toLowerCase().includes(q));
-    return matchStatus && matchQuery;
+    return matchQuery;
   });
 }
 
@@ -272,9 +300,15 @@ export function buildCoworkingExportData(
     b.guestPhone,
     b.spaceName,
     b.bookingType,
-    `${b.duration} ${b.bookingType === "HOURLY" ? "Jam" : b.bookingType === "DAILY" ? "Hari" : "Bulan"}`,
+    b.bookingType === "HOURLY"
+      ? `${b.duration} Jam`
+      : b.bookingType === "DAILY"
+      ? `${b.duration} Hari`
+      : b.duration >= 28
+      ? "1 Bulan"
+      : `${b.duration} Bulan`,
     `Rp ${(b.totalAmount || 0).toLocaleString("id-ID")}`,
-    b.paymentStatus || "PAID",
+    b.paymentMethod || b.paymentStatus || "PAID",
     b.checkInStatus,
     `${b.date} ${b.startTime}`,
   ]);

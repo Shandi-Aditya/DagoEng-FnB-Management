@@ -11,11 +11,11 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { Spinner } from "@/components/ui/spinner";
 import { calculateEndTime, getAvailableTimeSlots, spaceTypeLabel } from "@/features/customer/customer-domain";
 import { isRangeFree, slotAvailability } from "@/features/customer/space-slots";
+import { COWORKING_MAX_HOURS, isWithinCoworkingHours } from "@/lib/operating-hours";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
 
-const DAYS_AHEAD = 7;
-const MAX_HOURS = 8;
+const DAYS_AHEAD = 10;
 const WITA = "Asia/Makassar";
 
 export interface SpaceBookingRequest {
@@ -50,9 +50,12 @@ function upcomingDays(): { value: string; weekday: string; day: string }[] {
 }
 
 
-/** Current hour in WITA as "HH:00", for hiding today's past slots. */
 function currentHourWita(): string {
-  const hour = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, timeZone: WITA }).format(new Date());
+  const hour = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    timeZone: WITA,
+  }).format(new Date());
   return `${hour}:00`;
 }
 
@@ -64,7 +67,9 @@ interface Selection {
 /** Pick a day, see each room's free hours, tap one to book it. */
 export function SpaceView(props: SpaceViewProps) {
   const days = useMemo(upcomingDays, []);
-  const [date, setDate] = useState(days[0].value);
+  const [date, setDate] = useState(
+    () => days.find((d) => props.isDateOpen(d.value).isOpen)?.value ?? days[0].value
+  );
   const [selection, setSelection] = useState<Selection | null>(null);
   const [hours, setHours] = useState(1);
   const [name, setName] = useState(props.defaultName);
@@ -83,7 +88,11 @@ export function SpaceView(props: SpaceViewProps) {
     setPhone((current) => current || props.defaultPhone);
   };
 
-  const canExtend = selection !== null && hours < MAX_HOURS && isRangeFree(props.bookings, selection.space.id, date, selection.start, hours + 1);
+  const canExtend =
+    selection !== null &&
+    hours < COWORKING_MAX_HOURS &&
+    isWithinCoworkingHours(selection.start, hours + 1) &&
+    isRangeFree(props.bookings, selection.space.id, date, selection.start, hours + 1);
   const total = selection ? selection.space.hourlyRate * hours : 0;
   const canSubmit = selection !== null && name.trim() !== "" && phone.trim() !== "";
 
@@ -91,24 +100,33 @@ export function SpaceView(props: SpaceViewProps) {
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-medium tracking-tight">Pesan ruang kerja</h1>
-        <p className="text-sm text-muted-foreground">Pilih hari, lalu ketuk jam yang masih kosong.</p>
+        <p className="text-sm text-muted-foreground">
+          Senin sampai Jumat, pukul 09.00 sampai 18.00 WITA.
+        </p>
       </div>
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 no-scrollbar" role="group" aria-label="Tanggal">
-        {days.map((day) => (
-          <Button
-            key={day.value}
-            type="button"
-            size="lg"
-            variant={day.value === date ? "default" : "outline"}
-            aria-pressed={day.value === date}
-            onClick={() => setDate(day.value)}
-            className="h-auto shrink-0 flex-col gap-0 px-3 py-1.5"
-          >
-            <span className="text-xs">{day.weekday}</span>
-            <span className="text-sm font-medium">{day.day}</span>
-          </Button>
-        ))}
+        {days.map((day) => {
+          const isDayOpen = props.isDateOpen(day.value).isOpen;
+          return (
+            <Button
+              key={day.value}
+              type="button"
+              size="lg"
+              variant={day.value === date ? "default" : "outline"}
+              aria-pressed={day.value === date}
+              onClick={() => setDate(day.value)}
+              className={cn(
+                "h-auto shrink-0 flex-col gap-0 px-3 py-1.5",
+                !isDayOpen && day.value !== date && "opacity-60"
+              )}
+            >
+              <span className="text-xs">{day.weekday}</span>
+              <span className="text-sm font-medium">{day.day}</span>
+              {!isDayOpen ? <span className="text-xs">Tutup</span> : null}
+            </Button>
+          );
+        })}
       </div>
 
       {!dayStatus.isOpen ? (
@@ -134,8 +152,14 @@ export function SpaceView(props: SpaceViewProps) {
                 </span>
               </div>
               <div className="grid grid-cols-5 gap-1.5">
-                {slotAvailability(props.bookings, space.id, date, slots)
-                  .map((slot) => ({ ...slot, isTaken: slot.isTaken || (pastCutoff !== null && slot.time <= pastCutoff) }))
+                {slotAvailability(
+                  props.bookings,
+                  space.id,
+                  date,
+                  slots,
+                  space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1
+                )
+                  .map((slot) => ({ ...slot, isTaken: slot.isTaken || (pastCutoff !== null && slot.time < pastCutoff) }))
                   .map((slot) => (
                   <button
                     key={slot.time}

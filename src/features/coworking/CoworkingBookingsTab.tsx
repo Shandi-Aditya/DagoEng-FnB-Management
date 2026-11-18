@@ -6,6 +6,7 @@ import { Calendar, KeyRound, LogOut, Printer, UserCheck } from "lucide-react";
 import { DataPagination } from "@/components/app/data-pagination";
 import { DataTableToolbar } from "@/components/app/data-table-toolbar";
 import { EmptyState } from "@/components/app/empty-state";
+import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -31,6 +32,12 @@ import {
 
 export interface CoworkingBookingsTabProps {
   bookings: CoworkingBooking[];
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+  statusFilter?: string;
+  onStatusFilterChange?: (status: string) => void;
+  dateFilter?: string;
+  onDateFilterChange?: (date: string) => void;
   onOpenReceipt: (booking: CoworkingBooking) => void;
   onCheckIn: (bookingId: string) => void;
   onCheckout: (spaceId: string) => void;
@@ -39,21 +46,48 @@ export interface CoworkingBookingsTabProps {
 
 export function CoworkingBookingsTab({
   bookings,
+  searchQuery: controlledSearch,
+  onSearchChange,
+  statusFilter: controlledStatus,
+  onStatusFilterChange,
+  dateFilter: controlledDate,
+  onDateFilterChange,
   onOpenReceipt,
   onCheckIn,
   onCheckout,
   onConfirmQris,
 }: CoworkingBookingsTabProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [localSearch, setLocalSearch] = useState("");
+  const [localStatus, setLocalStatus] = useState("ALL");
+  const [localDate, setLocalDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const isFiltered = searchQuery.trim() !== "" || statusFilter !== "ALL";
+  const searchQuery = controlledSearch ?? localSearch;
+  const statusFilter = controlledStatus ?? localStatus;
+  const dateFilter = controlledDate ?? localDate;
+
+  const updateSearch = (val: string) => {
+    if (onSearchChange) onSearchChange(val);
+    else setLocalSearch(val);
+    setCurrentPage(1);
+  };
+  const updateStatus = (val: string) => {
+    if (onStatusFilterChange) onStatusFilterChange(val);
+    else setLocalStatus(val);
+    setCurrentPage(1);
+  };
+  const updateDate = (val: string) => {
+    if (onDateFilterChange) onDateFilterChange(val);
+    else setLocalDate(val);
+    setCurrentPage(1);
+  };
+
+  const isFiltered = searchQuery.trim() !== "" || statusFilter !== "ALL" || dateFilter !== "";
 
   const filteredBookings = useMemo(
-    () => filterCoworkingBookings(bookings, statusFilter, searchQuery),
-    [bookings, statusFilter, searchQuery]
+    () => filterCoworkingBookings(bookings, statusFilter, searchQuery, dateFilter),
+    [bookings, statusFilter, searchQuery, dateFilter]
   );
 
   const totalPages = Math.max(1, Math.ceil(filteredBookings.length / pageSize));
@@ -69,25 +103,27 @@ export function CoworkingBookingsTab({
     <div className="flex flex-col gap-4">
       <DataTableToolbar
         searchValue={searchQuery}
-        onSearchChange={(val) => {
-          setSearchQuery(val);
-          setCurrentPage(1);
-        }}
-        searchPlaceholder="Cari kode booking, tamu, atau ruang"
+        onSearchChange={updateSearch}
+        searchPlaceholder="Cari kode booking, tamu, telepon, atau ruang"
         searchAriaLabel="Cari booking"
         hasActiveFilters={isFiltered}
         onResetFilters={() => {
-          setSearchQuery("");
-          setStatusFilter("ALL");
+          updateSearch("");
+          updateStatus("ALL");
+          updateDate("");
           setCurrentPage(1);
         }}
       >
+        <Input
+          type="date"
+          value={dateFilter}
+          onChange={(e) => updateDate(e.target.value)}
+          aria-label="Filter tanggal booking"
+          className="w-38"
+        />
         <NativeSelect
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setCurrentPage(1);
-          }}
+          onChange={(e) => updateStatus(e.target.value)}
           aria-label="Filter status sesi"
         >
           <NativeSelectOption value="ALL">Semua status sesi</NativeSelectOption>

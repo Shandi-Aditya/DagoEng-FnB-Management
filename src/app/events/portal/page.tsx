@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { notify } from "@/components/app/notify";
 import { useAuth } from "@/contexts/AuthContext";
+import { downloadCSV } from "@/lib/export-utils";
 import { getMissingPayoutFields } from "@/lib/payout";
 import type {
   CommunityEvent,
@@ -196,24 +197,45 @@ export default function CommunityOrganizerPortalPage() {
     }
   }, [activeEmail, portalData?.registeredBankAccount]);
 
-  // Handle Supervisor Community Selection
+  useEffect(() => {
+    if (
+      selectedEventId !== "ALL" &&
+      portalData &&
+      !portalData.events.some((evt) => evt.id === selectedEventId)
+    ) {
+      setSelectedEventId("ALL");
+    }
+  }, [portalData, selectedEventId]);
+
   const handleSelectCommunity = async (comm: { id: string; name: string; email: string }) => {
+    setSelectedEventId("ALL");
+    setAttendeeSearch("");
+    setAttendeeDateRange(null);
     setOrganizerEmail(comm.email);
     await loadPortalData(comm.email);
   };
 
   const handleOrganizerSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSelectedEventId("ALL");
     loadPortalData(organizerEmail);
   };
 
-  // Open Revision Modal
   const toDateTimeLocal = (isoString?: string) => {
     if (!isoString) return "";
     const d = new Date(isoString);
     if (isNaN(d.getTime())) return "";
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Makassar",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(d);
+    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+    return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
   };
 
   const openRevisionModal = (evt: CommunityEvent) => {
@@ -292,8 +314,16 @@ export default function CommunityOrganizerPortalPage() {
             location: revisionLocation,
             maxCapacity: Number(revisionCapacity),
             posterUrl: revisionPosterUrl,
-            startDate: revisionStartDate ? new Date(revisionStartDate).toISOString() : revisionEvent.startDate,
-            endDate: revisionEndDate ? new Date(revisionEndDate).toISOString() : revisionEvent.endDate,
+            startDate: revisionStartDate
+              ? /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(revisionStartDate.trim())
+                ? `${revisionStartDate.trim()}:00+08:00`
+                : new Date(revisionStartDate).toISOString()
+              : revisionEvent.startDate,
+            endDate: revisionEndDate
+              ? /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(revisionEndDate.trim())
+                ? `${revisionEndDate.trim()}:00+08:00`
+                : new Date(revisionEndDate).toISOString()
+              : revisionEvent.endDate,
             guidelines: revisionGuidelines,
           },
         }),
@@ -526,19 +556,12 @@ export default function CommunityOrganizerPortalPage() {
       String(b.ticketCount || 1),
       b.paymentStatus,
       b.checkInStatus,
-      b.checkInTime ? new Date(b.checkInTime).toLocaleString("id-ID") : "—",
+      b.checkInTime
+        ? new Date(b.checkInTime).toLocaleString("id-ID", { timeZone: "Asia/Makassar" })
+        : "—",
     ]);
 
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))].join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `peserta-komunitas-${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCSV(`peserta-komunitas-${Date.now()}.csv`, headers, rows);
     notify.info("File CSV diunduh");
   };
 

@@ -5,15 +5,12 @@ import {
   createOrganizer,
   updateOrganizerStatus,
   updateOrganizerDetails,
+  syncOrganizersFromDb,
 } from "@/lib/organizers";
 import { getOrganizerActivationStatus } from "@/lib/organizer-activation";
 
 export const dynamic = "force-dynamic";
 
-/**
- * GET /api/events/admin/organizers
- * Returns all registered community organizers.
- */
 export async function GET(req: NextRequest) {
   try {
     const auth = await assertEventAdmin(req);
@@ -24,6 +21,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    await syncOrganizersFromDb();
     const rawOrganizers = getAllOrganizers();
     const organizers = rawOrganizers.map((org) => ({
       ...org,

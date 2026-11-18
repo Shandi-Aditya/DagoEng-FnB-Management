@@ -148,7 +148,10 @@ export function ProductsCatalogTab({
 
           <NativeSelect
             value={sortOrder}
-            onChange={(e) => onSortOrderChange(e.target.value as ProductSortOrder)}
+            onChange={(e) => {
+              onSortOrderChange(e.target.value as ProductSortOrder);
+              setCurrentPage(1);
+            }}
             aria-label="Urutkan menu"
           >
             <NativeSelectOption value="UPDATED_DESC">Terbaru diubah</NativeSelectOption>
@@ -157,6 +160,23 @@ export function ProductsCatalogTab({
             <NativeSelectOption value="PRICE_ASC">Harga terendah</NativeSelectOption>
             <NativeSelectOption value="PRICE_DESC">Harga tertinggi</NativeSelectOption>
           </NativeSelect>
+
+          {hasFilter ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onSearchChange("");
+                onCategoryFilterChange("ALL");
+                onStatusFilterChange("ALL");
+                if (!isTenantScope && onTenantFilterChange) onTenantFilterChange("ALL");
+                setCurrentPage(1);
+              }}
+            >
+              Reset filter
+            </Button>
+          ) : null}
         </div>
 
         <span className="text-xs text-muted-foreground tabular-nums">

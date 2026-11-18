@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/components/app/status-badge";
+import { normalizeTenantId } from "@/features/orders/orders-domain";
 import { resolveItemTenantId } from "@/lib/settlement";
 import type { OrderItemRecord, OrderRecord, OrderStatus, SLAStatus } from "@/types/order";
 import type { KitchenTicketData } from "@/types/printer";
@@ -42,14 +43,59 @@ export const STATION_FILTERS: readonly { value: KitchenStation; label: string }[
 ];
 
 const ACTIVE_STATUSES = new Set<OrderStatus>(KDS_COLUMNS.flatMap((column) => column.statuses));
-const BARISTA_KEYWORDS = ["kopi", "tea", "latte", "espresso", "ice", "matcha"];
-const PASTRY_KEYWORDS = ["croissant", "pastry", "cake", "toast"];
+const BARISTA_KEYWORDS = [
+  "kopi",
+  "tea",
+  "latte",
+  "espresso",
+  "ice",
+  "es",
+  "matcha",
+  "americano",
+  "teh",
+  "jeruk",
+  "cappuccino",
+  "mojito",
+  "squash",
+  "juice",
+  "jus",
+  "coklat",
+  "cokelat",
+  "air",
+  "mineral",
+];
+const PASTRY_KEYWORDS = [
+  "croissant",
+  "pastry",
+  "cake",
+  "toast",
+  "bread",
+  "bolu",
+  "danish",
+  "cinnamon",
+  "sourdough",
+  "chocolat",
+];
 
-function includesAny(name: string, keywords: readonly string[]): boolean {
-  return keywords.some((keyword) => name.includes(keyword));
+function matchesKeyword(name: string, keyword: string): boolean {
+  if (keyword === "ice") return /\biced?\b/i.test(name);
+  if (keyword === "chocolat") return /\bchocolat/i.test(name);
+  return new RegExp(`\\b${keyword}\\b`, "i").test(name);
 }
 
-/** Station an item is prepared at, guessed from its name. Hot kitchen is everything else. */
+function includesAny(name: string, keywords: readonly string[]): boolean {
+  return keywords.some((keyword) => matchesKeyword(name, keyword));
+}
+
+export function effectiveKitchenStatus(order: OrderRecord, tenantId?: string): OrderStatus {
+  const normTenant = normalizeTenantId(tenantId);
+  if (normTenant && normTenant !== "ALL" && order.tenantStatuses) {
+    if (order.tenantStatuses[normTenant]) return order.tenantStatuses[normTenant];
+    if (tenantId && order.tenantStatuses[tenantId]) return order.tenantStatuses[tenantId];
+  }
+  return order.status;
+}
+
 export function stationFor(productName: string): Exclude<KitchenStation, "ALL"> {
   const name = productName.toLowerCase();
   if (includesAny(name, BARISTA_KEYWORDS)) return "BARISTA";
@@ -57,13 +103,23 @@ export function stationFor(productName: string): Exclude<KitchenStation, "ALL"> 
   return "KITCHEN";
 }
 
-/** Items a kitchen should see on a ticket: a tenant only sees its own. */
-export function ticketItems(order: OrderRecord, tenantId: string | undefined): OrderItemRecord[] {
-  if (!tenantId || tenantId === "ALL") return order.items;
-  return order.items.filter((item) => {
-    const itemTenant = resolveItemTenantId(item);
-    return itemTenant === tenantId;
-  });
+export function ticketItems(
+  order: OrderRecord,
+  tenantId: string | undefined,
+  station: KitchenStation = "ALL"
+): OrderItemRecord[] {
+  const normTenant = normalizeTenantId(tenantId);
+  const fallbackTenantId = (order as { tenantId?: string }).tenantId;
+  const byTenant =
+    !normTenant || normTenant === "ALL"
+      ? order.items
+      : order.items.filter((item) => {
+          const itemTenant = normalizeTenantId(resolveItemTenantId(item, fallbackTenantId));
+          return itemTenant === normTenant;
+        });
+
+  if (!station || station === "ALL") return byTenant;
+  return byTenant.filter((item) => stationFor(item.productName) === station);
 }
 
 function matchesType(order: OrderRecord, type: KitchenTypeFilter): boolean {
@@ -75,7 +131,7 @@ function matchesType(order: OrderRecord, type: KitchenTypeFilter): boolean {
 /** Active tickets for the board, oldest first so the queue is served FIFO. */
 export function filterKitchenOrders(orders: readonly OrderRecord[], filters: KitchenFilters): OrderRecord[] {
   return orders
-    .filter((order) => ACTIVE_STATUSES.has(order.status))
+    .filter((order) => ACTIVE_STATUSES.has(effectiveKitchenStatus(order, filters.tenantId)))
     .filter((order) => ticketItems(order, filters.tenantId).length > 0)
     .filter((order) => matchesType(order, filters.type))
     .filter((order) => {
@@ -96,12 +152,14 @@ export function getNewIncomingKitchenOrders(
   dismissedIds: ReadonlySet<string> = new Set()
 ): OrderRecord[] {
   return orders
-    .filter(
-      (o) =>
-        (o.status === "NEW" || o.status === "CONFIRMED") &&
+    .filter((o) => {
+      const status = effectiveKitchenStatus(o, tenantId);
+      return (
+        (status === "NEW" || status === "CONFIRMED") &&
         ticketItems(o, tenantId).length > 0 &&
         !dismissedIds.has(o.id)
-    )
+      );
+    })
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 

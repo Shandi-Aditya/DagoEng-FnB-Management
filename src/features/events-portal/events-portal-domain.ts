@@ -5,8 +5,12 @@ import type {
   EventTicketOrder,
 } from "@/types/event";
 import type { DateRange } from "@/components/events/EventDateRangeFilter";
-import { isTimestampInWitaPeriod } from "@/components/events/EventDateRangeFilter";
+import {
+  isEventInWitaPeriod,
+  isTimestampInWitaPeriod,
+} from "@/components/events/EventDateRangeFilter";
 import { resolveVenueCapacity } from "@/lib/event-capacity";
+import { normalizeIndonesianPhone } from "@/lib/utils";
 
 // Reuse and re-export shared domain logic from events-admin for maximum efficiency
 export {
@@ -38,9 +42,6 @@ export interface EventOccupancyResult {
   occupancyRate: number;
 }
 
-/**
- * Filter event mitra secara murni tanpa mutasi input.
- */
 export function filterOrganizerEvents(
   events: readonly CommunityEvent[],
   status: string,
@@ -53,42 +54,62 @@ export function filterOrganizerEvents(
     const matchStatus = status === "ALL" || e.status === status;
     const matchSearch =
       !query ||
-      e.title.toLowerCase().includes(query) ||
-      (e.location && e.location.toLowerCase().includes(query));
+      (e.title || "").toLowerCase().includes(query) ||
+      Boolean(e.location && e.location.toLowerCase().includes(query));
 
-    let matchDate = true;
-    if (dateRange && e.startDate) {
-      matchDate = isTimestampInWitaPeriod(e.startDate, dateRange);
-    }
+    const matchDate = dateRange ? isEventInWitaPeriod(e, dateRange) : true;
 
     return matchStatus && matchSearch && matchDate;
   });
 }
 
-/**
- * Filter daftar peserta dan pemesanan tiket secara murni.
- */
 export function filterOrganizerAttendees(
   bookings: readonly EventTicketOrder[],
   selectedEventId: string,
   searchQuery: string,
-  dateRange?: DateRange | null
+  dateRange?: DateRange | null,
+  paymentStatusFilter: string = "ALL",
+  checkInStatusFilter: string = "ALL"
 ): EventTicketOrder[] {
   const query = searchQuery.trim().toLowerCase();
+  const normPhone = normalizeIndonesianPhone(query);
 
   return bookings.filter((b) => {
     const matchEvent = selectedEventId === "ALL" || b.eventId === selectedEventId;
+
+    if (paymentStatusFilter !== "ALL") {
+      if (paymentStatusFilter === "REJECTED") {
+        if (String(b.paymentStatus) !== "REJECTED" && !b.paymentRejectionReason) return false;
+      } else if (b.paymentStatus !== paymentStatusFilter) {
+        return false;
+      }
+    }
+
+    if (checkInStatusFilter !== "ALL") {
+      const qty = b.ticketCount || 1;
+      const checkedQty =
+        typeof b.checkedInQty === "number"
+          ? b.checkedInQty
+          : b.checkInStatus === "CHECKED_IN"
+          ? qty
+          : 0;
+      const isChecked = b.checkInStatus === "CHECKED_IN" || checkedQty >= qty;
+      const isPartial = !isChecked && checkedQty > 0;
+      if (checkInStatusFilter === "CHECKED_IN" && !isChecked) return false;
+      if (checkInStatusFilter === "PARTIALLY_CHECKED_IN" && !isPartial) return false;
+      if (checkInStatusFilter === "REGISTERED" && (isChecked || isPartial)) return false;
+    }
+
     const matchSearch =
       !query ||
-      b.ticketCode.toLowerCase().includes(query) ||
-      b.guestName.toLowerCase().includes(query) ||
+      (b.ticketCode || "").toLowerCase().includes(query) ||
+      (b.guestName || "").toLowerCase().includes(query) ||
+      (b.guestEmail || "").toLowerCase().includes(query) ||
       (b.institution || "").toLowerCase().includes(query) ||
-      (b.guestPhone || "").toLowerCase().includes(query);
+      (b.guestPhone || "").toLowerCase().includes(query) ||
+      (normPhone.length >= 4 && normalizeIndonesianPhone(b.guestPhone || "").includes(normPhone));
 
-    let matchDate = true;
-    if (dateRange && b.createdAt) {
-      matchDate = isTimestampInWitaPeriod(b.createdAt, dateRange);
-    }
+    const matchDate = dateRange ? isTimestampInWitaPeriod(b.createdAt, dateRange) : true;
 
     return matchEvent && matchSearch && matchDate;
   });

@@ -1,10 +1,25 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext } from "react";
+import type { TablesCommand } from "@/lib/domain-sync-types";
+import {
+  applyTablesCommand,
+  INITIAL_AREAS,
+  INITIAL_RESERVATIONS,
+  tablesSyncClient,
+} from "@/lib/sync-domains/spaces-spec";
+import { useSyncedDomain } from "@/lib/use-synced-domain";
 import { useOutlet } from "./OutletContext";
 import { useActivityLog } from "./ActivityLogContext";
 
-export type TableStatus = "AVAILABLE" | "OCCUPIED" | "RESERVED" | "BILLING" | "CLEANING";
+export { INITIAL_AREAS, INITIAL_RESERVATIONS };
+
+export type TableStatus =
+  | "AVAILABLE"
+  | "OCCUPIED"
+  | "RESERVED"
+  | "BILLING"
+  | "CLEANING";
 
 export interface TableItem {
   id: string;
@@ -13,12 +28,42 @@ export interface TableItem {
   status: TableStatus;
   outletId: string;
   outletName: string;
+  area?: string;
   customer?: string;
   total?: string;
+  currentBillTotal?: number;
   time?: string;
   itemsCount?: number;
   activeOrderId?: string;
   paymentStatus?: "UNPAID" | "PAID";
+}
+
+export interface SelectableTableCandidate {
+  status: string;
+  paymentStatus?: string;
+  activeOrderId?: string;
+  currentBillTotal?: number;
+  total?: string;
+}
+
+export function isTableSelectableForPos(
+  table: SelectableTableCandidate
+): boolean {
+  if (table.status === "AVAILABLE") return true;
+  if (table.status !== "OCCUPIED") return false;
+  if (table.paymentStatus === "PAID" || table.activeOrderId) return false;
+  if (table.currentBillTotal !== undefined && table.currentBillTotal > 0) {
+    return false;
+  }
+  if (
+    table.total &&
+    table.total !== "Rp 0" &&
+    !table.total.startsWith("DP Masuk")
+  ) {
+    const numericTotal = Number(table.total.replace(/\D/g, ""));
+    if (numericTotal > 0) return false;
+  }
+  return true;
 }
 
 export interface AreaItem {
@@ -44,114 +89,74 @@ export interface ScheduledReservation {
   status: "CONFIRMED" | "SEATED" | "CANCELLED" | "COMPLETED";
 }
 
-export const INITIAL_AREAS: AreaItem[] = [
-  // 1. Outlet Singaraja (KS-SGR)
-  {
-    id: "area-sgr-1",
-    name: "Indoor AC Main Hall",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    tables: [
-      { id: "T-01", number: "T-01", cap: 2, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
-      { id: "T-02", number: "T-02", cap: 4, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
-      { id: "T-03", number: "T-03", cap: 4, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
-      { id: "T-04", number: "T-04", cap: 6, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
-      { id: "VIP-01", number: "VIP-01", cap: 8, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
-    ],
-  },
-  {
-    id: "area-sgr-2",
-    name: "Outdoor Tropical Garden",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    tables: [
-      { id: "OUT-01", number: "OUT-01", cap: 4, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
-      { id: "OUT-02", number: "OUT-02", cap: 6, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
-      { id: "OUT-03", number: "OUT-03", cap: 2, status: "AVAILABLE", outletId: "outlet-sgr", outletName: "Singaraja" },
-    ],
-  },
-
-  // 2. Outlet Denpasar (KS-DPS) - STRICTLY ISOLATED
-  {
-    id: "area-dps-1",
-    name: "VIP Lounge Denpasar",
-    outletId: "outlet-dps",
-    outletName: "Denpasar",
-    tables: [
-      { id: "DPS-01", number: "DPS-01", cap: 4, status: "AVAILABLE", outletId: "outlet-dps", outletName: "Denpasar" },
-      { id: "DPS-02", number: "DPS-02", cap: 6, status: "AVAILABLE", outletId: "outlet-dps", outletName: "Denpasar" },
-    ],
-  },
-
-  // 3. Outlet Ubud (KS-UBD) - STRICTLY ISOLATED
-  {
-    id: "area-ubd-1",
-    name: "Jungle Terrace Ubud",
-    outletId: "outlet-ubd",
-    outletName: "Ubud",
-    tables: [
-      { id: "UBD-01", number: "UBD-01", cap: 2, status: "AVAILABLE", outletId: "outlet-ubd", outletName: "Ubud" },
-      { id: "UBD-02", number: "UBD-02", cap: 4, status: "AVAILABLE", outletId: "outlet-ubd", outletName: "Ubud" },
-    ],
-  },
-];
-
-export const INITIAL_RESERVATIONS: ScheduledReservation[] = [];
-
 interface TableContextType {
   areas: AreaItem[];
   filteredAreas: AreaItem[];
   reservations: ScheduledReservation[];
   filteredReservations: ScheduledReservation[];
   getAvailableTables: (outletId?: string) => TableItem[];
-  occupyTableWithOrder: (tableId: string, orderDetails: { customerName: string; totalFormatted: string; itemsCount: number; orderId: string }) => void;
+  occupyTableWithOrder: (
+    tableId: string,
+    orderDetails: {
+      customerName: string;
+      totalFormatted: string;
+      itemsCount: number;
+      orderId: string;
+    }
+  ) => void;
   releaseTableToAvailable: (tableId: string) => void;
-  updateTableStatus: (tableId: string, status: TableStatus, customer?: string, total?: string) => void;
+  updateTableStatus: (
+    tableId: string,
+    status: TableStatus,
+    customer?: string,
+    total?: string
+  ) => void;
   seatReservation: (reservationId: string) => void;
   cancelReservation: (reservationId: string) => void;
   addReservation: (reservation: Omit<ScheduledReservation, "id">) => void;
   addArea: (name: string, outletId?: string) => void;
   addTable: (areaId: string, number: string, cap: number) => void;
+  updateTable: (
+    tableId: string,
+    updates: {
+      number?: string;
+      areaName?: string;
+      cap?: number;
+      status?: TableStatus;
+    }
+  ) => void;
+  deleteTable: (tableId: string) => void;
   resetTableData: () => void;
 }
 
 const TableContext = createContext<TableContextType | undefined>(undefined);
-const STORAGE_KEY_AREAS = "dagoeng_tables_areas_v3";
-const STORAGE_KEY_RESERVATIONS = "dagoeng_tables_reservations_v3";
+
+function findTableInAreas(
+  areas: readonly AreaItem[],
+  tableIdOrNumber: string
+): { area: AreaItem; table: TableItem } | null {
+  for (const area of areas) {
+    const exact = area.tables.find((item) => item.id === tableIdOrNumber);
+    if (exact) return { area, table: exact };
+  }
+  for (const area of areas) {
+    const byNumber = area.tables.find(
+      (item) => item.number === tableIdOrNumber
+    );
+    if (byNumber) return { area, table: byNumber };
+  }
+  return null;
+}
 
 export function TableProvider({ children }: { children: React.ReactNode }) {
   const { activeOutletId, activeOutlet, isAllOutlets } = useOutlet();
   const { logActivity } = useActivityLog();
 
-  const [areas, setAreas] = useState<AreaItem[]>(INITIAL_AREAS);
-  const [reservations, setReservations] = useState<ScheduledReservation[]>(INITIAL_RESERVATIONS);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [domainState, mutateTables] = useSyncedDomain(tablesSyncClient, {
+    pollMs: 5000,
+  });
+  const { areas, reservations } = domainState;
 
-  useEffect(() => {
-    try {
-      const savedAreas = localStorage.getItem(STORAGE_KEY_AREAS);
-      const savedReservations = localStorage.getItem(STORAGE_KEY_RESERVATIONS);
-
-      if (savedAreas) setAreas(JSON.parse(savedAreas));
-      if (savedReservations) setReservations(JSON.parse(savedReservations));
-    } catch (e) {
-      console.error("Failed to load table state", e);
-    } finally {
-      setIsInitialized(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isInitialized) return;
-    try {
-      localStorage.setItem(STORAGE_KEY_AREAS, JSON.stringify(areas));
-      localStorage.setItem(STORAGE_KEY_RESERVATIONS, JSON.stringify(reservations));
-    } catch (e) {
-      console.error("Failed to save table state", e);
-    }
-  }, [areas, reservations, isInitialized]);
-
-  // Scoped areas and tables based strictly on activeOutletId
   const filteredAreas = areas.filter((area) => {
     if (isAllOutlets) return true;
     return area.outletId === activeOutletId;
@@ -162,52 +167,49 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
     return r.outletId === activeOutletId;
   });
 
-  // Returns only tables that are AVAILABLE for new orders
   const getAvailableTables = (outletId?: string): TableItem[] => {
     const targetOutlet = outletId !== undefined ? outletId : activeOutletId;
     return areas
-      .filter((a) => targetOutlet === "ALL" || isAllOutlets || a.outletId === targetOutlet)
-      .flatMap((a) => a.tables)
-      .filter((t) => t.status === "AVAILABLE");
+      .filter(
+        (a) =>
+          targetOutlet === "ALL" || isAllOutlets || a.outletId === targetOutlet
+      )
+      .flatMap((a) => a.tables.map((t) => ({ ...t, area: t.area || a.name })))
+      .filter((t) => isTableSelectableForPos(t));
   };
 
-  // OCCUPY TABLE ON POS TRANSACTION
   const occupyTableWithOrder = (
     tableId: string,
-    orderDetails: { customerName: string; totalFormatted: string; itemsCount: number; orderId: string }
-  ) => {
-    let targetArea: AreaItem | undefined;
-    let targetTable: TableItem | undefined;
-
-    for (const a of areas) {
-      const t = a.tables.find((item) => item.id === tableId || item.number === tableId);
-      if (t) {
-        targetArea = a;
-        targetTable = t;
-        break;
-      }
+    orderDetails: {
+      customerName: string;
+      totalFormatted: string;
+      itemsCount: number;
+      orderId: string;
     }
+  ) => {
+    const found = findTableInAreas(tablesSyncClient.getSnapshot().areas, tableId);
+    if (!found) return;
+    const { area: targetArea, table: targetTable } = found;
 
-    if (!targetTable || !targetArea) return;
+    const numericBillTotal =
+      Number(orderDetails.totalFormatted.replace(/\D/g, "")) || 0;
 
-    setAreas((prev) =>
-      prev.map((area) => ({
-        ...area,
-        tables: area.tables.map((table) =>
-          table.id === targetTable!.id
-            ? {
-                ...table,
-                status: "OCCUPIED",
-                customer: orderDetails.customerName,
-                total: orderDetails.totalFormatted,
-                time: "Baru saja",
-                itemsCount: orderDetails.itemsCount,
-                activeOrderId: orderDetails.orderId,
-                paymentStatus: "PAID",
-              }
-            : table
-        ),
-      }))
+    const cmd: TablesCommand = {
+      op: "PATCH_TABLE_STATUS",
+      tableId: targetTable.id,
+      status: "OCCUPIED",
+      customer: orderDetails.customerName,
+      total: orderDetails.totalFormatted,
+      currentBillTotal: numericBillTotal,
+      time: "Baru saja",
+      itemsCount: orderDetails.itemsCount,
+      activeOrderId: orderDetails.orderId,
+      paymentStatus: "PAID",
+    };
+
+    mutateTables(
+      (prev) => applyTablesCommand(prev, cmd),
+      { id: `tbl-status-${targetTable.id}`, isCreate: false, command: cmd }
     );
 
     logActivity({
@@ -224,40 +226,20 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  // RELEASE TABLE BACK TO AVAILABLE
   const releaseTableToAvailable = (tableId: string) => {
-    let targetArea: AreaItem | undefined;
-    let targetTable: TableItem | undefined;
+    const found = findTableInAreas(tablesSyncClient.getSnapshot().areas, tableId);
+    if (!found) return;
+    const { area: targetArea, table: targetTable } = found;
 
-    for (const a of areas) {
-      const t = a.tables.find((item) => item.id === tableId || item.number === tableId);
-      if (t) {
-        targetArea = a;
-        targetTable = t;
-        break;
-      }
-    }
+    const cmd: TablesCommand = {
+      op: "PATCH_TABLE_STATUS",
+      tableId: targetTable.id,
+      status: "AVAILABLE",
+    };
 
-    if (!targetTable || !targetArea) return;
-
-    setAreas((prev) =>
-      prev.map((area) => ({
-        ...area,
-        tables: area.tables.map((table) =>
-          table.id === targetTable!.id
-            ? {
-                ...table,
-                status: "AVAILABLE",
-                customer: undefined,
-                total: undefined,
-                time: undefined,
-                itemsCount: undefined,
-                activeOrderId: undefined,
-                paymentStatus: undefined,
-              }
-            : table
-        ),
-      }))
+    mutateTables(
+      (prev) => applyTablesCommand(prev, cmd),
+      { id: `tbl-status-${targetTable.id}`, isCreate: false, command: cmd }
     );
 
     logActivity({
@@ -274,41 +256,38 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const updateTableStatus = (tableId: string, status: TableStatus, customer?: string, total?: string) => {
-    let targetArea: AreaItem | undefined;
-    let targetTable: TableItem | undefined;
-
-    for (const a of areas) {
-      const t = a.tables.find((item) => item.id === tableId || item.number === tableId);
-      if (t) {
-        targetArea = a;
-        targetTable = t;
-        break;
-      }
-    }
-
-    if (!targetTable || !targetArea) return;
+  const updateTableStatus = (
+    tableId: string,
+    status: TableStatus,
+    customer?: string,
+    total?: string
+  ) => {
+    const found = findTableInAreas(tablesSyncClient.getSnapshot().areas, tableId);
+    if (!found) return;
+    const { area: targetArea, table: targetTable } = found;
 
     const isReset = status === "AVAILABLE";
+    const nextCurrentBillTotal = isReset
+      ? undefined
+      : total !== undefined
+        ? total.startsWith("DP Masuk")
+          ? 0
+          : Number(total.replace(/\D/g, "")) || 0
+        : targetTable.currentBillTotal;
 
-    setAreas((prev) =>
-      prev.map((area) => ({
-        ...area,
-        tables: area.tables.map((table) =>
-          table.id === targetTable!.id
-            ? {
-                ...table,
-                status,
-                customer: isReset ? undefined : (customer !== undefined ? customer : table.customer),
-                total: isReset ? undefined : (total !== undefined ? total : table.total),
-                time: isReset ? undefined : (status === "OCCUPIED" ? "Baru saja" : table.time),
-                itemsCount: isReset ? undefined : table.itemsCount,
-                activeOrderId: isReset ? undefined : table.activeOrderId,
-                paymentStatus: isReset ? undefined : table.paymentStatus,
-              }
-            : table
-        ),
-      }))
+    const cmd: TablesCommand = {
+      op: "PATCH_TABLE_STATUS",
+      tableId: targetTable.id,
+      status,
+      customer,
+      total,
+      currentBillTotal: nextCurrentBillTotal,
+      time: isReset ? undefined : status === "OCCUPIED" ? "Baru saja" : targetTable.time,
+    };
+
+    mutateTables(
+      (prev) => applyTablesCommand(prev, cmd),
+      { id: `tbl-status-${targetTable.id}`, isCreate: false, command: cmd }
     );
 
     logActivity({
@@ -326,14 +305,28 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
   };
 
   const seatReservation = (reservationId: string) => {
-    const target = reservations.find((r) => r.id === reservationId);
+    const target = tablesSyncClient
+      .getSnapshot()
+      .reservations.find((r) => r.id === reservationId);
     if (!target) return;
 
-    setReservations((prev) =>
-      prev.map((r) => (r.id === reservationId ? { ...r, status: "SEATED" } : r))
+    const resCmd: TablesCommand = {
+      op: "PATCH_RESERVATION_STATUS",
+      reservationId,
+      status: "SEATED",
+    };
+
+    mutateTables(
+      (prev) => applyTablesCommand(prev, resCmd),
+      { id: `tbl-res-${reservationId}`, isCreate: false, command: resCmd }
     );
 
-    updateTableStatus(target.tableId, "OCCUPIED", target.customerName, `DP Masuk: Rp ${target.downPayment.toLocaleString()}`);
+    updateTableStatus(
+      target.tableId,
+      "OCCUPIED",
+      target.customerName,
+      `DP Masuk: Rp ${target.downPayment.toLocaleString()}`
+    );
 
     logActivity({
       module: "TABLES",
@@ -350,11 +343,20 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
   };
 
   const cancelReservation = (reservationId: string) => {
-    const target = reservations.find((r) => r.id === reservationId);
+    const target = tablesSyncClient
+      .getSnapshot()
+      .reservations.find((r) => r.id === reservationId);
     if (!target) return;
 
-    setReservations((prev) =>
-      prev.map((r) => (r.id === reservationId ? { ...r, status: "CANCELLED" } : r))
+    const resCmd: TablesCommand = {
+      op: "PATCH_RESERVATION_STATUS",
+      reservationId,
+      status: "CANCELLED",
+    };
+
+    mutateTables(
+      (prev) => applyTablesCommand(prev, resCmd),
+      { id: `tbl-res-${reservationId}`, isCreate: false, command: resCmd }
     );
 
     releaseTableToAvailable(target.tableId);
@@ -379,8 +381,21 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
       id: `res-${Date.now()}`,
     };
 
-    setReservations((prev) => [newRes, ...prev]);
-    updateTableStatus(newRes.tableId, "RESERVED", `${newRes.customerName} (${newRes.dateTime})`);
+    const resCmd: TablesCommand = {
+      op: "UPSERT_RESERVATION",
+      reservation: newRes,
+    };
+
+    mutateTables(
+      (prev) => applyTablesCommand(prev, resCmd),
+      { id: `tbl-res-${newRes.id}`, isCreate: true, command: resCmd }
+    );
+
+    updateTableStatus(
+      newRes.tableId,
+      "RESERVED",
+      `${newRes.customerName} (${newRes.dateTime})`
+    );
 
     logActivity({
       module: "TABLES",
@@ -396,7 +411,8 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addArea = (name: string, outletId?: string) => {
-    const targetOutletId = outletId || (activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr");
+    const targetOutletId =
+      outletId || (activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr");
     const targetOutletName = activeOutlet?.name || "Singaraja";
 
     const newArea: AreaItem = {
@@ -407,7 +423,15 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
       tables: [],
     };
 
-    setAreas((prev) => [...prev, newArea]);
+    const cmd: TablesCommand = {
+      op: "UPSERT_AREA",
+      area: newArea,
+    };
+
+    mutateTables(
+      (prev) => applyTablesCommand(prev, cmd),
+      { id: `tbl-area-${newArea.id}`, isCreate: true, command: cmd }
+    );
 
     logActivity({
       module: "TABLES",
@@ -423,20 +447,52 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addTable = (areaId: string, number: string, cap: number) => {
-    const area = areas.find((a) => a.id === areaId);
-    if (!area) return;
+    const trimmedNumber = number.trim();
+    if (!trimmedNumber) return;
 
+    const currentAreas = tablesSyncClient.getSnapshot().areas;
+    const targetOutletId =
+      activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
+    const targetOutletName = activeOutlet?.name || "Singaraja";
+    const areaById = currentAreas.find((a) => a.id === areaId);
+    const areaByName = !areaById
+      ? currentAreas.find(
+          (a) =>
+            a.outletId === targetOutletId &&
+            a.name.trim().toLowerCase() === areaId.trim().toLowerCase()
+        )
+      : undefined;
+    const resolvedArea = areaById ?? areaByName;
+    const effectiveOutletId = resolvedArea?.outletId || targetOutletId;
+    const effectiveOutletName = resolvedArea?.outletName || targetOutletName;
+    const effectiveAreaName = resolvedArea?.name || areaId.trim() || "Main Hall";
+
+    const idExists = currentAreas.some((a) =>
+      a.tables.some((t) => t.id === trimmedNumber)
+    );
     const newTable: TableItem = {
-      id: number.trim(),
-      number: number.trim(),
+      id: idExists ? `tbl-${Date.now()}` : trimmedNumber,
+      number: trimmedNumber,
       cap,
       status: "AVAILABLE",
-      outletId: area.outletId,
-      outletName: area.outletName,
+      outletId: effectiveOutletId,
+      outletName: effectiveOutletName,
+      area: effectiveAreaName,
     };
 
-    setAreas((prev) =>
-      prev.map((a) => (a.id === areaId ? { ...a, tables: [...a.tables, newTable] } : a))
+    const cmd: TablesCommand = resolvedArea
+      ? { op: "UPSERT_TABLE", areaId: resolvedArea.id, table: newTable }
+      : {
+          op: "UPSERT_TABLE",
+          areaName: effectiveAreaName,
+          outletId: effectiveOutletId,
+          outletName: effectiveOutletName,
+          table: newTable,
+        };
+
+    mutateTables(
+      (prev) => applyTablesCommand(prev, cmd),
+      { id: `tbl-upsert-${newTable.id}`, isCreate: true, command: cmd }
     );
 
     logActivity({
@@ -444,23 +500,123 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
       action: "CREATE_TABLE",
       recordId: newTable.id,
       newValue: `Meja ${newTable.number} (Kapasitas ${cap} orang)`,
-      description: `Penambahan Meja ${newTable.number} di area ${area.name}`,
+      description: `Penambahan Meja ${newTable.number} di area ${effectiveAreaName}`,
       reason: "Penambahan kapasitas kursi gerai",
       status: "SUCCESS",
-      outletId: area.outletId,
-      outletName: area.outletName,
+      outletId: effectiveOutletId,
+      outletName: effectiveOutletName,
+    });
+  };
+
+  const updateTable = (
+    tableId: string,
+    updates: {
+      number?: string;
+      areaName?: string;
+      cap?: number;
+      status?: TableStatus;
+    }
+  ) => {
+    const found = findTableInAreas(tablesSyncClient.getSnapshot().areas, tableId);
+    if (!found) return;
+    const { area: existingArea, table: existingTable } = found;
+
+    const nextNumber =
+      updates.number !== undefined && String(updates.number).trim()
+        ? String(updates.number).trim()
+        : existingTable.number;
+    const nextCap =
+      updates.cap !== undefined
+        ? Number(updates.cap) || existingTable.cap
+        : existingTable.cap;
+    const nextStatus = updates.status ?? existingTable.status;
+    const nextAreaName = updates.areaName?.trim();
+    const isReset = nextStatus === "AVAILABLE";
+
+    const updatedTable: TableItem = {
+      ...existingTable,
+      number: nextNumber,
+      cap: nextCap,
+      status: nextStatus,
+      area: nextAreaName || existingArea.name,
+      customer: isReset ? undefined : existingTable.customer,
+      total: isReset ? undefined : existingTable.total,
+      currentBillTotal: isReset ? undefined : existingTable.currentBillTotal,
+      time: isReset ? undefined : existingTable.time,
+      itemsCount: isReset ? undefined : existingTable.itemsCount,
+      activeOrderId: isReset ? undefined : existingTable.activeOrderId,
+      paymentStatus: isReset ? undefined : existingTable.paymentStatus,
+    };
+
+    const cmd: TablesCommand = nextAreaName
+      ? {
+          op: "UPSERT_TABLE",
+          areaName: nextAreaName,
+          outletId: existingArea.outletId,
+          outletName: existingArea.outletName,
+          table: updatedTable,
+          previousTableId: existingTable.id,
+        }
+      : {
+          op: "UPSERT_TABLE",
+          areaId: existingArea.id,
+          table: updatedTable,
+          previousTableId: existingTable.id,
+        };
+
+    mutateTables(
+      (prev) => applyTablesCommand(prev, cmd),
+      { id: `tbl-upsert-${existingTable.id}`, isCreate: false, command: cmd }
+    );
+
+    logActivity({
+      module: "TABLES",
+      action: "UPDATE_TABLE",
+      recordId: existingTable.id,
+      previousValue: `Meja ${existingTable.number} (${existingArea.name}, Kapasitas ${existingTable.cap})`,
+      newValue: `Meja ${updatedTable.number} (${nextAreaName || existingArea.name}, Kapasitas ${updatedTable.cap})`,
+      description: `Pembaruan data Meja ${updatedTable.number}`,
+      reason: "Pembaruan konfigurasi meja gerai",
+      status: "SUCCESS",
+      outletId: existingArea.outletId,
+      outletName: existingArea.outletName,
+    });
+  };
+
+  const deleteTable = (tableId: string) => {
+    const found = findTableInAreas(tablesSyncClient.getSnapshot().areas, tableId);
+    if (!found) return;
+    const { area: existingArea, table: existingTable } = found;
+
+    const cmd: TablesCommand = {
+      op: "DELETE_TABLE",
+      tableId: existingTable.id,
+    };
+
+    mutateTables(
+      (prev) => applyTablesCommand(prev, cmd),
+      { id: `tbl-delete-${existingTable.id}`, isCreate: false, command: cmd }
+    );
+
+    logActivity({
+      module: "TABLES",
+      action: "DELETE_TABLE",
+      recordId: existingTable.id,
+      previousValue: `Meja ${existingTable.number} (${existingArea.name})`,
+      description: `Penghapusan Meja ${existingTable.number} dari area ${existingArea.name}`,
+      reason: "Penyesuaian kapasitas kursi gerai",
+      status: "SUCCESS",
+      outletId: existingArea.outletId,
+      outletName: existingArea.outletName,
     });
   };
 
   const resetTableData = () => {
-    setAreas(INITIAL_AREAS);
-    setReservations(INITIAL_RESERVATIONS);
-    try {
-      localStorage.removeItem(STORAGE_KEY_AREAS);
-      localStorage.removeItem(STORAGE_KEY_RESERVATIONS);
-    } catch (e) {
-      console.error(e);
-    }
+    const cmd: TablesCommand = { op: "RESET_TABLES" };
+    mutateTables(
+      (prev) => applyTablesCommand(prev, cmd),
+      { id: "tables-reset", isCreate: false, command: cmd }
+    );
   };
 
   return (
@@ -479,6 +635,8 @@ export function TableProvider({ children }: { children: React.ReactNode }) {
         addReservation,
         addArea,
         addTable,
+        updateTable,
+        deleteTable,
         resetTableData,
       }}
     >

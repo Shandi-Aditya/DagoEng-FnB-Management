@@ -1,4 +1,13 @@
 import type { BusinessUnit } from "@/components/app/unit-dot";
+import {
+  formatWitaDateTime,
+  getTodayWitaDateString,
+  getWitaHour,
+  normalizeDateRange,
+  toWitaDateKey,
+} from "@/contexts/DateFilterContext";
+import { calculateSettlement, resolveItemTenantId } from "@/lib/settlement";
+import type { OrderRecord } from "@/types/order";
 
 /** Minimal order shape the dashboard metrics need. */
 export interface MetricOrder {
@@ -79,12 +88,13 @@ export interface DayBucket {
   orders: number;
 }
 
-/** Seven daily buckets ending today (UTC dates). Orders outside the window are ignored. */
+/** Seven daily buckets ending today in WITA. Orders outside the window are ignored. */
 export function bucketLastSevenDays(orders: readonly MetricOrder[], now: Date = new Date()): DayBucket[] {
+  const todayKey = getTodayWitaDateString(now);
+  const [ty, tm, td] = todayKey.split("-").map(Number);
   const days: DayBucket[] = [];
   for (let offset = 6; offset >= 0; offset -= 1) {
-    const date = new Date(now);
-    date.setUTCDate(date.getUTCDate() - offset);
+    const date = new Date(Date.UTC(ty, tm - 1, td - offset));
     days.push({
       date: date.toISOString().slice(0, 10),
       day: DAY_NAMES[date.getUTCDay()],
@@ -98,7 +108,51 @@ export function bucketLastSevenDays(orders: readonly MetricOrder[], now: Date = 
 
   const byDate = new Map(days.map((day) => [day.date, day]));
   for (const order of orders) {
-    const bucket = order.createdAt ? byDate.get(order.createdAt.slice(0, 10)) : undefined;
+    const dateKey = order.createdAt ? toWitaDateKey(order.createdAt) : "";
+    const bucket = dateKey ? byDate.get(dateKey) : undefined;
+    if (!bucket) continue;
+    bucket.revenue += order.total || 0;
+    bucket.discount += order.discount || 0;
+    bucket.cost += Math.round((order.total || 0) * ESTIMATED_COST_RATIO);
+    bucket.orders += 1;
+  }
+
+  return days;
+}
+
+export function bucketOrdersByDateRange(
+  orders: readonly MetricOrder[],
+  startDate: string,
+  endDate: string,
+  now: Date = new Date()
+): DayBucket[] {
+  const todayKey = getTodayWitaDateString(now);
+  const normalized = normalizeDateRange(startDate, endDate, todayKey);
+  const [sy, sm, sd] = normalized.startDate.split("-").map(Number);
+  const [ey, em, ed] = normalized.endDate.split("-").map(Number);
+  const startUtc = Date.UTC(sy, sm - 1, sd);
+  const endUtc = Date.UTC(ey, em - 1, ed);
+  const spanDays = Math.max(1, Math.min(366, Math.round((endUtc - startUtc) / 86_400_000) + 1));
+
+  const days: DayBucket[] = [];
+  for (let offset = 0; offset < spanDays; offset += 1) {
+    const date = new Date(Date.UTC(sy, sm - 1, sd + offset));
+    const dateKey = date.toISOString().slice(0, 10);
+    days.push({
+      date: dateKey,
+      day: spanDays <= 7 ? DAY_NAMES[date.getUTCDay()] : formatWitaDateTime(dateKey, "dd MMM"),
+      isToday: dateKey === todayKey,
+      revenue: 0,
+      cost: 0,
+      discount: 0,
+      orders: 0,
+    });
+  }
+
+  const byDate = new Map(days.map((day) => [day.date, day]));
+  for (const order of orders) {
+    const dateKey = order.createdAt ? toWitaDateKey(order.createdAt) : "";
+    const bucket = dateKey ? byDate.get(dateKey) : undefined;
     if (!bucket) continue;
     bucket.revenue += order.total || 0;
     bucket.discount += order.discount || 0;
@@ -126,17 +180,68 @@ function slotForHour(hour: number): string {
   return "08:00";
 }
 
-/** Revenue and order counts per two-hour slot (local time). */
+/** Revenue and order counts per two-hour slot in WITA. */
 export function bucketHourly(orders: readonly MetricOrder[]): HourBucket[] {
   const slots = new Map<string, HourBucket>(HOUR_SLOTS.map((hour) => [hour, { hour, revenue: 0, orders: 0 }]));
   for (const order of orders) {
     if (!order.createdAt) continue;
-    const slot = slots.get(slotForHour(new Date(order.createdAt).getHours()));
+    const hour = getWitaHour(order.createdAt);
+    if (hour === null) continue;
+    const slot = slots.get(slotForHour(hour));
     if (!slot) continue;
     slot.revenue += order.total || 0;
     slot.orders += 1;
   }
   return [...slots.values()];
+}
+
+export interface DashboardOrderScopeOptions {
+  tenantId?: string;
+  isTenantOwner?: boolean;
+  isDateInRange?: (dateStr: string) => boolean;
+  requirePaid?: boolean;
+}
+
+export function scopeDashboardOrders(
+  orders: readonly OrderRecord[],
+  options: DashboardOrderScopeOptions
+): OrderRecord[] {
+  const { tenantId, isTenantOwner, isDateInRange, requirePaid = true } = options;
+  return orders.filter((order) => {
+    if (order.status === "CANCELLED") return false;
+    if (requirePaid && order.paymentStatus !== "PAID") return false;
+    if (isDateInRange && !isDateInRange(order.createdAt)) return false;
+    if (isTenantOwner && tenantId) {
+      const fallbackTenantId = (order as { tenantId?: string }).tenantId;
+      return order.items.some((item) => resolveItemTenantId(item, fallbackTenantId) === tenantId);
+    }
+    return true;
+  });
+}
+
+export function computeDashboardFnbRevenue(
+  paidOrders: readonly OrderRecord[],
+  options: { isTenantOwner?: boolean; tenantId?: string }
+): number {
+  if (options.isTenantOwner && options.tenantId) {
+    const settlements = calculateSettlement(paidOrders as OrderRecord[]);
+    return settlements.find((s) => s.tenantId === options.tenantId)?.tenantShareAmount ?? 0;
+  }
+  return paidOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+}
+
+export function projectDashboardOrdersForTenant(
+  paidOrders: readonly OrderRecord[],
+  tenantId: string
+): OrderRecord[] {
+  return paidOrders.map((order) => {
+    const tenantSettlement = calculateSettlement([order]).find((s) => s.tenantId === tenantId);
+    return {
+      ...order,
+      total: tenantSettlement?.tenantShareAmount ?? 0,
+      discount: Math.round(tenantSettlement?.discount ?? 0),
+    };
+  });
 }
 
 export interface PromoBucket {

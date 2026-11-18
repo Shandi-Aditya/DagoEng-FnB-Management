@@ -20,7 +20,7 @@ import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useSettings } from "@/contexts/SettingsContext";
-import { CashDrawerShiftModal } from "@/features/pos/CashDrawerShiftModal";
+import { CashDrawerShiftModal, buildCashDrawerShiftSummary } from "@/features/pos/CashDrawerShiftModal";
 import { getTenantName } from "@/lib/tenant";
 
 function initials(name: string | undefined): string {
@@ -29,31 +29,11 @@ function initials(name: string | undefined): string {
   return parts.map((part) => part.charAt(0).toUpperCase()).join("") || "U";
 }
 
-/** Live cash-drawer totals for the cashier shift-closing flow (moved unchanged from the old Sidebar). */
 function useCashierShiftSummary() {
-  const { filteredOrders } = useOrders();
+  const { orders } = useOrders();
   const { activeShift } = useEmployeeShift();
 
-  return useMemo(() => {
-    const paid = filteredOrders.filter((order) => order.paymentStatus === "PAID");
-    const sumBy = (predicate: (method: string | undefined) => boolean) =>
-      paid.filter((order) => predicate(order.paymentMethod)).reduce((sum, order) => sum + (order.total || 0), 0);
-
-    const cashSales = sumBy((method) => method === "CASH");
-    const qrisSales = sumBy((method) => method === "QRIS" || !method);
-    const edcSales = sumBy((method) => method === "EDC");
-    const transferSales = sumBy((method) => method === "TRANSFER");
-
-    return {
-      initialCash: activeShift?.openingCash ?? 0,
-      cashSales,
-      qrisSales,
-      edcSales,
-      nonCashSales: qrisSales + edcSales + transferSales,
-      transactionsCount: paid.length,
-      discounts: paid.reduce((sum, order) => sum + (order.discount || 0), 0),
-    };
-  }, [filteredOrders, activeShift]);
+  return useMemo(() => buildCashDrawerShiftSummary(orders, activeShift), [orders, activeShift]);
 }
 
 export function NavUser() {
@@ -61,6 +41,7 @@ export function NavUser() {
   const { isMobile } = useSidebar();
   const { user, logout } = useAuth();
   const { activeOutlet } = useOutlet();
+  const { activeShift, closeShift } = useEmployeeShift();
   const { settings } = useSettings();
   const summary = useCashierShiftSummary();
   const [isShiftModalOpen, setIsShiftModalOpen] = useState(false);
@@ -71,7 +52,7 @@ export function NavUser() {
     : user?.organization?.name || "Dago Hub";
 
   const handleLogout = async () => {
-    if (isCashier) {
+    if (isCashier && activeShift) {
       setIsShiftModalOpen(true);
       return;
     }
@@ -111,18 +92,19 @@ export function NavUser() {
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={handleLogout}>
                 <LogOut />
-                {isCashier ? "Tutup shift dan keluar" : "Keluar"}
+                {isCashier && activeShift ? "Tutup shift dan keluar" : "Keluar"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarMenuItem>
       </SidebarMenu>
 
-      {isShiftModalOpen ? (
+      {isShiftModalOpen && activeShift ? (
         <CashDrawerShiftModal
           isOpen={isShiftModalOpen}
           onClose={() => setIsShiftModalOpen(false)}
-          cashierName={user?.name || "Kasir Bertugas"}
+          shiftId={activeShift.id}
+          cashierName={activeShift.assignedCashierName || user?.name || "Kasir Bertugas"}
           outletName={activeOutlet?.name || user?.outlet?.name || "Singaraja"}
           initialCash={summary.initialCash}
           totalCashSales={summary.cashSales}
@@ -131,8 +113,12 @@ export function NavUser() {
           qrisSales={summary.qrisSales}
           edcSales={summary.edcSales}
           totalDiscounts={summary.discounts}
+          refundAmount={summary.refundAmount}
+          storedTax={summary.storedTax}
+          storedServiceCharge={summary.storedServiceCharge}
           isTaxEnabled={settings.isTaxEnabled}
           taxRatePercent={settings.taxRatePercent}
+          onConfirmClose={(actualCash, notes) => closeShift(activeShift.id, actualCash, notes)}
         />
       ) : null}
     </>

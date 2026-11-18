@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { EventTicketOrder } from "@/types/event";
+import { EventDateRangeFilter, type DateRange } from "@/components/events/EventDateRangeFilter";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
   formatDateSafe,
@@ -29,6 +30,8 @@ export interface EventsPaymentsTableProps {
   onFilterStatusChange: (status: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  dateRange?: DateRange | null;
+  onDateRangeChange?: (range: DateRange | null) => void;
   currentPage: number;
   pageSize: number;
   onPageChange: (page: number) => void;
@@ -45,6 +48,8 @@ export function EventsPaymentsTable({
   onFilterStatusChange,
   searchQuery,
   onSearchChange,
+  dateRange = null,
+  onDateRangeChange,
   currentPage,
   pageSize,
   onPageChange,
@@ -56,11 +61,11 @@ export function EventsPaymentsTable({
 }: EventsPaymentsTableProps) {
   const startIndex = (currentPage - 1) * pageSize;
   const pagedBookings = bookings.slice(startIndex, startIndex + pageSize);
+  const hasFilter = Boolean(searchQuery.trim() || dateRange || filterStatus !== "PENDING_PROOF");
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <Tabs value={filterStatus} onValueChange={onFilterStatusChange}>
           <TabsList className="overflow-x-auto no-scrollbar">
             <TabsTrigger value="PENDING_PROOF">Menunggu verifikasi</TabsTrigger>
@@ -70,19 +75,30 @@ export function EventsPaymentsTable({
           </TabsList>
         </Tabs>
 
-        <div className="max-w-sm flex-1">
-          <InputGroup>
-            <InputGroupAddon align="inline-start">
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              placeholder="Cari kode tiket, nama, email…"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              aria-label="Cari pembayaran tiket"
+        <div className="flex flex-wrap items-center gap-2.5 flex-1 lg:justify-end">
+          <div className="min-w-[200px] flex-1 sm:max-w-xs">
+            <InputGroup>
+              <InputGroupAddon align="inline-start">
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="search"
+                placeholder="Cari kode tiket, nama, email…"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                aria-label="Cari pembayaran tiket"
+              />
+            </InputGroup>
+          </div>
+
+          {onDateRangeChange ? (
+            <EventDateRangeFilter
+              initialRange={dateRange}
+              onApplyFilter={onDateRangeChange}
+              label="Periode bayar"
+              align="right"
             />
-          </InputGroup>
+          ) : null}
         </div>
       </div>
 
@@ -90,10 +106,12 @@ export function EventsPaymentsTable({
         <EmptyState
           className="border"
           icon={<CreditCard />}
-          title={searchQuery ? "Tidak ada pembayaran yang cocok" : "Tidak ada antrean pembayaran"}
+          title={hasFilter ? "Tidak ada pembayaran yang cocok" : "Tidak ada antrean pembayaran"}
           description={
             searchQuery
               ? `Tidak ditemukan pembayaran dengan kata kunci "${searchQuery}".`
+              : dateRange
+              ? "Tidak ada data pembayaran tiket pada rentang tanggal yang dipilih."
               : "Semua pembayaran tiket manual saat ini sudah diverifikasi."
           }
         />
@@ -116,7 +134,10 @@ export function EventsPaymentsTable({
               <TableBody>
                 {pagedBookings.map((b) => {
                   const formattedDate = formatDateSafe(b.createdAt, true);
-                  const isPending = b.paymentStatus === "PENDING";
+                  const hasRejectedProof = Boolean(b.paymentRejectionReason);
+                  const isPending = b.paymentStatus === "PENDING" && !hasRejectedProof;
+                  const effectiveStatus =
+                    b.paymentStatus === "PENDING" && hasRejectedProof ? "REJECTED" : b.paymentStatus;
 
                   return (
                     <TableRow key={b.id}>
@@ -179,10 +200,9 @@ export function EventsPaymentsTable({
                         )}
                       </TableCell>
 
-                      {/* Status */}
                       <TableCell>
-                        <StatusBadge status={paymentStatusTone(b.paymentStatus)}>
-                          {paymentStatusLabel(b.paymentStatus)}
+                        <StatusBadge status={paymentStatusTone(effectiveStatus)}>
+                          {paymentStatusLabel(effectiveStatus)}
                         </StatusBadge>
                       </TableCell>
 

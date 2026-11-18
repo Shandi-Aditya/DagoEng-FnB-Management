@@ -106,7 +106,11 @@ export function OrdersTable({
                     >
                       <span className="font-mono font-medium tabular-nums">{o.orderNumber}</span>
                       <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                        {new Date(o.createdAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                        {new Date(o.createdAt).toLocaleTimeString("id-ID", {
+                          timeZone: "Asia/Makassar",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                         <span className="sm:hidden"> · {o.tableNumber}</span>
                       </span>
                     </button>

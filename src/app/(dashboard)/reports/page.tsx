@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { notify } from "@/components/app/notify";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCoworking } from "@/contexts/CoworkingContext";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useInventory } from "@/contexts/InventoryContext";
@@ -17,7 +18,9 @@ import { ReportsPreviewTable } from "@/features/reports/ReportsPreviewTable";
 import { ReportsToolbar } from "@/features/reports/ReportsToolbar";
 import {
   buildReportData,
+  filterReportRows,
   getReportCategories,
+  projectOrdersForTenant,
   type ReportType,
 } from "@/features/reports/reports-domain";
 import { analyzeTransactionDiscrepancies } from "@/features/reports/reconciliation-domain";
@@ -28,10 +31,11 @@ import { calculateSettlement } from "@/lib/settlement";
 import type { EventTicketOrder } from "@/types/event";
 
 export default function ReportsPage() {
-  const { formattedRangeLabel, startDate, endDate } = useDateFilter();
+  const { formattedRangeLabel, startDate, endDate, isDateInRange } = useDateFilter();
   const { activeOutlet, activeOutletId } = useOutlet();
   const { user } = useAuth();
   const { orders } = useOrders();
+  const { bookings: coworkingBookings } = useCoworking();
   const { products } = useProducts();
   const { filteredIngredients } = useInventory();
   const { shifts } = useEmployeeShift();
@@ -45,12 +49,23 @@ export default function ReportsPage() {
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [eventBookings, setEventBookings] = useState<EventTicketOrder[]>([]);
 
+  const isTenantScope = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
+  const tenantId = isTenantScope ? user?.tenant?.id : undefined;
+
   const canAccessEvents =
-    user?.scopeLevel === "ORGANIZATION" || user?.scopeLevel === "PLATFORM";
+    !isTenantScope &&
+    (user?.scopeLevel === "ORGANIZATION" || user?.scopeLevel === "PLATFORM");
+
+  const roleSlug = user?.role?.slug || (typeof user?.role === "string" ? user.role : "");
+  const canViewUnmaskedEvents =
+    roleSlug === "SUPER_ADMIN" || roleSlug === "OWNER" || roleSlug === "MANAGER";
 
   useEffect(() => {
     if (canAccessEvents) {
-      fetch("/api/events/bookings")
+      const endpoint = canViewUnmaskedEvents
+        ? "/api/events/bookings?unmasked=true"
+        : "/api/events/bookings";
+      fetch(endpoint)
         .then((res) => res.json())
         .then((json) => {
           if (json.success && json.data) {
@@ -58,61 +73,177 @@ export default function ReportsPage() {
           }
         })
         .catch(() => {});
+    } else {
+      setEventBookings([]);
     }
-  }, [canAccessEvents]);
+  }, [canAccessEvents, canViewUnmaskedEvents]);
 
-  // Filter dataset by active outlet
-  const filteredOrders = orders.filter(
-    (o) => activeOutletId === "ALL" || o.outletId === activeOutletId || !o.outletId
-  );
-  const filteredProducts = products.filter(
-    (p) =>
-      activeOutletId === "ALL" ||
-      p.outletId === "ALL" ||
-      p.outletId === activeOutletId ||
-      !p.outletId
-  );
-  const filteredShifts = shifts.filter(
-    (s) => activeOutletId === "ALL" || s.outletId === activeOutletId || !s.outletId
-  );
-  const filteredMaterials = filteredIngredients;
-  const filteredFinanceLogs = logs.filter(
-    (l) =>
-      (activeOutletId === "ALL" || l.outletId === activeOutletId || !l.outletId) &&
-      (l.module === "POS" || l.module === "FINANCE" || l.module === "COMMERCIAL")
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [startDate, endDate, activeOutletId]);
+
+  const filteredOrders = useMemo(() => {
+    const outletAndDateOrders = orders.filter(
+      (o) =>
+        (activeOutletId === "ALL" || o.outletId === activeOutletId || !o.outletId) &&
+        isDateInRange(o.createdAt)
+    );
+    return tenantId
+      ? projectOrdersForTenant(outletAndDateOrders, tenantId)
+      : outletAndDateOrders;
+  }, [orders, activeOutletId, isDateInRange, tenantId]);
+
+  const reconciliationOrders = useMemo(() => {
+    const outletAndDateOrRefundOrders = orders.filter(
+      (o) =>
+        (activeOutletId === "ALL" || o.outletId === activeOutletId || !o.outletId) &&
+        (isDateInRange(o.createdAt) || (Boolean(o.refundedAt) && isDateInRange(o.refundedAt!)))
+    );
+    return tenantId
+      ? projectOrdersForTenant(outletAndDateOrRefundOrders, tenantId)
+      : outletAndDateOrRefundOrders;
+  }, [orders, activeOutletId, isDateInRange, tenantId]);
+
+  const filteredCoworkingBookings = useMemo(() => {
+    if (isTenantScope) return [];
+    return coworkingBookings.filter(
+      (b) =>
+        (activeOutletId === "ALL" || !b.outletId || b.outletId === activeOutletId) &&
+        isDateInRange(b.createdAt || b.date)
+    );
+  }, [coworkingBookings, activeOutletId, isDateInRange, isTenantScope]);
+
+  const filteredProducts = useMemo(
+    () =>
+      products.filter((p) => {
+        const matchOutlet =
+          activeOutletId === "ALL" ||
+          p.outletId === "ALL" ||
+          p.outletId === activeOutletId ||
+          !p.outletId;
+        const matchTenant = !tenantId || p.tenantId === tenantId;
+        return matchOutlet && matchTenant;
+      }),
+    [products, activeOutletId, tenantId]
   );
 
-  const scopeName = activeOutlet?.name || "Semua outlet";
+  const filteredShifts = useMemo(() => {
+    if (isTenantScope) return [];
+    return shifts.filter(
+      (s) =>
+        s.status !== "ACTIVE" &&
+        s.status !== "OPEN" &&
+        (activeOutletId === "ALL" || s.outletId === activeOutletId || !s.outletId) &&
+        isDateInRange(s.closedAt || s.endTime || s.startTime || "")
+    );
+  }, [shifts, activeOutletId, isDateInRange, isTenantScope]);
+
+  const filteredMaterials = isTenantScope ? [] : filteredIngredients;
+
+  const filteredFinanceLogs = useMemo(() => {
+    if (isTenantScope) return [];
+    return logs.filter(
+      (l) =>
+        (activeOutletId === "ALL" || l.outletId === "ALL" || l.outletId === activeOutletId || !l.outletId) &&
+        (l.module === "POS" ||
+          l.module === "FINANCE" ||
+          l.module === "COMMERCIAL" ||
+          l.module === "COWORKING" ||
+          l.module === "EMPLOYEES_SHIFT") &&
+        isDateInRange(l.timestamp)
+    );
+  }, [logs, activeOutletId, isDateInRange, isTenantScope]);
+
+  const filteredEventBookings = useMemo(() => {
+    if (!canAccessEvents) return [];
+    return eventBookings.filter((b) => isDateInRange(b.createdAt));
+  }, [eventBookings, canAccessEvents, isDateInRange]);
+
+  const scopeName = isTenantScope
+    ? `${user?.tenant?.name || "Mitra"} · ${activeOutlet?.name || "Singaraja"}`
+    : activeOutlet?.name || "Semua outlet";
+
+  const reconAnalysis = useMemo(
+    () => analyzeTransactionDiscrepancies({ orders: reconciliationOrders, shifts: filteredShifts }),
+    [reconciliationOrders, filteredShifts]
+  );
+
+  const paidOrdersCount = filteredOrders.filter(
+    (o) => o.paymentStatus === "PAID" && o.status !== "CANCELLED"
+  ).length;
+  const paidCoworkingCount = filteredCoworkingBookings.filter(
+    (b) => b.paymentStatus === "PAID" && b.checkInStatus !== "CANCELLED"
+  ).length;
+  const pendingCoworkingQrisCount = filteredCoworkingBookings.filter(
+    (b) =>
+      b.paymentMethod === "QRIS" &&
+      b.paymentStatus === "PENDING" &&
+      b.checkInStatus !== "CANCELLED"
+  ).length;
+  const discountedCoworkingCount = filteredCoworkingBookings.filter(
+    (b) =>
+      b.paymentStatus === "PAID" &&
+      b.checkInStatus !== "CANCELLED" &&
+      (b.discount || 0) > 0
+  ).length;
+  const settlementRowsCount = useMemo(() => {
+    const rows = calculateSettlement(filteredOrders);
+    return tenantId ? rows.filter((s) => s.tenantId === tenantId).length : rows.length;
+  }, [filteredOrders, tenantId]);
+
+  const categories = getReportCategories({
+    ordersCount: paidOrdersCount + paidCoworkingCount,
+    tenantsCount: settlementRowsCount,
+    shiftsCount: filteredShifts.length,
+    productsCount: filteredProducts.length,
+    materialsCount: filteredMaterials.length,
+    logsCount: filteredFinanceLogs.length,
+    paidEventsCount: filteredEventBookings.filter((b) => b.paymentStatus === "PAID").length,
+    canAccessEvents,
+    discrepanciesCount:
+      reconAnalysis.discrepancies.length + pendingCoworkingQrisCount + discountedCoworkingCount,
+    isTenantScope,
+  });
+
+  useEffect(() => {
+    if (!categories.some((c) => c.id === selectedReportType)) {
+      setSelectedReportType("SALES");
+      setSearchQuery("");
+      setCurrentPage(1);
+    }
+  }, [categories, selectedReportType]);
+
+  const effectiveReportType: ReportType = categories.some((c) => c.id === selectedReportType)
+    ? selectedReportType
+    : "SALES";
 
   const currentReport = buildReportData({
-    type: selectedReportType,
+    type: effectiveReportType,
     scopeName,
-    orders: filteredOrders,
+    orders: effectiveReportType === "RECONCILIATION" ? reconciliationOrders : filteredOrders,
     products: filteredProducts,
     shifts: filteredShifts,
     ingredients: filteredMaterials,
     logs: filteredFinanceLogs,
     promos: settings.promos,
-    eventBookings,
+    eventBookings: filteredEventBookings,
+    coworkingBookings: filteredCoworkingBookings,
+    tenantId,
     operatorName: user?.name,
   });
 
-  const reconAnalysis = useMemo(
-    () => analyzeTransactionDiscrepancies({ orders: filteredOrders, shifts: filteredShifts }),
-    [filteredOrders, filteredShifts]
+  const exportableReportRows = useMemo(
+    () => filterReportRows(currentReport.tableRows, searchQuery),
+    [currentReport.tableRows, searchQuery]
   );
 
-  const categories = getReportCategories({
-    ordersCount: filteredOrders.length,
-    tenantsCount: calculateSettlement(filteredOrders).length,
-    shiftsCount: filteredShifts.length,
-    productsCount: filteredProducts.length,
-    materialsCount: filteredMaterials.length,
-    logsCount: filteredFinanceLogs.length,
-    paidEventsCount: eventBookings.filter((b) => b.paymentStatus === "PAID").length,
-    canAccessEvents,
-    discrepanciesCount: reconAnalysis.discrepancies.length,
-  });
+  const exportableReportData = useMemo(
+    () => ({
+      ...currentReport,
+      tableRows: exportableReportRows,
+    }),
+    [currentReport, exportableReportRows]
+  );
 
   const handleSelectReportType = (nextType: ReportType) => {
     setSelectedReportType(nextType);
@@ -127,23 +258,38 @@ export default function ReportsPage() {
 
   const handleExportCSV = () => {
     downloadCSV(
-      `Laporan_${selectedReportType}_${activeOutlet?.name || "All"}_${Date.now()}`,
+      `Laporan_${effectiveReportType}_${activeOutlet?.name || "All"}_${Date.now()}`,
       currentReport.tableHeaders,
-      currentReport.tableRows
+      exportableReportRows
     );
     notify.success("Laporan diekspor ke CSV", currentReport.title);
   };
 
   const handleExportExcelTemplate = async () => {
     try {
+      const needle = searchQuery.trim().toLowerCase();
+      const paidOrders = filteredOrders.filter((o) => {
+        if (o.paymentStatus !== "PAID" || o.status === "CANCELLED") return false;
+        if (!needle) return true;
+        const fields = [
+          o.orderNumber,
+          o.customerName,
+          o.tableNumber,
+          o.paymentMethod,
+          o.orderType,
+          ...o.items.map((it) => it.productName),
+        ];
+        return fields.some((val) => val?.toLowerCase().includes(needle));
+      });
       await exportTransactionReportExcel({
-        orders: filteredOrders,
+        orders: paidOrders,
         products: filteredProducts,
         startDate,
         endDate,
-        outletName: activeOutlet?.name,
+        outletName: scopeName,
+        tenantId,
       });
-      notify.success("Laporan transaksi template diekspor ke Excel (.xlsx)", "3 Sheet: transaction, detail, tenant shares");
+      notify.success("Laporan transaksi diekspor ke Excel (.xlsx)", "3 sheet: transaction, detail, tenant shares");
     } catch (err) {
       console.error("Gagal mengekspor laporan transaksi Excel", err);
       notify.error("Gagal mengekspor laporan transaksi ke Excel");
@@ -151,16 +297,16 @@ export default function ReportsPage() {
   };
 
   const handleExportExcel = async () => {
-    if (selectedReportType === "SALES") {
+    if (effectiveReportType === "SALES") {
       await handleExportExcelTemplate();
       return;
     }
 
     downloadExcel(
-      `Laporan_${selectedReportType}_${activeOutlet?.name || "All"}_${Date.now()}`,
+      `Laporan_${effectiveReportType}_${activeOutlet?.name || "All"}_${Date.now()}`,
       currentReport.title.slice(0, 30),
       currentReport.tableHeaders,
-      currentReport.tableRows
+      exportableReportRows
     );
     notify.success("Laporan diekspor ke Excel", currentReport.title);
   };
@@ -171,6 +317,7 @@ export default function ReportsPage() {
         <ReportsToolbar
           scopeName={scopeName}
           periodLabel={formattedRangeLabel}
+          isTemplateXlsx={effectiveReportType === "SALES"}
           onExportExcel={handleExportExcel}
           onExportCSV={handleExportCSV}
           onOpenPDF={() => setIsPDFModalOpen(true)}
@@ -178,7 +325,7 @@ export default function ReportsPage() {
 
         <ReportsCategorySelector
           categories={categories}
-          selectedType={selectedReportType}
+          selectedType={effectiveReportType}
           onSelectType={handleSelectReportType}
         />
       </div>
@@ -202,11 +349,11 @@ export default function ReportsPage() {
         <StructuredReportPDFModal
           isOpen={isPDFModalOpen}
           onClose={() => setIsPDFModalOpen(false)}
-          reportType={selectedReportType}
+          reportType={effectiveReportType}
           outletName={scopeName}
           periodLabel={formattedRangeLabel}
           generatedBy={user?.name || "Staf operasional"}
-          data={currentReport}
+          data={exportableReportData}
         />
       )}
     </div>

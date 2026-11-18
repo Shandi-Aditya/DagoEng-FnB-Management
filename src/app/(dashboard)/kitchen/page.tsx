@@ -20,6 +20,7 @@ import {
   STATION_FILTERS,
   TYPE_FILTERS,
   buildReprintTicket,
+  effectiveKitchenStatus,
   filterKitchenOrders,
   getNewIncomingKitchenOrders,
   ticketItems,
@@ -27,7 +28,7 @@ import {
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
 import { soundChime } from "@/lib/audio-chime";
 import { isAddonActive } from "@/lib/subscription";
-import { DEFAULT_FNB_TENANTS } from "@/lib/tenant";
+import { getAllFnbTenants } from "@/lib/tenant";
 import type { OrderStatus } from "@/types/order";
 import type { KitchenTicketData } from "@/types/printer";
 
@@ -57,11 +58,20 @@ export default function KitchenKDSPage() {
     return () => clearInterval(timer);
   }, []);
 
-  // POS-38 / V-09: a tenant kitchen only sees tickets with its own items; staff can switch tenant filter
-  const isTenantLocked = user?.scopeLevel === "TENANT";
+  const isTenantLocked =
+    Boolean(user?.tenant?.id) &&
+    (user?.scopeLevel === "TENANT" || user?.role?.slug === "KITCHEN_STAFF");
   const [selectedTenant, setSelectedTenant] = useState<string>(
     isTenantLocked ? user?.tenant?.id || "ALL" : "ALL"
   );
+
+  useEffect(() => {
+    if (isTenantLocked && user?.tenant?.id) {
+      setSelectedTenant(user.tenant.id);
+    } else if (!isTenantLocked) {
+      setSelectedTenant("ALL");
+    }
+  }, [isTenantLocked, user?.tenant?.id]);
 
   const effectiveTenantId = isTenantLocked
     ? user?.tenant?.id
@@ -106,14 +116,16 @@ export default function KitchenKDSPage() {
     previousCountRef.current = activeOrders.length;
   }, [activeOrders.length, isSoundEnabled, isNewOrderModalOpen]);
 
+  const tenantUpdatePayload = effectiveTenantId ? { tenantId: effectiveTenantId } : undefined;
+
   const handleAdvance = (orderId: string, nextStatus: OrderStatus) => {
     if (isSoundEnabled) soundChime.playKitchenBell();
-    advanceOrderStatus(orderId, nextStatus);
+    advanceOrderStatus(orderId, nextStatus, undefined, tenantUpdatePayload);
   };
 
   const handleAcceptNewOrder = (orderId: string) => {
     if (isSoundEnabled) soundChime.playKitchenBell();
-    advanceOrderStatus(orderId, "KITCHEN_RECEIVED");
+    advanceOrderStatus(orderId, "KITCHEN_RECEIVED", undefined, tenantUpdatePayload);
     setDismissedNewOrderIds((prev) => new Set([...prev, orderId]));
     if (incomingNewOrders.length <= 1) {
       setIsNewOrderModalOpen(false);
@@ -123,7 +135,7 @@ export default function KitchenKDSPage() {
   const handleAcceptAllNewOrders = (orderIds: string[]) => {
     if (isSoundEnabled) soundChime.playKitchenBell();
     for (const id of orderIds) {
-      advanceOrderStatus(id, "KITCHEN_RECEIVED");
+      advanceOrderStatus(id, "KITCHEN_RECEIVED", undefined, tenantUpdatePayload);
     }
     setDismissedNewOrderIds((prev) => new Set([...prev, ...orderIds]));
     setIsNewOrderModalOpen(false);
@@ -175,7 +187,7 @@ export default function KitchenKDSPage() {
             <Tabs value={selectedTenant} onValueChange={setSelectedTenant}>
               <TabsList>
                 <TabsTrigger value="ALL">Semua mitra</TabsTrigger>
-                {DEFAULT_FNB_TENANTS.map((t) => (
+                {getAllFnbTenants().map((t) => (
                   <TabsTrigger key={t.id} value={t.id}>
                     {t.name}
                   </TabsTrigger>
@@ -222,7 +234,9 @@ export default function KitchenKDSPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {KDS_COLUMNS.map((column) => {
-          const tickets = activeOrders.filter((order) => column.statuses.includes(order.status));
+          const tickets = activeOrders.filter((order) =>
+            column.statuses.includes(effectiveKitchenStatus(order, effectiveTenantId))
+          );
           return (
             <section key={column.title} className="flex min-h-[480px] flex-col gap-3 rounded-xl bg-muted/50 p-3" aria-label={column.title}>
               <header className="flex items-center justify-between">
@@ -235,7 +249,7 @@ export default function KitchenKDSPage() {
                 <p className="rounded-lg border border-dashed py-10 text-center text-xs text-muted-foreground">Tidak ada tiket</p>
               ) : (
                 tickets.map((order, ticketIdx) => {
-                  const items = ticketItems(order, effectiveTenantId);
+                  const items = ticketItems(order, effectiveTenantId, isMultiStation ? station : "ALL");
                   const queueNumber = ticketIdx + 1;
                   return (
                     <KitchenTicketCard
@@ -248,7 +262,12 @@ export default function KitchenKDSPage() {
                       onAdvance={() => handleAdvance(order.id, column.nextStatus)}
                       onReprint={() =>
                         setTicketToPrint(
-                          buildReprintTicket(order, items, queueNumber, `${new Date().toLocaleTimeString("id-ID")} WITA`),
+                          buildReprintTicket(
+                            order,
+                            items,
+                            queueNumber,
+                            `${new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar" })} WITA`,
+                          ),
                         )
                       }
                     />

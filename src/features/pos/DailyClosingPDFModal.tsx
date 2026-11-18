@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
+  Bot,
   Printer,
   ShieldCheck,
   QrCode,
@@ -75,6 +76,7 @@ export interface ClosingReportData {
 interface DailyClosingPDFModalProps {
   isOpen: boolean;
   onClose: () => void;
+  shiftId?: string;
   reportData: ClosingReportData;
   managerPhone: string;
 }
@@ -82,10 +84,12 @@ interface DailyClosingPDFModalProps {
 export function DailyClosingPDFModal({
   isOpen,
   onClose,
+  shiftId,
   reportData,
   managerPhone,
 }: DailyClosingPDFModalProps) {
   const [isGatewaySending, setIsGatewaySending] = useState(false);
+  const [isChatbotSending, setIsChatbotSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -247,6 +251,60 @@ export function DailyClosingPDFModal({
     }
   };
 
+  const handleDispatchChatbot = async () => {
+    if (!shiftId || isChatbotSending) return;
+    setIsChatbotSending(true);
+    try {
+      const response = await fetch("/api/notifications/closing-chatbot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shiftId, forceResend: true }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success) {
+        notify.error(
+          "Gagal mengirim ringkasan bot",
+          data?.error || "Periksa status shift atau koneksi server lalu coba lagi."
+        );
+        return;
+      }
+
+      const dispatch = data.dispatch;
+      const sentCount = dispatch?.sentCount ?? 0;
+      const envelopeCount = dispatch?.envelopeCount ?? 0;
+      const allUnconfigured =
+        Array.isArray(dispatch?.envelopes) &&
+        dispatch.envelopes.length > 0 &&
+        dispatch.envelopes.every((env: { deliveries?: Array<{ configured?: boolean }> }) =>
+          (env.deliveries || []).every((d) => d.configured === false)
+        );
+
+      if (sentCount > 0) {
+        notify.success(
+          "Ringkasan dikirim",
+          `Laporan closing diteruskan ke ${envelopeCount} penerima melalui ${sentCount} kanal.`
+        );
+      } else if (allUnconfigured) {
+        notify.info(
+          "Gateway chatbot belum aktif",
+          "Token WhatsApp atau Telegram belum dikonfigurasi di server."
+        );
+      } else {
+        notify.error(
+          "Pengiriman chatbot gagal",
+          "Gateway tidak berhasil mengirim pesan ke penerima."
+        );
+      }
+    } catch {
+      notify.error(
+        "Gagal menghubungi server",
+        "Tidak dapat terhubung ke layanan notifikasi chatbot."
+      );
+    } finally {
+      setIsChatbotSending(false);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="w-full sm:max-w-4xl md:max-w-5xl max-h-[88vh] h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
@@ -271,7 +329,7 @@ export function DailyClosingPDFModal({
               type="button"
               size="lg"
               onClick={handlePrintPDF}
-              className="w-full sm:w-auto"
+              className={shiftId ? "col-span-2 sm:col-span-1 w-full sm:w-auto" : "w-full sm:w-auto"}
               title="Cetak langsung atau simpan sebagai PDF dari browser"
             >
               <Printer className="size-4" />
@@ -292,6 +350,23 @@ export function DailyClosingPDFModal({
                 {isGatewaySending ? "Membuka WA..." : "Kirim WA"}
               </span>
             </Button>
+
+            {shiftId && (
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                onClick={handleDispatchChatbot}
+                disabled={isChatbotSending}
+                className="w-full sm:w-auto"
+                title="Kirim ringkasan closing via chatbot ke Ka Ari dan mitra"
+              >
+                <Bot className="size-4" />
+                <span>
+                  {isChatbotSending ? "Mengirim..." : "Kirim bot"}
+                </span>
+              </Button>
+            )}
           </div>
         </DialogHeader>
 

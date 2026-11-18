@@ -62,10 +62,15 @@ export default function WaiterMobilePage() {
     }
   };
 
-  // Filter tables strictly for active outlet
   const currentOutletAreas = useMemo(() => {
     return areas.filter((a) => a.outletId === (activeOutletId || "outlet-sgr"));
   }, [areas, activeOutletId]);
+
+  useEffect(() => {
+    if (filterArea !== "ALL" && !currentOutletAreas.some((a) => a.id === filterArea)) {
+      setFilterArea("ALL");
+    }
+  }, [currentOutletAreas, filterArea]);
 
   const allOutletTables = useMemo(() => {
     return currentOutletAreas.flatMap((a) => a.tables);

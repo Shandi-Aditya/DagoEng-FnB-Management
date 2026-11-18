@@ -13,6 +13,36 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { CommunityEvent, EventCategory } from "@/types/event";
+import { eventCategoryLabel } from "./events-admin-domain";
+
+function toWitaDateTimeLocal(value?: string): string {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value.trim())) {
+    return value.trim();
+  }
+  const parsed = new Date(value);
+  if (isNaN(parsed.getTime())) return value.slice(0, 16);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Makassar",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(parsed);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
+
+function fromWitaDateTimeLocal(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) {
+    return `${trimmed}:00+08:00`;
+  }
+  return trimmed;
+}
 
 const CATEGORIES: EventCategory[] = [
   "WORKSHOP",
@@ -83,7 +113,7 @@ export function EventEditModal({
               >
                 {CATEGORIES.map((cat) => (
                   <NativeSelectOption key={cat} value={cat}>
-                    {cat}
+                    {eventCategoryLabel(cat)}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
@@ -103,23 +133,33 @@ export function EventEditModal({
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="editStartDate">Waktu mulai</Label>
+              <Label htmlFor="editStartDate">Waktu mulai (WITA)</Label>
               <Input
                 id="editStartDate"
                 type="datetime-local"
-                value={formData.startDate ? formData.startDate.slice(0, 16) : ""}
-                onChange={(e) => onFormDataChange({ ...formData, startDate: e.target.value })}
+                value={toWitaDateTimeLocal(formData.startDate)}
+                onChange={(e) =>
+                  onFormDataChange({
+                    ...formData,
+                    startDate: fromWitaDateTimeLocal(e.target.value),
+                  })
+                }
                 required
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="editEndDate">Waktu selesai</Label>
+              <Label htmlFor="editEndDate">Waktu selesai (WITA)</Label>
               <Input
                 id="editEndDate"
                 type="datetime-local"
-                value={formData.endDate ? formData.endDate.slice(0, 16) : ""}
-                onChange={(e) => onFormDataChange({ ...formData, endDate: e.target.value })}
+                value={toWitaDateTimeLocal(formData.endDate)}
+                onChange={(e) =>
+                  onFormDataChange({
+                    ...formData,
+                    endDate: fromWitaDateTimeLocal(e.target.value),
+                  })
+                }
               />
             </div>
           </div>

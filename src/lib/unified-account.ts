@@ -14,6 +14,7 @@ import {
   revokeOrganizerSessionsByEmail,
 } from "./organizer-activation";
 import { revokeUserSessionsAfter } from "./session-revocation";
+import { normalizeLoyaltyPhone } from "./master-data-defaults";
 
 export interface UnifiedUserAccount {
   id: string;
@@ -115,18 +116,22 @@ export function findUnifiedUserById(id: string): UnifiedUserAccount | null {
   return all.find((u) => u.id === id) || null;
 }
 
+export function findUnifiedUserByPhone(phone: string): UnifiedUserAccount | null {
+  const norm = normalizeLoyaltyPhone(phone || "");
+  if (!norm) return null;
+  const all = loadUnifiedUsersFromDisk();
+  return all.find((u) => normalizeLoyaltyPhone(u.phone || "") === norm) || null;
+}
+
 export interface RegisterUserPayload {
   name: string;
   email: string;
   phone: string;
   password?: string;
   role?: "CUSTOMER" | "STAFF" | "ADMIN";
+  enforceUniquePhone?: boolean;
 }
 
-/**
- * Register a unified user account.
- * Deduplicates strictly by normalized email.
- */
 export async function registerUnifiedUser(payload: RegisterUserPayload): Promise<{
   user: UnifiedUserAccount;
   isExisting: boolean;
@@ -149,8 +154,15 @@ export async function registerUnifiedUser(payload: RegisterUserPayload): Promise
   const existing = all.find((u) => u.email.toLowerCase() === normalizedEmail);
 
   if (existing) {
-    // Account already exists
     return { user: existing, isExisting: true };
+  }
+
+  const normPhoneDigits = normalizeLoyaltyPhone(normalizedPhone);
+  const existingByPhone = normPhoneDigits
+    ? all.find((u) => normalizeLoyaltyPhone(u.phone || "") === normPhoneDigits)
+    : undefined;
+  if (payload.enforceUniquePhone && existingByPhone) {
+    throw new Error("PHONE_CONFLICT: Nomor telepon/WhatsApp sudah terdaftar pada akun lain.");
   }
 
   if (!payload.password || typeof payload.password !== "string" || payload.password.trim().length < 6) {

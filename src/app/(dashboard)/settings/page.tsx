@@ -43,20 +43,32 @@ import {
   type TenantRevenueSplitConfig,
 } from "@/lib/settlement";
 import {
+  canManageSettlementAndReceiptPolicy,
+  getStoredSettlementReceiptPolicy,
+  saveStoredSettlementReceiptPolicy,
+  type SettlementBasisMode,
+} from "@/lib/settlement-receipt-policy";
+import {
   getSimulatedOrgSubscription,
   getSimulatedTenantAddons,
   type OrgSubscriptionState,
   type PlanTier,
   setSimulatedOrgPlan,
   type TenantAddonItem,
+  toggleSimulatedTenantAddon,
 } from "@/lib/subscription";
 import {
-  DEFAULT_FNB_TENANTS,
+  subscriptionSyncClient,
+  tenantsSyncClient,
+  wifiSyncClient,
+} from "@/lib/sync-domains/config-spec";
+import {
   getAllFnbTenants,
   getTenantName,
   getTenantProfile,
   getTenantStatus,
   saveCustomTenant,
+  saveTenantProfile,
   setTenantStatus,
 } from "@/lib/tenant";
 import {
@@ -76,8 +88,9 @@ import {
   type WifiVoucherRecord,
   type WifiVoucherStatus,
 } from "@/lib/wifi";
-import { MEMBERSHIP_PLANS } from "@/features/coworking/coworking-data";
 import type { CategoryTaxType } from "@/types/settings";
+import type { CoworkingMembershipPlan } from "@/types/coworking";
+import type { TableStatus } from "@/contexts/TableContext";
 import type { CommunityEvent, EventRevenueSharingPolicy, DEFAULT_EVENT_POLICY } from "@/types/event";
 import type { CommunityOrganizerProfile, INITIAL_ORGANIZERS } from "@/types/organizer";
 import type { MasterProduct } from "@/types/product";
@@ -103,16 +116,26 @@ import { WifiManagementTab } from "@/features/settings/WifiManagementTab";
 export default function SettingsPage() {
   const { user, activeOrgModules, toggleOrgModule } = useAuth();
   const { filteredProducts, categories, addProduct, updateProduct, deleteProduct, toggleProductStatus, addCategory } = useProducts();
-  const { spaces: cwSpaces, addSpace, updateSpace, deleteSpace } = useCoworking();
-  const { areas } = useTables();
+  const {
+    spaces: cwSpaces,
+    plans: cwPlans,
+    addSpace,
+    updateSpace,
+    deleteSpace,
+    addPlan: cwAddPlan,
+    updatePlan: cwUpdatePlan,
+    deletePlan: cwDeletePlan,
+  } = useCoworking();
+  const { areas, addTable, updateTable, deleteTable, updateTableStatus } = useTables();
   const allTables = areas.flatMap((a) => a.tables.map((t) => ({ ...t, areaName: a.name })));
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, savePromos } = useSettings();
   const { outlets } = useOutlet();
 
   const isSuperAdmin = user?.role?.slug === "SUPER_ADMIN";
   const isOrgOwner = user?.role?.slug === "OWNER" && user?.scopeLevel === "ORGANIZATION";
   const isTenantOwner = user?.role?.slug === "OWNER" && user?.scopeLevel === "TENANT";
   const canAccessSettings = isSuperAdmin || isOrgOwner || isTenantOwner;
+  const canEditSettlementPolicy = canManageSettlementAndReceiptPolicy(user);
 
   // Tab Utama Navigasi
   const [selectedAdminTab, setSelectedAdminTab] = useState<string>("PRODUCTS");
@@ -159,10 +182,26 @@ export default function SettingsPage() {
   const [newOverrideDate, setNewOverrideDate] = useState("");
   const [newOverrideType, setNewOverrideType] = useState<"OPEN" | "CLOSED">("OPEN");
   const [newOverrideReason, setNewOverrideReason] = useState("");
-  const [cwOpenTime, setCwOpenTime] = useState(settings.operationalHours?.coworking?.open || "09:00");
-  const [cwCloseTime, setCwCloseTime] = useState(settings.operationalHours?.coworking?.close || "18:00");
-  const [fnbOpenTime, setFnbOpenTime] = useState(settings.operationalHours?.fnb?.open || "07:00");
-  const [fnbCloseTime, setFnbCloseTime] = useState(settings.operationalHours?.fnb?.close || "22:00");
+  const [cwOpenTime, setCwOpenTime] = useState(
+    settings.operationalHours?.coworking?.open ||
+      settings.operationalHours?.coworking?.openTime ||
+      "09:00"
+  );
+  const [cwCloseTime, setCwCloseTime] = useState(
+    settings.operationalHours?.coworking?.close ||
+      settings.operationalHours?.coworking?.closeTime ||
+      "18:00"
+  );
+  const [fnbOpenTime, setFnbOpenTime] = useState(
+    settings.operationalHours?.fnb?.open ||
+      settings.operationalHours?.fnb?.openTime ||
+      "07:00"
+  );
+  const [fnbCloseTime, setFnbCloseTime] = useState(
+    settings.operationalHours?.fnb?.close ||
+      settings.operationalHours?.fnb?.closeTime ||
+      "22:00"
+  );
 
   // Tenant Operations & Profil
   const [localTenants, setLocalTenants] = useState<{ id: string; name: string; code: string; badge: string }[]>(() => getAllFnbTenants());
@@ -186,6 +225,9 @@ export default function SettingsPage() {
   const [isSavingTenantOps, setIsSavingTenantOps] = useState(false);
 
   // Flexible Revenue Sharing
+  const [settlementBasis, setSettlementBasis] = useState<SettlementBasisMode>(
+    () => getStoredSettlementReceiptPolicy().settlementBasis
+  );
   const [revenueSplits, setRevenueSplits] = useState<Record<string, TenantRevenueSplitConfig>>({});
   const [revenueSplitErrors, setRevenueSplitErrors] = useState<Record<string, string>>({});
   const [splitSaveFeedback, setSplitSaveFeedback] = useState<string>("");
@@ -273,10 +315,9 @@ export default function SettingsPage() {
   const [isAddCatModalOpen, setIsAddCatModalOpen] = useState(false);
   const [formNewCatName, setFormNewCatName] = useState("");
 
-  // Spaces & Plans & Tables
   const [localSpaces, setLocalSpaces] = useState<any[]>(cwSpaces);
   useEffect(() => {
-    if (cwSpaces && cwSpaces.length > 0) setLocalSpaces(cwSpaces);
+    setLocalSpaces(cwSpaces);
   }, [cwSpaces]);
   const [isAddSpaceModalOpen, setIsAddSpaceModalOpen] = useState(false);
   const [isEditSpaceModalOpen, setIsEditSpaceModalOpen] = useState(false);
@@ -291,7 +332,6 @@ export default function SettingsPage() {
   const [formSpaceDaily, setFormSpaceDaily] = useState(65000);
   const [formSpaceStatus, setFormSpaceStatus] = useState<string>("AVAILABLE");
 
-  const [localPlans, setLocalPlans] = useState<any[]>(MEMBERSHIP_PLANS);
   const [isAddPlanModalOpen, setIsAddPlanModalOpen] = useState(false);
   const [isEditPlanModalOpen, setIsEditPlanModalOpen] = useState(false);
   const [editingPlan, setEditingPlan] = useState<any>(null);
@@ -302,7 +342,6 @@ export default function SettingsPage() {
   const [formPlanPrice, setFormPlanPrice] = useState(500000);
   const [formPlanDeskAccess, setFormPlanDeskAccess] = useState("Akses Hot Desk Bebas Pakai");
 
-  const [localTables, setLocalTables] = useState<any[]>(allTables);
   const [isAddTableModalOpen, setIsAddTableModalOpen] = useState(false);
   const [isEditTableModalOpen, setIsEditTableModalOpen] = useState(false);
   const [editingTable, setEditingTable] = useState<any>(null);
@@ -313,10 +352,11 @@ export default function SettingsPage() {
   const [formTableCap, setFormTableCap] = useState(4);
   const [formTableStatus, setFormTableStatus] = useState<string>("AVAILABLE");
 
-  // Inisialisasi Data
   const refreshAllTenantStatuses = () => {
+    const tenants = getAllFnbTenants();
+    setLocalTenants(tenants);
     const statuses: Record<string, "ACTIVE" | "INACTIVE"> = {};
-    DEFAULT_FNB_TENANTS.forEach((t) => {
+    tenants.forEach((t) => {
       statuses[t.id] = getTenantStatus(t.id);
     });
     setAllTenantStatuses(statuses);
@@ -327,11 +367,122 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    setLanguage(settings.language);
+    setTimezone(settings.timezone);
+    setCurrency(settings.currency);
+    setLowStock(settings.lowStockThresholdPercent);
+    setFnbTaxType(settings.categoryTax?.fnb?.taxType || "PB1");
+    setFnbTaxRate(settings.categoryTax?.fnb?.taxRatePercent ?? settings.taxRatePercent ?? 10);
+    setFnbTaxEnabled(settings.categoryTax?.fnb?.isEnabled ?? true);
+    setCwTaxType(settings.categoryTax?.coworking?.taxType || "NON_TAX");
+    setCwTaxRate(settings.categoryTax?.coworking?.taxRatePercent ?? 0);
+    setCwTaxEnabled(settings.categoryTax?.coworking?.isEnabled ?? false);
+    setServiceCharge(settings.serviceChargePercent);
+    setSilverPts(settings.loyaltyTiers.silverMin);
+    setGoldPts(settings.loyaltyTiers.goldMin);
+    setPlatPts(settings.loyaltyTiers.platinumMin);
+    setPromos(sortPromosByPriority(settings.promos || []));
+    setCwWeekendClosed(settings.coworkingHolidays?.closeOnWeekends ?? true);
+    setCwNationalHolidaysClosed(settings.coworkingHolidays?.closeOnNationalHolidays ?? true);
+    setCwOverrides(settings.coworkingHolidays?.overrides || []);
+    setCwOpenTime(
+      settings.operationalHours?.coworking?.open ||
+        settings.operationalHours?.coworking?.openTime ||
+        "09:00"
+    );
+    setCwCloseTime(
+      settings.operationalHours?.coworking?.close ||
+        settings.operationalHours?.coworking?.closeTime ||
+        "18:00"
+    );
+    setFnbOpenTime(
+      settings.operationalHours?.fnb?.open ||
+        settings.operationalHours?.fnb?.openTime ||
+        "07:00"
+    );
+    setFnbCloseTime(
+      settings.operationalHours?.fnb?.close ||
+        settings.operationalHours?.fnb?.closeTime ||
+        "22:00"
+    );
+    setTenantOps(settings.tenantOperations || {});
+    const currentTenantId = user?.tenant?.id || "tenant-ks";
+    const myOp = settings.tenantOperations?.[currentTenantId];
+    if (myOp) {
+      setTenantOpenTime(myOp.openTime || "08:00");
+      setTenantCloseTime(myOp.closeTime || "21:00");
+      setTenantClosedReason(myOp.temporaryClosedReason || "");
+    }
+  }, [settings, user?.tenant?.id]);
+
+  useEffect(() => {
     refreshAllTenantStatuses();
     refreshRevenueSplits();
     const currentScopeId = isTenantOwner ? (user?.tenant?.id || "tenant-unassigned") : "org-dago-hub";
+    setOrgSub(getSimulatedOrgSubscription());
     setTenantAddons(getSimulatedTenantAddons(currentScopeId));
+
+    void tenantsSyncClient.hydrate();
+    void wifiSyncClient.hydrate();
+    void subscriptionSyncClient.hydrate();
+
+    const unsubTenants = tenantsSyncClient.subscribe(() => {
+      refreshAllTenantStatuses();
+      if (isTenantOwner && user?.tenant?.id) {
+        const profile = getTenantProfile(user.tenant.id);
+        setTenantBrandName(profile.brandName);
+        setTenantTagline(profile.tagline);
+        setTenantDesc(profile.description);
+        setTenantPhone(profile.contactPhone);
+        setTenantReceiptHeader(profile.receiptHeader);
+        setTenantReceiptFooter(profile.receiptFooter);
+        setTenantLowStock(profile.lowStockThresholdPercent);
+        setBankName(profile.bankName);
+        setBankAccountNumber(profile.bankAccountNumber);
+        setBankAccountHolder(profile.bankAccountHolder);
+        setTenantStatusState(profile.status);
+      }
+    });
+    const unsubWifi = wifiSyncClient.subscribe(() => {
+      setWifiFnBRules(getSimulatedFnBRules());
+      setWifiVouchers(getSimulatedWifiVouchers());
+      setWifiCalcBasis(getSimulatedWifiCalcBasis());
+    });
+    const unsubSub = subscriptionSyncClient.subscribe(() => {
+      setOrgSub(getSimulatedOrgSubscription());
+      setTenantAddons(getSimulatedTenantAddons(currentScopeId));
+    });
+
+    return () => {
+      unsubTenants();
+      unsubWifi();
+      unsubSub();
+    };
   }, [user, isTenantOwner]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/settings/settlement-receipt")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data?.success || !data?.policy) return;
+        const policy = data.policy;
+        setSettlementBasis(policy.settlementBasis);
+        if (policy.revenueSplits) {
+          setRevenueSplits((prev) => ({
+            ...DEFAULT_TENANT_REVENUE_SPLITS,
+            ...prev,
+            ...policy.revenueSplits,
+          }));
+        }
+        saveStoredSettlementReceiptPolicy(policy);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     fetch("/api/events/admin/organizers")
@@ -534,19 +685,28 @@ export default function SettingsPage() {
     notify.success("Ruang dihapus", `${deletingSpace.name} dihapus.`);
   };
 
-  // Plan Handlers
   const handleSaveNewPlan = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formPlanName.trim()) return;
-    const newPlan = {
+    const priceNum = Number(formPlanPrice) || 0;
+    const cycle: CoworkingMembershipPlan["billingCycle"] =
+      formPlanCycle === "Harian" || formPlanCycle === "Paket 10 Hari"
+        ? formPlanCycle
+        : "Bulanan";
+    const newPlan: CoworkingMembershipPlan = {
       id: `plan-${Date.now()}`,
       name: formPlanName.trim(),
-      billingCycle: formPlanCycle,
-      priceNumber: Number(formPlanPrice) || 0,
-      priceFormatted: `${Number(formPlanPrice).toLocaleString("id-ID")}`,
-      deskAccess: formPlanDeskAccess.trim(),
+      billingCycle: cycle,
+      priceNumber: priceNum,
+      priceFormatted: `Rp ${priceNum.toLocaleString("id-ID")}`,
+      color: "blue",
+      deskAccess: formPlanDeskAccess.trim() || "Akses Hot Desk Bebas Pakai",
+      meetingCredits: "Termasuk kuota ruang rapat standar",
+      fnbPerk: "Diskon 10% mitra F&B",
+      fnbVoucherCode: "MEMBER10",
+      amenities: ["High-speed Fiber WiFi", "Free Flow Infused Water"],
     };
-    setLocalPlans((prev) => [...prev, newPlan]);
+    cwAddPlan(newPlan);
     setIsAddPlanModalOpen(false);
     notify.success("Paket ditambahkan", `${newPlan.name} berhasil disimpan.`);
   };
@@ -554,19 +714,18 @@ export default function SettingsPage() {
   const handleSaveEditPlan = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingPlan || !formPlanName.trim()) return;
-    setLocalPlans((prev) =>
-      prev.map((p) =>
-        p.id === editingPlan.id
-          ? {
-              ...p,
-              name: formPlanName.trim(),
-              billingCycle: formPlanCycle,
-              priceNumber: Number(formPlanPrice) || 0,
-              deskAccess: formPlanDeskAccess.trim(),
-            }
-          : p,
-      ),
-    );
+    const priceNum = Number(formPlanPrice) || 0;
+    const cycle: CoworkingMembershipPlan["billingCycle"] =
+      formPlanCycle === "Harian" || formPlanCycle === "Paket 10 Hari"
+        ? formPlanCycle
+        : "Bulanan";
+    cwUpdatePlan(editingPlan.id, {
+      name: formPlanName.trim(),
+      billingCycle: cycle,
+      priceNumber: priceNum,
+      priceFormatted: `Rp ${priceNum.toLocaleString("id-ID")}`,
+      deskAccess: formPlanDeskAccess.trim(),
+    });
     setIsEditPlanModalOpen(false);
     setEditingPlan(null);
     notify.success("Paket diperbarui", `Perubahan ${formPlanName} disimpan.`);
@@ -574,67 +733,61 @@ export default function SettingsPage() {
 
   const handleConfirmDeletePlan = () => {
     if (!deletingPlan) return;
-    setLocalPlans((prev) => prev.filter((p) => p.id !== deletingPlan.id));
+    cwDeletePlan(deletingPlan.id);
     setIsDeletePlanOpen(false);
     setDeletingPlan(null);
     notify.success("Paket dihapus", `${deletingPlan.name} dihapus.`);
   };
 
-  // Table Handlers
   const handleSaveNewTable = (e: React.FormEvent) => {
     e.preventDefault();
-    const newTable = {
-      id: `tbl-${Date.now()}`,
-      number: String(formTableNumber) || String(localTables.length + 1),
-      areaName: formTableArea,
-      cap: Number(formTableCap) || 4,
-      status: formTableStatus as any,
-    };
-    setLocalTables((prev) => [...prev, newTable]);
+    const tableNum = String(formTableNumber || allTables.length + 1).trim();
+    const targetArea = formTableArea.trim() || "Main Hall";
+    const capNum = Number(formTableCap) || 4;
+    const desiredStatus = (formTableStatus || "AVAILABLE") as TableStatus;
+    addTable(targetArea, tableNum, capNum);
+    if (desiredStatus !== "AVAILABLE") {
+      updateTableStatus(tableNum, desiredStatus);
+    }
     setIsAddTableModalOpen(false);
-    notify.success("Meja ditambahkan", `Meja ${newTable.number} (${newTable.areaName}) disimpan.`);
+    notify.success("Meja ditambahkan", `Meja ${tableNum} (${targetArea}) disimpan.`);
   };
 
   const handleSaveEditTable = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTable) return;
-    setLocalTables((prev) =>
-      prev.map((t) =>
-        t.id === editingTable.id
-          ? {
-              ...t,
-              number: Number(formTableNumber) || t.number,
-              areaName: formTableArea,
-              cap: Number(formTableCap) || 4,
-              status: formTableStatus as any,
-            }
-          : t,
-      ),
-    );
+    const nextNumber = String(formTableNumber || editingTable.number).trim();
+    updateTable(editingTable.id, {
+      number: nextNumber,
+      areaName: formTableArea.trim() || editingTable.areaName || "Main Hall",
+      cap: Number(formTableCap) || 4,
+      status: (formTableStatus || editingTable.status || "AVAILABLE") as TableStatus,
+    });
     setIsEditTableModalOpen(false);
     setEditingTable(null);
-    notify.success("Meja diperbarui", `Perubahan meja ${formTableNumber} disimpan.`);
+    notify.success("Meja diperbarui", `Perubahan meja ${nextNumber} disimpan.`);
   };
 
   const handleToggleTableStatus = (tblId: string) => {
-    setLocalTables((prev) =>
-      prev.map((t) => {
-        if (t.id !== tblId) return t;
-        const next = t.status === "AVAILABLE" ? "OCCUPIED" : t.status === "OCCUPIED" ? "RESERVED" : "AVAILABLE";
-        return { ...t, status: next };
-      }),
-    );
+    const existing = allTables.find((t) => t.id === tblId);
+    if (!existing) return;
+    const next: TableStatus =
+      existing.status === "AVAILABLE"
+        ? "OCCUPIED"
+        : existing.status === "OCCUPIED"
+          ? "RESERVED"
+          : "AVAILABLE";
+    updateTableStatus(tblId, next);
   };
 
   const handleConfirmDeleteTable = () => {
     if (!deletingTable) return;
-    setLocalTables((prev) => prev.filter((t) => t.id !== deletingTable.id));
+    deleteTable(deletingTable.id);
     setIsDeleteTableOpen(false);
     setDeletingTable(null);
     notify.success("Meja dihapus", `Meja ${deletingTable.number} dihapus.`);
   };
 
-  // Partner Handlers
   const handleSaveNewTenant = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTenantName.trim()) return;
@@ -649,9 +802,10 @@ export default function SettingsPage() {
       desc: "Mitra resmi platform Dago Hub",
       icon: "Store",
     };
-    setLocalTenants((prev) => [...prev, newTenant]);
     saveCustomTenant(newTenant);
     setTenantRevenueSplit(newId, 85);
+    refreshAllTenantStatuses();
+    refreshRevenueSplits();
     setIsAddTenantModalOpen(false);
     setFormTenantName("");
     setFormTenantCode("");
@@ -754,7 +908,15 @@ export default function SettingsPage() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleSaveTenantSplits = () => {
+  const handleSaveTenantSplits = async () => {
+    if (!canEditSettlementPolicy) {
+      notify.error(
+        "Akses ditolak",
+        "Hanya pemilik organisasi atau super admin yang dapat mengubah bagi hasil."
+      );
+      return;
+    }
+
     let hasError = false;
     const newErrors: Record<string, string> = {};
 
@@ -773,12 +935,39 @@ export default function SettingsPage() {
       return;
     }
 
+    setRevenueSplitErrors({});
+
     Object.values(revenueSplits).forEach((cfg) => {
       setTenantRevenueSplit(cfg.tenantId, cfg.tenantSharePercent, cfg.dagoSharePercent);
     });
+    saveStoredSettlementReceiptPolicy({ settlementBasis, revenueSplits });
 
-    setSplitSaveFeedback("Skema bagi hasil mitra F&B berhasil diperbarui.");
-    notify.success("Bagi hasil disimpan", "Skema bagi hasil mitra F&B berhasil disinkronkan.");
+    try {
+      const res = await fetch("/api/settings/settlement-receipt", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settlementBasis, revenueSplits }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        const errMsg = data?.error || "Gagal menyimpan kebijakan bagi hasil ke server.";
+        setSplitSaveFeedback("");
+        notify.error("Gagal menyimpan bagi hasil", errMsg);
+        return;
+      }
+      if (data.policy) {
+        saveStoredSettlementReceiptPolicy(data.policy);
+      }
+    } catch {
+      notify.warning(
+        "Tersimpan di browser",
+        "Skema bagi hasil tersimpan lokal, tetapi sinkronisasi server belum tercapai."
+      );
+      return;
+    }
+
+    setSplitSaveFeedback("Skema dan dasar bagi hasil mitra F&B diperbarui.");
+    notify.success("Bagi hasil disimpan", "Dasar perhitungan dan pembagian mitra diperbarui.");
     setTimeout(() => setSplitSaveFeedback(""), 4000);
   };
 
@@ -988,6 +1177,21 @@ export default function SettingsPage() {
       return;
     }
     const currentTenantId = user?.tenant?.id || "tenant-ks";
+    saveTenantProfile({
+      tenantId: currentTenantId,
+      brandName: tenantBrandName.trim(),
+      tagline: tenantTagline.trim(),
+      description: tenantDesc.trim(),
+      contactPhone: tenantPhone.trim(),
+      receiptHeader: tenantReceiptHeader.trim(),
+      receiptFooter: tenantReceiptFooter.trim(),
+      lowStockThresholdPercent: Number(tenantLowStock) || 0,
+      bankName: bankName || "BCA",
+      bankAccountNumber: bankAccountNumber.trim(),
+      bankAccountHolder: bankAccountHolder.trim(),
+      status: tenantStatus,
+    });
+    refreshAllTenantStatuses();
     const updatedTenantOps = {
       ...tenantOps,
       [currentTenantId]: {
@@ -1026,8 +1230,14 @@ export default function SettingsPage() {
     }
   };
 
-  // Filtered Products
   const myTenantId = user?.tenant?.id || "";
+  const persistPromos: React.Dispatch<React.SetStateAction<PromoConfig[]>> = (action) => {
+    setPromos((prev) => {
+      const next = typeof action === "function" ? action(prev) : action;
+      savePromos(next, isTenantOwner ? myTenantId : undefined);
+      return next;
+    });
+  };
   const displayedProducts = filterAndSortProducts(filteredProducts, {
     tenantId: isTenantOwner ? myTenantId : masterTenantFilter,
     category: masterCategoryFilter,
@@ -1174,7 +1384,7 @@ export default function SettingsPage() {
           {tenantActiveTab === "PROMOS" ? (
             <PromosTab
               promos={promos}
-              onChangePromos={setPromos}
+              onChangePromos={persistPromos}
               isTenantScope
               tenantId={myTenantId}
               tenants={localTenants}
@@ -1183,8 +1393,8 @@ export default function SettingsPage() {
               spaces={localSpaces}
               onAddPromo={() => {
                 const newCode = `PROMO${Math.floor(10 + Math.random() * 90)}`;
-                setPromos([
-                  ...promos,
+                persistPromos((prev) => [
+                  ...prev,
                   {
                     id: `promo-${Date.now()}`,
                     code: newCode,
@@ -1195,21 +1405,26 @@ export default function SettingsPage() {
                     targetType: "ALL",
                     scope: "FNB",
                     tenantId: myTenantId,
-                    quota: 50,
-                    validFrom: new Date().toISOString().slice(0, 10),
-                    validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-                    isActive: true,
-                  },
-                ]);
-              }}
-              isProductModalOpen={isPromoProductModalOpen}
-              onProductModalOpenChange={setIsPromoProductModalOpen}
-              onOpenPromoProductSelect={(id) => {
-                const p = promos.find((item) => item.id === id);
-                setActivePromoIdForProductSelect(id);
-                setSelectedProductIdsInModal(p?.applicableProductIds || []);
-                setIsPromoProductModalOpen(true);
-              }}
+                     quota: 50,
+                     validFrom: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date()),
+                     validUntil: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(
+                       new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                     ),
+                     isActive: true,
+                   },
+                 ]);
+               }}
+               isProductModalOpen={isPromoProductModalOpen}
+               onProductModalOpenChange={setIsPromoProductModalOpen}
+               onOpenPromoProductSelect={(id) => {
+                 const p = promos.find((item) => item.id === id);
+                 setActivePromoIdForProductSelect(id);
+                 setSelectedProductIdsInModal(p?.applicableProductIds || []);
+                 setPromoProductSearch("");
+                 setPromoProductCategoryFilter("ALL");
+                 setPromoProductTenantFilter("ALL");
+                 setIsPromoProductModalOpen(true);
+               }}
               selectedProductIdsInModal={selectedProductIdsInModal}
               onToggleModalProduct={(pid) =>
                 setSelectedProductIdsInModal((prev) =>
@@ -1220,7 +1435,7 @@ export default function SettingsPage() {
               onClearAllModalProducts={() => setSelectedProductIdsInModal([])}
               onSavePromoProducts={() => {
                 if (activePromoIdForProductSelect) {
-                  setPromos((prev) =>
+                  persistPromos((prev) =>
                     prev.map((p) =>
                       p.id === activePromoIdForProductSelect
                         ? { ...p, applicableProductIds: selectedProductIdsInModal }
@@ -1231,7 +1446,7 @@ export default function SettingsPage() {
                 setIsPromoProductModalOpen(false);
               }}
               onRemoveProductFromPromo={(pId, prodId) =>
-                setPromos((prev) =>
+                persistPromos((prev) =>
                   prev.map((p) =>
                     p.id === pId
                       ? {
@@ -1262,15 +1477,13 @@ export default function SettingsPage() {
                 setOrgSub(getSimulatedOrgSubscription());
               }}
               onToggleAddon={(code) => {
-                setTenantAddons((prev) =>
-                  prev.map((a) => (a.code === code ? { ...a, status: a.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" } : a)),
-                );
+                const scopeKey = myTenantId || "tenant-unassigned";
+                setTenantAddons(toggleSimulatedTenantAddon(code, scopeKey));
               }}
             />
           ) : null}
         </div>
       ) : (
-        /* Tampilan Admin / Organization Owner */
         <div className="flex flex-col gap-6">
           <Tabs
             value={selectedAdminTab}
@@ -1411,6 +1624,9 @@ export default function SettingsPage() {
               revenueSplits={revenueSplits}
               revenueSplitErrors={revenueSplitErrors}
               splitSaveFeedback={splitSaveFeedback}
+              settlementBasis={settlementBasis}
+              onSettlementBasisChange={setSettlementBasis}
+              canEditSettlementPolicy={canEditSettlementPolicy}
               onTenantSplitChange={(tId, share) => {
                 setRevenueSplits((prev) => ({
                   ...prev,
@@ -1448,8 +1664,8 @@ export default function SettingsPage() {
           {selectedAdminTab === "SPACES_TABLES" ? (
             <SpacesAndTablesTab
               spaces={localSpaces}
-              plans={localPlans}
-              tables={localTables}
+              plans={cwPlans}
+              tables={allTables}
               onOpenAddSpace={() => {
                 setFormSpaceName("");
                 setFormSpaceType("HOT_DESK");
@@ -1537,7 +1753,7 @@ export default function SettingsPage() {
               onSaveEditPlan={handleSaveEditPlan}
               onConfirmDeletePlan={handleConfirmDeletePlan}
               onOpenAddTable={() => {
-                setFormTableNumber(localTables.length + 1);
+                setFormTableNumber(allTables.length + 1);
                 setFormTableArea("Main Hall");
                 setFormTableCap(4);
                 setFormTableStatus("AVAILABLE");
@@ -1580,15 +1796,15 @@ export default function SettingsPage() {
           {selectedAdminTab === "PROMOS" ? (
             <PromosTab
               promos={promos}
-              onChangePromos={setPromos}
+              onChangePromos={persistPromos}
               tenants={localTenants}
               categories={categories}
               products={filteredProducts}
               spaces={localSpaces}
               onAddPromo={() => {
                 const newCode = `PROMO${Math.floor(10 + Math.random() * 90)}`;
-                setPromos([
-                  ...promos,
+                persistPromos((prev) => [
+                  ...prev,
                   {
                     id: `promo-${Date.now()}`,
                     code: newCode,
@@ -1598,21 +1814,26 @@ export default function SettingsPage() {
                     discountValue: 10,
                     targetType: "ALL",
                     scope: "ALL",
-                    quota: 50,
-                    validFrom: new Date().toISOString().slice(0, 10),
-                    validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-                    isActive: true,
-                  },
-                ]);
-              }}
-              isProductModalOpen={isPromoProductModalOpen}
-              onProductModalOpenChange={setIsPromoProductModalOpen}
-              onOpenPromoProductSelect={(id) => {
-                const p = promos.find((item) => item.id === id);
-                setActivePromoIdForProductSelect(id);
-                setSelectedProductIdsInModal(p?.applicableProductIds || []);
-                setIsPromoProductModalOpen(true);
-              }}
+                     quota: 50,
+                     validFrom: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date()),
+                     validUntil: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(
+                       new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                     ),
+                     isActive: true,
+                   },
+                 ]);
+               }}
+               isProductModalOpen={isPromoProductModalOpen}
+               onProductModalOpenChange={setIsPromoProductModalOpen}
+               onOpenPromoProductSelect={(id) => {
+                 const p = promos.find((item) => item.id === id);
+                 setActivePromoIdForProductSelect(id);
+                 setSelectedProductIdsInModal(p?.applicableProductIds || []);
+                 setPromoProductSearch("");
+                 setPromoProductCategoryFilter("ALL");
+                 setPromoProductTenantFilter("ALL");
+                 setIsPromoProductModalOpen(true);
+               }}
               selectedProductIdsInModal={selectedProductIdsInModal}
               onToggleModalProduct={(pid) =>
                 setSelectedProductIdsInModal((prev) =>
@@ -1623,7 +1844,7 @@ export default function SettingsPage() {
               onClearAllModalProducts={() => setSelectedProductIdsInModal([])}
               onSavePromoProducts={() => {
                 if (activePromoIdForProductSelect) {
-                  setPromos((prev) =>
+                  persistPromos((prev) =>
                     prev.map((p) =>
                       p.id === activePromoIdForProductSelect
                         ? { ...p, applicableProductIds: selectedProductIdsInModal }
@@ -1634,7 +1855,7 @@ export default function SettingsPage() {
                 setIsPromoProductModalOpen(false);
               }}
               onRemoveProductFromPromo={(pId, prodId) =>
-                setPromos((prev) =>
+                persistPromos((prev) =>
                   prev.map((p) =>
                     p.id === pId
                       ? {
@@ -1721,9 +1942,7 @@ export default function SettingsPage() {
                 setOrgSub(getSimulatedOrgSubscription());
               }}
               onToggleAddon={(code) => {
-                setTenantAddons((prev) =>
-                  prev.map((a) => (a.code === code ? { ...a, status: a.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" } : a)),
-                );
+                setTenantAddons(toggleSimulatedTenantAddon(code, "org-dago-hub"));
               }}
             />
           ) : null}

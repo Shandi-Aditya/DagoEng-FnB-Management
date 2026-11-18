@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useId } from "react";
 import { Calendar, Check, ChevronDown, Clock, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,10 +9,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 
 export interface DateRange {
-  startDate: string; // YYYY-MM-DD
-  endDate: string; // YYYY-MM-DD
-  startMs?: number; // WITA 00:00:00
-  endMs?: number; // WITA 23:59:59.999
+  startDate: string;
+  endDate: string;
+  startMs?: number;
+  endMs?: number;
 }
 
 export type PresetKey = "ALL" | "TODAY" | "7D" | "30D" | "MONTH" | "CUSTOM";
@@ -25,9 +25,8 @@ export interface EventDateRangeFilterProps {
   align?: "left" | "right";
 }
 
-/**
- * Menghitung format tanggal (YYYY-MM-DD) dalam zona waktu WITA (Asia/Makassar, UTC+8).
- */
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 export function getWitaDateString(date: Date = new Date()): string {
   try {
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(date);
@@ -39,40 +38,26 @@ export function getWitaDateString(date: Date = new Date()): string {
   }
 }
 
-/**
- * Menghitung tanggal N hari lalu dalam WITA.
- */
-export function getWitaDaysAgoString(daysAgo: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
-  return getWitaDateString(d);
+export function getWitaDaysAgoString(daysAgo: number, baseDate: Date = new Date()): string {
+  const todayWita = getWitaDateString(baseDate);
+  const [y, m, d] = todayWita.split("-").map(Number);
+  const targetUtc = new Date(Date.UTC(y, m - 1, d - daysAgo));
+  return targetUtc.toISOString().slice(0, 10);
 }
 
-/**
- * Menghitung tanggal awal bulan ini dalam WITA (YYYY-MM-01).
- */
-export function getWitaStartOfMonthString(): string {
-  const todayWita = getWitaDateString();
+export function getWitaStartOfMonthString(baseDate: Date = new Date()): string {
+  const todayWita = getWitaDateString(baseDate);
   return `${todayWita.slice(0, 7)}-01`;
 }
 
-/**
- * Menghitung epoch timestamp (ms) untuk 00:00:00.000 WITA pada tanggal YYYY-MM-DD.
- */
 export function getWitaStartOfDay(dateStr: string): number {
   return new Date(`${dateStr}T00:00:00+08:00`).getTime();
 }
 
-/**
- * Menghitung epoch timestamp (ms) untuk 23:59:59.999 WITA pada tanggal YYYY-MM-DD.
- */
 export function getWitaEndOfDay(dateStr: string): number {
   return new Date(`${dateStr}T23:59:59.999+08:00`).getTime();
 }
 
-/**
- * Memeriksa apakah event bersinggungan dengan rentang waktu periode WITA.
- */
 export function isEventInWitaPeriod(
   event: { startDate: string; endDate?: string | null },
   range?: DateRange | null
@@ -81,30 +66,53 @@ export function isEventInWitaPeriod(
 
   const filterStartMs = range.startMs ?? getWitaStartOfDay(range.startDate);
   const filterEndMs = range.endMs ?? getWitaEndOfDay(range.endDate);
+  if (isNaN(filterStartMs) || isNaN(filterEndMs) || filterStartMs > filterEndMs) {
+    return false;
+  }
 
-  const eventStartMs = new Date(event.startDate).getTime();
-  const eventEndMs = event.endDate
-    ? new Date(event.endDate).getTime()
-    : eventStartMs + 24 * 60 * 60 * 1000;
+  const rawStart = (event.startDate || "").trim();
+  if (!rawStart) return false;
 
-  if (isNaN(eventStartMs) || isNaN(eventEndMs)) return true;
+  const eventStartMs = DATE_ONLY_PATTERN.test(rawStart)
+    ? getWitaStartOfDay(rawStart)
+    : new Date(rawStart).getTime();
+  if (isNaN(eventStartMs)) return false;
+
+  const rawEnd = (event.endDate || "").trim();
+  let eventEndMs: number;
+  if (rawEnd) {
+    eventEndMs = DATE_ONLY_PATTERN.test(rawEnd)
+      ? getWitaEndOfDay(rawEnd)
+      : new Date(rawEnd).getTime();
+  } else {
+    eventEndMs = getWitaEndOfDay(getWitaDateString(new Date(eventStartMs)));
+  }
+
+  if (isNaN(eventEndMs)) return false;
+  if (eventEndMs < eventStartMs) {
+    eventEndMs = eventStartMs;
+  }
 
   return eventStartMs <= filterEndMs && eventEndMs >= filterStartMs;
 }
 
-/**
- * Memeriksa apakah timestamp berada di dalam rentang filter tanggal WITA.
- */
 export function isTimestampInWitaPeriod(
-  timestamp: string | number,
+  timestamp?: string | number | null,
   range?: DateRange | null
 ): boolean {
   if (!range || !range.startDate || !range.endDate) return true;
+  if (timestamp === undefined || timestamp === null || timestamp === "") return false;
 
   const startMs = range.startMs ?? getWitaStartOfDay(range.startDate);
   const endMs = range.endMs ?? getWitaEndOfDay(range.endDate);
+  if (isNaN(startMs) || isNaN(endMs) || startMs > endMs) return false;
 
-  const targetMs = typeof timestamp === "string" ? new Date(timestamp).getTime() : timestamp;
+  const targetMs =
+    typeof timestamp === "string"
+      ? DATE_ONLY_PATTERN.test(timestamp.trim())
+        ? getWitaStartOfDay(timestamp.trim())
+        : new Date(timestamp).getTime()
+      : timestamp;
   if (isNaN(targetMs)) return false;
 
   return targetMs >= startMs && targetMs <= endMs;
@@ -117,6 +125,10 @@ export function EventDateRangeFilter({
   label = "Filter tanggal",
   align = "left",
 }: EventDateRangeFilterProps) {
+  const uid = useId();
+  const startInputId = `${uid}-start`;
+  const endInputId = `${uid}-end`;
+
   const [isOpen, setIsOpen] = useState(false);
   const [startDate, setStartDate] = useState(initialRange?.startDate || "");
   const [endDate, setEndDate] = useState(initialRange?.endDate || "");
@@ -133,8 +145,20 @@ export function EventDateRangeFilter({
       setStartDate("");
       setEndDate("");
       setAppliedRange(null);
+      setShowCustomInputs(false);
     }
+    setValidationError(null);
   }, [initialRange]);
+
+  const handleOpenChange = (open: boolean) => {
+    setIsOpen(open);
+    if (!open) {
+      setStartDate(appliedRange?.startDate || "");
+      setEndDate(appliedRange?.endDate || "");
+      setValidationError(null);
+      setShowCustomInputs(false);
+    }
+  };
 
   const activePreset = useMemo<PresetKey>(() => {
     if (!appliedRange || (!appliedRange.startDate && !appliedRange.endDate)) {
@@ -142,8 +166,8 @@ export function EventDateRangeFilter({
     }
 
     const todayStr = getWitaDateString();
-    const daysAgo7 = getWitaDaysAgoString(7);
-    const daysAgo30 = getWitaDaysAgoString(30);
+    const daysAgo7 = getWitaDaysAgoString(6);
+    const daysAgo30 = getWitaDaysAgoString(29);
     const monthStart = getWitaStartOfMonthString();
 
     if (appliedRange.startDate === todayStr && appliedRange.endDate === todayStr) {
@@ -178,10 +202,12 @@ export function EventDateRangeFilter({
             const s = new Date(`${appliedRange.startDate}T00:00:00+08:00`).toLocaleDateString("id-ID", {
               day: "numeric",
               month: "short",
+              timeZone: "Asia/Makassar",
             });
             const e = new Date(`${appliedRange.endDate}T00:00:00+08:00`).toLocaleDateString("id-ID", {
               day: "numeric",
               month: "short",
+              timeZone: "Asia/Makassar",
             });
             return `${s} – ${e}`;
           } catch {
@@ -216,20 +242,14 @@ export function EventDateRangeFilter({
     setShowCustomInputs(false);
     const todayStr = getWitaDateString();
     let sDate = todayStr;
-    let eDate = todayStr;
+    const eDate = todayStr;
 
-    if (preset === "TODAY") {
-      sDate = todayStr;
-      eDate = todayStr;
-    } else if (preset === "7D") {
-      sDate = getWitaDaysAgoString(7);
-      eDate = todayStr;
+    if (preset === "7D") {
+      sDate = getWitaDaysAgoString(6);
     } else if (preset === "30D") {
-      sDate = getWitaDaysAgoString(30);
-      eDate = todayStr;
+      sDate = getWitaDaysAgoString(29);
     } else if (preset === "MONTH") {
       sDate = getWitaStartOfMonthString();
-      eDate = todayStr;
     }
 
     setStartDate(sDate);
@@ -303,7 +323,7 @@ export function EventDateRangeFilter({
 
   return (
     <div className={cn("inline-flex items-center gap-1.5", className)}>
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <Popover open={isOpen} onOpenChange={handleOpenChange}>
         <PopoverTrigger render={<Button variant="outline" size="lg" className="gap-1.5" />}>
           <Calendar />
           <span className="truncate max-w-[160px] font-normal">{activeLabel}</span>
@@ -353,9 +373,9 @@ export function EventDateRangeFilter({
             <div className="pt-2 border-t flex flex-col gap-2.5">
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="flex flex-col gap-1">
-                  <Label htmlFor="customStart" className="text-xs text-muted-foreground">Mulai</Label>
+                  <Label htmlFor={startInputId} className="text-xs text-muted-foreground">Mulai</Label>
                   <Input
-                    id="customStart"
+                    id={startInputId}
                     type="date"
                     value={startDate}
                     onChange={(e) => {
@@ -366,9 +386,9 @@ export function EventDateRangeFilter({
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <Label htmlFor="customEnd" className="text-xs text-muted-foreground">Selesai</Label>
+                  <Label htmlFor={endInputId} className="text-xs text-muted-foreground">Selesai</Label>
                   <Input
-                    id="customEnd"
+                    id={endInputId}
                     type="date"
                     value={endDate}
                     onChange={(e) => {

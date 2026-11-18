@@ -11,11 +11,23 @@
 
 import type { StatTone } from "@/components/app/stat-card";
 import type { StatusTone } from "@/components/app/status-badge";
+import { toWitaDateKey } from "@/contexts/DateFilterContext";
+import { bookingCheckInStatusLabel } from "@/features/coworking/coworking-domain";
 import { ingredientCategoryLabel } from "@/features/inventory/inventory-reorder";
-import { orderStatusLabel, paymentMethodLabel } from "@/features/orders/orders-domain";
-import { calculateSettlement, getTenantPayoutAccount, maskAccountNumber } from "@/lib/settlement";
+import { filterOrdersByTenant, orderStatusLabel, paymentMethodLabel } from "@/features/orders/orders-domain";
+import {
+  calculateSettlement,
+  getTenantPayoutAccount,
+  maskAccountNumber,
+} from "@/lib/settlement";
+import {
+  getStoredSettlementReceiptPolicy,
+  settlementBasisLabel,
+  type SettlementBasisMode,
+} from "@/lib/settlement-receipt-policy";
 import { aggregateOrdersTaxAndRevenue, getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import type { ActivityLogEntry } from "@/types/audit";
+import type { CoworkingBooking } from "@/types/coworking";
 import type { EventTicketOrder } from "@/types/event";
 import type { IngredientItem } from "@/types/inventory";
 import type { OrderItemRecord, OrderRecord } from "@/types/order";
@@ -192,6 +204,18 @@ export function calculateReportSummaryMetrics(
 }
 
 function formatMakassarDate(iso: string): string {
+  const dateKey = toWitaDateKey(iso);
+  if (dateKey) {
+    const normalized = new Date(`${dateKey}T12:00:00Z`);
+    if (!Number.isNaN(normalized.getTime())) {
+      return normalized.toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "Asia/Makassar",
+      });
+    }
+  }
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return iso.split("T")[0] ?? iso;
   return parsed.toLocaleDateString("id-ID", {
@@ -200,6 +224,13 @@ function formatMakassarDate(iso: string): string {
     year: "numeric",
     timeZone: "Asia/Makassar",
   });
+}
+
+export function projectOrdersForTenant(
+  orders: readonly OrderRecord[],
+  tenantId: string
+): OrderRecord[] {
+  return filterOrdersByTenant([...orders], tenantId, true);
 }
 
 export interface ReportSummaryCard {
@@ -240,7 +271,11 @@ export interface BuildReportParams {
   logs: ActivityLogEntry[];
   promos?: PromoReference[];
   eventBookings?: EventTicketOrder[];
+  coworkingBookings?: CoworkingBooking[];
+  tenantId?: string;
   operatorName?: string;
+  settlementBasis?: SettlementBasisMode;
+  customSplits?: Record<string, { tenantSharePercent: number; dagoSharePercent: number }>;
 }
 
 export interface ReportCategoryMeta {
@@ -263,7 +298,31 @@ export function getReportCategories(params: {
   paidEventsCount?: number;
   canAccessEvents?: boolean;
   discrepanciesCount?: number;
+  isTenantScope?: boolean;
 }): ReportCategoryMeta[] {
+  if (params.isTenantScope) {
+    return [
+      {
+        id: "SALES",
+        label: "Penjualan POS",
+        count: `${params.ordersCount} Trx`,
+        rawCount: params.ordersCount,
+      },
+      {
+        id: "SETTLEMENT",
+        label: "Settlement mitra",
+        count: `${params.tenantsCount} Tenant`,
+        rawCount: params.tenantsCount,
+      },
+      {
+        id: "PRODUCTS",
+        label: "Produk dan margin",
+        count: `${params.productsCount} Menu`,
+        rawCount: params.productsCount,
+      },
+    ];
+  }
+
   const categories: ReportCategoryMeta[] = [
     {
       id: "SALES",
@@ -356,37 +415,75 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
   const {
     type,
     scopeName,
-    orders,
-    products,
+    orders: rawOrders,
+    products: rawProducts,
     shifts,
     ingredients,
     logs,
     promos = [],
     eventBookings = [],
+    coworkingBookings = [],
+    tenantId,
     operatorName,
+    settlementBasis,
+    customSplits,
   } = params;
+
+  const orders = tenantId ? projectOrdersForTenant(rawOrders, tenantId) : rawOrders;
+  const products = tenantId ? rawProducts.filter((p) => p.tenantId === tenantId) : rawProducts;
+  const effectiveCoworking = tenantId ? [] : coworkingBookings;
 
   switch (type) {
     case "SALES": {
-      const aggregatedTax = aggregateOrdersTaxAndRevenue(orders);
-      const totalRevenue = aggregatedTax.totalRevenue;
-      const totalDiscounts = aggregatedTax.totalDiscounts;
-      const totalOrdersCount = orders.length;
-      const totalItemsSold = orders.reduce(
-        (sum: number, o: OrderRecord) =>
-          sum + o.items.reduce((iSum: number, it: OrderItemRecord) => iSum + it.quantity, 0),
-        0
+      const paidOrders = orders.filter(
+        (o) => o.paymentStatus === "PAID" && o.status !== "CANCELLED"
+      );
+      const paidCoworking = effectiveCoworking.filter(
+        (b) => b.paymentStatus === "PAID" && b.checkInStatus !== "CANCELLED"
       );
 
-      const totalNonCashRevenue = orders
-        .filter((o) => o.status !== "CANCELLED" && o.paymentStatus !== "REFUNDED" && o.paymentMethod !== "CASH")
-        .reduce((sum, o) => sum + o.total, 0);
+      const aggregatedTax = aggregateOrdersTaxAndRevenue(paidOrders);
+      const coworkingRevenue = paidCoworking.reduce(
+        (sum, b) => sum + ((b as { paidAmount?: number }).paidAmount ?? b.totalAmount ?? 0),
+        0
+      );
+      const coworkingDiscount = paidCoworking.reduce((sum, b) => sum + (b.discount || 0), 0);
+      const coworkingTax = paidCoworking.reduce((sum, b) => sum + (b.tax || 0), 0);
 
-      const totalCashRevenue = orders
-        .filter((o) => o.status !== "CANCELLED" && o.paymentStatus !== "REFUNDED" && o.paymentMethod === "CASH")
-        .reduce((sum, o) => sum + o.total, 0);
+      const totalRevenue = aggregatedTax.totalRevenue + coworkingRevenue;
+      const totalDiscounts = aggregatedTax.totalDiscounts + coworkingDiscount;
+      const totalTaxPB1 = aggregatedTax.totalTaxPB1 + coworkingTax;
+      const totalOrdersCount = paidOrders.length + paidCoworking.length;
+      const totalItemsSold =
+        paidOrders.reduce(
+          (sum: number, o: OrderRecord) =>
+            sum + o.items.reduce((iSum: number, it: OrderItemRecord) => iSum + it.quantity, 0),
+          0
+        ) + paidCoworking.length;
 
-      const tableRows = orders.map((o) => {
+      const totalNonCashRevenue =
+        paidOrders
+          .filter((o) => o.paymentMethod !== "CASH")
+          .reduce((sum, o) => sum + o.total, 0) +
+        paidCoworking
+          .filter((b) => (b.paymentMethod || "QRIS").toUpperCase() !== "CASH")
+          .reduce(
+            (sum, b) => sum + ((b as { paidAmount?: number }).paidAmount ?? b.totalAmount ?? 0),
+            0
+          );
+
+      const totalCashRevenue =
+        paidOrders
+          .filter((o) => o.paymentMethod === "CASH")
+          .reduce((sum, o) => sum + o.total, 0) +
+        paidCoworking
+          .filter((b) => (b.paymentMethod || "QRIS").toUpperCase() === "CASH")
+          .reduce(
+            (sum, b) => sum + ((b as { paidAmount?: number }).paidAmount ?? b.totalAmount ?? 0),
+            0
+          );
+
+      const orderRows = paidOrders.map((o) => {
         const promoName = promos.find((p) => p.id === o.promoId)?.name || o.promoId || "-";
         const breakdown = getOrderTaxBreakdown(o);
         const disc = breakdown.discount;
@@ -407,15 +504,45 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         ];
       });
 
+      const coworkingRows = paidCoworking.map((b) => {
+        const disc = b.discount || 0;
+        const tax = b.tax || 0;
+        const amount = (b as { paidAmount?: number }).paidAmount ?? b.totalAmount ?? 0;
+        return [
+          b.bookingCode || b.id,
+          b.guestName || "Tamu",
+          `Co-working · ${b.spaceName}`,
+          formatMakassarDate(b.createdAt || b.date),
+          b.promoTitle || "-",
+          disc > 0 ? `-Rp ${disc.toLocaleString("id-ID")}` : "-",
+          tax > 0 ? `Rp ${tax.toLocaleString("id-ID")}` : "Rp 0",
+          "Rp 0",
+          bookingCheckInStatusLabel(b.checkInStatus),
+          paymentMethodLabel((b.paymentMethod || "QRIS") as OrderRecord["paymentMethod"]),
+          `Rp ${amount.toLocaleString("id-ID")}`,
+        ];
+      });
+
+      const tableRows = [...orderRows, ...coworkingRows];
+
       return {
         title: "Laporan penjualan POS",
-        subtitle: `Semua transaksi kasir di ${scopeName}`,
+        subtitle:
+          paidCoworking.length > 0
+            ? `Semua transaksi kasir dan co-working di ${scopeName}`
+            : `Semua transaksi kasir di ${scopeName}`,
         summaryCards: [
           { label: "Omzet", value: `Rp ${totalRevenue.toLocaleString("id-ID")}` },
-          { label: "Transaksi", value: `${totalOrdersCount} pesanan` },
+          {
+            label: "Transaksi",
+            value:
+              paidCoworking.length > 0
+                ? `${totalOrdersCount} transaksi`
+                : `${paidOrders.length} pesanan`,
+          },
           { label: "Diskon promo", value: `Rp ${totalDiscounts.toLocaleString("id-ID")}` },
           { label: "Item terjual", value: `${totalItemsSold} item` },
-          { label: "Total PB1", value: `Rp ${aggregatedTax.totalTaxPB1.toLocaleString("id-ID")}` },
+          { label: "Total PB1", value: `Rp ${totalTaxPB1.toLocaleString("id-ID")}` },
           {
             label: "Total service",
             value: `Rp ${aggregatedTax.totalServiceCharge.toLocaleString("id-ID")}`,
@@ -436,7 +563,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         ],
         tableRows,
         reconciliationInfo: [
-          { label: "PB1", value: `Rp ${aggregatedTax.totalTaxPB1.toLocaleString("id-ID")}` },
+          { label: "PB1", value: `Rp ${totalTaxPB1.toLocaleString("id-ID")}` },
           {
             label: "Service charge",
             value: `Rp ${aggregatedTax.totalServiceCharge.toLocaleString("id-ID")}`,
@@ -471,6 +598,8 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           ? "Perlu rekonsiliasi"
           : s.status === "CLOSED"
           ? "Ditutup"
+          : s.status === "ACTIVE" || s.status === "OPEN"
+          ? "Aktif"
           : s.status,
       ]);
 
@@ -630,7 +759,13 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
     }
 
     case "SETTLEMENT": {
-      const settlementData = calculateSettlement(orders);
+      const effectiveBasis = settlementBasis ?? getStoredSettlementReceiptPolicy().settlementBasis;
+      const rawSettlementData = calculateSettlement(orders, undefined, customSplits, {
+        settlementBasis: effectiveBasis,
+      });
+      const settlementData = tenantId
+        ? rawSettlementData.filter((s) => s.tenantId === tenantId)
+        : rawSettlementData;
       const totalNetSettlement = settlementData.reduce(
         (sum, s) => sum + (s.dpp ?? (s.grossRevenue - s.discount)),
         0
@@ -685,6 +820,9 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           "Bersih (Rp)",
         ],
         tableRows,
+        reconciliationInfo: [
+          { label: "Dasar bagi hasil", value: settlementBasisLabel(effectiveBasis) },
+        ],
       };
     }
 
@@ -753,7 +891,34 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
       });
       const { summary, discrepancies } = reconResult;
 
-      const tableRows = discrepancies.map((d) => [
+      const paidCoworking = effectiveCoworking.filter(
+        (b) => b.paymentStatus === "PAID" && b.checkInStatus !== "CANCELLED"
+      );
+      const pendingCoworkingQris = effectiveCoworking.filter(
+        (b) =>
+          b.paymentMethod === "QRIS" &&
+          b.paymentStatus === "PENDING" &&
+          b.checkInStatus !== "CANCELLED"
+      );
+      const discountedCoworking = paidCoworking.filter((b) => (b.discount || 0) > 0);
+
+      const coworkingPaidTotal = paidCoworking.reduce(
+        (sum, b) => sum + ((b as { paidAmount?: number }).paidAmount ?? b.totalAmount ?? 0),
+        0
+      );
+      const coworkingGrossTotal =
+        paidCoworking.reduce((sum, b) => sum + (b.price ?? b.totalAmount ?? 0), 0) +
+        pendingCoworkingQris.reduce((sum, b) => sum + (b.totalAmount ?? 0), 0);
+      const coworkingPendingTotal = pendingCoworkingQris.reduce(
+        (sum, b) => sum + (b.totalAmount ?? 0),
+        0
+      );
+      const coworkingDiscountTotal = discountedCoworking.reduce(
+        (sum, b) => sum + (b.discount || 0),
+        0
+      );
+
+      const orderReconRows = discrepancies.map((d) => [
         d.referenceNo,
         formatMakassarDate(d.timestamp),
         d.cashierOrStaff,
@@ -762,6 +927,37 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         d.reason,
         d.formattedAmount,
       ]);
+
+      const coworkingPendingRows = pendingCoworkingQris.map((b) => [
+        b.bookingCode || b.id,
+        formatMakassarDate(b.createdAt || b.date),
+        "Sistem Gateway",
+        "QRIS Belum Konfirmasi (Co-working)",
+        "Dana belum masuk rekening settlement DAGO",
+        "Pembayaran QRIS co-working belum diverifikasi supervisor",
+        `Rp ${(b.totalAmount || 0).toLocaleString("id-ID")}`,
+      ]);
+
+      const coworkingDiscountRows = discountedCoworking.map((b) => [
+        b.bookingCode || b.id,
+        formatMakassarDate(b.createdAt || b.date),
+        "Staf Co-working",
+        "Diskon Promo (Co-working)",
+        "Mengurangi kas bersih dibanding tarif ruang kotor",
+        b.promoTitle ? `Promo: ${b.promoTitle}` : "Potongan tarif sewa ruang",
+        `-Rp ${(b.discount || 0).toLocaleString("id-ID")}`,
+      ]);
+
+      const tableRows = [...orderReconRows, ...coworkingPendingRows, ...coworkingDiscountRows];
+
+      const totalReceiptsNet = summary.totalReceiptsNet + coworkingPaidTotal;
+      const totalReceiptsGross = summary.totalReceiptsGross + coworkingGrossTotal;
+      const totalSettlementNet = summary.totalSettlementNet + coworkingPaidTotal;
+      const totalPendingAmount = summary.totalPendingAmount + coworkingPendingTotal;
+      const totalDiscountAmount = summary.totalDiscountAmount + coworkingDiscountTotal;
+      const discrepanciesCount =
+        summary.discrepanciesCount + coworkingPendingRows.length + coworkingDiscountRows.length;
+      const auditBalanced = discrepanciesCount === 0 && summary.status === "BALANCED";
 
       const formattedVariance =
         summary.totalCashVariance < 0
@@ -786,13 +982,13 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           },
           {
             label: "Total struk bersih",
-            value: `Rp ${summary.totalReceiptsNet.toLocaleString("id-ID")}`,
-            sub: `Kotor Rp ${summary.totalReceiptsGross.toLocaleString("id-ID")}`,
+            value: `Rp ${totalReceiptsNet.toLocaleString("id-ID")}`,
+            sub: `Kotor Rp ${totalReceiptsGross.toLocaleString("id-ID")}`,
             subTone: "muted",
           },
           {
             label: "Total settlement",
-            value: `Rp ${summary.totalSettlementNet.toLocaleString("id-ID")}`,
+            value: `Rp ${totalSettlementNet.toLocaleString("id-ID")}`,
             sub: `Mitra Rp ${summary.totalTenantShare.toLocaleString("id-ID")}`,
             subTone: "info",
           },
@@ -805,11 +1001,13 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
               ? "destructive"
               : "warning",
             sub:
-              summary.status === "BALANCED"
+              auditBalanced && !hasCashVariance
                 ? "Kasir seimbang"
                 : summary.totalCashVariance < 0
                 ? "Ada selisih kas fisik"
-                : "Ada kelebihan kas fisik",
+                : summary.totalCashVariance > 0
+                ? "Ada kelebihan kas fisik"
+                : "Kasir seimbang",
             subTone: !hasCashVariance
               ? "success"
               : summary.totalCashVariance < 0
@@ -818,21 +1016,21 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           },
           {
             label: "Transaksi bermasalah",
-            value: `${summary.discrepanciesCount} transaksi`,
+            value: `${discrepanciesCount} transaksi`,
             valueTone:
-              summary.discrepanciesCount === 0
+              discrepanciesCount === 0
                 ? "success"
                 : summary.totalRefundAmount > 0
                 ? "destructive"
                 : "warning",
             sub:
-              summary.discrepanciesCount === 0
+              discrepanciesCount === 0
                 ? "Semua klop"
                 : summary.totalRefundAmount > 0
                 ? "Terdapat refund"
-                : `${summary.discrepanciesCount} anomali tercatat`,
+                : `${discrepanciesCount} anomali tercatat`,
             subTone:
-              summary.discrepanciesCount === 0
+              discrepanciesCount === 0
                 ? "success"
                 : summary.totalRefundAmount > 0
                 ? "destructive"
@@ -852,13 +1050,13 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
         reconciliationInfo: [
           {
             label: "Status audit",
-            value: summary.status === "BALANCED" ? "Seimbang" : "Perlu verifikasi",
-            tone: summary.status === "BALANCED" ? "success" : "destructive",
+            value: auditBalanced ? "Seimbang" : "Perlu verifikasi",
+            tone: auditBalanced ? "success" : "destructive",
           },
           {
             label: "Pending QRIS",
-            value: `Rp ${summary.totalPendingAmount.toLocaleString("id-ID")}`,
-            tone: summary.totalPendingAmount > 0 ? "warning" : "muted",
+            value: `Rp ${totalPendingAmount.toLocaleString("id-ID")}`,
+            tone: totalPendingAmount > 0 ? "warning" : "muted",
           },
           {
             label: "Total refund",
@@ -867,8 +1065,8 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           },
           {
             label: "Total diskon",
-            value: `Rp ${summary.totalDiscountAmount.toLocaleString("id-ID")}`,
-            tone: summary.totalDiscountAmount > 0 ? "info" : "muted",
+            value: `Rp ${totalDiscountAmount.toLocaleString("id-ID")}`,
+            tone: totalDiscountAmount > 0 ? "info" : "muted",
           },
         ],
       };

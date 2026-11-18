@@ -11,12 +11,11 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   calculateEndTime,
-  COWORKING_TIME_SLOTS,
   formatCoworkingDuration,
-  parseHour,
   spaceTypeLabel,
 } from "@/features/pos/pos-coworking";
 import type { POSPaymentMethod } from "@/features/pos/types";
+import { getCoworkingStartSlots, isWithinCoworkingHours } from "@/lib/operating-hours";
 import type { PromoConfig } from "@/lib/promo";
 import type { CoworkingSpaceItem } from "@/types/coworking";
 import type { LoyaltyMember } from "@/types/loyalty";
@@ -65,6 +64,8 @@ interface CoworkingBookingPanelProps {
   cwPaymentMethod: POSPaymentMethod;
   onPaymentMethodChange: (method: POSPaymentMethod) => void;
   onCompletePayment: () => void;
+  isDateClosed?: boolean;
+  closedDateReason?: string;
 }
 
 const QUICK_DURATIONS = [
@@ -117,9 +118,12 @@ export function CoworkingBookingPanel({
   cwPaymentMethod,
   onPaymentMethodChange,
   onCompletePayment,
+  isDateClosed = false,
+  closedDateReason,
 }: CoworkingBookingPanelProps) {
   const endTime = calculateEndTime(cwStartTime, cwDuration);
-  const isPastOperatingHours = parseHour(cwStartTime) + cwDuration > 18;
+  const isPastOperatingHours = !isWithinCoworkingHours(cwStartTime, cwDuration);
+  const startSlots = getCoworkingStartSlots(1);
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 text-xs text-card-foreground shadow-xs">
@@ -203,9 +207,9 @@ export function CoworkingBookingPanel({
             className="w-40"
             aria-label="Pilih durasi lain"
           >
-            {[1, 2, 3, 4, 5, 6, 7, 8, 10, 12].map((h) => (
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((h) => (
               <NativeSelectOption key={h} value={h}>
-                {h} jam {h === 4 ? "(setengah hari)" : h === 8 ? "(seharian)" : h === 12 ? "(maksimal)" : ""}
+                {h} jam {h === 4 ? "(setengah hari)" : h === 8 ? "(seharian)" : h === 9 ? "(penuh 09:00–18:00)" : ""}
               </NativeSelectOption>
             ))}
           </NativeSelect>
@@ -236,7 +240,7 @@ export function CoworkingBookingPanel({
               type="time"
               value={cwStartTime}
               min="09:00"
-              max="18:00"
+              max="17:00"
               onChange={(e) => onStartTimeChange(e.target.value)}
               className="rounded-md border border-input bg-input/20 px-2 py-0.5 font-mono text-xs font-medium text-foreground outline-none focus:ring-1 focus:ring-ring"
               aria-label="Jam mulai sewa"
@@ -248,17 +252,26 @@ export function CoworkingBookingPanel({
           </div>
         </div>
 
+        {isDateClosed && (
+          <Alert variant="destructive" className="py-2">
+            <AlertTriangle className="size-4 shrink-0" />
+            <AlertDescription className="text-xs">
+              {closedDateReason || "Co-working tutup pada tanggal ini"}. Operasional reguler Senin sampai Jumat, 09:00–18:00 WITA.
+            </AlertDescription>
+          </Alert>
+        )}
+
         {isPastOperatingHours && (
           <Alert variant="destructive" className="py-2">
             <AlertTriangle className="size-4 shrink-0" />
             <AlertDescription className="text-xs">
-              Waktu selesai ({endTime} WITA) melewati jam operasional co-working (tutup 18:00 WITA).
+              Waktu sewa ({cwStartTime}–{endTime} WITA) melewati jam kantor Dago Creative Hub (09:00–18:00 WITA).
             </AlertDescription>
           </Alert>
         )}
 
         <div className="grid grid-cols-3 gap-1.5 pt-1 sm:grid-cols-5">
-          {COWORKING_TIME_SLOTS.slice(0, 9).map((slot) => {
+          {startSlots.map((slot) => {
             const isAvail = checkSlotAvailable(slot);
             const isSelected = cwStartTime === slot;
 
@@ -490,6 +503,7 @@ export function CoworkingBookingPanel({
       <Button
         type="button"
         size="lg"
+        disabled={isPastOperatingHours || isDateClosed}
         onClick={onCompletePayment}
         className="w-full font-medium"
       >
