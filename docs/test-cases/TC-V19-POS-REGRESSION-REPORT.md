@@ -1,7 +1,7 @@
 # Laporan uji regresi POS DagoEng (Task V-19)
 
 - **ID Task.** V-19 Regression test POS dan perbaikan bug sisa
-- **Acuan.** [Test Case POS DagoEng](./../../Test%20Case%20POS%20DagoEng%20%E2%80%94%20Regression%20Checklist.md) dan [QA Handover POS DagoEng](./../../QA%20Handover%20POS%20DagoEng%20%E2%80%94%20Temuan%20%26%20Rekomendasi%20Improvement.md)
+- **Acuan.** Dokumen uji internal `Test Case POS DagoEng Regression Checklist` dan `QA Handover POS DagoEng Temuan dan Rekomendasi Improvement`
 - **Lingkup.** Seluruh 37 skenario prioritas P1 dan temuan P2 terkait pada modul POS, shift, pesanan, refund, void, loyalty, co-working POS, KDS, inventori, laporan, dashboard, serta RBAC dan keamanan sesi
 
 ## 1. Perbaikan inti yang diterapkan
