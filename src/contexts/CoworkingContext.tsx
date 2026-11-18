@@ -34,7 +34,7 @@ import {
 import { generateSequentialReceiptNumber } from "@/lib/receipt-publisher";
 import {
   checkCoworkingBookingConflict,
-  validateCoworkingDateRange,
+  validateCoworkingBookingSchedule,
 } from "@/lib/operating-hours";
 import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
@@ -570,16 +570,12 @@ export function CoworkingProvider({ children }: { children: React.ReactNode }) {
   const bookSpace = (
     bookingData: NewBookingInput
   ): (typeof INITIAL_BOOKINGS)[0] => {
-    const holidayCheck = validateCoworkingDateRange(
-      bookingData.date,
-      bookingData.endDate,
+    const scheduleCheck = validateCoworkingBookingSchedule(
+      bookingData,
       settings?.coworkingHolidays
     );
-    if (!holidayCheck.isValid) {
-      const firstClosed = holidayCheck.closedDates[0];
-      throw new Error(
-        `COWORKING_DATE_CLOSED: Tanggal ${firstClosed.date} tidak dapat dibooking (${firstClosed.reason}).`
-      );
+    if (!scheduleCheck.isValid) {
+      throw new Error(`COWORKING_SCHEDULE_CLOSED: ${scheduleCheck.reason}`);
     }
 
     const latestBookings = bookingsRef.current;

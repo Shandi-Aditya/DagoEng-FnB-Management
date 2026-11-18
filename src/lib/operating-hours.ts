@@ -100,6 +100,32 @@ export const DEFAULT_OPERATIONAL_HOURS: ServiceOperationalHours = {
   },
 };
 
+export const COWORKING_OPEN_TIME = DEFAULT_OPERATIONAL_HOURS.coworking.openTime;
+export const COWORKING_CLOSE_TIME = DEFAULT_OPERATIONAL_HOURS.coworking.closeTime;
+export const COWORKING_OPEN_MINUTES = 9 * 60;
+export const COWORKING_CLOSE_MINUTES = 18 * 60;
+export const COWORKING_MAX_HOURS = (COWORKING_CLOSE_MINUTES - COWORKING_OPEN_MINUTES) / 60;
+
+export function getCoworkingStartSlots(minDurationHours = 1): string[] {
+  const safeMinHours = Math.max(1, Math.floor(minDurationHours));
+  const lastStartMinutes = COWORKING_CLOSE_MINUTES - safeMinHours * 60;
+  const slots: string[] = [];
+  for (let mins = COWORKING_OPEN_MINUTES; mins <= lastStartMinutes; mins += 60) {
+    const h = Math.floor(mins / 60);
+    slots.push(`${String(h).padStart(2, "0")}:00`);
+  }
+  return slots;
+}
+
+export function isWithinCoworkingHours(startTime: string, durationHours: number): boolean {
+  const startMinutes = parseTimeToMinutes(startTime);
+  if (startMinutes === null || durationHours <= 0) return false;
+  return (
+    startMinutes >= COWORKING_OPEN_MINUTES &&
+    startMinutes + durationHours * 60 <= COWORKING_CLOSE_MINUTES
+  );
+}
+
 export const DEFAULT_TENANT_OPERATIONS: Record<string, TenantOperationConfig> = {
   "tenant-ks": {
     isOpenOrder: true,
@@ -203,7 +229,6 @@ export function isCoworkingDateOpen(
   const ymd = normalizeDateToYMD(dateInput);
   if (!ymd) return { isOpen: false, reason: "Tanggal tidak valid", isOverridden: false };
 
-  // 1. Highest priority: Manual Override by Admin/Owner
   const override = config.overrides?.find((o) => o.date === ymd);
   if (override) {
     return {
@@ -213,20 +238,21 @@ export function isCoworkingDateOpen(
     };
   }
 
-  // 2. National Holiday check
-  const holiday = config.nationalHolidays?.find((h) => h.date === ymd);
-  if (holiday) {
-    return {
-      isOpen: false,
-      reason: `Tutup: Hari Libur Nasional (${holiday.name})`,
-      isOverridden: false,
-    };
+  const holidaysClosed = config.closeOnNationalHolidays ?? true;
+  if (holidaysClosed) {
+    const holiday = config.nationalHolidays?.find((h) => h.date === ymd);
+    if (holiday) {
+      return {
+        isOpen: false,
+        reason: `Tutup: Hari Libur Nasional (${holiday.name})`,
+        isOverridden: false,
+      };
+    }
   }
 
-  // 3. Weekend check (Saturday = 6, Sunday = 0)
-  if (config.defaultWeekendClosed) {
+  const weekendClosed = config.closeOnWeekends ?? config.defaultWeekendClosed ?? true;
+  if (weekendClosed) {
     const [year, month, day] = ymd.split("-").map(Number);
-    // Use UTC or local noon to avoid timezone shift
     const dateObj = new Date(year, month - 1, day, 12, 0, 0);
     const dayOfWeek = dateObj.getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) {
@@ -240,9 +266,88 @@ export function isCoworkingDateOpen(
 
   return {
     isOpen: true,
-    reason: "Buka sesuai jam operasional Co-working",
+    reason: "Buka sesuai jam kantor Dago Creative Hub (Senin - Jumat, 09:00 - 18:00 WITA)",
     isOverridden: false,
   };
+}
+
+export function getNextOpenCoworkingDate(
+  startDateInput: string,
+  config: CoworkingHolidayConfig = DEFAULT_COWORKING_HOLIDAY_CONFIG
+): string {
+  const startYmd = normalizeDateToYMD(startDateInput);
+  if (!startYmd) return startDateInput;
+  const [sY, sM, sD] = startYmd.split("-").map(Number);
+  const cursor = new Date(sY, sM - 1, sD, 12, 0, 0);
+  for (let offset = 0; offset < 14; offset += 1) {
+    const candidateYmd = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}-${String(cursor.getDate()).padStart(2, "0")}`;
+    if (isCoworkingDateOpen(candidateYmd, config).isOpen) {
+      return candidateYmd;
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return startYmd;
+}
+
+export function validateCoworkingBookingSchedule(
+  candidate: {
+    bookingType?: string;
+    date?: string;
+    endDate?: string;
+    startTime?: string;
+    endTime?: string;
+    duration?: number;
+  },
+  config: CoworkingHolidayConfig = DEFAULT_COWORKING_HOLIDAY_CONFIG
+): { isValid: boolean; reason?: string } {
+  if (!candidate.date) {
+    return { isValid: false, reason: "Tanggal booking co-working wajib diisi." };
+  }
+
+  const startYmd = normalizeDateToYMD(candidate.date);
+  const endYmd = candidate.endDate ? normalizeDateToYMD(candidate.endDate) : startYmd;
+  const startStatus = isCoworkingDateOpen(startYmd, config);
+  if (!startStatus.isOpen) {
+    return {
+      isValid: false,
+      reason: `Tanggal ${startYmd} tidak dapat dibooking (${startStatus.reason}). Co-working buka Senin sampai Jumat pukul 09:00–18:00 WITA.`,
+    };
+  }
+
+  const normalizedType = (candidate.bookingType || "HOURLY").toUpperCase();
+  const isSingleDay = normalizedType === "HOURLY" || !endYmd || endYmd === startYmd;
+  if (isSingleDay && endYmd && endYmd !== startYmd) {
+    const endStatus = isCoworkingDateOpen(endYmd, config);
+    if (!endStatus.isOpen) {
+      return {
+        isValid: false,
+        reason: `Tanggal ${endYmd} tidak dapat dibooking (${endStatus.reason}).`,
+      };
+    }
+  }
+
+  if (normalizedType === "HOURLY" && candidate.startTime) {
+    const startMinutes = parseTimeToMinutes(candidate.startTime);
+    const endMinutes = candidate.endTime
+      ? parseTimeToMinutes(candidate.endTime)
+      : startMinutes !== null && candidate.duration
+        ? startMinutes + candidate.duration * 60
+        : null;
+
+    if (
+      startMinutes === null ||
+      startMinutes < COWORKING_OPEN_MINUTES ||
+      (endMinutes !== null && (endMinutes > COWORKING_CLOSE_MINUTES || endMinutes <= startMinutes))
+    ) {
+      return {
+        isValid: false,
+        reason:
+          "Waktu sewa co-working harus berada dalam jam kantor Dago Creative Hub (Senin sampai Jumat, 09:00–18:00 WITA).",
+      };
+    }
+  }
+
+  return { isValid: true };
 }
 
 /**

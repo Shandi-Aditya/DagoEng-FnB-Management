@@ -270,6 +270,9 @@ function CustomerApp() {
         notify.success("Ruang dipesan", `${request.space.name}, bayar ${formatCurrencyIDR(subtotal)} di kasir.`);
         setView("activity");
       }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Jadwal co-working tidak tersedia.";
+      notify.error("Gagal memesan ruang", msg.replace(/^COWORKING_SCHEDULE_CLOSED:\s*/, ""));
     } finally {
       setIsBooking(false);
     }

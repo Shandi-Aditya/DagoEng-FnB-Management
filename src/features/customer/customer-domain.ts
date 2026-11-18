@@ -184,18 +184,9 @@ export function calculateCartTotals(
   };
 }
 
-export const COWORKING_TIME_SLOTS = [
-  "09:00",
-  "10:00",
-  "11:00",
-  "12:00",
-  "13:00",
-  "14:00",
-  "15:00",
-  "16:00",
-  "17:00",
-  "18:00",
-];
+import { getCoworkingStartSlots } from "@/lib/operating-hours";
+
+export const COWORKING_TIME_SLOTS = getCoworkingStartSlots(1);
 
 export function getAvailableTimeSlots(): string[] {
   return [...COWORKING_TIME_SLOTS];

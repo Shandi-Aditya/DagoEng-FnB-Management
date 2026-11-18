@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  DEFAULT_COWORKING_HOLIDAY_CONFIG,
+  validateCoworkingBookingSchedule,
+  type CoworkingHolidayConfig,
+} from "@/lib/operating-hours";
+import {
   getCoworkingBookings,
+  readPersistentData,
   saveCoworkingBooking,
   writePersistentData,
 } from "@/lib/persistent-storage";
@@ -155,14 +161,45 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (auth.role === "CUSTOMER") {
-      const existingBookings = await getCoworkingBookings();
-      const matchedExisting = existingBookings.find(
-        (b: Record<string, unknown>) =>
-          (booking.id && b.id === booking.id) ||
-          (booking.bookingCode && b.bookingCode === booking.bookingCode)
-      );
+    const existingBookings = await getCoworkingBookings();
+    const matchedExisting = existingBookings.find(
+      (b: Record<string, unknown>) =>
+        (booking.id && b.id === booking.id) ||
+        (booking.bookingCode && b.bookingCode === booking.bookingCode)
+    );
 
+    if (
+      !matchedExisting &&
+      booking.date &&
+      booking.checkInStatus !== "CANCELLED" &&
+      booking.checkInStatus !== "COMPLETED"
+    ) {
+      const storedSettings = await readPersistentData<{
+        coworkingHolidays?: CoworkingHolidayConfig;
+      } | null>("platform_settings.json", null);
+      const scheduleCheck = validateCoworkingBookingSchedule(
+        {
+          bookingType:
+            typeof booking.bookingType === "string" ? booking.bookingType : "HOURLY",
+          date: String(booking.date),
+          endDate: typeof booking.endDate === "string" ? booking.endDate : undefined,
+          startTime:
+            typeof booking.startTime === "string" ? booking.startTime : undefined,
+          endTime: typeof booking.endTime === "string" ? booking.endTime : undefined,
+          duration:
+            typeof booking.duration === "number" ? booking.duration : undefined,
+        },
+        storedSettings?.coworkingHolidays ?? DEFAULT_COWORKING_HOLIDAY_CONFIG
+      );
+      if (!scheduleCheck.isValid) {
+        return NextResponse.json(
+          { error: scheduleCheck.reason || "Jadwal co-working tutup." },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (auth.role === "CUSTOMER") {
       if (matchedExisting) {
         const isSameUser =
           (matchedExisting.userId && matchedExisting.userId === auth.userId) ||

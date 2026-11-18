@@ -44,10 +44,12 @@ import {
   resolvePublisherCode,
 } from "@/lib/receipt-publisher";
 import {
+  getNextOpenCoworkingDate,
   isCoworkingDateOpen,
   checkCoworkingBookingConflict,
   isTenantAcceptingOrders,
   isServiceWithinHours,
+  isWithinCoworkingHours,
 } from "@/lib/operating-hours";
 import {
   Calculator,
@@ -142,7 +144,9 @@ export default function POSPage() {
   const [cwSelectedSpaceId, setCwSelectedSpaceId] = useState<string>("");
   const [cwSpaceTypeFilter, setCwSpaceTypeFilter] = useState<string>("ALL");
   const [cwSearchQuery, setCwSearchQuery] = useState<string>("");
-  const [cwDate, setCwDate] = useState<string>(() => getTodayWitaDateString());
+  const [cwDate, setCwDate] = useState<string>(() =>
+    getNextOpenCoworkingDate(getTodayWitaDateString(), settings?.coworkingHolidays)
+  );
   const [cwStartTime, setCwStartTime] = useState<string>("09:00");
   const [isManualTimeSet, setIsManualTimeSet] = useState<boolean>(false);
   const [cwDuration, setCwDuration] = useState<number>(2); // hours
@@ -1070,6 +1074,13 @@ export default function POSPage() {
     }
 
     const startH = parseHour(cwStartTime);
+    if (!isWithinCoworkingHours(cwStartTime, cwDuration)) {
+      notify.warning(
+        "Di luar jam operasional",
+        "Jam operasional Dago Creative Hub dan co-working adalah 09.00 sampai 18.00 WITA."
+      );
+      return;
+    }
     const avail = checkSlotAvailability(selectedSpace.id, cwDate, startH, cwDuration);
     if (!avail.isAvailable) {
       notify.warning("Slot sudah terisi", `${cwStartTime}, ${cwDuration} jam pada ${cwDate} tidak tersedia.`);
@@ -1518,6 +1529,15 @@ export default function POSPage() {
             }}
           />
 
+          {!isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).isOpen && (
+            <Alert variant="destructive">
+              <AlertTriangle className="size-4" />
+              <AlertDescription className="text-xs">
+                {isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).reason}. Kantor Dago Creative Hub dan co-working beroperasi Senin sampai Jumat, pukul 09.00 sampai 18.00 WITA.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
             <div className={selectedSpace ? "lg:col-span-7 xl:col-span-8 space-y-3" : "col-span-12 space-y-3"}>
               {!selectedSpace ? (
@@ -1526,7 +1546,7 @@ export default function POSPage() {
                     <div>
                       <h3 className="font-medium text-foreground text-xs">Pilih ruangan untuk memulai booking</h3>
                       <p className="text-xs text-muted-foreground">
-                        Pilih kartu ruangan atau meja di bawah untuk mengatur durasi dan pembayaran.
+                        Operasional Senin sampai Jumat, pukul 09.00 sampai 18.00 WITA. Pilih kartu ruangan atau meja di bawah.
                       </p>
                     </div>
                   </div>
@@ -1640,6 +1660,8 @@ export default function POSPage() {
                   cwPaymentMethod={cwPaymentMethod}
                   onPaymentMethodChange={setCwPaymentMethod}
                   onCompletePayment={handleCompleteCoworkingPayment}
+                  isDateClosed={!isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).isOpen}
+                  closedDateReason={isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).reason}
                 />
               </div>
             )}

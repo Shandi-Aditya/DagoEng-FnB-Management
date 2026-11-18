@@ -182,10 +182,26 @@ export default function SettingsPage() {
   const [newOverrideDate, setNewOverrideDate] = useState("");
   const [newOverrideType, setNewOverrideType] = useState<"OPEN" | "CLOSED">("OPEN");
   const [newOverrideReason, setNewOverrideReason] = useState("");
-  const [cwOpenTime, setCwOpenTime] = useState(settings.operationalHours?.coworking?.open || "09:00");
-  const [cwCloseTime, setCwCloseTime] = useState(settings.operationalHours?.coworking?.close || "18:00");
-  const [fnbOpenTime, setFnbOpenTime] = useState(settings.operationalHours?.fnb?.open || "07:00");
-  const [fnbCloseTime, setFnbCloseTime] = useState(settings.operationalHours?.fnb?.close || "22:00");
+  const [cwOpenTime, setCwOpenTime] = useState(
+    settings.operationalHours?.coworking?.open ||
+      settings.operationalHours?.coworking?.openTime ||
+      "09:00"
+  );
+  const [cwCloseTime, setCwCloseTime] = useState(
+    settings.operationalHours?.coworking?.close ||
+      settings.operationalHours?.coworking?.closeTime ||
+      "18:00"
+  );
+  const [fnbOpenTime, setFnbOpenTime] = useState(
+    settings.operationalHours?.fnb?.open ||
+      settings.operationalHours?.fnb?.openTime ||
+      "07:00"
+  );
+  const [fnbCloseTime, setFnbCloseTime] = useState(
+    settings.operationalHours?.fnb?.close ||
+      settings.operationalHours?.fnb?.closeTime ||
+      "22:00"
+  );
 
   // Tenant Operations & Profil
   const [localTenants, setLocalTenants] = useState<{ id: string; name: string; code: string; badge: string }[]>(() => getAllFnbTenants());
@@ -369,10 +385,26 @@ export default function SettingsPage() {
     setCwWeekendClosed(settings.coworkingHolidays?.closeOnWeekends ?? true);
     setCwNationalHolidaysClosed(settings.coworkingHolidays?.closeOnNationalHolidays ?? true);
     setCwOverrides(settings.coworkingHolidays?.overrides || []);
-    setCwOpenTime(settings.operationalHours?.coworking?.open || "09:00");
-    setCwCloseTime(settings.operationalHours?.coworking?.close || "18:00");
-    setFnbOpenTime(settings.operationalHours?.fnb?.open || "07:00");
-    setFnbCloseTime(settings.operationalHours?.fnb?.close || "22:00");
+    setCwOpenTime(
+      settings.operationalHours?.coworking?.open ||
+        settings.operationalHours?.coworking?.openTime ||
+        "09:00"
+    );
+    setCwCloseTime(
+      settings.operationalHours?.coworking?.close ||
+        settings.operationalHours?.coworking?.closeTime ||
+        "18:00"
+    );
+    setFnbOpenTime(
+      settings.operationalHours?.fnb?.open ||
+        settings.operationalHours?.fnb?.openTime ||
+        "07:00"
+    );
+    setFnbCloseTime(
+      settings.operationalHours?.fnb?.close ||
+        settings.operationalHours?.fnb?.closeTime ||
+        "22:00"
+    );
     setTenantOps(settings.tenantOperations || {});
     const currentTenantId = user?.tenant?.id || "tenant-ks";
     const myOp = settings.tenantOperations?.[currentTenantId];
