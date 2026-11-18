@@ -7,7 +7,14 @@ import { useOutlet } from "./OutletContext";
 import { useDateFilter } from "./DateFilterContext";
 import { useActivityLog } from "./ActivityLogContext";
 import { useNotifications } from "./NotificationContext";
-import { syncWithOutbox, flushOutbox, getOutboxItems } from "@/lib/sync-outbox";
+import {
+  ensureGlobalOutboxAutoFlush,
+  flushOutbox,
+  getOutboxItems,
+  OUTBOX_FLUSHED_EVENT,
+  reconcileCollectionWithOutbox,
+  syncWithOutbox,
+} from "@/lib/sync-outbox";
 import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import {
   generateSequentialReceiptNumber,
@@ -20,7 +27,22 @@ import {
 } from "@/features/orders/orders-domain";
 
 const ORDER_SYNC_ENDPOINT = "/api/orders";
+const SELF_ORDER_SYNC_ENDPOINT = "/api/orders/self-order";
 const orderSyncId = (orderId: string) => `order-sync-${orderId}`;
+
+function isSelfOrderRole(roleSlug?: string | null): boolean {
+  return !roleSlug || roleSlug === "CUSTOMER";
+}
+
+function hasOrderStateChanged(prev: OrderRecord, next: OrderRecord): boolean {
+  return (
+    prev.status !== next.status ||
+    prev.paymentStatus !== next.paymentStatus ||
+    prev.total !== next.total ||
+    (prev.statusHistory?.length ?? 0) !== (next.statusHistory?.length ?? 0) ||
+    JSON.stringify(prev.tenantStatuses) !== JSON.stringify(next.tenantStatuses)
+  );
+}
 
 const KITCHEN_STAGE_RANK: Record<OrderStatus, number> = {
   NEW: 0,
@@ -127,6 +149,8 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
   const [orders, setOrders] = useState<OrderRecord[]>(INITIAL_ORDERS);
   const ordersRef = useRef<OrderRecord[]>(INITIAL_ORDERS);
   const pendingSyncOrderIdsRef = useRef<Set<string>>(new Set());
+  const userRef = useRef(user);
+  userRef.current = user;
 
   const updateOrdersState = (updater: (prev: OrderRecord[]) => OrderRecord[]) => {
     const next = updater(ordersRef.current);
@@ -166,16 +190,18 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     rollbackSnapshot?: OrderRecord
   ): Promise<OrderActionServerSyncResult> => {
     if (typeof window === "undefined") return { synced: true, rejected: false };
-    // Customer self-order devices have no POS write permission; their orders stay local by design.
-    if (user?.role?.slug === "CUSTOMER") return { synced: true, rejected: false };
+
+    const targetEndpoint = isSelfOrderRole(userRef.current?.role?.slug)
+      ? SELF_ORDER_SYNC_ENDPOINT
+      : ORDER_SYNC_ENDPOINT;
 
     pendingSyncOrderIdsRef.current.add(order.id);
     try {
       const result = await syncWithOutbox({
         id: orderSyncId(order.id),
-        endpoint: ORDER_SYNC_ENDPOINT,
+        endpoint: targetEndpoint,
         method: "POST",
-        payload: { order, ...extraPayload },
+        payload: { id: order.id, order, ...extraPayload },
       });
 
       if (result.synced) {
@@ -215,16 +241,77 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
   const getPendingOutboxOrderIds = (): Set<string> => {
     return new Set(
       getOutboxItems()
-        .filter((item) => item.endpoint === ORDER_SYNC_ENDPOINT)
-        .map((item) => String((item.payload?.order as OrderRecord | undefined)?.id || ""))
+        .filter(
+          (item) =>
+            item.endpoint === ORDER_SYNC_ENDPOINT ||
+            item.endpoint === SELF_ORDER_SYNC_ENDPOINT
+        )
+        .map((item) =>
+          String(
+            item.payload?.id ||
+              (item.payload?.order as OrderRecord | undefined)?.id ||
+              ""
+          )
+        )
         .filter(Boolean)
     );
+  };
+
+  const reconcileStaffServerOrders = (
+    serverOrders: readonly OrderRecord[],
+    localOrders: readonly OrderRecord[]
+  ): OrderRecord[] => {
+    const outboxItems = getOutboxItems();
+    const hasPendingReset = outboxItems.some(
+      (item) =>
+        item.id === "orders-reset" &&
+        item.endpoint === ORDER_SYNC_ENDPOINT &&
+        item.method === "DELETE"
+    );
+    const effectiveBase = hasPendingReset ? [] : serverOrders;
+    const pendingOutbox = getPendingOutboxOrderIds();
+    const localMap = new Map(localOrders.map((o) => [o.id, o]));
+
+    const adjustedServer = effectiveBase.map((srvOrder) => {
+      if (
+        (pendingSyncOrderIdsRef.current.has(srvOrder.id) ||
+          pendingOutbox.has(srvOrder.id)) &&
+        localMap.has(srvOrder.id)
+      ) {
+        return localMap.get(srvOrder.id)!;
+      }
+      return srvOrder;
+    });
+
+    const reconciled = reconcileCollectionWithOutbox<OrderRecord>({
+      serverItems: adjustedServer,
+      localItems: localOrders,
+      endpoint: ORDER_SYNC_ENDPOINT,
+      getId: (o) => o.id,
+    });
+
+    const reconciledIds = new Set(reconciled.map((o) => o.id));
+    const pendingSelfOrders = reconcileCollectionWithOutbox<OrderRecord>({
+      serverItems: [],
+      localItems: localOrders,
+      endpoint: SELF_ORDER_SYNC_ENDPOINT,
+      getId: (o) => o.id,
+    }).filter((o) => !reconciledIds.has(o.id));
+
+    const inFlightExtras = localOrders.filter(
+      (o) =>
+        pendingSyncOrderIdsRef.current.has(o.id) &&
+        !reconciledIds.has(o.id) &&
+        !pendingSelfOrders.some((p) => p.id === o.id)
+    );
+
+    return [...inFlightExtras, ...pendingSelfOrders, ...reconciled];
   };
 
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_ORDERS);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           ordersRef.current = parsed;
@@ -236,119 +323,149 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsInitialized(true);
     }
-
-    // Flush pending outbox orders first, then hydrate orders from persistent server storage (POS-33 / R9)
-    if (typeof window !== "undefined") {
-      flushOutbox()
-        .then(({ rejected }) => {
-          for (const { item, error } of rejected) {
-            const rejectedOrder = item.payload.order as OrderRecord | undefined;
-            if (item.endpoint !== ORDER_SYNC_ENDPOINT || !rejectedOrder?.id) continue;
-            markOrderSync(rejectedOrder.id, "REJECTED", error);
-            notifyOrderRejected(rejectedOrder, error);
-          }
-        })
-        .catch(() => {})
-        .finally(() => {
-          fetch("/api/orders")
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data) => {
-              if (data && Array.isArray(data.orders) && data.orders.length > 0) {
-                const pendingOutbox = getPendingOutboxOrderIds();
-                updateOrdersState((prev) => {
-                  const merged = new Map(prev.map((o) => [o.id, o]));
-                  for (const srvOrder of data.orders) {
-                    if (
-                      pendingSyncOrderIdsRef.current.has(srvOrder.id) ||
-                      pendingOutbox.has(srvOrder.id)
-                    ) {
-                      continue;
-                    }
-                    merged.set(srvOrder.id, srvOrder);
-                  }
-                  return Array.from(merged.values());
-                });
-              }
-            })
-            .catch(() => {});
-        });
-
-      const handleStorage = (event: StorageEvent) => {
-        if (event.key === STORAGE_KEY_ORDERS && event.newValue) {
-          try {
-            const parsed = JSON.parse(event.newValue);
-            if (Array.isArray(parsed)) {
-              const pendingOutbox = getPendingOutboxOrderIds();
-              updateOrdersState((prev) => {
-                const merged = new Map(prev.map((o) => [o.id, o]));
-                let changed = false;
-                for (const o of parsed) {
-                  if (pendingSyncOrderIdsRef.current.has(o.id) || pendingOutbox.has(o.id)) {
-                    continue;
-                  }
-                  const existing = merged.get(o.id);
-                  if (
-                    !existing ||
-                    existing.status !== o.status ||
-                    existing.paymentStatus !== o.paymentStatus ||
-                    existing.statusHistory?.length !== o.statusHistory?.length ||
-                    JSON.stringify(existing.tenantStatuses) !== JSON.stringify(o.tenantStatuses)
-                  ) {
-                    merged.set(o.id, o);
-                    changed = true;
-                  }
-                }
-                return changed ? Array.from(merged.values()) : prev;
-              });
-            }
-          } catch (e) {
-            console.error("Failed to parse storage update", e);
-          }
-        }
-      };
-      window.addEventListener("storage", handleStorage);
-
-      const pollInterval = setInterval(() => {
-        fetch("/api/orders")
-          .then((res) => (res.ok ? res.json() : null))
-          .then((data) => {
-            if (data && Array.isArray(data.orders) && data.orders.length > 0) {
-              const pendingOutbox = getPendingOutboxOrderIds();
-              updateOrdersState((prev) => {
-                const merged = new Map(prev.map((o) => [o.id, o]));
-                let changed = false;
-                for (const srvOrder of data.orders) {
-                  if (
-                    pendingSyncOrderIdsRef.current.has(srvOrder.id) ||
-                    pendingOutbox.has(srvOrder.id)
-                  ) {
-                    continue;
-                  }
-                  const existing = merged.get(srvOrder.id);
-                  if (
-                    !existing ||
-                    existing.status !== srvOrder.status ||
-                    existing.paymentStatus !== srvOrder.paymentStatus ||
-                    existing.statusHistory?.length !== srvOrder.statusHistory?.length ||
-                    JSON.stringify(existing.tenantStatuses) !== JSON.stringify(srvOrder.tenantStatuses)
-                  ) {
-                    merged.set(srvOrder.id, srvOrder);
-                    changed = true;
-                  }
-                }
-                return changed ? Array.from(merged.values()) : prev;
-              });
-            }
-          })
-          .catch(() => {});
-      }, 5000);
-
-      return () => {
-        window.removeEventListener("storage", handleStorage);
-        clearInterval(pollInterval);
-      };
-    }
+    ensureGlobalOutboxAutoFlush();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+
+    const hydrateStaffOrders = () => {
+      fetch("/api/orders")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (cancelled || !data || !Array.isArray(data.orders)) return;
+          updateOrdersState((prev) => {
+            const next = reconcileStaffServerOrders(data.orders, prev);
+            if (
+              next.length === prev.length &&
+              next.every((item, idx) => prev[idx] && !hasOrderStateChanged(prev[idx], item))
+            ) {
+              return prev;
+            }
+            return next;
+          });
+        })
+        .catch(() => {});
+    };
+
+    const pollSelfOrders = () => {
+      const activeIds = ordersRef.current
+        .filter((o) => o.status !== "COMPLETED" && o.status !== "CANCELLED")
+        .slice(0, 20)
+        .map((o) => o.id);
+      if (activeIds.length === 0) return;
+
+      fetch(`/api/orders/self-order?ids=${encodeURIComponent(activeIds.join(","))}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (cancelled || !data || !Array.isArray(data.orders) || data.orders.length === 0) {
+            return;
+          }
+          const pendingOutbox = getPendingOutboxOrderIds();
+          updateOrdersState((prev) => {
+            const srvMap = new Map<string, OrderRecord>(
+              (data.orders as OrderRecord[]).map((o) => [o.id, o])
+            );
+            let changed = false;
+            const next = prev.map((localOrder) => {
+              if (
+                pendingSyncOrderIdsRef.current.has(localOrder.id) ||
+                pendingOutbox.has(localOrder.id)
+              ) {
+                return localOrder;
+              }
+              const srvOrder = srvMap.get(localOrder.id);
+              if (srvOrder && hasOrderStateChanged(localOrder, srvOrder)) {
+                changed = true;
+                return { ...srvOrder, syncStatus: "SYNCED" as const };
+              }
+              return localOrder;
+            });
+            return changed ? next : prev;
+          });
+        })
+        .catch(() => {});
+    };
+
+    const runSyncPass = () => {
+      if (isSelfOrderRole(userRef.current?.role?.slug)) {
+        pollSelfOrders();
+      } else {
+        hydrateStaffOrders();
+      }
+    };
+
+    flushOutbox()
+      .then(({ rejected }) => {
+        if (cancelled) return;
+        for (const { item, error } of rejected) {
+          const rejectedOrder = item.payload.order as OrderRecord | undefined;
+          const isOrderEndpoint =
+            item.endpoint === ORDER_SYNC_ENDPOINT ||
+            item.endpoint === SELF_ORDER_SYNC_ENDPOINT;
+          if (!isOrderEndpoint || !rejectedOrder?.id) continue;
+          markOrderSync(rejectedOrder.id, "REJECTED", error);
+          notifyOrderRejected(rejectedOrder, error);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) {
+          runSyncPass();
+        }
+      });
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY_ORDERS) return;
+      if (event.newValue === null) {
+        updateOrdersState(() => []);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(event.newValue);
+        if (Array.isArray(parsed)) {
+          const pendingOutbox = getPendingOutboxOrderIds();
+          updateOrdersState((prev) => {
+            if (parsed.length === 0 && pendingOutbox.size === 0) {
+              return prev.length === 0 ? prev : [];
+            }
+            const merged = new Map(prev.map((o) => [o.id, o]));
+            let changed = false;
+            for (const o of parsed as OrderRecord[]) {
+              if (pendingSyncOrderIdsRef.current.has(o.id) || pendingOutbox.has(o.id)) {
+                continue;
+              }
+              const existing = merged.get(o.id);
+              if (!existing || hasOrderStateChanged(existing, o)) {
+                merged.set(o.id, o);
+                changed = true;
+              }
+            }
+            return changed ? Array.from(merged.values()) : prev;
+          });
+        }
+      } catch (e) {
+        console.error("Failed to parse storage update", e);
+      }
+    };
+
+    const handleOutboxFlushed = () => {
+      runSyncPass();
+    };
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(OUTBOX_FLUSHED_EVENT, handleOutboxFlushed);
+
+    const pollInterval = setInterval(runSyncPass, 5000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(OUTBOX_FLUSHED_EVENT, handleOutboxFlushed);
+      clearInterval(pollInterval);
+    };
+  }, [user?.id, user?.role?.slug]);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -359,7 +476,6 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
     }
   }, [orders, isInitialized]);
 
-  // Strict outlet scope and date filter
   const filteredOrders = orders.filter((o) => {
     const matchOutlet = isAllOutlets || o.outletId === activeOutletId;
     const isActiveOrder =
@@ -865,6 +981,14 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem(STORAGE_KEY_ORDERS);
     } catch (e) {
       console.error(e);
+    }
+    if (typeof window !== "undefined") {
+      syncWithOutbox({
+        id: "orders-reset",
+        endpoint: "/api/orders",
+        method: "DELETE",
+        payload: { action: "RESET" },
+      }).catch(() => {});
     }
   };
 

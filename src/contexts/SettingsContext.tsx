@@ -1,23 +1,32 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useEffect } from "react";
 import { PlatformSettings, DEFAULT_PLATFORM_SETTINGS, LanguageCode } from "@/types/settings";
-import { useAuth } from "./AuthContext";
+import { useOptionalAuth } from "./AuthContext";
 import { useActivityLog } from "./ActivityLogContext";
-import { redeemPromoQuota, refundPromoQuota } from "@/lib/promo";
+import { redeemPromoQuota, refundPromoQuota, type PromoConfig } from "@/lib/promo";
+import { useSyncedDomain } from "@/lib/use-synced-domain";
+import { syncWithOutbox } from "@/lib/sync-outbox";
+import type { PlatformSettingsCommand } from "@/lib/domain-sync-types";
+import {
+  applyPlatformSettingsCommand,
+  platformSettingsSyncClient,
+  subscriptionSyncClient,
+  tenantsSyncClient,
+  wifiSyncClient,
+} from "@/lib/sync-domains/config-spec";
 
 interface SettingsContextType {
   settings: PlatformSettings;
   updateSettings: (newSettings: Partial<PlatformSettings>, reason?: string) => void;
+  savePromos: (promos: PromoConfig[], tenantScopeId?: string) => void;
   redeemPromo: (promoIdOrCode: string, customerId?: string) => boolean;
   refundPromo: (promoIdOrCode: string, customerId?: string) => boolean;
   t: (key: string) => string;
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
-const STORAGE_KEY_SETTINGS = "dagoeng_platform_settings_v1";
 
-// Bilingual dictionary for system-wide translation
 const DICTIONARY: Record<LanguageCode, Record<string, string>> = {
   id: {
     "nav.dashboard": "Dashboard Utama",
@@ -79,113 +88,122 @@ const DICTIONARY: Record<LanguageCode, Record<string, string>> = {
   },
 };
 
+let patchSeqCounter = 1;
+
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_PLATFORM_SETTINGS);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const auth = useOptionalAuth();
+  const authUser = auth?.user ?? null;
+  const [settings, mutateSettings] = useSyncedDomain(platformSettingsSyncClient, {
+    pollMs: 10000,
+    rehydrateKey: authUser?.id ?? null,
+  });
   const { logActivity } = useActivityLog();
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_SETTINGS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setSettings({
-          ...DEFAULT_PLATFORM_SETTINGS,
-          ...parsed,
-          coworkingHolidays: {
-            ...DEFAULT_PLATFORM_SETTINGS.coworkingHolidays,
-            ...(parsed.coworkingHolidays || {}),
-            nationalHolidays: parsed.coworkingHolidays?.nationalHolidays || DEFAULT_PLATFORM_SETTINGS.coworkingHolidays.nationalHolidays,
-            overrides: parsed.coworkingHolidays?.overrides || DEFAULT_PLATFORM_SETTINGS.coworkingHolidays.overrides,
-          },
-          operationalHours: {
-            ...DEFAULT_PLATFORM_SETTINGS.operationalHours,
-            ...(parsed.operationalHours || {}),
-          },
-          tenantOperations: {
-            ...DEFAULT_PLATFORM_SETTINGS.tenantOperations,
-            ...(parsed.tenantOperations || {}),
-          },
-          eventRevenueSharing: {
-            ...DEFAULT_PLATFORM_SETTINGS.eventRevenueSharing,
-            ...(parsed.eventRevenueSharing || {}),
-            history: parsed.eventRevenueSharing?.history || DEFAULT_PLATFORM_SETTINGS.eventRevenueSharing.history,
-          },
-          categoryTax: {
-            ...DEFAULT_PLATFORM_SETTINGS.categoryTax,
-            ...(parsed.categoryTax || {}),
-            fnb: {
-              ...(DEFAULT_PLATFORM_SETTINGS.categoryTax?.fnb || { taxType: "PB1", taxRatePercent: 10, isEnabled: true }),
-              ...(parsed.categoryTax?.fnb || {}),
-            },
-            coworking: {
-              ...(DEFAULT_PLATFORM_SETTINGS.categoryTax?.coworking || { taxType: "NON_TAX", taxRatePercent: 0, isEnabled: false }),
-              ...(parsed.categoryTax?.coworking || {}),
-            },
-          },
-        });
-      }
-    } catch (e) {
-      console.error("Failed to load settings", e);
-    } finally {
-      setIsInitialized(true);
-    }
+    if (typeof window === "undefined" || process.env.NODE_ENV === "test") return;
 
-    // Hydrate tenant operations from persistent server storage (Task V-03)
-    if (typeof window !== "undefined") {
-      fetch("/api/tenant/operations")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.tenantOperations) {
-            setSettings((prev) => ({
+    void tenantsSyncClient.hydrate();
+    void wifiSyncClient.hydrate();
+    void subscriptionSyncClient.hydrate();
+
+    fetch("/api/tenant/operations")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.tenantOperations) {
+          mutateSettings(
+            (prev) => ({
               ...prev,
               tenantOperations: {
                 ...prev.tenantOperations,
                 ...data.tenantOperations,
               },
-            }));
-          }
-        })
-        .catch(() => {});
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isInitialized) return;
-    try {
-      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
-    } catch (e) {
-      console.error("Failed to save settings", e);
-    }
-  }, [settings, isInitialized]);
+            }),
+            null
+          );
+        }
+      })
+      .catch(() => {});
+  }, [authUser?.id, mutateSettings]);
 
   const updateSettings = (newSettings: Partial<PlatformSettings>, reason?: string) => {
     const prevDesc = `PB1: ${settings.taxRatePercent}%, Service: ${settings.serviceChargePercent}%, Lang: ${settings.language}, Curr: ${settings.currency}`;
-    const nextTax = newSettings.taxRatePercent !== undefined ? newSettings.taxRatePercent : settings.taxRatePercent;
-    const nextService = newSettings.serviceChargePercent !== undefined ? newSettings.serviceChargePercent : settings.serviceChargePercent;
+    const nextTax =
+      newSettings.taxRatePercent !== undefined
+        ? newSettings.taxRatePercent
+        : settings.taxRatePercent;
+    const nextService =
+      newSettings.serviceChargePercent !== undefined
+        ? newSettings.serviceChargePercent
+        : settings.serviceChargePercent;
     const nextLang = newSettings.language || settings.language;
     const nextCurr = newSettings.currency || settings.currency;
     const newDesc = `PB1: ${nextTax}%, Service: ${nextService}%, Lang: ${nextLang}, Curr: ${nextCurr}`;
 
-    setSettings((prev) => ({ ...prev, ...newSettings }));
+    const isTenantScopedOwner =
+      authUser?.role?.slug === "OWNER" &&
+      authUser?.scopeLevel === "TENANT" &&
+      Boolean(authUser?.tenant?.id);
 
-    // Persist tenant operational changes to server endpoint (Task V-03)
-    if (newSettings.tenantOperations && typeof window !== "undefined") {
-      fetch("/api/tenant/operations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenantOperations: newSettings.tenantOperations }),
-      }).catch((err) => console.warn("[SettingsContext] Failed to persist tenantOperations to server", err));
+    const definedPatchKeys = Object.entries(newSettings)
+      .filter(([, val]) => val !== undefined)
+      .map(([key]) => key);
+
+    let patchForSync: Partial<PlatformSettings> = newSettings;
+    if (
+      isTenantScopedOwner &&
+      authUser?.tenant?.id &&
+      definedPatchKeys.length === 1 &&
+      definedPatchKeys[0] === "tenantOperations" &&
+      newSettings.tenantOperations
+    ) {
+      const ownOp = newSettings.tenantOperations[authUser.tenant.id];
+      if (ownOp) {
+        patchForSync = {
+          tenantOperations: {
+            [authUser.tenant.id]: ownOp,
+          },
+        };
+      }
     }
 
-    // Log the configuration changes
+    const seq = patchSeqCounter++;
+    const cmd: PlatformSettingsCommand = {
+      op: "PATCH_SETTINGS",
+      patch: patchForSync,
+      reason,
+    };
+
+    mutateSettings(
+      (prev) => applyPlatformSettingsCommand(prev, { op: "PATCH_SETTINGS", patch: newSettings, reason }),
+      {
+        id: `platform-settings-patch-${Date.now()}-${seq}`,
+        command: cmd,
+      }
+    );
+
+    if (
+      newSettings.tenantOperations &&
+      typeof window !== "undefined" &&
+      process.env.NODE_ENV !== "test"
+    ) {
+      void syncWithOutbox({
+        id: "tenant-operations-sync",
+        endpoint: "/api/tenant/operations",
+        method: "POST",
+        payload: {
+          tenantOperations: patchForSync.tenantOperations ?? newSettings.tenantOperations,
+        },
+      });
+    }
+
     logActivity({
       module: "SETTINGS",
       action: "PLATFORM_SETTINGS_UPDATED",
       recordId: "cfg-platform",
       previousValue: prevDesc,
       newValue: newDesc,
-      description: "Pembaruan konfigurasi global platform (pajak, bahasa, mata uang, loyalty tier).",
+      description:
+        "Pembaruan konfigurasi global platform (pajak, bahasa, mata uang, loyalty tier).",
       reason: reason || "Penyesuaian konfigurasi sistem oleh administrator",
       status: "SUCCESS",
       severity: "LOW",
@@ -194,17 +212,77 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
+  const savePromos = (promos: PromoConfig[], tenantScopeId?: string) => {
+    const currentPromos = settings.promos || [];
+    const normalizedPromos = tenantScopeId
+      ? promos
+          .filter((p) => {
+            if (p.tenantId === tenantScopeId) return true;
+            if (!p.tenantId) {
+              const isExistingOrgPromo = currentPromos.some(
+                (cur) => cur.id === p.id && !cur.tenantId
+              );
+              return !isExistingOrgPromo;
+            }
+            return false;
+          })
+          .map((p) => ({ ...p, tenantId: tenantScopeId }))
+      : promos.map((p) => ({ ...p }));
+
+    const cmd: PlatformSettingsCommand = {
+      op: "SAVE_PROMOS",
+      promos: normalizedPromos,
+      ...(tenantScopeId ? { tenantScopeId } : {}),
+    };
+
+    mutateSettings(
+      (prev) => applyPlatformSettingsCommand(prev, cmd),
+      {
+        id: tenantScopeId ? `platform-promos-${tenantScopeId}` : "platform-promos-all",
+        command: cmd,
+      }
+    );
+  };
+
   const redeemPromo = (promoIdOrCode: string, customerId?: string): boolean => {
-    const res = redeemPromoQuota(settings.promos || [], promoIdOrCode, customerId);
+    const latest = platformSettingsSyncClient.getSnapshot();
+    const res = redeemPromoQuota(latest.promos || [], promoIdOrCode, customerId);
     if (!res.success) return false;
-    setSettings((prev) => ({ ...prev, promos: res.updatedPromos }));
+    const opId = `promo-redeem-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const cmd: PlatformSettingsCommand = {
+      op: "REDEEM_PROMO",
+      opId,
+      promoIdOrCode,
+      customerId,
+    };
+    mutateSettings(
+      (prev) => applyPlatformSettingsCommand(prev, cmd),
+      {
+        id: opId,
+        command: cmd,
+      }
+    );
     return true;
   };
 
   const refundPromo = (promoIdOrCode: string, customerId?: string): boolean => {
-    const res = refundPromoQuota(settings.promos || [], promoIdOrCode, customerId);
+    const latest = platformSettingsSyncClient.getSnapshot();
+    const res = refundPromoQuota(latest.promos || [], promoIdOrCode, customerId);
     if (!res.success) return false;
-    setSettings((prev) => ({ ...prev, promos: res.updatedPromos }));
+    const opId = `promo-refund-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const cmd: PlatformSettingsCommand = {
+      op: "REFUND_PROMO",
+      opId,
+      promoIdOrCode,
+      customerId,
+    };
+    mutateSettings(
+      (prev) => applyPlatformSettingsCommand(prev, cmd),
+      {
+        id: opId,
+        command: cmd,
+      }
+    );
     return true;
   };
 
@@ -218,6 +296,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       value={{
         settings,
         updateSettings,
+        savePromos,
         redeemPromo,
         refundPromo,
         t,
@@ -234,6 +313,7 @@ export function useSettings() {
     return {
       settings: DEFAULT_PLATFORM_SETTINGS,
       updateSettings: () => {},
+      savePromos: () => {},
       redeemPromo: () => false,
       refundPromo: () => false,
       t: (key: string) => key,
@@ -241,4 +321,3 @@ export function useSettings() {
   }
   return context;
 }
-

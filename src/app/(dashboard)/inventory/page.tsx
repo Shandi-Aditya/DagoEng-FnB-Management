@@ -42,7 +42,7 @@ import { StockOpnameModal } from "@/features/inventory/StockOpnameModal";
 import { StockOpnameReportPDFModal } from "@/features/inventory/StockOpnameReportPDFModal";
 
 export default function InventoryPage() {
-  const { activeOutlet } = useOutlet();
+  const { activeOutlet, activeOutletId } = useOutlet();
   const { products } = useProducts();
   const {
     filteredIngredients,
@@ -207,6 +207,10 @@ export default function InventoryPage() {
 
     const sysStock = target.stockNumber;
     const variance = data.physicalStock - sysStock;
+    const resolvedOutletId =
+      activeOutletId && activeOutletId !== "ALL"
+        ? activeOutletId
+        : (target as { outletId?: string }).outletId || "outlet-sgr";
 
     const result = recordStockOpname({
       date: new Date().toLocaleDateString("id-ID", {
@@ -225,8 +229,8 @@ export default function InventoryPage() {
       reason: data.reason,
       reasonNotes: data.notes,
       performedBy: data.auditor,
-      tenantId: "outlet-sgr",
-      outletId: "outlet-sgr",
+      tenantId: resolvedOutletId,
+      outletId: resolvedOutletId,
     });
 
     setSessionAuditedIds((prev) => [...prev, target.id]);

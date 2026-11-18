@@ -1,6 +1,11 @@
 import fs from "fs";
 import path from "path";
-import { getDataFilePath, syncStorageFromDb, persistStorageToDb } from "@/lib/data-storage";
+import {
+  getDataFilePath,
+  getStorageSyncStatus,
+  persistStorageToDb,
+  syncStorageFromDb,
+} from "@/lib/data-storage";
 import { ActivityLogEntry } from "@/types/audit";
 import { ShiftRecord, EmployeeProfile } from "@/types/shift";
 import { OrderRecord } from "@/types/order";
@@ -12,6 +17,13 @@ import {
   INITIAL_MEMBERS,
   normalizeLoyaltyPhone,
 } from "@/lib/master-data-defaults";
+import type {
+  DomainCommandMap,
+  DomainStateMap,
+  ServerDomainSpec,
+  SyncDomainName,
+} from "@/lib/domain-sync-types";
+import type { ServerAuthResult } from "@/lib/server-auth";
 
 const FILE_AUDIT_LOGS = "audit_logs.json";
 const FILE_SHIFTS = "shifts.json";
@@ -98,6 +110,13 @@ async function writeUnlocked<T>(filename: string, data: T): Promise<boolean> {
   }
 
   try {
+    if (
+      process.env.NODE_ENV !== "test" &&
+      getStorageSyncStatus(filename) === "UNAVAILABLE"
+    ) {
+      await syncStorageFromDb(filename).catch(() => {});
+    }
+
     const filePath = getDataFilePath(filename);
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) {
@@ -157,9 +176,72 @@ export async function mutatePersistentData<T>(
   });
 }
 
-// ==========================================
-// 1. AUDIT TRAIL (STRICTLY APPEND-ONLY)
-// ==========================================
+async function readUnlockedOrSeed<T>(
+  filename: string,
+  seedValue: () => T
+): Promise<T> {
+  try {
+    if (process.env.NODE_ENV !== "test") {
+      await syncStorageFromDb(filename).catch(() => {});
+    }
+
+    const filePath = getDataFilePath(filename);
+    if (!fs.existsSync(filePath)) {
+      return seedValue();
+    }
+
+    const content = fs.readFileSync(filePath, "utf-8").trim();
+    if (!content) {
+      return seedValue();
+    }
+
+    return JSON.parse(content) as T;
+  } catch (err) {
+    console.warn(`[persistent-storage] Seeded read error on ${filename}:`, err);
+    return seedValue();
+  }
+}
+
+export async function readSeededPersistentData<T>(
+  filename: string,
+  seedValue: () => T
+): Promise<T> {
+  return withFileLock(filename, () => readUnlockedOrSeed(filename, seedValue));
+}
+
+export async function mutateSeededPersistentData<T>(
+  filename: string,
+  seedValue: () => T,
+  mutator: (current: T) => Promise<T> | T
+): Promise<T> {
+  return withFileLock(filename, async () => {
+    const current = await readUnlockedOrSeed(filename, seedValue);
+    const updated = await mutator(current);
+    await writeUnlocked(filename, updated);
+    return updated;
+  });
+}
+
+export async function readPersistentDomainState<D extends SyncDomainName>(
+  spec: ServerDomainSpec<D>
+): Promise<DomainStateMap[D]> {
+  return readSeededPersistentData<DomainStateMap[D]>(
+    spec.filename,
+    spec.defaultState
+  );
+}
+
+export async function applyPersistentDomainCommand<D extends SyncDomainName>(
+  spec: ServerDomainSpec<D>,
+  command: DomainCommandMap[D],
+  auth: ServerAuthResult
+): Promise<DomainStateMap[D]> {
+  return mutateSeededPersistentData<DomainStateMap[D]>(
+    spec.filename,
+    spec.defaultState,
+    (current) => spec.applyCommand(current, command, auth)
+  );
+}
 
 export async function getAuditLogs(): Promise<ActivityLogEntry[]> {
   return readPersistentData<ActivityLogEntry[]>(FILE_AUDIT_LOGS, []);
@@ -235,12 +317,12 @@ export async function saveCoworkingBooking(booking: any): Promise<boolean> {
   return true;
 }
 
-// ==========================================
-// 4. POS ORDERS & LOYALTY POINTS PERSISTENCE (POS-33)
-// ==========================================
-
 export async function getPersistentOrders(): Promise<OrderRecord[]> {
   return readPersistentData<OrderRecord[]>(FILE_POS_ORDERS, []);
+}
+
+export async function resetPersistentOrders(): Promise<boolean> {
+  return writePersistentData<OrderRecord[]>(FILE_POS_ORDERS, []);
 }
 
 export async function savePersistentOrder(order: OrderRecord): Promise<OrderRecord> {
@@ -401,72 +483,75 @@ export async function claimQrisSessionForOrder(params: {
   return result;
 }
 
-// ==========================================
-// 6. EMPLOYEES PERSISTENCE (V-06)
-// ==========================================
-
 export async function getPersistentEmployees(): Promise<EmployeeProfile[]> {
-  const data = await readPersistentData<EmployeeProfile[]>(FILE_EMPLOYEES, []);
-  if (!data || data.length === 0) {
-    await writePersistentData<EmployeeProfile[]>(FILE_EMPLOYEES, INITIAL_EMPLOYEES);
-    return INITIAL_EMPLOYEES;
-  }
-  return data;
+  return readSeededPersistentData<EmployeeProfile[]>(
+    FILE_EMPLOYEES,
+    () => [...INITIAL_EMPLOYEES]
+  );
 }
 
 export async function savePersistentEmployee(employee: EmployeeProfile): Promise<EmployeeProfile> {
   let saved: EmployeeProfile = employee;
-  await mutatePersistentData<EmployeeProfile[]>(FILE_EMPLOYEES, INITIAL_EMPLOYEES, (existing) => {
-    const list = existing && existing.length > 0 ? existing : INITIAL_EMPLOYEES;
-    const index = list.findIndex((e) => e.id === employee.id);
-    if (index >= 0) {
-      const updated = [...list];
-      updated[index] = employee;
+  await mutateSeededPersistentData<EmployeeProfile[]>(
+    FILE_EMPLOYEES,
+    () => [...INITIAL_EMPLOYEES],
+    (existing) => {
+      const list = Array.isArray(existing) ? existing : [...INITIAL_EMPLOYEES];
+      const index = list.findIndex((e) => e.id === employee.id);
+      if (index >= 0) {
+        const updated = [...list];
+        updated[index] = employee;
+        saved = employee;
+        return updated;
+      }
       saved = employee;
-      return updated;
+      return [employee, ...list];
     }
-    saved = employee;
-    return [employee, ...list];
-  });
+  );
   return saved;
 }
 
 export async function deletePersistentEmployee(id: string): Promise<boolean> {
-  await mutatePersistentData<EmployeeProfile[]>(FILE_EMPLOYEES, INITIAL_EMPLOYEES, (existing) => {
-    const list = existing && existing.length > 0 ? existing : INITIAL_EMPLOYEES;
-    return list.filter((e) => e.id !== id);
-  });
+  await mutateSeededPersistentData<EmployeeProfile[]>(
+    FILE_EMPLOYEES,
+    () => [...INITIAL_EMPLOYEES],
+    (existing) => {
+      const list = Array.isArray(existing) ? existing : [...INITIAL_EMPLOYEES];
+      return list.filter((e) => e.id !== id);
+    }
+  );
   return true;
 }
 
-// ==========================================
-// 7. MASTER PRODUCTS PERSISTENCE (V-06)
-// ==========================================
-
 export async function getPersistentProductsData(): Promise<MasterProductsStoragePayload> {
-  const defaultPayload: MasterProductsStoragePayload = {
-    products: INITIAL_PRODUCTS,
+  const seedPayload = (): MasterProductsStoragePayload => ({
+    products: [...INITIAL_PRODUCTS],
     customCategories: [],
-  };
-  const data = await readPersistentData<MasterProductsStoragePayload>(
+  });
+  const data = await readSeededPersistentData<MasterProductsStoragePayload>(
     FILE_MASTER_PRODUCTS,
-    defaultPayload
+    seedPayload
   );
-  if (!data || !data.products || data.products.length === 0) {
-    await writePersistentData<MasterProductsStoragePayload>(FILE_MASTER_PRODUCTS, defaultPayload);
-    return defaultPayload;
-  }
-  return data;
+  return {
+    products: Array.isArray(data?.products) ? data.products : [...INITIAL_PRODUCTS],
+    customCategories: Array.isArray(data?.customCategories)
+      ? data.customCategories
+      : [],
+  };
 }
 
 export async function savePersistentProduct(product: MasterProduct): Promise<MasterProduct> {
   let saved: MasterProduct = product;
-  await mutatePersistentData<MasterProductsStoragePayload>(
+  await mutateSeededPersistentData<MasterProductsStoragePayload>(
     FILE_MASTER_PRODUCTS,
-    { products: INITIAL_PRODUCTS, customCategories: [] },
+    () => ({ products: [...INITIAL_PRODUCTS], customCategories: [] }),
     (existing) => {
-      const products = existing?.products?.length ? existing.products : INITIAL_PRODUCTS;
-      const categories = existing?.customCategories || [];
+      const products = Array.isArray(existing?.products)
+        ? existing.products
+        : [...INITIAL_PRODUCTS];
+      const categories = Array.isArray(existing?.customCategories)
+        ? existing.customCategories
+        : [];
       const index = products.findIndex((p) => p.id === product.id);
       let nextProducts: MasterProduct[];
       if (index >= 0) {
@@ -486,14 +571,18 @@ export async function savePersistentProduct(product: MasterProduct): Promise<Mas
 }
 
 export async function deletePersistentProduct(id: string): Promise<boolean> {
-  await mutatePersistentData<MasterProductsStoragePayload>(
+  await mutateSeededPersistentData<MasterProductsStoragePayload>(
     FILE_MASTER_PRODUCTS,
-    { products: INITIAL_PRODUCTS, customCategories: [] },
+    () => ({ products: [...INITIAL_PRODUCTS], customCategories: [] }),
     (existing) => {
-      const products = existing?.products?.length ? existing.products : INITIAL_PRODUCTS;
+      const products = Array.isArray(existing?.products)
+        ? existing.products
+        : [...INITIAL_PRODUCTS];
       return {
         products: products.filter((p) => p.id !== id),
-        customCategories: existing?.customCategories || [],
+        customCategories: Array.isArray(existing?.customCategories)
+          ? existing.customCategories
+          : [],
       };
     }
   );
@@ -504,12 +593,16 @@ export async function savePersistentCustomCategory(category: string): Promise<st
   const trimmed = category.trim();
   if (!trimmed) return [];
   let updatedCats: string[] = [];
-  await mutatePersistentData<MasterProductsStoragePayload>(
+  await mutateSeededPersistentData<MasterProductsStoragePayload>(
     FILE_MASTER_PRODUCTS,
-    { products: INITIAL_PRODUCTS, customCategories: [] },
+    () => ({ products: [...INITIAL_PRODUCTS], customCategories: [] }),
     (existing) => {
-      const products = existing?.products?.length ? existing.products : INITIAL_PRODUCTS;
-      const categories = existing?.customCategories || [];
+      const products = Array.isArray(existing?.products)
+        ? existing.products
+        : [...INITIAL_PRODUCTS];
+      const categories = Array.isArray(existing?.customCategories)
+        ? existing.customCategories
+        : [];
       if (!categories.includes(trimmed)) {
         updatedCats = [...categories, trimmed];
       } else {
@@ -524,44 +617,46 @@ export async function savePersistentCustomCategory(category: string): Promise<st
   return updatedCats;
 }
 
-// ==========================================
-// 8. LOYALTY MEMBERS PERSISTENCE (V-06)
-// ==========================================
-
 export async function getPersistentLoyaltyMembers(): Promise<LoyaltyMember[]> {
-  const data = await readPersistentData<LoyaltyMember[]>(FILE_LOYALTY_MEMBERS, []);
-  if (!data || data.length === 0) {
-    await writePersistentData<LoyaltyMember[]>(FILE_LOYALTY_MEMBERS, INITIAL_MEMBERS);
-    return INITIAL_MEMBERS;
-  }
-  return data;
+  return readSeededPersistentData<LoyaltyMember[]>(
+    FILE_LOYALTY_MEMBERS,
+    () => [...INITIAL_MEMBERS]
+  );
 }
 
 export async function savePersistentLoyaltyMember(member: LoyaltyMember): Promise<LoyaltyMember> {
   let saved: LoyaltyMember = member;
-  await mutatePersistentData<LoyaltyMember[]>(FILE_LOYALTY_MEMBERS, INITIAL_MEMBERS, (existing) => {
-    const list = existing && existing.length > 0 ? existing : INITIAL_MEMBERS;
-    const normPhone = normalizeLoyaltyPhone(member.phone);
-    const index = list.findIndex(
-      (m) => m.id === member.id || (normPhone && normalizeLoyaltyPhone(m.phone) === normPhone)
-    );
-    if (index >= 0) {
-      const updated = [...list];
-      updated[index] = member;
+  await mutateSeededPersistentData<LoyaltyMember[]>(
+    FILE_LOYALTY_MEMBERS,
+    () => [...INITIAL_MEMBERS],
+    (existing) => {
+      const list = Array.isArray(existing) ? existing : [...INITIAL_MEMBERS];
+      const normPhone = normalizeLoyaltyPhone(member.phone);
+      const index = list.findIndex(
+        (m) => m.id === member.id || (normPhone && normalizeLoyaltyPhone(m.phone) === normPhone)
+      );
+      if (index >= 0) {
+        const updated = [...list];
+        updated[index] = member;
+        saved = member;
+        return updated;
+      }
       saved = member;
-      return updated;
+      return [member, ...list];
     }
-    saved = member;
-    return [member, ...list];
-  });
+  );
   return saved;
 }
 
 export async function deletePersistentLoyaltyMember(id: string): Promise<boolean> {
-  await mutatePersistentData<LoyaltyMember[]>(FILE_LOYALTY_MEMBERS, INITIAL_MEMBERS, (existing) => {
-    const list = existing && existing.length > 0 ? existing : INITIAL_MEMBERS;
-    return list.filter((m) => m.id !== id);
-  });
+  await mutateSeededPersistentData<LoyaltyMember[]>(
+    FILE_LOYALTY_MEMBERS,
+    () => [...INITIAL_MEMBERS],
+    (existing) => {
+      const list = Array.isArray(existing) ? existing : [...INITIAL_MEMBERS];
+      return list.filter((m) => m.id !== id);
+    }
+  );
   return true;
 }
 

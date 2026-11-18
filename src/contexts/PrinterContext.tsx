@@ -8,7 +8,6 @@ import {
   KitchenTicketData,
   PrintPurpose,
   DEFAULT_PRINTER_DEVICES,
-  DEFAULT_PRINTING_SETTINGS,
 } from "@/types/printer";
 import { POSReceiptData } from "@/features/pos/types";
 import type { RoleSlug } from "@/types/auth";
@@ -27,8 +26,6 @@ import {
 } from "@/lib/settlement-receipt-policy";
 import {
   STORAGE_KEY_PRINT_QUEUE,
-  STORAGE_KEY_PRINTER_DEVICES,
-  STORAGE_KEY_PRINTER_SETTINGS,
   buildIdempotencyKey,
   isJobIdempotentDuplicate,
   generateKitchenTicketText,
@@ -41,6 +38,12 @@ import {
   splitCustomerReceiptByTenant,
 } from "@/lib/printer";
 import { getTenantName } from "@/lib/tenant";
+import { useSyncedDomain } from "@/lib/use-synced-domain";
+import { syncWithOutbox } from "@/lib/sync-outbox";
+import {
+  applyPrinterConfigCommand,
+  printerConfigSyncClient,
+} from "@/lib/sync-domains/config-spec";
 
 interface PrinterContextType {
   devices: PrinterDeviceConfig[];
@@ -75,6 +78,8 @@ interface PrinterContextType {
 
 const PrinterContext = createContext<PrinterContextType | undefined>(undefined);
 
+let printerSettingsPatchSeq = 1;
+
 function sameRoleSet(a: readonly RoleSlug[] | undefined, b: readonly RoleSlug[] | undefined): boolean {
   const normA = Array.from(new Set(a || [])).sort();
   const normB = Array.from(new Set(b || [])).sort();
@@ -90,41 +95,45 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
   const { activeOutletId, activeOutlet } = useOutlet();
   const { logActivity } = useActivityLog();
 
-  const [devices, setDevices] = useState<PrinterDeviceConfig[]>(DEFAULT_PRINTER_DEVICES);
-  const [settings, setSettings] = useState<POSPrintingSettings>(DEFAULT_PRINTING_SETTINGS);
+  const [printerConfig, mutatePrinterConfig] = useSyncedDomain(printerConfigSyncClient, {
+    rehydrateKey: user?.id ?? null,
+  });
+  const devices = printerConfig.devices;
+  const settings = printerConfig.settings;
   const [queue, setQueue] = useState<PrintJob[]>([]);
-  const [isInitialized, setIsInitialized] = useState(false);
 
-  // 1. Initial Load & Recovery on Mount
   useEffect(() => {
     try {
-      // Load Devices
-      const savedDevices = localStorage.getItem(STORAGE_KEY_PRINTER_DEVICES);
-      if (savedDevices) {
-        const parsed = JSON.parse(savedDevices);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setDevices(parsed);
-        }
+      const hasStoredPolicy = Boolean(localStorage.getItem(SETTLEMENT_POLICY_LOCAL_KEY));
+      if (hasStoredPolicy) {
+        const storedPolicy = getStoredSettlementReceiptPolicy();
+        mutatePrinterConfig(
+          (prev) => {
+            if (
+              sameRoleSet(
+                prev.settings.cashierReceiptRoles,
+                storedPolicy.receiptRoles.cashierReceiptRoles
+              ) &&
+              sameRoleSet(
+                prev.settings.kitchenReceiptRoles,
+                storedPolicy.receiptRoles.kitchenReceiptRoles
+              )
+            ) {
+              return prev;
+            }
+            return {
+              ...prev,
+              settings: {
+                ...prev.settings,
+                cashierReceiptRoles: storedPolicy.receiptRoles.cashierReceiptRoles,
+                kitchenReceiptRoles: storedPolicy.receiptRoles.kitchenReceiptRoles,
+              },
+            };
+          },
+          null
+        );
       }
 
-      const savedSettings = localStorage.getItem(STORAGE_KEY_PRINTER_SETTINGS);
-      const parsedSettings = savedSettings
-        ? (JSON.parse(savedSettings) as Partial<POSPrintingSettings>)
-        : {};
-      const hasStoredPolicy = Boolean(localStorage.getItem(SETTLEMENT_POLICY_LOCAL_KEY));
-      const storedPolicy = getStoredSettlementReceiptPolicy();
-      setSettings({
-        ...DEFAULT_PRINTING_SETTINGS,
-        ...parsedSettings,
-        cashierReceiptRoles: hasStoredPolicy
-          ? storedPolicy.receiptRoles.cashierReceiptRoles
-          : parsedSettings.cashierReceiptRoles ?? DEFAULT_PRINTING_SETTINGS.cashierReceiptRoles,
-        kitchenReceiptRoles: hasStoredPolicy
-          ? storedPolicy.receiptRoles.kitchenReceiptRoles
-          : parsedSettings.kitchenReceiptRoles ?? DEFAULT_PRINTING_SETTINGS.kitchenReceiptRoles,
-      });
-
-      // Load & Recover Queue
       const storedQueue = getStoredPrintQueue();
       const { recoveredQueue, hasChanges } = recoverStalePrintingJobs(storedQueue);
       setQueue(recoveredQueue);
@@ -133,12 +142,11 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (e) {
       console.error("Gagal inisialisasi printer storage:", e);
-    } finally {
-      setIsInitialized(true);
     }
-  }, []);
+  }, [mutatePrinterConfig]);
 
   useEffect(() => {
+    if (process.env.NODE_ENV === "test") return;
     let active = true;
     fetch("/api/settings/settlement-receipt")
       .then((res) => (res.ok ? res.json() : null))
@@ -151,21 +159,64 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
           data.policy.receiptRoles.kitchenReceiptRoles || DEFAULT_RECEIPT_ROLE_POLICY.kitchenReceiptRoles
         );
         saveStoredSettlementReceiptPolicy(data.policy);
-        setSettings((prev) => ({
-          ...prev,
-          cashierReceiptRoles: nextCashier,
-          kitchenReceiptRoles: nextKitchen,
-        }));
+        mutatePrinterConfig(
+          (prev) => {
+            if (
+              sameRoleSet(prev.settings.cashierReceiptRoles, nextCashier) &&
+              sameRoleSet(prev.settings.kitchenReceiptRoles, nextKitchen)
+            ) {
+              return prev;
+            }
+            return {
+              ...prev,
+              settings: {
+                ...prev.settings,
+                cashierReceiptRoles: nextCashier,
+                kitchenReceiptRoles: nextKitchen,
+              },
+            };
+          },
+          null
+        );
       })
       .catch(() => {});
 
     return () => {
       active = false;
     };
-  }, [user?.id]);
+  }, [user?.id, mutatePrinterConfig]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    const syncRolesFromStoredPolicy = () => {
+      const updatedPolicy = getStoredSettlementReceiptPolicy();
+      mutatePrinterConfig(
+        (prev) => {
+          if (
+            sameRoleSet(
+              prev.settings.cashierReceiptRoles,
+              updatedPolicy.receiptRoles.cashierReceiptRoles
+            ) &&
+            sameRoleSet(
+              prev.settings.kitchenReceiptRoles,
+              updatedPolicy.receiptRoles.kitchenReceiptRoles
+            )
+          ) {
+            return prev;
+          }
+          return {
+            ...prev,
+            settings: {
+              ...prev.settings,
+              cashierReceiptRoles: updatedPolicy.receiptRoles.cashierReceiptRoles,
+              kitchenReceiptRoles: updatedPolicy.receiptRoles.kitchenReceiptRoles,
+            },
+          };
+        },
+        null
+      );
+    };
 
     const handleStorageEvent = (e: StorageEvent) => {
       if (!e.newValue) return;
@@ -175,107 +226,64 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
           if (Array.isArray(updatedQueue)) {
             setQueue(updatedQueue);
           }
-        } else if (e.key === STORAGE_KEY_PRINTER_DEVICES) {
-          const updatedDevices = JSON.parse(e.newValue);
-          if (Array.isArray(updatedDevices)) {
-            setDevices(updatedDevices);
-          }
-        } else if (e.key === STORAGE_KEY_PRINTER_SETTINGS) {
-          const updatedSettings = JSON.parse(e.newValue);
-          if (updatedSettings && typeof updatedSettings === "object") {
-            setSettings({ ...DEFAULT_PRINTING_SETTINGS, ...updatedSettings });
-          }
         } else if (e.key === SETTLEMENT_POLICY_LOCAL_KEY) {
-          const updatedPolicy = getStoredSettlementReceiptPolicy();
-          setSettings((prev) => ({
-            ...prev,
-            cashierReceiptRoles: updatedPolicy.receiptRoles.cashierReceiptRoles,
-            kitchenReceiptRoles: updatedPolicy.receiptRoles.kitchenReceiptRoles,
-          }));
+          syncRolesFromStoredPolicy();
         }
-      } catch {
-        // Silently ignore corrupted storage messages
-      }
-    };
-
-    const handlePolicyUpdated = () => {
-      const updatedPolicy = getStoredSettlementReceiptPolicy();
-      setSettings((prev) => {
-        if (
-          sameRoleSet(prev.cashierReceiptRoles, updatedPolicy.receiptRoles.cashierReceiptRoles) &&
-          sameRoleSet(prev.kitchenReceiptRoles, updatedPolicy.receiptRoles.kitchenReceiptRoles)
-        ) {
-          return prev;
-        }
-        return {
-          ...prev,
-          cashierReceiptRoles: updatedPolicy.receiptRoles.cashierReceiptRoles,
-          kitchenReceiptRoles: updatedPolicy.receiptRoles.kitchenReceiptRoles,
-        };
-      });
+      } catch {}
     };
 
     window.addEventListener("storage", handleStorageEvent);
-    window.addEventListener("settlement_receipt_policy_updated", handlePolicyUpdated);
+    window.addEventListener("settlement_receipt_policy_updated", syncRolesFromStoredPolicy);
     return () => {
       window.removeEventListener("storage", handleStorageEvent);
-      window.removeEventListener("settlement_receipt_policy_updated", handlePolicyUpdated);
+      window.removeEventListener("settlement_receipt_policy_updated", syncRolesFromStoredPolicy);
     };
-  }, []);
+  }, [mutatePrinterConfig]);
 
-  // 2. Persist Devices on Change
-  useEffect(() => {
-    if (!isInitialized) return;
-    try {
-      localStorage.setItem(STORAGE_KEY_PRINTER_DEVICES, JSON.stringify(devices));
-    } catch (e) {
-      console.error("Gagal menyimpan devices ke storage:", e);
-    }
-  }, [devices, isInitialized]);
-
-  // 3. Persist Settings on Change
-  useEffect(() => {
-    if (!isInitialized) return;
-    try {
-      localStorage.setItem(STORAGE_KEY_PRINTER_SETTINGS, JSON.stringify(settings));
-    } catch (e) {
-      console.error("Gagal menyimpan printer settings ke storage:", e);
-    }
-  }, [settings, isInitialized]);
-
-  // 4. Resolve Active Printers for Current Active Outlet
   const activeKitchenPrinter = useMemo(() => {
-    // 1st: Exact match outlet + isDefaultKitchen
     const outletSpecific = devices.find(
-      (d) => d.isActive && d.outletId === activeOutletId && (d.role === "KITCHEN_ORDER" || d.role === "ALL") && d.isDefaultKitchen
+      (d) =>
+        d.isActive &&
+        d.outletId === activeOutletId &&
+        (d.role === "KITCHEN_ORDER" || d.role === "ALL") &&
+        d.isDefaultKitchen
     );
     if (outletSpecific) return outletSpecific;
 
-    // 2nd: Global "ALL" + isDefaultKitchen
     const globalDefault = devices.find(
-      (d) => d.isActive && d.outletId === "ALL" && (d.role === "KITCHEN_ORDER" || d.role === "ALL") && d.isDefaultKitchen
+      (d) =>
+        d.isActive &&
+        d.outletId === "ALL" &&
+        (d.role === "KITCHEN_ORDER" || d.role === "ALL") &&
+        d.isDefaultKitchen
     );
     if (globalDefault) return globalDefault;
 
-    // 3rd: Any active kitchen printer
     return devices.find((d) => d.isActive && (d.role === "KITCHEN_ORDER" || d.role === "ALL"));
   }, [devices, activeOutletId]);
 
   const activeCustomerPrinter = useMemo(() => {
     const outletSpecific = devices.find(
-      (d) => d.isActive && d.outletId === activeOutletId && (d.role === "CUSTOMER_RECEIPT" || d.role === "ALL") && d.isDefaultCustomer
+      (d) =>
+        d.isActive &&
+        d.outletId === activeOutletId &&
+        (d.role === "CUSTOMER_RECEIPT" || d.role === "ALL") &&
+        d.isDefaultCustomer
     );
     if (outletSpecific) return outletSpecific;
 
     const globalDefault = devices.find(
-      (d) => d.isActive && d.outletId === "ALL" && (d.role === "CUSTOMER_RECEIPT" || d.role === "ALL") && d.isDefaultCustomer
+      (d) =>
+        d.isActive &&
+        d.outletId === "ALL" &&
+        (d.role === "CUSTOMER_RECEIPT" || d.role === "ALL") &&
+        d.isDefaultCustomer
     );
     if (globalDefault) return globalDefault;
 
     return devices.find((d) => d.isActive && (d.role === "CUSTOMER_RECEIPT" || d.role === "ALL"));
   }, [devices, activeOutletId]);
 
-  // 5. Device Management Actions
   const addDevice = (newDev: Omit<PrinterDeviceConfig, "id" | "createdAt" | "updatedAt">) => {
     const nowIso = new Date().toISOString();
     const created: PrinterDeviceConfig = {
@@ -285,17 +293,19 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
       updatedAt: nowIso,
     };
 
-    setDevices((prev) => {
-      // If set as default, adjust previous defaults
-      let updated = [...prev];
-      if (created.isDefaultKitchen) {
-        updated = updated.map((d) => (d.outletId === created.outletId ? { ...d, isDefaultKitchen: false } : d));
+    const command = {
+      op: "UPSERT_DEVICE" as const,
+      device: created,
+    };
+
+    mutatePrinterConfig(
+      (prev) => applyPrinterConfigCommand(prev, command),
+      {
+        id: `printer-device-${created.id}`,
+        isCreate: true,
+        command,
       }
-      if (created.isDefaultCustomer) {
-        updated = updated.map((d) => (d.outletId === created.outletId ? { ...d, isDefaultCustomer: false } : d));
-      }
-      return [...updated, created];
-    });
+    );
 
     logActivity({
       module: "POS",
@@ -308,22 +318,41 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateDevice = (id: string, updates: Partial<PrinterDeviceConfig>) => {
+    const existing = devices.find((d) => d.id === id);
+    if (!existing) return;
     const nowIso = new Date().toISOString();
-    setDevices((prev) =>
-      prev.map((d) => {
-        if (d.id !== id) return d;
-        return {
-          ...d,
-          ...updates,
-          updatedAt: nowIso,
-        };
-      })
+    const updatedDevice: PrinterDeviceConfig = {
+      ...existing,
+      ...updates,
+      id,
+      updatedAt: nowIso,
+    };
+    const command = {
+      op: "UPSERT_DEVICE" as const,
+      device: updatedDevice,
+    };
+    mutatePrinterConfig(
+      (prev) => applyPrinterConfigCommand(prev, command),
+      {
+        id: `printer-device-${id}`,
+        command,
+      }
     );
   };
 
   const deleteDevice = (id: string) => {
     const target = devices.find((d) => d.id === id);
-    setDevices((prev) => prev.filter((d) => d.id !== id));
+    const command = {
+      op: "DELETE_DEVICE" as const,
+      deviceId: id,
+    };
+    mutatePrinterConfig(
+      (prev) => applyPrinterConfigCommand(prev, command),
+      {
+        id: `printer-device-${id}`,
+        command,
+      }
+    );
     if (target) {
       logActivity({
         module: "POS",
@@ -359,7 +388,19 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         }
       : updates;
 
-    setSettings((prev) => ({ ...prev, ...normalizedUpdates }));
+    const seq = printerSettingsPatchSeq++;
+    const command = {
+      op: "PATCH_SETTINGS" as const,
+      updates: normalizedUpdates,
+    };
+
+    mutatePrinterConfig(
+      (prev) => applyPrinterConfigCommand(prev, command),
+      {
+        id: `printer-settings-patch-${Date.now()}-${seq}`,
+        command,
+      }
+    );
 
     if (hasRoleUpdates) {
       const receiptRoles: ReceiptRoleDistributionPolicy = {
@@ -370,12 +411,13 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         !sameRoleSet(settings.cashierReceiptRoles, nextCashierRoles) ||
         !sameRoleSet(settings.kitchenReceiptRoles, nextKitchenRoles);
       saveStoredSettlementReceiptPolicy({ receiptRoles });
-      if (rolesChanged) {
-        fetch("/api/settings/settlement-receipt", {
+      if (rolesChanged && typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
+        void syncWithOutbox({
+          id: "settlement-receipt-roles",
+          endpoint: "/api/settings/settlement-receipt",
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ receiptRoles }),
-        }).catch(() => {});
+          payload: { receiptRoles },
+        });
       }
     }
 
@@ -388,7 +430,6 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  // 6. Kitchen Ticket Printing Engine (Non-blocking & Idempotent)
   const printKitchenOrder = useCallback(
     async (
       ticket: KitchenTicketData,
@@ -399,7 +440,6 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
       const seqNo = ticket.sequenceNumber || 1;
       const isSilent = options?.isSilent !== undefined ? options.isSilent : settings.silentKitchenPrint;
 
-      // Pemisahan tiket dapur per mitra (Task V-15)
       const shouldSplit = settings.splitKitchenTicketPerTenant !== false;
       const ticketsToPrint = shouldSplit ? splitKitchenTicketByTenant(ticket) : [ticket];
 
@@ -412,7 +452,6 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         const tenantSuffix = subTicket.tenantId ? `_${subTicket.tenantId}` : "";
         const idempotencyKey = `${buildIdempotencyKey(subTicket.orderId, purpose, seqNo)}${tenantSuffix}`;
 
-        // Check Idempotency for automatic prints
         if (!options?.isManualReprint && isJobIdempotentDuplicate(queue, idempotencyKey, purpose)) {
           const existing = queue.find((j) => j.idempotencyKey === idempotencyKey);
           if (existing) {
@@ -421,7 +460,6 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        // Generate Ticket Text per mitra (Strictly no financial data)
         const payloadText = generateKitchenTicketText(
           {
             ...subTicket,
@@ -457,18 +495,15 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
           reprintedBy: options?.reprintedBy,
         };
 
-        // Add to persistent queue
         setQueue((prev) => {
           const updated = [newJob, ...prev];
           saveStoredPrintQueue(updated);
           return updated;
         });
 
-        // Dispatch asynchronously
         const result = await dispatchPrintJob(newJob, targetPrinter, { isSilent });
         lastResultStatus = result.status;
 
-        // Update Job status with verifiable result
         const finalizedJob: PrintJob = {
           ...newJob,
           status: result.status,
@@ -521,7 +556,6 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     [activeKitchenPrinter, queue, settings, activeOutletId]
   );
 
-  // 7. Customer Receipt Printing Engine
   const printCustomerReceipt = useCallback(
     async (
       receipt: POSReceiptData,
@@ -618,7 +652,6 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     [activeCustomerPrinter, activeOutletId, settings.splitCustomerReceiptPerTenant]
   );
 
-  // 8. Helper to print from an OrderRecord (used by Orders page & KDS)
   const printFromOrderRecord = useCallback(
     async (
       order: OrderRecord,
@@ -658,14 +691,16 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     [printKitchenOrder]
   );
 
-  // 9. Manual Retry Handler for Failed/Offline Jobs
   const retryPrintJob = async (jobId: string): Promise<{ success: boolean; job: PrintJob; message: string }> => {
     const targetJob = queue.find((j) => j.id === jobId);
     if (!targetJob) {
       throw new Error("Job antrean cetak tidak ditemukan.");
     }
 
-    const targetPrinter = devices.find((d) => d.id === targetJob.printerId) || activeKitchenPrinter || DEFAULT_PRINTER_DEVICES[0];
+    const targetPrinter =
+      devices.find((d) => d.id === targetJob.printerId) ||
+      activeKitchenPrinter ||
+      DEFAULT_PRINTER_DEVICES[0];
 
     const updatedAttemptJob: PrintJob = {
       ...targetJob,
@@ -686,7 +721,8 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
       ...updatedAttemptJob,
       status: result.status,
       errorInfo: result.errorInfo,
-      completedAt: result.status !== "FAILED" && result.status !== "OFFLINE" ? new Date().toISOString() : undefined,
+      completedAt:
+        result.status !== "FAILED" && result.status !== "OFFLINE" ? new Date().toISOString() : undefined,
     };
 
     setQueue((prev) => {
@@ -707,7 +743,6 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
     };
   };
 
-  // 10. Actual Test Print against the Device Configuration
   const testPrintDevice = async (deviceId: string): Promise<{ success: boolean; message: string }> => {
     const target = devices.find((d) => d.id === deviceId);
     if (!target) return { success: false, message: "Printer tidak ditemukan." };
@@ -762,8 +797,8 @@ export function PrinterProvider({ children }: { children: React.ReactNode }) {
         result.status === "BRIDGE_ACKNOWLEDGED"
           ? `Koneksi berhasil: Bridge lokal merespons ACK untuk printer '${target.name}'.`
           : result.status === "SENT_TO_SPOOLER"
-          ? `Uji coba cetak diteruskan ke spooler sistem (${target.name}).`
-          : result.errorInfo || "Koneksi printer gagal.",
+            ? `Uji coba cetak diteruskan ke spooler sistem (${target.name}).`
+            : result.errorInfo || "Koneksi printer gagal.",
     };
   };
 
@@ -832,4 +867,3 @@ export function usePrinter() {
   }
   return context;
 }
-

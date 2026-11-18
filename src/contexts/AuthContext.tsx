@@ -1,8 +1,26 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { AuthenticatedUser, RoleSlug, BusinessModuleCode, ScopeLevel, PersonaKey } from "@/types/auth";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import {
+  AuthenticatedUser,
+  RoleSlug,
+  BusinessModuleCode,
+  PersonaKey,
+} from "@/types/auth";
 import { getTenantName } from "@/lib/tenant";
+import {
+  applyPlatformSettingsCommand,
+  mutateConfigDomain,
+  platformSettingsStorageMirror,
+  platformSettingsSyncClient,
+} from "@/lib/sync-domains/config-spec";
 
 export type { PersonaKey } from "@/types/auth";
 
@@ -18,7 +36,11 @@ export function isStaffIdleExpired(
   nowMs: number = Date.now(),
   timeoutMs: number = STAFF_IDLE_TIMEOUT_MS
 ): boolean {
-  if (lastActivityAtMs === null || lastActivityAtMs === undefined || !Number.isFinite(lastActivityAtMs)) {
+  if (
+    lastActivityAtMs === null ||
+    lastActivityAtMs === undefined ||
+    !Number.isFinite(lastActivityAtMs)
+  ) {
     return false;
   }
   return nowMs - lastActivityAtMs >= timeoutMs;
@@ -54,9 +76,7 @@ interface AuthContextType {
   switchPersona: (personaKey: PersonaKey) => Promise<void>;
 }
 
-// Seeded Multi-Business Users matching the 3-Dimensional Authorization Model
 export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
-  // 1. Dago Creative Hub Owner (Scope: ORGANIZATION -> sees all F&B, Coworking, Commercial)
   DAGO_OWNER: {
     id: "user-dago-owner",
     email: "owner.dago@dagoeng.com",
@@ -66,7 +86,7 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     scopeLevel: "ORGANIZATION",
     allowedModules: ["FNB", "CO_WORKING", "COMMERCIAL"],
     organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
-    tenant: null, // Full organization scope
+    tenant: null,
     outlet: null,
     permissions: [
       "dashboard:view", "dashboard:compare_outlets", "orders:view", "tables:view",
@@ -74,8 +94,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
       "employees:manage", "settings:manage"
     ],
   },
-
-  // 2a. F&B Tenant Owner: Kopi Senja (Scope: TENANT -> sees ONLY Kopi Senja F&B)
   TENANT_OWNER_KS: {
     id: "user-owner-ks",
     email: "owner.kopisenja@dagoeng.com",
@@ -92,8 +110,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
       "menu:view", "menu:manage", "customers:view", "reports:view"
     ],
   },
-
-  // 2b. F&B Tenant Owner: Dapur Mama (Scope: TENANT -> sees ONLY Dapur Mama F&B)
   TENANT_OWNER_KITCHEN: {
     id: "user-owner-kitchen",
     email: "owner.dapurmama@dagoeng.com",
@@ -110,8 +126,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
       "menu:view", "menu:manage", "customers:view", "reports:view"
     ],
   },
-
-  // 2c. F&B Tenant Owner: Manis Bakery (Scope: TENANT -> sees ONLY Manis Bakery F&B)
   TENANT_OWNER_BAKERY: {
     id: "user-owner-bakery",
     email: "owner.manisbakery@dagoeng.com",
@@ -128,8 +142,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
       "menu:view", "menu:manage", "customers:view", "reports:view"
     ],
   },
-
-  // 2d. F&B Tenant Owner: Warung Bu Narti (Scope: TENANT -> sees ONLY Warung Bu Narti F&B)
   TENANT_OWNER_TEA: {
     id: "user-owner-tea",
     email: "owner.warungbunarti@dagoeng.com",
@@ -146,8 +158,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
       "menu:view", "menu:manage", "customers:view", "reports:view"
     ],
   },
-
-  // 3. Co-working Space Manager (Scope: BUSINESS_UNIT -> Co-working only)
   COWORK_MANAGER: {
     id: "user-mgr-cowork",
     email: "manager.cowork@dagoeng.com",
@@ -161,8 +171,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["dashboard:view", "reports:view", "employees:manage"],
   },
-
-  // 4. Commercial Leases Manager (Scope: BUSINESS_UNIT -> Commercial only)
   COMMERCIAL_MANAGER: {
     id: "user-mgr-commercial",
     email: "manager.commercial@dagoeng.com",
@@ -176,8 +184,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["dashboard:view", "reports:view"],
   },
-
-  // 5. F&B Cashier Singaraja (Scope: OUTLET -> Single outlet POS & Coworking Frontdesk)
   CASHIER_SGR: {
     id: "user-cashier-sgr",
     email: "cashier.sgr@kopisenja.com",
@@ -191,8 +197,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: { id: "outlet-sgr", name: "Singaraja", code: "KS-SGR" },
     permissions: ["pos:operate", "orders:view", "tables:view"],
   },
-
-  // 6. Kitchen Staff (Scope: OUTLET -> KDS Station Singaraja)
   KITCHEN_SGR: {
     id: "user-kitchen-sgr",
     email: "kitchen.sgr@kopisenja.com",
@@ -206,8 +210,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: { id: "outlet-sgr", name: "Singaraja", code: "KS-SGR" },
     permissions: ["kitchen:kds", "orders:view"],
   },
-
-  // 7. Waiter Floor (Scope: OUTLET -> Tables Singaraja)
   WAITER_SGR: {
     id: "user-waiter-sgr",
     email: "waiter.sgr@kopisenja.com",
@@ -221,8 +223,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: { id: "outlet-sgr", name: "Singaraja", code: "KS-SGR" },
     permissions: ["tables:view", "tables:manage", "orders:view"],
   },
-
-  // 8. Customer Self-Order QR
   CUSTOMER_DEMO: {
     id: "user-customer-demo",
     email: "customer@gmail.com",
@@ -236,8 +236,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["menu:view"],
   },
-
-  // 9. Platform Super Admin (Scope: PLATFORM)
   SUPER_ADMIN: {
     id: "user-admin",
     email: "admin@dagoeng.com",
@@ -251,8 +249,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["*"],
   },
-
-  // 10. Community Organizer: Dago Barista Guild
   COMMUNITY_BARISTA: {
     id: "user-comm-barista",
     email: "baristaguild@dagocreative.id",
@@ -266,8 +262,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["events:manage_own"],
   },
-
-  // 11. Community Organizer: Bandung Game Creators / Dev
   COMMUNITY_BANDUNGDEV: {
     id: "user-comm-bandungdev",
     email: "halo@bandungdev.org",
@@ -281,8 +275,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["events:manage_own"],
   },
-
-  // 12. Community Organizer: Aksara Priangan
   COMMUNITY_AKSARAPRIANGAN: {
     id: "user-comm-aksara",
     email: "info@aksarapriangan.id",
@@ -296,8 +288,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["events:manage_own"],
   },
-
-  // 13. Event Field Staff with explicit check-in permission
   EVENT_STAFF: {
     id: "user-event-staff-demo",
     email: "eventstaff@dagoeng.com",
@@ -315,7 +305,8 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const OPERATIONAL_COOKIE_MAX_AGE = 16 * 60 * 60; // 16 hours (POS-23)
+const OPERATIONAL_COOKIE_MAX_AGE = 16 * 60 * 60;
+const DEFAULT_ORG_MODULES: BusinessModuleCode[] = ["CORE", "FNB", "CO_WORKING"];
 
 function syncPersonaCookie(personaKey: string | null) {
   if (typeof document === "undefined") return;
@@ -349,9 +340,19 @@ function syncStaffActivityKey(roleSlug: RoleSlug | string | undefined): void {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
-  const [activeOrgModules, setActiveOrgModules] = useState<BusinessModuleCode[]>(["CORE", "FNB", "CO_WORKING"]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
+
+  const platformState = useSyncExternalStore(
+    platformSettingsSyncClient.subscribe,
+    platformSettingsSyncClient.getSnapshot,
+    platformSettingsSyncClient.getServerSnapshot
+  );
+
+  const activeOrgModules: BusinessModuleCode[] =
+    platformState.activeOrgModules && platformState.activeOrgModules.length > 0
+      ? platformState.activeOrgModules
+      : DEFAULT_ORG_MODULES;
 
   const clearClientSessionStorage = useCallback(() => {
     localStorage.removeItem("dagoeng_active_persona");
@@ -629,21 +630,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("tenant_settings_updated", handleTenantUpdated);
   }, []);
 
-  const toggleOrgModule = (moduleCode: BusinessModuleCode) => {
-    setActiveOrgModules((prev) =>
-      prev.includes(moduleCode) ? prev.filter((m) => m !== moduleCode) : [...prev, moduleCode]
+  const toggleOrgModule = useCallback((moduleCode: BusinessModuleCode) => {
+    if (moduleCode === "CORE") return;
+    const command = {
+      op: "TOGGLE_ORG_MODULE" as const,
+      moduleCode,
+    };
+    mutateConfigDomain(
+      platformSettingsSyncClient,
+      platformSettingsStorageMirror,
+      (prev) => applyPlatformSettingsCommand(prev, command),
+      {
+        id: `org-module-toggle-${moduleCode}-${Date.now()}`,
+        command,
+      }
     );
-  };
+  }, []);
 
-  const login = async (personaKey?: PersonaKey, customUser?: any) => {
+  const login = async (personaKey?: PersonaKey, customUser?: AuthenticatedUser) => {
     setIsLoading(true);
 
-    // If personaKey is provided or customUser matches a known demo persona email, ALWAYS prioritize canonical DEMO_PERSONAS
-    const matchedKey = personaKey || (customUser?.email
-      ? (Object.keys(DEMO_PERSONAS) as PersonaKey[]).find(
-          (k) => DEMO_PERSONAS[k].email.toLowerCase() === customUser.email.toLowerCase()
-        )
-      : undefined);
+    const matchedKey =
+      personaKey ||
+      (customUser?.email
+        ? (Object.keys(DEMO_PERSONAS) as PersonaKey[]).find(
+            (k) => DEMO_PERSONAS[k].email.toLowerCase() === customUser.email.toLowerCase()
+          )
+        : undefined);
 
     if (matchedKey && DEMO_PERSONAS[matchedKey]) {
       const targetUser = DEMO_PERSONAS[matchedKey];
@@ -660,13 +673,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem("dago_organizer_email", targetUser.email);
       }
     } else if (customUser) {
-      const roleSlug: RoleSlug = typeof customUser.role === "string" ? customUser.role : customUser.role?.slug || "CUSTOMER";
+      const rawRole = customUser.role as RoleSlug | { id?: string; slug?: RoleSlug; name?: string } | undefined;
+      const roleSlug: RoleSlug =
+        typeof rawRole === "string" ? rawRole : rawRole?.slug || "CUSTOMER";
       const normalizedRole = {
         id: `role-${roleSlug.toLowerCase()}`,
         slug: roleSlug,
-        name: typeof customUser.role === "object" && customUser.role?.name
-          ? customUser.role.name
-          : roleSlug === "OWNER" ? "Owner" : roleSlug === "CUSTOMER" ? "Customer" : roleSlug,
+        name:
+          typeof rawRole === "object" && rawRole?.name
+            ? rawRole.name
+            : roleSlug === "OWNER"
+              ? "Owner"
+              : roleSlug === "CUSTOMER"
+                ? "Customer"
+                : roleSlug,
       };
 
       const normalizedUser: AuthenticatedUser = {
@@ -691,7 +711,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  const loginCustomer = async (customerData: { name: string; phone: string; email?: string }): Promise<AuthenticatedUser> => {
+  const loginCustomer = async (customerData: {
+    name: string;
+    phone: string;
+    email?: string;
+  }): Promise<AuthenticatedUser> => {
     setIsLoading(true);
     const customCustomer: AuthenticatedUser = {
       id: `user-cust-${Date.now()}`,
@@ -757,4 +781,8 @@ export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
+}
+
+export function useOptionalAuth(): AuthContextType | null {
+  return useContext(AuthContext) ?? null;
 }

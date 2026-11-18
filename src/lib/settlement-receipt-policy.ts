@@ -1,5 +1,6 @@
 import type { RoleSlug, ScopeLevel } from "@/types/auth";
 import type { TenantRevenueSplitConfig } from "@/lib/settlement";
+import { syncWithOutbox } from "@/lib/sync-outbox";
 
 export type SettlementBasisMode =
   | "RECEIPT_NET_BEFORE_TAX"
@@ -441,9 +442,31 @@ export function saveStoredSettlementReceiptPolicy(
     if (policy.revenueSplits) {
       writeBrowserStorageItem(LEGACY_REVENUE_SPLIT_LOCAL_KEY, JSON.stringify(next.revenueSplits));
     }
-    window.dispatchEvent(new Event("settlement_receipt_policy_updated"));
-    window.dispatchEvent(new Event("tenant_revenue_split_updated"));
+    if (typeof window.dispatchEvent === "function") {
+      window.dispatchEvent(new Event("settlement_receipt_policy_updated"));
+      window.dispatchEvent(new Event("tenant_revenue_split_updated"));
+    }
   }
 
   return next;
+}
+
+export function syncSettlementReceiptPolicyToServer(
+  policy: SettlementReceiptPolicyConfig
+): void {
+  if (typeof window === "undefined" || process.env.NODE_ENV === "test") return;
+  void syncWithOutbox<{ success: boolean; policy?: SettlementReceiptPolicyConfig }>({
+    id: "settlement-receipt-policy",
+    endpoint: "/api/settings/settlement-receipt",
+    method: "PUT",
+    payload: {
+      settlementBasis: policy.settlementBasis,
+      revenueSplits: policy.revenueSplits,
+      receiptRoles: policy.receiptRoles,
+    },
+  }).then((res) => {
+    if (res.synced && res.data?.policy) {
+      saveStoredSettlementReceiptPolicy(res.data.policy);
+    }
+  });
 }

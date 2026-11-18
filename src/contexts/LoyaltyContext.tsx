@@ -1,13 +1,24 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
-import { LoyaltyMember, LoyaltyTier, LoyaltyPointTransaction, LoyaltyTierChangeLog } from "@/types/loyalty";
+import {
+  LoyaltyMember,
+  LoyaltyTier,
+  LoyaltyPointTransaction,
+  LoyaltyTierChangeLog,
+} from "@/types/loyalty";
 import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
 import { useSettings } from "./SettingsContext";
 import { useActivityLog } from "./ActivityLogContext";
 import { useNotifications } from "./NotificationContext";
-import { syncWithOutbox } from "@/lib/sync-outbox";
+import {
+  ensureGlobalOutboxAutoFlush,
+  flushOutbox,
+  OUTBOX_FLUSHED_EVENT,
+  reconcileCollectionWithOutbox,
+  syncWithOutbox,
+} from "@/lib/sync-outbox";
 import { INITIAL_MEMBERS, normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
 export { INITIAL_MEMBERS, normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
 
@@ -15,11 +26,41 @@ interface LoyaltyContextType {
   members: LoyaltyMember[];
   filteredMembers: LoyaltyMember[];
   calculateTierForPoints: (points: number) => LoyaltyTier;
-  createMember: (memberData: { name: string; phone: string; email?: string; identityNo?: string; initialPoints?: number }) => LoyaltyMember;
-  getOrCreateMember: (memberData: { name: string; phone: string; email?: string; identityNo?: string; initialPoints?: number }) => LoyaltyMember;
-  addPoints: (memberId: string, points: number, reason: string, transactionId?: string, spendAmount?: number) => void;
-  reverseTransactionPoints: (memberId: string, transactionId: string, reason?: string, exactRefundAmount?: number) => void;
-  redeemPoints: (memberId: string, points: number, reason: string, relatedTransactionId?: string) => boolean;
+  createMember: (memberData: {
+    name: string;
+    phone: string;
+    email?: string;
+    identityNo?: string;
+    initialPoints?: number;
+  }) => LoyaltyMember;
+  getOrCreateMember: (memberData: {
+    name: string;
+    phone: string;
+    email?: string;
+    identityNo?: string;
+    initialPoints?: number;
+  }) => LoyaltyMember;
+  updateMember: (id: string, updates: Partial<LoyaltyMember>) => void;
+  deleteMember: (id: string) => void;
+  addPoints: (
+    memberId: string,
+    points: number,
+    reason: string,
+    transactionId?: string,
+    spendAmount?: number
+  ) => void;
+  reverseTransactionPoints: (
+    memberId: string,
+    transactionId: string,
+    reason?: string,
+    exactRefundAmount?: number
+  ) => void;
+  redeemPoints: (
+    memberId: string,
+    points: number,
+    reason: string,
+    relatedTransactionId?: string
+  ) => boolean;
   manualOverrideTier: (memberId: string, newTier: LoyaltyTier, reason: string) => void;
   resetLoyaltyData: () => void;
 }
@@ -39,7 +80,9 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
   const syncChainRef = useRef<Map<string, Promise<void>>>(new Map());
   const [isInitialized, setIsInitialized] = useState(false);
 
-  const commitMembers = (updater: (prev: LoyaltyMember[]) => LoyaltyMember[]): LoyaltyMember[] => {
+  const commitMembers = (
+    updater: (prev: LoyaltyMember[]) => LoyaltyMember[]
+  ): LoyaltyMember[] => {
     const next = updater(membersRef.current);
     membersRef.current = next;
     setMembers(next);
@@ -57,7 +100,6 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     syncChainRef.current.set(memberId, nextChain);
   };
 
-  // Calculate Tier dynamically based on configurable point settings
   const calculateTierForPoints = (points: number): LoyaltyTier => {
     const config = settings.loyaltyTiers;
     if (points >= config.platinumMin) return "Platinum";
@@ -81,9 +123,9 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_LOYALTY);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           const sanitized = normalizeLoadedMembers(parsed);
           membersRef.current = sanitized;
           setMembers(sanitized);
@@ -94,40 +136,69 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsInitialized(true);
     }
-
-    if (typeof window !== "undefined") {
-      fetch("/api/loyalty/members")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && Array.isArray(data.members) && data.members.length > 0) {
-            commitMembers((prev) => {
-              const serverMap = new Map(data.members.map((m: LoyaltyMember) => [m.id, m]));
-              const localCustom = prev.filter((m) => !serverMap.has(m.id));
-              return normalizeLoadedMembers([...data.members, ...localCustom]);
-            });
-          }
-        })
-        .catch(() => {});
-
-      const handleStorage = (event: StorageEvent) => {
-        if (event.key === STORAGE_KEY_LOYALTY && event.newValue) {
-          try {
-            const parsed = JSON.parse(event.newValue);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              const normalized = normalizeLoadedMembers(parsed);
-              membersRef.current = normalized;
-              setMembers(normalized);
-            }
-          } catch (e) {
-            console.error("Failed to sync loyalty storage update", e);
-          }
-        }
-      };
-
-      window.addEventListener("storage", handleStorage);
-      return () => window.removeEventListener("storage", handleStorage);
-    }
+    ensureGlobalOutboxAutoFlush();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+
+    const hydrateMembers = async () => {
+      await flushOutbox().catch(() => {});
+      if (cancelled) return;
+      try {
+        const res = await fetch("/api/loyalty/members");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (data && Array.isArray(data.members) && !cancelled) {
+          commitMembers((prev) =>
+            normalizeLoadedMembers(
+              reconcileCollectionWithOutbox<LoyaltyMember>({
+                serverItems: data.members,
+                localItems: prev,
+                endpoint: "/api/loyalty/members",
+                getId: (m) => m.id,
+              })
+            )
+          );
+        }
+      } catch {}
+    };
+
+    void hydrateMembers();
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY_LOYALTY) return;
+      if (event.newValue === null) {
+        membersRef.current = INITIAL_MEMBERS;
+        setMembers(INITIAL_MEMBERS);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(event.newValue);
+        if (Array.isArray(parsed)) {
+          const normalized = normalizeLoadedMembers(parsed);
+          membersRef.current = normalized;
+          setMembers(normalized);
+        }
+      } catch (e) {
+        console.error("Failed to sync loyalty storage update", e);
+      }
+    };
+
+    const handleOutboxFlushed = () => {
+      void hydrateMembers();
+    };
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(OUTBOX_FLUSHED_EVENT, handleOutboxFlushed);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(OUTBOX_FLUSHED_EVENT, handleOutboxFlushed);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -143,7 +214,6 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     return m.registeredOutletId === activeOutletId || !m.registeredOutletId;
   });
 
-  // Create member: only identity input required. Default points = 0, Tier = Bronze (or auto calculated)
   const createMember = (memberData: {
     name: string;
     phone: string;
@@ -183,21 +253,32 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       registeredOutletId: targetOutletId,
       registeredOutletName: targetOutletName,
       status: "ACTIVE",
-      joinedDate: new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }),
-      lastVisit: new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }),
-      pointHistory: points > 0 ? [
-        {
-          id: `ptx-${Date.now()}`,
-          memberId: newId,
-          type: "EARN",
-          points,
-          balanceAfter: points,
-          reason: "Poin Awal Pendaftaran Member",
-          timestamp: nowIso,
-          actorName: user?.name || "Kasir / Admin",
-          outletId: targetOutletId,
-        },
-      ] : [],
+      joinedDate: new Date().toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      lastVisit: new Date().toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      pointHistory:
+        points > 0
+          ? [
+              {
+                id: `ptx-${Date.now()}`,
+                memberId: newId,
+                type: "EARN",
+                points,
+                balanceAfter: points,
+                reason: "Poin Awal Pendaftaran Member",
+                timestamp: nowIso,
+                actorName: user?.name || "Kasir / Admin",
+                outletId: targetOutletId,
+              },
+            ]
+          : [],
       tierHistory: [],
     };
 
@@ -219,7 +300,8 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       id: newMember.id,
       endpoint: "/api/loyalty/members",
       method: "POST",
-      payload: { member: newMember },
+      isCreate: true,
+      payload: { id: newMember.id, member: newMember },
     });
 
     return newMember;
@@ -250,6 +332,79 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     return createMember(memberData);
   };
 
+  const updateMember = (id: string, updates: Partial<LoyaltyMember>) => {
+    const target = membersRef.current.find((m) => m.id === id);
+    if (!target) return;
+
+    const nextPoints = updates.points !== undefined ? updates.points : target.points;
+    const hasManualOverride = (updates.tierHistory ?? target.tierHistory)?.some(
+      (th) => th.isManualOverride
+    );
+    const nextTier =
+      updates.tier !== undefined
+        ? updates.tier
+        : hasManualOverride
+        ? target.tier
+        : calculateTierForPoints(nextPoints);
+
+    const mergedUpdates: Partial<LoyaltyMember> = {
+      ...updates,
+      points: nextPoints,
+      tier: nextTier,
+    };
+
+    commitMembers((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...mergedUpdates, id } : m))
+    );
+
+    logActivity({
+      module: "LOYALTY",
+      action: "UPDATE_MEMBER",
+      recordId: id,
+      previousValue: `${target.name} (${target.phone})`,
+      newValue: `${mergedUpdates.name || target.name} (${mergedUpdates.phone || target.phone})`,
+      description: `Pembaruan data member loyalty: ${mergedUpdates.name || target.name}`,
+      reason: "Pembaruan profil member CRM",
+      status: "SUCCESS",
+      outletId: target.registeredOutletId,
+      outletName: target.registeredOutletName,
+    });
+
+    enqueueMemberSync(id, {
+      id,
+      endpoint: "/api/loyalty/members",
+      method: "PUT",
+      payload: { id, updates: mergedUpdates },
+    });
+  };
+
+  const deleteMember = (id: string) => {
+    const target = membersRef.current.find((m) => m.id === id);
+    if (!target) return;
+
+    commitMembers((prev) => prev.filter((m) => m.id !== id));
+
+    logActivity({
+      module: "LOYALTY",
+      action: "DELETE_MEMBER",
+      recordId: id,
+      previousValue: `${target.name} (${target.phone})`,
+      newValue: "DELETED",
+      description: `Penghapusan member loyalty: ${target.name} (${target.phone})`,
+      reason: "Data member dihapus dari CRM",
+      status: "SUCCESS",
+      outletId: target.registeredOutletId,
+      outletName: target.registeredOutletName,
+    });
+
+    enqueueMemberSync(id, {
+      id,
+      endpoint: "/api/loyalty/members",
+      method: "DELETE",
+      payload: { id },
+    });
+  };
+
   const addPoints = (
     memberId: string,
     pointsEarned: number,
@@ -260,7 +415,8 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     const target = membersRef.current.find((m) => m.id === memberId);
     if (!target || pointsEarned < 0) return;
 
-    const hasSpendUpdate = Boolean(transactionId) && spendAmount !== undefined && spendAmount >= 0;
+    const hasSpendUpdate =
+      Boolean(transactionId) && spendAmount !== undefined && spendAmount >= 0;
     if (pointsEarned === 0 && !hasSpendUpdate) return;
 
     if (
@@ -269,7 +425,9 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         (ptx) => ptx.type === "EARN" && ptx.relatedTransactionId === transactionId
       )
     ) {
-      console.warn(`[Loyalty] Points for transaction ${transactionId} already awarded to member ${memberId}. Skipping duplicate.`);
+      console.warn(
+        `[Loyalty] Points for transaction ${transactionId} already awarded to member ${memberId}. Skipping duplicate.`
+      );
       return;
     }
 
@@ -332,7 +490,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         recordId: memberId,
         previousValue: `Tier: ${target.tier} (${target.points} Pts)`,
         newValue: `Tier: ${newTier} (${newPoints} Pts)`,
-        description: `Kenaikan tier loyalty otomatis: ${target.name} (${target.tier} ➔ ${newTier})`,
+        description: `Kenaikan tier loyalty otomatis: ${target.name} (${target.tier} ke ${newTier})`,
         reason: `Poin mencapai ${newPoints}`,
         status: "SUCCESS",
         outletId: target.registeredOutletId,
@@ -656,7 +814,7 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       recordId: memberId,
       previousValue: `Tier: ${target.tier}`,
       newValue: `Tier: ${newTier} (Manual Override)`,
-      description: `Perubahan tier manual untuk ${target.name} (${target.tier} ➔ ${newTier})`,
+      description: `Perubahan tier manual untuk ${target.name} (${target.tier} ke ${newTier})`,
       reason: reason || "Manual override oleh Owner/Admin",
       status: "SUCCESS",
       outletId: target.registeredOutletId,
@@ -695,6 +853,8 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
         calculateTierForPoints,
         createMember,
         getOrCreateMember,
+        updateMember,
+        deleteMember,
         addPoints,
         reverseTransactionPoints,
         redeemPoints,

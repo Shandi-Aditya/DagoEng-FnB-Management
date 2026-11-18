@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getPersistentProductsData,
-  savePersistentProduct,
-  deletePersistentProduct,
-  savePersistentCustomCategory,
   appendAuditLog,
+  deletePersistentProduct,
+  getPersistentProductsData,
+  MasterProductsStoragePayload,
+  mutateSeededPersistentData,
+  savePersistentCustomCategory,
+  savePersistentProduct,
+  writePersistentData,
 } from "@/lib/persistent-storage";
+import { INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
 import { getRequestAuthUser, ServerAuthResult } from "@/lib/server-auth";
 import { normalizeTenantId } from "@/features/orders/orders-domain";
 import { RoleSlug } from "@/types/auth";
@@ -14,6 +18,7 @@ import { MasterProduct } from "@/types/product";
 export const dynamic = "force-dynamic";
 
 const PRODUCT_WRITE_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER"];
+const FILE_MASTER_PRODUCTS = "master_products.json";
 
 async function authorizeProductWrite(
   req: NextRequest
@@ -49,6 +54,22 @@ async function authorizeProductWrite(
   return { authorized: true, auth };
 }
 
+function assertHubOwnerOrSuperAdmin(auth: ServerAuthResult): NextResponse | null {
+  const isAllowed =
+    auth.role === "SUPER_ADMIN" ||
+    (auth.role === "OWNER" && auth.scopeLevel !== "TENANT");
+  if (!isAllowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "FORBIDDEN: Hanya Super Admin atau Hub Owner yang diizinkan melakukan aksi ini.",
+      },
+      { status: 403 }
+    );
+  }
+  return null;
+}
+
 function assertTenantOwnsProduct(
   auth: ServerAuthResult,
   productTenantId?: string | null
@@ -68,10 +89,105 @@ function assertTenantOwnsProduct(
   return null;
 }
 
-/**
- * GET /api/products
- * Fetches master products and custom categories from persistent server storage.
- */
+async function handleDeleteCustomCategory(
+  auth: ServerAuthResult,
+  rawCategory: unknown
+): Promise<NextResponse> {
+  const permError = assertHubOwnerOrSuperAdmin(auth);
+  if (permError) return permError;
+
+  const categoryName = typeof rawCategory === "string" ? rawCategory.trim() : "";
+  if (!categoryName) {
+    return NextResponse.json(
+      { success: false, error: "Nama kategori wajib diisi." },
+      { status: 400 }
+    );
+  }
+
+  const updated = await mutateSeededPersistentData<MasterProductsStoragePayload>(
+    FILE_MASTER_PRODUCTS,
+    () => ({ products: [...INITIAL_PRODUCTS], customCategories: [] }),
+    (existing) => ({
+      products: Array.isArray(existing?.products) ? existing.products : [...INITIAL_PRODUCTS],
+      customCategories: (Array.isArray(existing?.customCategories)
+        ? existing.customCategories
+        : []
+      ).filter((c) => c !== categoryName),
+    })
+  );
+
+  const actorName = auth.name || auth.email || "Admin";
+  await appendAuditLog({
+    id: `audit-cat-del-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    actorId: auth.userId || "unknown",
+    actorName,
+    actorRole: auth.role || "OWNER",
+    role: auth.role || "OWNER",
+    userId: auth.userId || "unknown",
+    userName: actorName,
+    userRole: auth.role || "OWNER",
+    module: "MENU",
+    action: "DELETE_CATEGORY",
+    recordId: `cat-${categoryName}`,
+    referenceId: `cat-${categoryName}`,
+    previousValue: categoryName,
+    newValue: "DELETED",
+    description: `Penghapusan kategori menu kustom "${categoryName}"`,
+    reason: "Penghapusan kategori menu oleh Super Admin / Hub Owner",
+    status: "WARNING",
+    severity: "MEDIUM",
+    category: "CONFIGURATION",
+  });
+
+  return NextResponse.json({
+    success: true,
+    customCategories: updated.customCategories,
+  });
+}
+
+async function handleResetProducts(auth: ServerAuthResult): Promise<NextResponse> {
+  const permError = assertHubOwnerOrSuperAdmin(auth);
+  if (permError) return permError;
+
+  const current = await getPersistentProductsData();
+  const seedPayload: MasterProductsStoragePayload = {
+    products: [...INITIAL_PRODUCTS],
+    customCategories: [],
+  };
+  await writePersistentData<MasterProductsStoragePayload>(FILE_MASTER_PRODUCTS, seedPayload);
+
+  const actorName = auth.name || auth.email || "Admin";
+  await appendAuditLog({
+    id: `audit-prod-reset-${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    actorId: auth.userId || "unknown",
+    actorName,
+    actorRole: auth.role || "OWNER",
+    role: auth.role || "OWNER",
+    userId: auth.userId || "unknown",
+    userName: actorName,
+    userRole: auth.role || "OWNER",
+    module: "MENU",
+    action: "RESET_PRODUCTS",
+    recordId: "master_products",
+    referenceId: "master_products",
+    previousValue: `${current.products.length} produk, ${current.customCategories.length} kategori kustom`,
+    newValue: `${INITIAL_PRODUCTS.length} produk bawaan, 0 kategori kustom`,
+    description: "Reset katalog master produk dan kategori kustom ke data awal.",
+    reason: "Reset katalog produk oleh Super Admin / Hub Owner",
+    status: "WARNING",
+    severity: "HIGH",
+    category: "CONFIGURATION",
+  });
+
+  return NextResponse.json({
+    success: true,
+    products: seedPayload.products,
+    customCategories: seedPayload.customCategories,
+  });
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -101,18 +217,12 @@ export async function GET(req: NextRequest) {
       products,
       customCategories: data.customCategories || [],
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || "Gagal mengambil data produk." },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Gagal mengambil data produk.";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
-/**
- * POST /api/products
- * Creates or updates a master product, or registers a new custom category.
- */
 export async function POST(req: NextRequest) {
   try {
     const authCheck = await authorizeProductWrite(req);
@@ -120,6 +230,14 @@ export async function POST(req: NextRequest) {
     const { auth } = authCheck;
 
     const body = await req.json().catch(() => ({}));
+
+    if (body.action === "DELETE_CATEGORY") {
+      return handleDeleteCustomCategory(auth, body.categoryName ?? body.category);
+    }
+
+    if (body.action === "RESET_PRODUCTS") {
+      return handleResetProducts(auth);
+    }
 
     if (body.action === "ADD_CATEGORY" || body.newCategory) {
       const categoryName = body.categoryName || body.newCategory;
@@ -165,9 +283,12 @@ export async function POST(req: NextRequest) {
     const nowIso = new Date().toISOString();
     const margin =
       productData.basePrice > 0
-        ? `${Math.round(
-            ((productData.basePrice - (productData.cogsEstimate || 0)) / productData.basePrice) * 1000
-          ) / 10}%`
+        ? `${
+            Math.round(
+              ((productData.basePrice - (productData.cogsEstimate || 0)) / productData.basePrice) *
+                1000
+            ) / 10
+          }%`
         : "0.0%";
 
     const product: MasterProduct = {
@@ -227,18 +348,12 @@ export async function POST(req: NextRequest) {
       success: true,
       product: saved,
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || "Gagal menyimpan data produk." },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Gagal menyimpan data produk.";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
-/**
- * PUT /api/products
- * Updates an existing master product.
- */
 export async function PUT(req: NextRequest) {
   try {
     const authCheck = await authorizeProductWrite(req);
@@ -322,18 +437,12 @@ export async function PUT(req: NextRequest) {
       success: true,
       product: saved,
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || "Gagal memperbarui data produk." },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Gagal memperbarui data produk.";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
 
-/**
- * DELETE /api/products
- * Deletes a master product from persistent server storage.
- */
 export async function DELETE(req: NextRequest) {
   try {
     const authCheck = await authorizeProductWrite(req);
@@ -341,14 +450,24 @@ export async function DELETE(req: NextRequest) {
     const { auth } = authCheck;
 
     const { searchParams } = new URL(req.url);
-    const idFromQuery = searchParams.get("id");
-    let id = idFromQuery;
+    const body = await req.json().catch(() => ({}));
+    const action = searchParams.get("action") || body.action;
 
-    if (!id) {
-      const body = await req.json().catch(() => ({}));
-      id = body.id;
+    if (action === "RESET_PRODUCTS") {
+      return handleResetProducts(auth);
     }
 
+    if (action === "DELETE_CATEGORY") {
+      return handleDeleteCustomCategory(
+        auth,
+        searchParams.get("category") ??
+          searchParams.get("categoryName") ??
+          body.categoryName ??
+          body.category
+      );
+    }
+
+    const id = searchParams.get("id") || body.id;
     if (!id) {
       return NextResponse.json(
         { success: false, error: "ID produk wajib disertakan untuk penghapusan." },
@@ -398,10 +517,8 @@ export async function DELETE(req: NextRequest) {
       success: true,
       message: `Produk dengan ID [${id}] berhasil dihapus.`,
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || "Gagal menghapus data produk." },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Gagal menghapus data produk.";
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

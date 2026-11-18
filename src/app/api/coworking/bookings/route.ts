@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCoworkingBookings, saveCoworkingBooking } from "@/lib/persistent-storage";
-import { getRequestAuthUser } from "@/lib/server-auth";
-import { RoleSlug } from "@/types/auth";
+import {
+  getCoworkingBookings,
+  saveCoworkingBooking,
+  writePersistentData,
+} from "@/lib/persistent-storage";
+import { getRequestAuthUser, type ServerAuthResult } from "@/lib/server-auth";
+import type { RoleSlug } from "@/types/auth";
 
-const COWORKING_READ_ROLES: RoleSlug[] = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
+const FILE_COWORKING_BOOKINGS = "coworking_bookings.json";
+
+const COWORKING_READ_ROLES: RoleSlug[] = [
+  "SUPER_ADMIN",
+  "OWNER",
+  "MANAGER",
+  "CASHIER",
+  "CUSTOMER",
+];
+
 const COWORKING_WRITE_ROLES: RoleSlug[] = [
   "SUPER_ADMIN",
   "OWNER",
@@ -12,19 +25,50 @@ const COWORKING_WRITE_ROLES: RoleSlug[] = [
   "CUSTOMER",
 ];
 
+function isNonTenantOwner(auth: ServerAuthResult): boolean {
+  return (
+    auth.isAuthenticated &&
+    auth.role === "OWNER" &&
+    !auth.tenantId &&
+    auth.scopeLevel !== "TENANT"
+  );
+}
+
+function isCallerOwnedBooking(
+  booking: Record<string, unknown>,
+  auth: ServerAuthResult
+): boolean {
+  if (auth.userId && booking.userId === auth.userId) {
+    return true;
+  }
+  if (
+    auth.email &&
+    typeof booking.guestEmail === "string" &&
+    booking.guestEmail.toLowerCase() === auth.email.toLowerCase()
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await getRequestAuthUser(req);
     if (!auth.isAuthenticated || !auth.role) {
       return NextResponse.json(
-        { error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
+        {
+          error:
+            auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan.",
+        },
         { status: 401 }
       );
     }
 
     if (!COWORKING_READ_ROLES.includes(auth.role)) {
       return NextResponse.json(
-        { error: `FORBIDDEN: Role [${auth.role}] tidak memiliki akses data booking coworking.` },
+        {
+          error: `FORBIDDEN: Role [${auth.role}] tidak memiliki akses data booking coworking.`,
+        },
         { status: 403 }
       );
     }
@@ -39,12 +83,43 @@ export async function GET(req: NextRequest) {
       bookings = bookings.filter((b) => b.date === date);
     }
     if (status) {
-      bookings = bookings.filter((b) => b.paymentStatus === status || b.status === status);
+      bookings = bookings.filter(
+        (b) => b.paymentStatus === status || b.status === status
+      );
+    }
+
+    if (auth.role === "CUSTOMER") {
+      bookings = bookings.flatMap((b: Record<string, unknown>) => {
+        if (isCallerOwnedBooking(b, auth)) {
+          return [b];
+        }
+        if (
+          b.checkInStatus === "CANCELLED" ||
+          b.checkInStatus === "COMPLETED"
+        ) {
+          return [];
+        }
+        return [
+          {
+            ...b,
+            guestName: "Terisi",
+            guestPhone: "",
+            guestEmail: "",
+            company: undefined,
+            notes: undefined,
+            userId: undefined,
+            paymentRef: undefined,
+            qrisVerification: undefined,
+            fnbVoucherApplied: undefined,
+          },
+        ];
+      });
     }
 
     return NextResponse.json({ bookings });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -53,14 +128,19 @@ export async function POST(req: NextRequest) {
     const auth = await getRequestAuthUser(req);
     if (!auth.isAuthenticated || !auth.role || !auth.userId) {
       return NextResponse.json(
-        { error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
+        {
+          error:
+            auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan.",
+        },
         { status: 401 }
       );
     }
 
     if (!COWORKING_WRITE_ROLES.includes(auth.role)) {
       return NextResponse.json(
-        { error: `FORBIDDEN: Role [${auth.role}] tidak memiliki izin membuat atau mengubah booking coworking.` },
+        {
+          error: `FORBIDDEN: Role [${auth.role}] tidak memiliki izin membuat atau mengubah booking coworking.`,
+        },
         { status: 403 }
       );
     }
@@ -75,11 +155,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // R11: Prevent CUSTOMER from overwriting another user's existing booking
     if (auth.role === "CUSTOMER") {
       const existingBookings = await getCoworkingBookings();
       const matchedExisting = existingBookings.find(
-        (b: any) =>
+        (b: Record<string, unknown>) =>
           (booking.id && b.id === booking.id) ||
           (booking.bookingCode && b.bookingCode === booking.bookingCode)
       );
@@ -90,7 +169,8 @@ export async function POST(req: NextRequest) {
           (!matchedExisting.userId &&
             matchedExisting.guestEmail &&
             auth.email &&
-            String(matchedExisting.guestEmail).toLowerCase() === auth.email.toLowerCase());
+            String(matchedExisting.guestEmail).toLowerCase() ===
+              auth.email.toLowerCase());
 
         if (!isSameUser) {
           return NextResponse.json(
@@ -123,7 +203,39 @@ export async function POST(req: NextRequest) {
 
     await saveCoworkingBooking(booking);
     return NextResponse.json({ success: true, booking });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        {
+          error:
+            auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan.",
+        },
+        { status: 401 }
+      );
+    }
+
+    if (auth.role !== "SUPER_ADMIN" && !isNonTenantOwner(auth)) {
+      return NextResponse.json(
+        {
+          error:
+            "FORBIDDEN: Hanya Super Admin atau Hub Owner yang dapat mereset seluruh data booking co-working.",
+        },
+        { status: 403 }
+      );
+    }
+
+    await writePersistentData(FILE_COWORKING_BOOKINGS, []);
+    return NextResponse.json({ success: true, bookings: [] });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

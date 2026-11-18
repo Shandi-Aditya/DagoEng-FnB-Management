@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
   getPersistentOrders,
+  resetPersistentOrders,
   savePersistentOrder,
   getPersistentLoyaltyPoints,
   updatePersistentLoyaltyPoints,
@@ -382,7 +383,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // R8: Validate order schema & mathematical consistency on the server
     const parsed = OrderPayloadSchema.safeParse({
       id: orderData.id,
       orderNumber: orderData.orderNumber,
@@ -631,5 +631,64 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const auth = await getRequestAuthUser(req);
+    if (!auth.isAuthenticated || !auth.role) {
+      return NextResponse.json(
+        { error: auth.error || "UNAUTHORIZED: Autentikasi sesi server diperlukan." },
+        { status: 401 }
+      );
+    }
+
+    const canResetOrders =
+      auth.role === "SUPER_ADMIN" ||
+      (auth.role === "OWNER" && auth.scopeLevel !== "TENANT");
+    if (!canResetOrders) {
+      return NextResponse.json(
+        {
+          error: `FORBIDDEN: Role [${auth.role}] tidak diizinkan mereset data transaksi POS.`,
+        },
+        { status: 403 }
+      );
+    }
+
+    const previousCount = (await getPersistentOrders()).length;
+    await resetPersistentOrders();
+
+    const actorName = auth.name || auth.email || "Admin";
+    await appendAuditLog({
+      id: `audit-orders-reset-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      actorId: auth.userId || "unknown",
+      actorName,
+      actorRole: auth.role,
+      role: auth.role,
+      userId: auth.userId || "unknown",
+      userName: actorName,
+      userRole: auth.role,
+      action: "RESET_ORDERS",
+      module: "POS",
+      recordId: "pos_orders",
+      referenceId: "pos_orders",
+      previousValue: `${previousCount} transaksi`,
+      newValue: "0 transaksi",
+      description: `Reset seluruh data transaksi POS (${previousCount} pesanan dihapus).`,
+      reason: "Reset data operasional POS oleh Super Admin / Hub Owner",
+      status: "WARNING",
+      severity: "HIGH",
+      category: "CONFIGURATION",
+    });
+
+    return NextResponse.json({
+      success: true,
+      orders: [],
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Gagal mereset data transaksi POS.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

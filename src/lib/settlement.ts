@@ -3,6 +3,8 @@ import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import { INITIAL_PRODUCTS } from "@/lib/master-data-defaults";
 import {
   getStoredSettlementReceiptPolicy,
+  saveStoredSettlementReceiptPolicy,
+  syncSettlementReceiptPolicyToServer,
   type SettlementBasisMode,
 } from "@/lib/settlement-receipt-policy";
 
@@ -11,8 +13,8 @@ export interface SettlementSummary {
   tenantName: string;
   grossRevenue: number;
   discount: number;
-  dpp?: number;                // Base revenue (gross - discount) before tax and service charge (POS-35 / B3)
-  netSales?: number;           // Penjualan bersih (DPP = gross - discount)
+  dpp?: number;
+  netSales?: number;
   tax: number;
   serviceCharge: number;
   paymentFee: number;
@@ -21,8 +23,8 @@ export interface SettlementSummary {
   itemCount: number;
   settlementBasis?: SettlementBasisMode;
   settlementBasisAmount?: number;
-  tenantSharePercent?: number; // e.g. 85 or 90
-  dagoSharePercent?: number;   // e.g. 15 or 10
+  tenantSharePercent?: number;
+  dagoSharePercent?: number;
   tenantShareAmount?: number;
   dagoShareAmount?: number;
 }
@@ -32,8 +34,8 @@ export const REVENUE_SPLIT_STORAGE_KEY = "dagoeng_tenant_revenue_splits_v1";
 export interface TenantRevenueSplitConfig {
   tenantId: string;
   tenantName: string;
-  tenantSharePercent: number; // e.g. 85.0
-  dagoSharePercent: number;   // e.g. 15.0
+  tenantSharePercent: number;
+  dagoSharePercent: number;
   status: "ACTIVE" | "INACTIVE";
   updatedAt?: string;
 }
@@ -48,11 +50,16 @@ export const DEFAULT_TENANT_REVENUE_SPLITS: Record<string, TenantRevenueSplitCon
 export function getAllTenantRevenueSplits(): Record<string, TenantRevenueSplitConfig> {
   if (typeof window === "undefined") return DEFAULT_TENANT_REVENUE_SPLITS;
   try {
-    const raw = localStorage.getItem(REVENUE_SPLIT_STORAGE_KEY);
-    if (!raw) return DEFAULT_TENANT_REVENUE_SPLITS;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object") {
-      return { ...DEFAULT_TENANT_REVENUE_SPLITS, ...parsed };
+    const raw = window.localStorage?.getItem(REVENUE_SPLIT_STORAGE_KEY) ?? null;
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object") {
+        return { ...DEFAULT_TENANT_REVENUE_SPLITS, ...parsed };
+      }
+    }
+    const policySplits = getStoredSettlementReceiptPolicy().revenueSplits;
+    if (policySplits && typeof policySplits === "object") {
+      return { ...DEFAULT_TENANT_REVENUE_SPLITS, ...policySplits };
     }
   } catch (e) {
     console.error("Failed to read revenue splits from localStorage", e);
@@ -100,8 +107,11 @@ export function setTenantRevenueSplit(
       dagoSharePercent: calcDago,
       updatedAt: new Date().toISOString(),
     };
-    localStorage.setItem(REVENUE_SPLIT_STORAGE_KEY, JSON.stringify(all));
-    window.dispatchEvent(new Event("tenant_revenue_split_updated"));
+    window.localStorage?.setItem(REVENUE_SPLIT_STORAGE_KEY, JSON.stringify(all));
+    const nextPolicy = saveStoredSettlementReceiptPolicy({ revenueSplits: all });
+    if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
+      syncSettlementReceiptPolicyToServer(nextPolicy);
+    }
     return { success: true };
   } catch (e) {
     console.error("Failed to save tenant revenue split", e);
@@ -109,16 +119,12 @@ export function setTenantRevenueSplit(
   }
 }
 
-/**
- * Resolves an item's owner tenant ID using reliable tiered fallbacks:
- * 1. Direct explicit tenantId on item (if non-empty and not default DAGO_HUB)
- * 2. Product ID lookup in authoritative master products (INITIAL_PRODUCTS)
- * 3. Product name lookup in INITIAL_PRODUCTS (exact or case-insensitive)
- * 4. Substring and keyword heuristic for partner tenants
- * 5. Order-level tenant fallback (if order has tenantId)
- * 6. Direct tenantId if present
- * 7. Defaults to "DAGO_HUB" if truly unmapped
- */
+function getOrderFallbackTenantId(
+  order: OrderRecord & { tenantId?: unknown }
+): string | undefined {
+  return typeof order.tenantId === "string" ? order.tenantId : undefined;
+}
+
 export function resolveItemTenantId(
   item: { tenantId?: string; productId?: string; productName?: string },
   orderFallbackTenantId?: string
@@ -137,7 +143,6 @@ export function resolveItemTenantId(
   if (item.productName) {
     const cleanName = item.productName.trim().toLowerCase();
 
-    // Exact name match in INITIAL_PRODUCTS
     const productByExactName = INITIAL_PRODUCTS.find(
       (p) => p.name.trim().toLowerCase() === cleanName
     );
@@ -145,7 +150,6 @@ export function resolveItemTenantId(
       return productByExactName.tenantId;
     }
 
-    // Substring match in INITIAL_PRODUCTS
     const productBySubstring = INITIAL_PRODUCTS.find(
       (p) =>
         p.name.toLowerCase().includes(cleanName) ||
@@ -155,7 +159,6 @@ export function resolveItemTenantId(
       return productBySubstring.tenantId;
     }
 
-    // Category / keyword heuristic for partner tenants
     if (/kopi|coffee|espresso|americano|matcha|latte|cappuccino|fries/i.test(cleanName)) {
       return "tenant-ks";
     }
@@ -211,9 +214,7 @@ export function calculateSettlement(
     options?.settlementBasis ?? getStoredSettlementReceiptPolicy().settlementBasis;
 
   orders.forEach((order) => {
-    // Only process valid paid non-cancelled orders
     if (order.paymentStatus === "PAID" && order.status !== "CANCELLED") {
-      // Step 1: Calculate total valid gross for this order to use as prorata base
       let orderValidGross = 0;
       const tenantGrosses = new Map<string, { gross: number; qty: number }>();
 
@@ -225,7 +226,7 @@ export function calculateSettlement(
           return;
         }
 
-        const ownerId = resolveItemTenantId(item, (order as any).tenantId);
+        const ownerId = resolveItemTenantId(item, getOrderFallbackTenantId(order));
         const itemGross = qty * price;
 
         orderValidGross += itemGross;
@@ -237,7 +238,6 @@ export function calculateSettlement(
         });
       });
 
-      // Step 2: Allocate order level discount, PB1 tax, and service charge based on prorata (POS-34 / A3-1)
       const breakdown = getOrderTaxBreakdown(order);
       const computedDiscount = breakdown.discount;
 
@@ -247,9 +247,6 @@ export function calculateSettlement(
         const allocatedDiscount = computedDiscount * ratio;
         const allocatedTax = breakdown.pb1 * ratio;
         const allocatedServiceCharge = breakdown.serviceCharge * ratio;
-        const allocatedPaymentFee = 0;
-
-        // DPP per tenant = data.gross - allocatedDiscount (POS-35 / B3 / TC-K06)
         const tenantDpp = Math.max(0, data.gross - allocatedDiscount);
 
         const netRevenue =
@@ -269,7 +266,6 @@ export function calculateSettlement(
           DAGO_HUB: "Dago Hub",
         };
 
-        // Determine tenant revenue sharing configuration
         const splitConfig = activeSplits[tenantId] || { tenantSharePercent: 85, dagoSharePercent: 15 };
         const tenantSharePct = tenantId === "DAGO_HUB" ? 0 : splitConfig.tenantSharePercent;
         const dagoSharePct = tenantId === "DAGO_HUB" ? 100 : splitConfig.dagoSharePercent;
@@ -322,7 +318,6 @@ export function calculateSettlement(
 
   const result: SettlementSummary[] = Array.from(settlementMap.values());
 
-  // Handle rounding to avoid floating point errors
   result.forEach((r) => {
     r.grossRevenue = Math.round(r.grossRevenue);
     r.discount = Math.round(r.discount);
@@ -338,7 +333,6 @@ export function calculateSettlement(
     if (r.dagoShareAmount !== undefined) r.dagoShareAmount = Math.round(r.dagoShareAmount);
   });
 
-  // Sort descending by netRevenue
   return result.sort((a, b) => b.netRevenue - a.netRevenue);
 }
 
@@ -346,17 +340,14 @@ export interface TenantProfitSharing {
   tenantId: string;
   tenantName: string;
   grossSales: number;
-  platformFee: number; // DAGO Platform Fee (Configurable %)
-  qrisMdr: number;     // 0.7% Bank Indonesia QRIS MDR
-  netPayout: number;   // Net Payout to Tenant
+  platformFee: number;
+  qrisMdr: number;
+  netPayout: number;
   orderCount: number;
   commissionPercent: number;
   tenantSharePercent: number;
 }
 
-/**
- * Calculates profit-sharing breakdown for a tenant based on dynamic configurable commission %
- */
 export function calculateTenantProfitSharing(
   orders: OrderRecord[],
   tenantId: string,
@@ -378,7 +369,7 @@ export function calculateTenantProfitSharing(
   tenantOrders.forEach((order) => {
     let hasTenantItem = false;
     order.items.forEach((item) => {
-      const resolvedTenant = resolveItemTenantId(item, (order as any).tenantId);
+      const resolvedTenant = resolveItemTenantId(item, getOrderFallbackTenantId(order));
       if (resolvedTenant === tenantId) {
         hasTenantItem = true;
         grossSales += (item.unitPrice || 0) * (item.quantity || 1);
@@ -412,9 +403,6 @@ export interface TenantPayoutAccount {
   isConfigured: boolean;
 }
 
-/**
- * Masks account number for secure operational display (e.g. "•••• •••• 7890")
- */
 export function maskAccountNumber(accountNumber: string): string {
   const clean = (accountNumber || "").replace(/\s+/g, "");
   if (!clean) return "-";
@@ -433,19 +421,16 @@ export const DEFAULT_TENANT_PAYOUT_ACCOUNTS: Record<
   "tenant-tea": { bankName: "BRI", accountNumber: "002101928374501", accountHolder: "Warung Bu Narti" },
 };
 
-/**
- * Resolves tenant payout account info with fallback to default demo data.
- */
 export function getTenantPayoutAccount(
   tenantId: string,
-  customMap?: Record<string, any>
+  customMap?: Record<string, { bankName?: string; bankAccountNumber?: string; bankAccountHolder?: string }>
 ): TenantPayoutAccount {
   if (customMap && customMap[tenantId]?.bankAccountNumber) {
     const item = customMap[tenantId];
     return {
       tenantId,
       bankName: item.bankName || "BCA",
-      accountNumber: item.bankAccountNumber,
+      accountNumber: item.bankAccountNumber || "-",
       accountHolder: item.bankAccountHolder || "-",
       isConfigured: true,
     };

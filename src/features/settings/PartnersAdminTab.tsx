@@ -42,7 +42,7 @@ import {
   SETTLEMENT_BASIS_OPTIONS,
   type SettlementBasisMode,
 } from "@/lib/settlement-receipt-policy";
-import { DEFAULT_TENANT_PROFILES } from "@/lib/tenant";
+import { getTenantProfile } from "@/lib/tenant";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { CommunityEvent } from "@/types/event";
 import type { CommunityOrganizerProfile } from "@/types/organizer";
@@ -77,7 +77,6 @@ export interface PartnersAdminTabProps {
   onToggleOrganizerStatus: (orgId: string, status: "ACTIVE" | "INACTIVE") => void;
   onGenerateActivationLink: (orgId: string) => void;
   isGeneratingInvite: boolean;
-  // F&B Operasional & Bagi Hasil
   tenantOps: Record<string, TenantOperationConfig>;
   onUpdateTenantOperation: (tenantId: string, field: keyof TenantOperationConfig, value: unknown) => void;
   onToggleTenantOrderStatus: (tenantId: string, name: string, nextAccepting: boolean) => void;
@@ -91,7 +90,6 @@ export interface PartnersAdminTabProps {
   canEditSettlementPolicy?: boolean;
   onTenantSplitChange: (tenantId: string, tenantShare: number) => void;
   onSaveTenantSplits: () => void;
-  // Event Bagi Hasil
   eventPlatformFee: number;
   onEventPlatformFeeChange: (val: number) => void;
   eventPolicyEffectiveDate: string;
@@ -175,14 +173,14 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
 
   const fnbRows: UnifiedPartnerRow[] = localTenants.map((t) => {
     const status = allTenantStatuses[t.id] || "ACTIVE";
-    const prof = DEFAULT_TENANT_PROFILES[t.id];
+    const prof = getTenantProfile(t.id);
     return {
       id: t.id,
       name: t.name,
       type: "FNB",
       categoryOrBadge: t.badge,
       contactPerson: "—",
-      phone: prof?.contactPhone || "—",
+      phone: prof.contactPhone || "—",
       email: "—",
       status,
       serviceModule: "FNB",
@@ -197,13 +195,14 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
         "menu:manage",
         "reports:view",
       ],
-      bankInfo: prof?.bankAccountNumber
-        ? {
-            bankName: prof.bankName || "BCA",
-            accountNumber: prof.bankAccountNumber,
-            accountHolder: prof.bankAccountHolder || t.name,
-          }
-        : undefined,
+      bankInfo:
+        prof.bankAccountNumber && prof.bankAccountNumber !== "-"
+          ? {
+              bankName: prof.bankName || "BCA",
+              accountNumber: prof.bankAccountNumber,
+              accountHolder: prof.bankAccountHolder || t.name,
+            }
+          : undefined,
       notes: "Mitra gerai kuliner F&B terhubung dengan POS multi-mitra.",
     };
   });
@@ -261,7 +260,6 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
         </TabsList>
       </Tabs>
 
-      {/* SUB-TAB 1: DIREKTORI MITRA */}
       {partnerSubTab === "MANAJEMEN_MITRA" ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -465,7 +463,6 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
         </div>
       ) : null}
 
-      {/* SUB-TAB 2: OPERASIONAL & BAGI HASIL F&B */}
       {partnerSubTab === "BAGI_HASIL_FNB" ? (
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-3 rounded-lg border bg-card p-4">
@@ -700,7 +697,6 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
         </div>
       ) : null}
 
-      {/* SUB-TAB 3: BAGI HASIL EVENT */}
       {partnerSubTab === "BAGI_HASIL_EVENTS" ? (
         <div className="flex flex-col gap-6">
           <Card>
@@ -756,7 +752,6 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
             </CardContent>
           </Card>
 
-          {/* Simulasi hitung */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-sm font-medium">
@@ -818,7 +813,6 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
             </CardContent>
           </Card>
 
-          {/* Override per Event */}
           {activeAdminEvents.length > 0 ? (
             <div className="flex flex-col gap-2">
               <h3 className="text-sm font-medium text-foreground">Penyesuaian komisi per event</h3>

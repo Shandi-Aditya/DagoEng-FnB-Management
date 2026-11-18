@@ -10,6 +10,13 @@ import {
 } from "@/types/audit";
 import { useAuth } from "./AuthContext";
 import { useOutlet } from "./OutletContext";
+import {
+  ensureGlobalOutboxAutoFlush,
+  flushOutbox,
+  OUTBOX_FLUSHED_EVENT,
+  reconcileCollectionWithOutbox,
+  syncWithOutbox,
+} from "@/lib/sync-outbox";
 
 export const INITIAL_AUDIT_LOGS: ActivityLogEntry[] = [];
 
@@ -49,7 +56,7 @@ export function ActivityLogProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_AUDIT);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
           setLogs(parsed);
@@ -60,30 +67,48 @@ export function ActivityLogProvider({ children }: { children: React.ReactNode })
     } finally {
       setIsInitialized(true);
     }
-
-    // Sync with persistent backend API to ensure records survive browser resets
-    if (typeof window !== "undefined") {
-      fetch("/api/audit-logs")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && Array.isArray(data.logs) && data.logs.length > 0) {
-            setLogs((prev) => {
-              const prevMap = new Map(prev.map((l) => [l.id, l]));
-              for (const serverLog of data.logs) {
-                if (!prevMap.has(serverLog.id)) {
-                  prevMap.set(serverLog.id, serverLog);
-                }
-              }
-              const merged = Array.from(prevMap.values()).sort(
-                (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-              );
-              return merged;
-            });
-          }
-        })
-        .catch(() => {});
-    }
+    ensureGlobalOutboxAutoFlush();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    let cancelled = false;
+
+    const hydrateAuditLogs = async () => {
+      await flushOutbox().catch(() => {});
+      if (cancelled) return;
+      try {
+        const res = await fetch("/api/audit-logs");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (data && Array.isArray(data.logs) && !cancelled) {
+          setLogs((prev) => {
+            const reconciled = reconcileCollectionWithOutbox<ActivityLogEntry>({
+              serverItems: data.logs,
+              localItems: prev,
+              endpoint: "/api/audit-logs",
+              getId: (l) => l.id,
+            });
+            return [...reconciled].sort(
+              (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            );
+          });
+        }
+      } catch {}
+    };
+
+    void hydrateAuditLogs();
+
+    const handleOutboxFlushed = () => {
+      void hydrateAuditLogs();
+    };
+    window.addEventListener(OUTBOX_FLUSHED_EVENT, handleOutboxFlushed);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(OUTBOX_FLUSHED_EVENT, handleOutboxFlushed);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -111,7 +136,7 @@ export function ActivityLogProvider({ children }: { children: React.ReactNode })
         ? user.role
         : "Owner";
 
-    const entry: ActivityLogEntry = {
+    const newEntry: ActivityLogEntry = {
       id: `audit-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       actorId: user?.id || "usr-current",
       actorName: user?.name || "Hendra Wijaya",
@@ -137,14 +162,15 @@ export function ActivityLogProvider({ children }: { children: React.ReactNode })
       metadata: payload.metadata,
     };
 
-    setLogs((prev) => [entry, ...prev]);
+    setLogs((prev) => [newEntry, ...prev]);
 
-    // Persist to server backend storage
-    if (typeof window !== "undefined") {
-      fetch("/api/audit-logs", {
+    if (typeof window !== "undefined" && process.env.NODE_ENV !== "test") {
+      syncWithOutbox({
+        id: newEntry.id,
+        endpoint: "/api/audit-logs",
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ entry }),
+        isCreate: true,
+        payload: { entry: newEntry },
       }).catch((err) => {
         console.warn("[audit] Persistent sync warning:", err);
       });
