@@ -29,6 +29,12 @@ import {
   EventPromoCode,
   PromoDiscountType,
   CreateInvitationPayload,
+  EventRefundPolicy,
+  EventRefundPolicyType,
+  TicketRefundStatus,
+  TicketRefundRequest,
+  RequestRefundPayload,
+  ProcessRefundPayload,
   RevenueSplitParty,
   RevenueSplitNegotiationStatus,
   ProposedRevenueSplit,
@@ -53,6 +59,12 @@ export {
   type EventPromoCode,
   type PromoDiscountType,
   type CreateInvitationPayload,
+  type EventRefundPolicy,
+  type EventRefundPolicyType,
+  type TicketRefundStatus,
+  type TicketRefundRequest,
+  type RequestRefundPayload,
+  type ProcessRefundPayload,
   type RevenueSplitParty,
   type RevenueSplitNegotiationStatus,
   type ProposedRevenueSplit,
@@ -1704,6 +1716,7 @@ export function toPublicEvent(event: CommunityEvent): PublicCommunityEvent {
     organizerName: event.organizerName,
     status: "APPROVED",
     guidelines: event.guidelines || null,
+    refundPolicy: event.refundPolicy || { policyType: "NO_REFUND" },
     createdAt: event.createdAt,
     maxTicketsPerBooking: maxLimit,
     destinationBank: destBank,
@@ -1751,7 +1764,7 @@ export function getEventActiveBookedTicketCount(
 
   const activeBookings = allBookings.filter((b) => {
     if ((b.eventId || "").trim().toLowerCase() !== normalizedId) return false;
-    if (b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED") return false;
+    if (b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED" || b.paymentStatus === "REFUNDED") return false;
 
     // Unpaid pending booking expiry check
     if (b.paymentStatus === "PENDING" && b.totalPrice > 0 && !b.paymentProofUrl) {
@@ -1792,7 +1805,7 @@ export function getEventActiveBookedTicketCountForTier(
   const activeBookings = allBookings.filter((b) => {
     if ((b.eventId || "").trim().toLowerCase() !== normalizedId) return false;
     if ((b.ticketTierId || "").trim().toLowerCase() !== normalizedTierId) return false;
-    if (b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED") return false;
+    if (b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED" || b.paymentStatus === "REFUNDED") return false;
 
     // Unpaid pending booking expiry check
     if (b.paymentStatus === "PENDING" && b.totalPrice > 0 && !b.paymentProofUrl) {
@@ -2401,6 +2414,7 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
         payoutHistory: [],
         ticketTiers: Array.isArray(payload.ticketTiers) ? payload.ticketTiers : undefined,
         promoCodes: Array.isArray((payload as any).promoCodes) ? (payload as any).promoCodes : [],
+        refundPolicy: payload.refundPolicy || { policyType: "NO_REFUND" },
 
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -2600,6 +2614,9 @@ export async function updateEventDetails(
       }
       if (updates.promoCodes !== undefined) {
         sanitizedUpdates.promoCodes = Array.isArray(updates.promoCodes) ? updates.promoCodes : undefined;
+      }
+      if (updates.refundPolicy !== undefined) {
+        sanitizedUpdates.refundPolicy = updates.refundPolicy;
       }
       if (updates.customPlatformFeePercent !== undefined) {
         if (isEventRevenueSplitLocked(id)) {
@@ -3480,6 +3497,362 @@ export async function createInvitationTicket(
 }
 
 /**
+ * Validates whether a booking is eligible for refund based on event policy,
+ * booking payment status, check-in status, and date deadlines.
+ */
+export function validateTicketRefundEligibility(
+  event: CommunityEvent,
+  booking: EventTicketOrder,
+  requestDate: Date = new Date()
+): {
+  eligible: boolean;
+  error?: string;
+  calculatedRefundAmount: number;
+  feeDeducted: number;
+  deadlineDate?: Date;
+} {
+  if (!booking) {
+    return { eligible: false, error: "Data pemesanan tiket tidak ditemukan.", calculatedRefundAmount: 0, feeDeducted: 0 };
+  }
+
+  if (!event) {
+    return { eligible: false, error: "Data event tidak ditemukan.", calculatedRefundAmount: 0, feeDeducted: 0 };
+  }
+
+  // Must be paid
+  if (booking.paymentStatus !== "PAID") {
+    return {
+      eligible: false,
+      error: `Hanya tiket berstatus LUNAS (PAID) yang dapat diajukan refund (status saat ini: ${booking.paymentStatus}).`,
+      calculatedRefundAmount: 0,
+      feeDeducted: 0,
+    };
+  }
+
+  // Cannot refund free or complimentary tickets
+  if (
+    booking.isInvitation ||
+    booking.paymentMethod === "INVITATION" ||
+    booking.paymentMethod === "FREE" ||
+    (booking.totalPrice || 0) <= 0
+  ) {
+    return {
+      eligible: false,
+      error: "Tiket gratis atau tiket undangan tidak memenuhi syarat pengembalian dana (refund).",
+      calculatedRefundAmount: 0,
+      feeDeducted: 0,
+    };
+  }
+
+  // Cannot refund if already checked in (in whole or in part)
+  const checkedInQty = typeof booking.checkedInQty === "number" ? booking.checkedInQty : 0;
+  const hasCheckedInSeats = Array.isArray(booking.checkedInSeats) && booking.checkedInSeats.length > 0;
+  if (
+    booking.checkInStatus === "CHECKED_IN" ||
+    booking.checkInStatus === "PARTIALLY_CHECKED_IN" ||
+    checkedInQty > 0 ||
+    hasCheckedInSeats
+  ) {
+    return {
+      eligible: false,
+      error: "Tiket yang sudah digunakan untuk check-in tidak dapat dibatalkan atau di-refund.",
+      calculatedRefundAmount: 0,
+      feeDeducted: 0,
+    };
+  }
+
+  // Cannot refund if already refunded
+  if (booking.refundStatus === "APPROVED") {
+    return {
+      eligible: false,
+      error: "Tiket ini sudah berhasil di-refund sebelumnya.",
+      calculatedRefundAmount: 0,
+      feeDeducted: 0,
+    };
+  }
+
+  // Cannot submit new request if already requested and pending review
+  if (booking.refundStatus === "REQUESTED") {
+    return {
+      eligible: false,
+      error: "Pengajuan refund untuk tiket ini sedang menunggu proses verifikasi oleh admin.",
+      calculatedRefundAmount: 0,
+      feeDeducted: 0,
+    };
+  }
+
+  // Check event refund policy
+  const policy: EventRefundPolicy = event.refundPolicy || { policyType: "NO_REFUND" };
+  if (policy.policyType === "NO_REFUND") {
+    return {
+      eligible: false,
+      error: "Penyelenggara memberlakukan kebijakan tidak dapat dibatalkan atau di-refund (No Refund) untuk event ini.",
+      calculatedRefundAmount: 0,
+      feeDeducted: 0,
+    };
+  }
+
+  if (policy.policyType === "REFUNDABLE_UNTIL_H_MINUS") {
+    const hMinusDays = Math.max(0, policy.hMinusDays || 0);
+    const startMs = new Date(event.startDate).getTime();
+    const deadlineMs = startMs - (hMinusDays * 24 * 60 * 60 * 1000);
+    const deadlineDate = new Date(deadlineMs);
+    const reqMs = requestDate.getTime();
+
+    if (reqMs > deadlineMs) {
+      const deadlineStr = deadlineDate.toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone: "Asia/Makassar",
+      });
+      return {
+        eligible: false,
+        error: `Batas waktu pengajuan refund untuk event ini telah berakhir pada ${deadlineStr} (kebijakan maksimal H-${hMinusDays} sebelum event dimulai).`,
+        calculatedRefundAmount: 0,
+        feeDeducted: 0,
+        deadlineDate,
+      };
+    }
+
+    // Calculate refund nominal
+    const feePercent = Math.min(100, Math.max(0, policy.refundFeePercent || 0));
+    const feeDeducted = Math.round((booking.totalPrice * feePercent) / 100);
+    const calculatedRefundAmount = Math.max(0, booking.totalPrice - feeDeducted);
+
+    return {
+      eligible: true,
+      calculatedRefundAmount,
+      feeDeducted,
+      deadlineDate,
+    };
+  }
+
+  return {
+    eligible: false,
+    error: "Kebijakan refund event tidak dikenal.",
+    calculatedRefundAmount: 0,
+    feeDeducted: 0,
+  };
+}
+
+/**
+ * Attendee requests ticket refund. Validates eligibility, records refund payload,
+ * and sets status to REQUESTED.
+ */
+export async function requestTicketRefund(
+  bookingIdentifier: string,
+  payload: RequestRefundPayload
+): Promise<EventTicketOrder> {
+  if (!bookingIdentifier || bookingIdentifier.trim() === "") {
+    throw new Error("Identitas tiket atau booking ID wajib disertakan.");
+  }
+
+  if (!payload.reason || payload.reason.trim().length < 5) {
+    throw new Error("Alasan pengajuan refund wajib diisi (minimal 5 karakter).");
+  }
+
+  if (!payload.bankName || payload.bankName.trim() === "") {
+    throw new Error("Nama bank/e-wallet tujuan transfer pengembalian dana wajib diisi.");
+  }
+
+  if (!payload.accountNumber || payload.accountNumber.trim().length < 4) {
+    throw new Error("Nomor rekening tujuan transfer pengembalian dana wajib diisi.");
+  }
+
+  if (!payload.accountHolder || payload.accountHolder.trim().length < 2) {
+    throw new Error("Nama pemilik rekening tujuan transfer pengembalian dana wajib diisi.");
+  }
+
+  return withBookingLock(async () => {
+    const normalizedId = bookingIdentifier.trim();
+    const normalizedUpper = normalizedId.toUpperCase();
+
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
+    await syncStorageFromDb("events.json").catch(() => {});
+    const initialBookings = loadBookingsFromDisk();
+    const targetBooking = initialBookings.find(
+      (b) =>
+        b.id === normalizedId ||
+        b.guestToken === normalizedId ||
+        (b.ticketCode && b.ticketCode.trim().toUpperCase() === normalizedUpper)
+    );
+
+    if (!targetBooking) {
+      throw new Error(`Data pemesanan tiket dengan kode atau ID [${bookingIdentifier}] tidak ditemukan.`);
+    }
+
+    let committedOrder: EventTicketOrder | null = null;
+    let committedBookingsList: EventTicketOrder[] | null = null;
+
+    await runWithDistributedEventLock(targetBooking.eventId, async (tx) => {
+      const allBookings: EventTicketOrder[] = await loadBookingsFromTxOrDisk(tx);
+      const allEvents: CommunityEvent[] = await loadEventsFromTxOrDisk(tx);
+
+      const bIndex = allBookings.findIndex(
+        (b) =>
+          b.id === normalizedId ||
+          b.guestToken === normalizedId ||
+          (b.ticketCode && b.ticketCode.trim().toUpperCase() === normalizedUpper)
+      );
+
+      if (bIndex === -1) {
+        throw new Error(`Data pemesanan tiket [${bookingIdentifier}] tidak ditemukan.`);
+      }
+
+      const currentBooking = allBookings[bIndex];
+      const event = allEvents.find((e) => e.id === currentBooking.eventId);
+      if (!event) {
+        throw new Error(`Event terkait pemesanan [${currentBooking.eventId}] tidak ditemukan.`);
+      }
+
+      const eligibility = validateTicketRefundEligibility(event, currentBooking, new Date());
+      if (!eligibility.eligible) {
+        throw new Error(eligibility.error || "Pemesanan tiket tidak memenuhi syarat untuk diajukan refund.");
+      }
+
+      const refundReq: TicketRefundRequest = {
+        requestedAt: new Date().toISOString(),
+        reason: sanitizeHtmlText(payload.reason.trim()),
+        bankName: sanitizeHtmlText(payload.bankName.trim().toUpperCase()),
+        accountNumber: sanitizeHtmlText(payload.accountNumber.trim()),
+        accountHolder: sanitizeHtmlText(payload.accountHolder.trim()),
+        refundAmount: eligibility.calculatedRefundAmount,
+        status: "REQUESTED",
+      };
+
+      currentBooking.refundStatus = "REQUESTED";
+      currentBooking.refundRequest = refundReq;
+      currentBooking.updatedAt = new Date().toISOString();
+
+      allBookings[bIndex] = currentBooking;
+      await saveBookingsToDisk(allBookings, { tx });
+
+      committedOrder = currentBooking;
+      committedBookingsList = allBookings;
+    });
+
+    if (committedBookingsList) {
+      syncBookingsToLocalDiskAndCache(committedBookingsList, Date.now());
+      markStorageSyncSynced("event_bookings.json");
+    }
+
+    if (!committedOrder) {
+      throw new Error("Gagal menyimpan pengajuan refund tiket.");
+    }
+
+    return committedOrder;
+  });
+}
+
+/**
+ * Admin processes ticket refund.
+ * If APPROVE: marks booking as REFUNDED, freeing capacity for tier and event.
+ * If REJECT: records rejection reason and restores booking to normal PAID status.
+ */
+export async function adminProcessTicketRefund(
+  bookingId: string,
+  payload: ProcessRefundPayload,
+  adminEmail: string = "admin@dagoeng.com"
+): Promise<EventTicketOrder> {
+  if (!bookingId || bookingId.trim() === "") {
+    throw new Error("ID pemesanan tiket wajib disertakan.");
+  }
+
+  if (!payload.decision || (payload.decision !== "APPROVE" && payload.decision !== "REJECT")) {
+    throw new Error("Keputusan refund tidak valid (harus APPROVE atau REJECT).");
+  }
+
+  if (payload.decision === "REJECT" && (!payload.rejectionReason || payload.rejectionReason.trim().length < 5)) {
+    throw new Error("Alasan penolakan refund wajib diisi (minimal 5 karakter).");
+  }
+
+  return withBookingLock(async () => {
+    const normalizedId = bookingId.trim();
+    await syncStorageFromDb("event_bookings.json").catch(() => {});
+    const initialBookings = loadBookingsFromDisk();
+    const targetBooking = initialBookings.find((b) => b.id === normalizedId);
+
+    if (!targetBooking) {
+      throw new Error(`Data pemesanan tiket dengan ID [${bookingId}] tidak ditemukan.`);
+    }
+
+    let committedOrder: EventTicketOrder | null = null;
+    let committedBookingsList: EventTicketOrder[] | null = null;
+
+    await runWithDistributedEventLock(targetBooking.eventId, async (tx) => {
+      const allBookings: EventTicketOrder[] = await loadBookingsFromTxOrDisk(tx);
+      const bIndex = allBookings.findIndex((b) => b.id === normalizedId);
+      if (bIndex === -1) {
+        throw new Error(`Pemesanan tiket [${bookingId}] tidak ditemukan.`);
+      }
+
+      const booking = allBookings[bIndex];
+      if (booking.refundStatus !== "REQUESTED" || !booking.refundRequest) {
+        throw new Error(
+          `Pemesanan tiket ini tidak memiliki pengajuan refund aktif yang berstatus REQUESTED (status refund saat ini: ${booking.refundStatus || "NONE"}).`
+        );
+      }
+
+      const nowIso = new Date().toISOString();
+      if (payload.decision === "APPROVE") {
+        booking.refundStatus = "APPROVED";
+        booking.paymentStatus = "REFUNDED";
+        booking.refundRequest.status = "APPROVED";
+        booking.refundRequest.processedAt = nowIso;
+        booking.refundRequest.processedBy = adminEmail;
+        booking.refundRequest.adminNote = payload.adminNotes
+          ? sanitizeHtmlText(payload.adminNotes)
+          : "Refund telah disetujui dan diproses oleh admin.";
+      } else {
+        booking.refundStatus = "REJECTED";
+        booking.refundRequest.status = "REJECTED";
+        booking.refundRequest.processedAt = nowIso;
+        booking.refundRequest.processedBy = adminEmail;
+        booking.refundRequest.rejectionReason = sanitizeHtmlText(payload.rejectionReason!.trim());
+        booking.refundRequest.adminNote = payload.adminNotes ? sanitizeHtmlText(payload.adminNotes) : null;
+      }
+
+      booking.updatedAt = nowIso;
+      allBookings[bIndex] = booking;
+      await saveBookingsToDisk(allBookings, { tx });
+
+      committedOrder = booking;
+      committedBookingsList = allBookings;
+    });
+
+    if (committedBookingsList) {
+      syncBookingsToLocalDiskAndCache(committedBookingsList, Date.now());
+      markStorageSyncSynced("event_bookings.json");
+    }
+
+    if (!committedOrder) {
+      throw new Error("Gagal memperbarui status refund tiket.");
+    }
+
+    return committedOrder;
+  });
+}
+
+/**
+ * Retrieves refund booking requests for admin review.
+ */
+export async function getAdminRefundBookings(options?: {
+  eventId?: string;
+  status?: TicketRefundStatus;
+}): Promise<EventTicketOrder[]> {
+  await syncStorageFromDb("event_bookings.json").catch(() => {});
+  const allBookings = loadBookingsFromDisk();
+  return allBookings.filter((b) => {
+    if (options?.eventId && b.eventId !== options.eventId) return false;
+    if (options?.status) {
+      return b.refundStatus === options.status;
+    }
+    return Boolean(b.refundStatus && b.refundStatus !== "NONE");
+  });
+}
+
+/**
  * Validates ticket booking input against business rules.
  */
 export function validateEventBooking(
@@ -3974,6 +4347,25 @@ export async function updateBookingCheckIn(
               (options?.incrementQty ?? 0) > 0)
           ) {
             throw new Error("Tiket dengan status EXPIRED tidak dapat digunakan untuk check-in.");
+          }
+
+          // 8b. Tolak check-in jika tiket berstatus REFUNDED atau dalam proses pengajuan refund
+          if (
+            (existing.paymentStatus === "REFUNDED" || existing.refundStatus === "APPROVED") &&
+            (status === "CHECKED_IN" ||
+              status === "PARTIALLY_CHECKED_IN" ||
+              (options?.incrementQty ?? 0) > 0)
+          ) {
+            throw new Error("Tiket dengan status REFUNDED tidak dapat digunakan untuk check-in.");
+          }
+
+          if (
+            existing.refundStatus === "REQUESTED" &&
+            (status === "CHECKED_IN" ||
+              status === "PARTIALLY_CHECKED_IN" ||
+              (options?.incrementQty ?? 0) > 0)
+          ) {
+            throw new Error("Tiket sedang dalam proses pengajuan refund dan tidak dapat digunakan untuk check-in.");
           }
 
           // 9. Tolak check-in jika tiket berstatus PENDING

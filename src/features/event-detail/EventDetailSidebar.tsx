@@ -194,6 +194,19 @@ export function EventDetailSidebar({
             <CheckCircle2 className="size-3.5 text-success shrink-0" />
             <span>QR code check-in resmi Dago Creative Hub</span>
           </div>
+          <div className="pt-2 border-t text-xs space-y-1">
+            <span className="font-medium text-foreground block">Ketentuan Refund:</span>
+            {event.refundPolicy?.policyType === "REFUNDABLE_UNTIL_H_MINUS" ? (
+              <span className="text-muted-foreground block leading-relaxed">
+                Dapat dibatalkan hingga H-{event.refundPolicy.hMinusDays ?? 0} sebelum event dimulai
+                {Boolean(event.refundPolicy.refundFeePercent) && ` (potongan biaya ${event.refundPolicy.refundFeePercent}%)`}.
+              </span>
+            ) : (
+              <span className="text-muted-foreground block leading-relaxed">
+                Event ini memberlakukan kebijakan tidak dapat dibatalkan atau di-refund (No Refund).
+              </span>
+            )}
+          </div>
           <div className="pt-2 border-t text-center">
             <Link
               href="/events/tickets/recovery"

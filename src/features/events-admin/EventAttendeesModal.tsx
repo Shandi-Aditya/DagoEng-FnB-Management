@@ -236,8 +236,28 @@ export function EventAttendeesModal({
                         </TableCell>
 
                         <TableCell className="hidden md:table-cell">
-                          <Badge variant={b.isInvitation || b.paymentMethod === "INVITATION" ? "outline" : b.paymentStatus === "PAID" ? "default" : "secondary"}>
-                            {b.isInvitation || b.paymentMethod === "INVITATION" ? "Undangan" : b.paymentStatus === "PAID" ? "Lunas" : "Menunggu"}
+                          <Badge
+                            variant={
+                              b.paymentStatus === "REFUNDED"
+                                ? "destructive"
+                                : b.refundStatus === "REQUESTED"
+                                ? "secondary"
+                                : b.isInvitation || b.paymentMethod === "INVITATION"
+                                ? "outline"
+                                : b.paymentStatus === "PAID"
+                                ? "default"
+                                : "secondary"
+                            }
+                          >
+                            {b.paymentStatus === "REFUNDED"
+                              ? "Refunded"
+                              : b.refundStatus === "REQUESTED"
+                              ? "Refund Req"
+                              : b.isInvitation || b.paymentMethod === "INVITATION"
+                              ? "Undangan"
+                              : b.paymentStatus === "PAID"
+                              ? "Lunas"
+                              : "Menunggu"}
                           </Badge>
                         </TableCell>
 
@@ -252,7 +272,12 @@ export function EventAttendeesModal({
                             variant={isCheckedIn ? "outline" : "default"}
                             size="sm"
                             onClick={() => onToggleCheckIn(b)}
-                            disabled={isUpdating || b.paymentStatus === "CANCELLED"}
+                            disabled={
+                              isUpdating ||
+                              b.paymentStatus === "CANCELLED" ||
+                              b.paymentStatus === "REFUNDED" ||
+                              b.refundStatus === "REQUESTED"
+                            }
                           >
                             {isCheckedIn ? (
                               <>

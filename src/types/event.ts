@@ -41,6 +41,44 @@ export interface EventTicketTierAvailability {
 
 export type PromoDiscountType = "PERCENT" | "NOMINAL";
 
+export type EventRefundPolicyType = "NO_REFUND" | "REFUNDABLE_UNTIL_H_MINUS";
+
+export interface EventRefundPolicy {
+  policyType: EventRefundPolicyType;
+  hMinusDays?: number; // e.g. 3 for H-3 (refund allowed until 3 days before event start)
+  refundFeePercent?: number; // admin fee deducted in percent (0 to 100)
+  description?: string;
+}
+
+export type TicketRefundStatus = "NONE" | "REQUESTED" | "APPROVED" | "REJECTED";
+
+export interface TicketRefundRequest {
+  requestedAt: string;
+  reason: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+  refundAmount: number;
+  status: TicketRefundStatus;
+  processedAt?: string | null;
+  processedBy?: string | null;
+  adminNote?: string | null;
+  rejectionReason?: string | null;
+}
+
+export interface RequestRefundPayload {
+  reason: string;
+  bankName: string;
+  accountNumber: string;
+  accountHolder: string;
+}
+
+export interface ProcessRefundPayload {
+  decision: "APPROVE" | "REJECT";
+  adminNotes?: string;
+  rejectionReason?: string;
+}
+
 export interface EventPromoCode {
   id: string;
   eventId: string;
@@ -89,6 +127,7 @@ export interface CommunityEvent {
   destinationBankId?: string | null; // Override rekening bank tujuan khusus event
   ticketTiers?: EventTicketTier[];
   promoCodes?: EventPromoCode[];
+  refundPolicy?: EventRefundPolicy;
 
   // Collaboration requirements
   collaborationFacilities?: string[] | string | null;
@@ -206,6 +245,7 @@ export interface PublicCommunityEvent {
   ticketTiers?: EventTicketTier[];
   tierAvailability?: EventTicketTierAvailability[];
   promoCodes?: Pick<EventPromoCode, "code" | "discountType" | "discountValue" | "maxDiscountAmount" | "minOrderAmount" | "validFrom" | "validUntil" | "isActive" | "applicableTierIds">[];
+  refundPolicy?: EventRefundPolicy;
   availability?: EventTicketAvailability;
   createdAt: string;
 }
@@ -226,6 +266,7 @@ export interface EventSubmissionPayload {
   isPaid: boolean;
   price?: number;
   ticketTiers?: EventTicketTier[];
+  refundPolicy?: EventRefundPolicy;
   posterUrl: string;
   externalRegistrationUrl?: string;
   guidelines?: string[] | string | null;
@@ -244,7 +285,7 @@ export interface EventSubmissionPayload {
 }
 
 export type TicketPaymentMethod = "FREE" | "QRIS" | "CASH" | "TRANSFER" | "DOKU_CHECKOUT" | "MANUAL_TRANSFER" | "INVITATION";
-export type TicketPaymentStatus = "PAID" | "PENDING" | "CANCELLED" | "EXPIRED";
+export type TicketPaymentStatus = "PAID" | "PENDING" | "CANCELLED" | "EXPIRED" | "REFUNDED";
 export type AttendeeCheckInStatus = "REGISTERED" | "PARTIALLY_CHECKED_IN" | "CHECKED_IN";
 
 export type EventBankAccountType = "PLATFORM" | "EVENT_OVERRIDE" | "ORGANIZER";
@@ -317,6 +358,8 @@ export interface EventTicketOrder {
   promoCode?: string | null;
   isInvitation?: boolean;
   invitationNote?: string | null;
+  refundStatus?: TicketRefundStatus;
+  refundRequest?: TicketRefundRequest;
   platformFeePercent: number; // e.g. 20%
   platformFeeAmount: number;
   organizerRevenueAmount: number;

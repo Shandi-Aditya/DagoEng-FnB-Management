@@ -77,8 +77,25 @@ export function EventTicketPassDialog({
             <DialogTitle className="text-base font-medium">
               E-Tiket Acara Komunitas
             </DialogTitle>
-            <Badge variant={isPaid ? "default" : "secondary"} className="text-xs">
-              {ticket.isInvitation || ticket.paymentMethod === "INVITATION"
+            <Badge
+              variant={
+                ticket.paymentStatus === "REFUNDED"
+                  ? "destructive"
+                  : ticket.refundStatus === "REQUESTED"
+                  ? "secondary"
+                  : ticket.isInvitation || ticket.paymentMethod === "INVITATION"
+                  ? "outline"
+                  : isPaid
+                  ? "default"
+                  : "secondary"
+              }
+              className="text-xs"
+            >
+              {ticket.paymentStatus === "REFUNDED"
+                ? "Di-refund"
+                : ticket.refundStatus === "REQUESTED"
+                ? "Pengajuan Refund"
+                : ticket.isInvitation || ticket.paymentMethod === "INVITATION"
                 ? "Tiket Undangan"
                 : isPaid
                 ? "Lunas"
@@ -150,8 +167,27 @@ export function EventTicketPassDialog({
             </div>
           </div>
 
+          {/* Refund Notice */}
+          {ticket.refundStatus === "REQUESTED" && (
+            <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs text-warning space-y-0.5">
+              <span className="font-medium block">Pengajuan Refund Sedang Diproses</span>
+              <p className="text-muted-foreground leading-relaxed">
+                Pengembalian dana sebesar {formatCurrencyIDR(ticket.refundRequest?.refundAmount || ticket.totalPrice)} sedang menunggu proses oleh admin.
+              </p>
+            </div>
+          )}
+
+          {ticket.paymentStatus === "REFUNDED" && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive space-y-0.5">
+              <span className="font-medium block">Tiket Telah Di-refund</span>
+              <p className="text-muted-foreground leading-relaxed">
+                Tiket ini telah dibatalkan dan dananya telah disetujui untuk dikembalikan. Tiket tidak dapat digunakan untuk check-in.
+              </p>
+            </div>
+          )}
+
           {/* QR Code Container */}
-          {isPaid ? (
+          {isPaid && ticket.paymentStatus !== "REFUNDED" ? (
             <div
               id="event-detail-ticket-qr"
               className="rounded-lg border bg-muted/30 p-4 flex flex-col items-center justify-center gap-3 text-center"
