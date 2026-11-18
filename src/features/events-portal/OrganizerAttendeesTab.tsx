@@ -186,6 +186,7 @@ export function OrganizerAttendeesTab({
                   <TableHead>Kode tiket</TableHead>
                   <TableHead>Peserta & kontak</TableHead>
                   <TableHead className="hidden md:table-cell">Event</TableHead>
+                  <TableHead className="hidden lg:table-cell">Jenis tiket</TableHead>
                   <TableHead className="hidden sm:table-cell text-center">Jumlah</TableHead>
                   <TableHead className="text-center">Status bayar</TableHead>
                   <TableHead className="text-center">Kehadiran</TableHead>
@@ -260,6 +261,12 @@ export function OrganizerAttendeesTab({
                           {b.eventTitle || "—"}
                         </TableCell>
 
+                        <TableCell className="hidden lg:table-cell">
+                          <span className="text-xs font-medium text-foreground">
+                            {b.ticketTierName || (b.isInvitation ? "Tiket Undangan" : "Standar")}
+                          </span>
+                        </TableCell>
+
                         <TableCell className="hidden sm:table-cell text-center font-mono tabular-nums">
                           {b.ticketCount} orang
                         </TableCell>
@@ -288,7 +295,7 @@ export function OrganizerAttendeesTab({
                       {/* Expandable breakdown for multi-seat tickets */}
                       {isExpanded && (
                         <TableRow className="bg-muted/30">
-                          <TableCell colSpan={6} className="p-3 text-xs">
+                          <TableCell colSpan={7} className="p-3 text-xs">
                             <div className="rounded-md border bg-card p-3 space-y-2">
                               <div className="flex items-center justify-between font-medium">
                                 <span>Rincian Tiket Pesanan ({b.ticketCount} Tiket)</span>

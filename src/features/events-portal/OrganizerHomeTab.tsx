@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { ArrowRight, CalendarDays, MapPin, ScanLine } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { StatCard } from "@/components/app/stat-card";
@@ -14,6 +15,7 @@ import { formatCurrencyIDR } from "@/lib/utils";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 import {
   calculateEventOccupancy,
+  calculateEventSalesSummary,
   formatDateSafe,
   paymentStatusLabel,
   paymentStatusTone,
@@ -67,6 +69,11 @@ export function OrganizerHomeTab({
     () => [...bookings].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, RECENT_TICKETS),
     [bookings],
   );
+
+  const nextEventSales = useMemo(() => {
+    if (!nextEvent) return null;
+    return calculateEventSalesSummary(nextEvent, bookings);
+  }, [nextEvent, bookings]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -144,6 +151,66 @@ export function OrganizerHomeTab({
           }
         />
       </div>
+
+      {nextEvent && nextEventSales ? (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div className="space-y-0.5">
+              <CardTitle>Penjualan tiket per jenis</CardTitle>
+              <CardDescription>
+                Rincian kuota dan pendapatan tiket untuk event &quot;{nextEvent.title}&quot;.
+              </CardDescription>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => onSelectEvent(nextEvent)}>
+              Rincian event
+              <ArrowRight />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="pb-2 font-medium">Jenis Tiket</th>
+                    <th className="pb-2 font-medium">Harga</th>
+                    <th className="pb-2 text-center font-medium">Terjual</th>
+                    <th className="pb-2 text-center font-medium">Sisa Kuota</th>
+                    <th className="pb-2 text-right font-medium">Omzet</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {nextEventSales.tierBreakdown.map((t) => (
+                    <tr key={t.tierId} className="py-2.5">
+                      <td className="py-2.5 font-medium text-foreground">
+                        <div className="flex items-center gap-1.5">
+                          <span>{t.tierName}</span>
+                          {t.isSoldOut ? (
+                            <Badge variant="secondary" className="px-1.5 py-0 text-xs">
+                              Habis
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="py-2.5 font-mono text-muted-foreground">
+                        {t.price > 0 ? formatCurrencyIDR(t.price) : "Gratis"}
+                      </td>
+                      <td className="py-2.5 text-center font-mono tabular-nums text-foreground">
+                        {t.soldCount} tiket
+                      </td>
+                      <td className="py-2.5 text-center font-mono tabular-nums text-muted-foreground">
+                        {t.remainingQuota} tiket
+                      </td>
+                      <td className="py-2.5 text-right font-mono font-medium tabular-nums text-foreground">
+                        {t.revenue > 0 ? formatCurrencyIDR(t.revenue) : "0"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

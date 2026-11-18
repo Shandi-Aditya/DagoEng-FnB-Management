@@ -509,6 +509,7 @@ export default function CommunityOrganizerPortalPage() {
     const headers = [
       "Kode Tiket",
       "Nama Event",
+      "Jenis Tiket",
       "Nama Peserta",
       "No HP",
       "Instansi",
@@ -520,6 +521,7 @@ export default function CommunityOrganizerPortalPage() {
     const rows = rowsToExport.map((b) => [
       b.ticketCode,
       b.eventTitle || "—",
+      b.ticketTierName || (b.isInvitation ? "Tiket Undangan" : "Standar"),
       b.guestName,
       b.guestPhone || "—",
       b.institution || "—",

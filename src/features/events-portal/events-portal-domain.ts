@@ -107,11 +107,14 @@ export function calculateOrganizerEventMetrics(
     (e) => e.status === "PENDING" || e.status === "REVISION_REQUESTED"
   ).length;
 
-  const paidBookings = bookings.filter((b) => b.paymentStatus === "PAID");
+  const eventIds = new Set(events.map((e) => e.id));
+  const paidBookings = bookings.filter(
+    (b) => b.paymentStatus === "PAID" && (eventIds.size === 0 || eventIds.has(b.eventId))
+  );
   const totalAttendees = paidBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
   const grossRevenue = paidBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
   const organizerEarnings = paidBookings.reduce(
-    (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round(b.totalPrice * 0.8)),
+    (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round((b.totalPrice || 0) * 0.8)),
     0
   );
 
@@ -225,6 +228,7 @@ export function buildAttendeesExportRows(
   return bookings.map((b) => [
     b.ticketCode,
     b.eventTitle || "—",
+    b.ticketTierName || (b.isInvitation ? "Tiket Undangan" : "Standar"),
     b.guestName,
     b.guestPhone || "—",
     b.institution || "—",
@@ -237,4 +241,140 @@ export function buildAttendeesExportRows(
     b.checkInStatus === "CHECKED_IN" ? "Hadir" : "Belum hadir",
     b.checkInTime ? new Date(b.checkInTime).toLocaleString("id-ID") : "—",
   ]);
+}
+
+export interface EventTierSalesStats {
+  tierId: string;
+  tierName: string;
+  price: number;
+  quota: number;
+  soldCount: number;
+  remainingQuota: number;
+  revenue: number;
+  organizerRevenue: number;
+  isSoldOut: boolean;
+}
+
+export interface EventSalesSummary {
+  eventId: string;
+  eventTitle: string;
+  totalCapacity: number;
+  totalTicketsSold: number;
+  remainingCapacity: number;
+  occupancyRate: number;
+  totalRevenue: number;
+  organizerEarnings: number;
+  tierBreakdown: EventTierSalesStats[];
+  attendeeCount: number;
+  isSoldOut: boolean;
+}
+
+/**
+ * Menghitung ringkasan performa penjualan tiket per jenis (tier) dan sisa kuota event.
+ */
+export function calculateEventSalesSummary(
+  event: CommunityEvent,
+  bookings: readonly EventTicketOrder[]
+): EventSalesSummary {
+  const eventBookings = bookings.filter((b) => b.eventId === event.id);
+  const paidBookings = eventBookings.filter((b) => b.paymentStatus === "PAID");
+
+  const totalTicketsSold = paidBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+  const totalRevenue = paidBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+  const organizerEarnings = paidBookings.reduce(
+    (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round((b.totalPrice || 0) * 0.8)),
+    0
+  );
+
+  let totalCapacity = 0;
+  if (event.ticketTiers && event.ticketTiers.length > 0) {
+    totalCapacity = event.ticketTiers.reduce((sum, t) => sum + (t.quota || 0), 0);
+  } else if (typeof event.maxCapacity === "number" && event.maxCapacity > 0) {
+    totalCapacity = event.maxCapacity;
+  } else {
+    const capacityRes = resolveVenueCapacity(event);
+    totalCapacity = capacityRes.capacity || 0;
+  }
+
+  const remainingCapacity = Math.max(0, totalCapacity - totalTicketsSold);
+  const occupancyRate =
+    totalCapacity > 0 ? Math.min(100, Math.round((totalTicketsSold / totalCapacity) * 100)) : 0;
+
+  const tierBreakdown: EventTierSalesStats[] = [];
+
+  if (event.ticketTiers && event.ticketTiers.length > 0) {
+    const knownTierIds = new Set(event.ticketTiers.map((t) => t.id));
+
+    for (const tier of event.ticketTiers) {
+      const tierBookings = paidBookings.filter((b) => b.ticketTierId === tier.id);
+      const soldCount = tierBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+      const remainingQuota = Math.max(0, (tier.quota || 0) - soldCount);
+      const revenue = tierBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+      const organizerRevenue = tierBookings.reduce(
+        (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round((b.totalPrice || 0) * 0.8)),
+        0
+      );
+      const isSoldOut = tier.quota > 0 && soldCount >= tier.quota;
+
+      tierBreakdown.push({
+        tierId: tier.id,
+        tierName: tier.name,
+        price: tier.price,
+        quota: tier.quota,
+        soldCount,
+        remainingQuota,
+        revenue,
+        organizerRevenue,
+        isSoldOut,
+      });
+    }
+
+    const nonTierBookings = paidBookings.filter((b) => !b.ticketTierId || !knownTierIds.has(b.ticketTierId));
+    if (nonTierBookings.length > 0) {
+      const soldCount = nonTierBookings.reduce((sum, b) => sum + (b.ticketCount || 1), 0);
+      const revenue = nonTierBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+      const organizerRevenue = nonTierBookings.reduce(
+        (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round((b.totalPrice || 0) * 0.8)),
+        0
+      );
+      tierBreakdown.push({
+        tierId: "other",
+        tierName: nonTierBookings.some((b) => b.isInvitation) ? "Tiket Undangan" : "Standar / Lainnya",
+        price: 0,
+        quota: soldCount,
+        soldCount,
+        remainingQuota: 0,
+        revenue,
+        organizerRevenue,
+        isSoldOut: true,
+      });
+    }
+  } else {
+    const isFree = !event.isPaid || event.price === 0;
+    tierBreakdown.push({
+      tierId: "default",
+      tierName: isFree ? "Tiket Masuk (Gratis)" : "Tiket Masuk (Reguler)",
+      price: event.price || 0,
+      quota: totalCapacity,
+      soldCount: totalTicketsSold,
+      remainingQuota: remainingCapacity,
+      revenue: totalRevenue,
+      organizerRevenue: organizerEarnings,
+      isSoldOut: totalCapacity > 0 && totalTicketsSold >= totalCapacity,
+    });
+  }
+
+  return {
+    eventId: event.id,
+    eventTitle: event.title,
+    totalCapacity,
+    totalTicketsSold,
+    remainingCapacity,
+    occupancyRate,
+    totalRevenue,
+    organizerEarnings,
+    tierBreakdown,
+    attendeeCount: paidBookings.length,
+    isSoldOut: totalCapacity > 0 && totalTicketsSold >= totalCapacity,
+  };
 }

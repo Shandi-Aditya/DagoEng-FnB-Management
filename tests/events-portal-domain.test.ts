@@ -208,9 +208,10 @@ describe("events-portal-domain", () => {
     expect(rows).toHaveLength(4);
     expect(rows[0][0]).toBe("DAGO-EVT-001");
     expect(rows[0][1]).toBe("Latte Art Workshop");
-    expect(rows[0][2]).toBe("Budi Santoso");
-    expect(rows[0][6]).toBe("Lunas");
-    expect(rows[0][7]).toBe("Hadir");
+    expect(rows[0][2]).toBe("Standar");
+    expect(rows[0][3]).toBe("Budi Santoso");
+    expect(rows[0][7]).toBe("Lunas");
+    expect(rows[0][8]).toBe("Hadir");
   });
 
   it("re-exports or maps status labels and tones consistently with events-admin", () => {

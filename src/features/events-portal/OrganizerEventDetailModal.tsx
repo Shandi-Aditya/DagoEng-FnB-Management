@@ -26,6 +26,7 @@ import { formatCurrencyIDR } from "@/lib/utils";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 import {
   calculateEventOccupancy,
+  calculateEventSalesSummary,
   eventCategoryLabel,
   eventStatusLabel,
   eventStatusTone,
@@ -62,6 +63,7 @@ export function OrganizerEventDetailModal({
   const grossSales = paidBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
   const sharePercent = organizerSharePercent(event);
   const organizerShare = Math.round(grossSales * (sharePercent / 100));
+  const salesSummary = calculateEventSalesSummary(event, bookings);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -150,6 +152,59 @@ export function OrganizerEventDetailModal({
               </span>
             </div>
           </div>
+
+          {/* Ticket Tier Breakdown */}
+          {salesSummary.tierBreakdown.length > 0 && (
+            <div className="space-y-2 border-t pt-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-foreground block">Penjualan per Jenis Tiket</span>
+                <span className="text-xs text-muted-foreground">
+                  Sisa total: {salesSummary.remainingCapacity} dari {salesSummary.totalCapacity} tiket
+                </span>
+              </div>
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/40 text-muted-foreground">
+                    <tr className="border-b text-left">
+                      <th className="p-2 font-medium">Jenis Tiket</th>
+                      <th className="p-2 font-medium">Harga</th>
+                      <th className="p-2 font-medium text-center">Terjual</th>
+                      <th className="p-2 font-medium text-center">Sisa Kuota</th>
+                      <th className="p-2 font-medium text-right">Omzet</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {salesSummary.tierBreakdown.map((t) => (
+                      <tr key={t.tierId} className="hover:bg-muted/20">
+                        <td className="p-2 font-medium text-foreground">
+                          <div className="flex items-center gap-1.5">
+                            <span>{t.tierName}</span>
+                            {t.isSoldOut && (
+                              <Badge variant="secondary" className="px-1.5 py-0 text-xs">
+                                Habis
+                              </Badge>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-2 font-mono text-muted-foreground">
+                          {t.price > 0 ? formatCurrencyIDR(t.price) : "Gratis"}
+                        </td>
+                        <td className="p-2 text-center font-mono tabular-nums text-foreground">
+                          {t.soldCount}
+                        </td>
+                        <td className="p-2 text-center font-mono tabular-nums text-muted-foreground">
+                          {t.remainingQuota}
+                        </td>
+                        <td className="p-2 text-right font-mono tabular-nums font-medium text-foreground">
+                          {t.revenue > 0 ? formatCurrencyIDR(t.revenue) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* Schedule & Location */}
           <div className="space-y-2 border-t pt-3">
