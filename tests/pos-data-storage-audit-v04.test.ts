@@ -107,10 +107,32 @@ describe("Task V-04: Audit Penyimpanan Data (localStorage vs Server)", () => {
       "dago_organizer_email",
       "dago_my_event_tickets",
       "dagoeng_guest_identity_v1",
+      "dagoeng_cwk_plans_v1",
+      "dagoeng_simulated_tenant_addons_v1_scopes",
     ];
 
     for (const key of allCoreAndDeviceKeys) {
       expect(content).toContain(key);
+    }
+  });
+
+  it("7. Mencatat hasil akhir pasca-migrasi V-06 termasuk seluruh endpoint /api/sync/* dan /api/orders/self-order", () => {
+    const content = fs.readFileSync(docPath, "utf-8");
+    const syncedEndpoints = [
+      "/api/orders/self-order",
+      "/api/sync/platform-settings",
+      "/api/sync/tenants",
+      "/api/sync/wifi",
+      "/api/sync/subscription",
+      "/api/sync/printer-config",
+      "/api/sync/inventory",
+      "/api/sync/tables",
+      "/api/sync/coworking-master",
+      "/api/sync/commercial",
+    ];
+
+    for (const endpoint of syncedEndpoints) {
+      expect(content).toContain(endpoint);
     }
   });
 });
