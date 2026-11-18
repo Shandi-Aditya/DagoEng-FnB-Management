@@ -20,6 +20,7 @@ export interface TransactionExportParams {
   startDate?: Date | string;
   endDate?: Date | string;
   outletName?: string;
+  tenantId?: string;
   tenantSplits?: Record<string, { tenantSharePercent: number; dagoSharePercent: number }>;
 }
 
@@ -347,8 +348,9 @@ export async function buildTransactionTemplateWorkbook(
   // Pre-calculate items and merchant totals
   const tenantMapTotals = new Map<string, TenantShareSummaryRow>();
 
-  // Ensure default active tenants exist in summary map
-  const allTenants = getAllFnbTenants();
+  const allTenants = params.tenantId
+    ? getAllFnbTenants().filter((t) => t.id === params.tenantId)
+    : getAllFnbTenants();
   allTenants.forEach((t) => {
     const name = t.name || t.id;
     if (!tenantMapTotals.has(name)) {
@@ -396,14 +398,14 @@ export async function buildTransactionTemplateWorkbook(
       const qrisTotal = isQris ? Math.round(itemTotal * 0.007 * 100) / 100 : 0;
       const itemGrandTotal = itemTotal - qrisTotal;
 
-      const tenantId = resolveItemTenantId(item, (o as any).tenantId);
+      const tenantId = resolveItemTenantId(item, (o as { tenantId?: string }).tenantId);
       const tenantName = getTenantName(tenantId) || tenantId;
 
       const splitConfig = activeSplits[tenantId] || getTenantRevenueSplit(tenantId);
       const tenantSharePct =
-        tenantId === "DAGO_HUB" || tenantName.toLowerCase().includes("dago")
-          ? 70 // default Dago internal share
-          : splitConfig.tenantSharePercent ?? 70;
+        tenantId === "DAGO_HUB"
+          ? 0
+          : splitConfig.tenantSharePercent ?? 85;
       const dagoSharePct = 100 - tenantSharePct;
 
       const shareTenant = Math.round(itemGrandTotal * (tenantSharePct / 100) * 1000) / 1000;

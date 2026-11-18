@@ -154,6 +154,7 @@ function OrderDetailBody({
                   <span>Waktu refund</span>
                   <span className="font-mono tabular-nums">
                     {new Date(selectedOrder.refundedAt).toLocaleString("id-ID", {
+                      timeZone: "Asia/Makassar",
                       day: "2-digit",
                       month: "short",
                       year: "numeric",
@@ -188,6 +189,7 @@ function OrderDetailBody({
                   <span>Waktu pembatalan</span>
                   <span className="font-mono tabular-nums">
                     {new Date(selectedOrder.voidedAt).toLocaleString("id-ID", {
+                      timeZone: "Asia/Makassar",
                       day: "2-digit",
                       month: "short",
                       year: "numeric",
@@ -265,7 +267,11 @@ function OrderDetailBody({
                 <span className="flex items-baseline gap-2">
                   <span className="font-medium">{orderStatusLabel(step.toStatus as OrderRecord["status"])}</span>
                   <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                    {new Date(step.timestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                    {new Date(step.timestamp).toLocaleTimeString("id-ID", {
+                      timeZone: "Asia/Makassar",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </span>
                 </span>
                 {step.actorName ? <span className="text-xs text-muted-foreground">oleh {step.actorName}</span> : null}

@@ -28,7 +28,7 @@ import {
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
 import { soundChime } from "@/lib/audio-chime";
 import { isAddonActive } from "@/lib/subscription";
-import { DEFAULT_FNB_TENANTS } from "@/lib/tenant";
+import { getAllFnbTenants } from "@/lib/tenant";
 import type { OrderStatus } from "@/types/order";
 import type { KitchenTicketData } from "@/types/printer";
 
@@ -187,7 +187,7 @@ export default function KitchenKDSPage() {
             <Tabs value={selectedTenant} onValueChange={setSelectedTenant}>
               <TabsList>
                 <TabsTrigger value="ALL">Semua mitra</TabsTrigger>
-                {DEFAULT_FNB_TENANTS.map((t) => (
+                {getAllFnbTenants().map((t) => (
                   <TabsTrigger key={t.id} value={t.id}>
                     {t.name}
                   </TabsTrigger>
@@ -249,7 +249,7 @@ export default function KitchenKDSPage() {
                 <p className="rounded-lg border border-dashed py-10 text-center text-xs text-muted-foreground">Tidak ada tiket</p>
               ) : (
                 tickets.map((order, ticketIdx) => {
-                  const items = ticketItems(order, effectiveTenantId);
+                  const items = ticketItems(order, effectiveTenantId, isMultiStation ? station : "ALL");
                   const queueNumber = ticketIdx + 1;
                   return (
                     <KitchenTicketCard

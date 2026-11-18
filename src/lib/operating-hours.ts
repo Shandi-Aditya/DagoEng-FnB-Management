@@ -315,8 +315,23 @@ export function validateCoworkingBookingSchedule(
   }
 
   const normalizedType = (candidate.bookingType || "HOURLY").toUpperCase();
-  const isSingleDay = normalizedType === "HOURLY" || !endYmd || endYmd === startYmd;
-  if (isSingleDay && endYmd && endYmd !== startYmd) {
+  if (endYmd && endYmd < startYmd) {
+    return {
+      isValid: false,
+      reason: "Tanggal selesai tidak boleh mendahului tanggal mulai.",
+    };
+  }
+
+  if (normalizedType === "DAILY" && endYmd && endYmd !== startYmd) {
+    const rangeStatus = validateCoworkingDateRange(startYmd, endYmd, config);
+    if (!rangeStatus.isValid) {
+      const firstClosed = rangeStatus.closedDates[0];
+      return {
+        isValid: false,
+        reason: `Tanggal ${firstClosed.date} tidak dapat dibooking (${firstClosed.reason}). Co-working buka Senin sampai Jumat pukul 09:00–18:00 WITA.`,
+      };
+    }
+  } else if (normalizedType === "HOURLY" && endYmd && endYmd !== startYmd) {
     const endStatus = isCoworkingDateOpen(endYmd, config);
     if (!endStatus.isOpen) {
       return {
@@ -422,6 +437,7 @@ export function checkCoworkingBookingConflict(
     endDate?: string;
     startTime: string;
     endTime?: string;
+    maxCapacity?: number;
   }
 ): { hasConflict: boolean; conflictingBooking?: CoworkingBooking; message?: string } {
   const candStartYmd = normalizeDateToYMD(candidate.date);
@@ -429,26 +445,29 @@ export function checkCoworkingBookingConflict(
 
   const candStartMin = parseTimeToMinutes(candidate.startTime);
   const candEndMin = parseTimeToMinutes(candidate.endTime);
+  const allowedConcurrent = Math.max(1, candidate.maxCapacity ?? 1);
+  let overlappingCount = 0;
+  let firstOverlap: CoworkingBooking | undefined;
 
   for (const b of existingBookings) {
-    // Skip checking self
     if (candidate.id && b.id === candidate.id) continue;
 
-    // Skip cancelled bookings
-    if (b.checkInStatus === "CANCELLED" || (b as any).paymentStatus === "CANCELLED") continue;
+    if (
+      b.checkInStatus === "CANCELLED" ||
+      b.checkInStatus === "COMPLETED" ||
+      (b as { paymentStatus?: string }).paymentStatus === "CANCELLED"
+    ) {
+      continue;
+    }
 
-    // Must be the same workspace/space to conflict
     if (b.spaceId !== candidate.spaceId) continue;
 
     const bookStartYmd = normalizeDateToYMD(b.date);
     const bookEndYmd = b.endDate ? normalizeDateToYMD(b.endDate) : bookStartYmd;
 
-    // Check date interval overlap: !(candEndYmd < bookStartYmd || candStartYmd > bookEndYmd)
     const datesOverlap = !(candEndYmd < bookStartYmd || candStartYmd > bookEndYmd);
     if (!datesOverlap) continue;
 
-    // If dates overlap:
-    // Case 1: Both are single-day HOURLY bookings on the exact same date
     if (
       candidate.bookingType === "HOURLY" &&
       b.bookingType === "HOURLY" &&
@@ -465,31 +484,46 @@ export function checkCoworkingBookingConflict(
         bookStartMin !== null &&
         bookEndMin !== null
       ) {
-        // Standard interval collision: start1 < end2 && start2 < end1
-        // Note: strictly less than ensures consecutive slots (e.g. 10-12 and 12-14) do NOT conflict!
         const timesOverlap = candStartMin < bookEndMin && bookStartMin < candEndMin;
         if (timesOverlap) {
-          return {
-            hasConflict: true,
-            conflictingBooking: b,
-            message: `Jadwal bentrok: Workspace ${candidate.spaceName || b.spaceName} sudah dipesan oleh ${b.guestName} pada jam ${b.startTime} - ${b.endTime || "Selesai"} (Kode: ${b.bookingCode}).`,
-          };
+          overlappingCount += 1;
+          if (!firstOverlap) firstOverlap = b;
+          if (overlappingCount >= allowedConcurrent) {
+            return {
+              hasConflict: true,
+              conflictingBooking: firstOverlap,
+              message: `Jadwal bentrok: Workspace ${candidate.spaceName || firstOverlap.spaceName} sudah dipesan oleh ${firstOverlap.guestName} pada jam ${firstOverlap.startTime} - ${firstOverlap.endTime || "Selesai"} (Kode: ${firstOverlap.bookingCode}).`,
+            };
+          }
         }
-        // If times do not overlap, this booking is fine
         continue;
       }
     }
 
-    // Case 2: One or both are DAILY / MONTHLY or multi-day reservations
-    // Daily/Monthly booking reserves the workspace for the full operating hours of the overlapping dates
-    return {
-      hasConflict: true,
-      conflictingBooking: b,
-      message: `Jadwal bentrok: Workspace ${candidate.spaceName || b.spaceName} sudah memiliki reservasi aktif (${b.bookingType}) oleh ${b.guestName} pada rentang ${b.date}${b.endDate ? ` s/d ${b.endDate}` : ""} (Kode: ${b.bookingCode}).`,
-    };
+    overlappingCount += 1;
+    if (!firstOverlap) firstOverlap = b;
+    if (overlappingCount >= allowedConcurrent) {
+      return {
+        hasConflict: true,
+        conflictingBooking: firstOverlap,
+        message: `Jadwal bentrok: Workspace ${candidate.spaceName || firstOverlap.spaceName} sudah memiliki reservasi aktif (${firstOverlap.bookingType}) oleh ${firstOverlap.guestName} pada rentang ${firstOverlap.date}${firstOverlap.endDate ? ` s/d ${firstOverlap.endDate}` : ""} (Kode: ${firstOverlap.bookingCode}).`,
+      };
+    }
   }
 
   return { hasConflict: false };
+}
+
+function getWitaTotalMinutes(dateObj: Date): number {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Makassar",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(dateObj);
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? 0);
+  return hour * 60 + minute;
 }
 
 /**
@@ -542,11 +576,8 @@ export function isTenantAcceptingOrders(
     };
   }
 
-  // Check operating hours if configured
   if (config.openTime && config.closeTime) {
-    const curHours = currentDateObj.getHours();
-    const curMinutes = currentDateObj.getMinutes();
-    const curTotal = curHours * 60 + curMinutes;
+    const curTotal = getWitaTotalMinutes(currentDateObj);
 
     const openTotal = parseTimeToMinutes(config.openTime) ?? 0;
     const closeTotal = parseTimeToMinutes(config.closeTime) ?? 24 * 60;
@@ -563,9 +594,6 @@ export function isTenantAcceptingOrders(
   return { isOpen: true, reason: "Mitra buka dan menerima pesanan" };
 }
 
-/**
- * Checks if general service (F&B or Co-working) is within operating hours.
- */
 export function isServiceWithinHours(
   service: "fnb" | "coworking",
   operationalHours?: ServiceOperationalHours,
@@ -576,9 +604,7 @@ export function isServiceWithinHours(
     return { isOpen: false, reason: `Layanan ${service.toUpperCase()} sedang dinonaktifkan sementara` };
   }
 
-  const curHours = currentDateObj.getHours();
-  const curMinutes = currentDateObj.getMinutes();
-  const curTotal = curHours * 60 + curMinutes;
+  const curTotal = getWitaTotalMinutes(currentDateObj);
 
   const openTotal = parseTimeToMinutes(config.openTime) ?? 0;
   const closeTotal = parseTimeToMinutes(config.closeTime) ?? 24 * 60;

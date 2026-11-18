@@ -5,10 +5,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { notify } from "@/components/app/notify";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useInventory } from "@/contexts/InventoryContext";
 import { normalizeLoyaltyPhone, useLoyalty } from "@/contexts/LoyaltyContext";
 import { useOrders } from "@/contexts/OrderContext";
+import { useOutlet } from "@/contexts/OutletContext";
 import { usePrinter } from "@/contexts/PrinterContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useTables } from "@/contexts/TableContext";
@@ -40,6 +42,8 @@ import { RefundOrderModal } from "@/features/orders/RefundOrderModal";
 
 export default function OrdersPage() {
   const { user } = useAuth();
+  const { startDate, endDate } = useDateFilter();
+  const { activeOutletId, activeOutlet } = useOutlet();
   const { filteredOrders, advanceOrderStatus, refundOrder, voidOrder } = useOrders();
   const { deductOrderBOM, restoreOrderBOM, recordOrderWasteBOM } = useInventory();
   const { members, addPoints, reverseTransactionPoints } = useLoyalty();
@@ -100,7 +104,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [orderQueue, searchQuery, displayedOrders.length]);
+  }, [orderQueue, searchQuery, startDate, endDate, activeOutletId, pageSize]);
 
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -127,13 +131,13 @@ export default function OrdersPage() {
 
   const handleExportOrdersCSV = () => {
     if (!canExportNominalReports) return;
-    const { headers, rows } = buildOrderExportData(displayedOrders, settings.promos);
+    const { headers, rows } = buildOrderExportData(visibleOrders, settings.promos);
     downloadCSV(`Daftar_Pesanan_Transaksi_${Date.now()}`, headers, rows);
   };
 
   const handleExportOrdersExcel = () => {
     if (!canExportNominalReports) return;
-    const { headers, rows } = buildOrderExportData(displayedOrders, settings.promos);
+    const { headers, rows } = buildOrderExportData(visibleOrders, settings.promos);
     downloadExcel(`Daftar_Pesanan_Transaksi_${Date.now()}`, "Riwayat Pesanan", headers, rows);
   };
 
@@ -538,6 +542,7 @@ export default function OrdersPage() {
         counts={queueCounts}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        onResetFilters={() => setSearchQuery("")}
         canExport={canExportNominalReports}
         onExportExcel={handleExportOrdersExcel}
         onExportCSV={handleExportOrdersCSV}
@@ -623,12 +628,16 @@ export default function OrdersPage() {
         onConfirmRefund={handleConfirmRefund}
       />
 
-      {/* PDF Report Modal */}
       <OrdersReportPDFModal
         isOpen={isPDFModalOpen}
         onClose={() => setIsPDFModalOpen(false)}
-        orders={displayedOrders}
-        outletName={displayedOrders[0]?.outletName || "Singaraja"}
+        orders={visibleOrders}
+        outletName={
+          visibleOrders[0]?.outletName ||
+          displayedOrders[0]?.outletName ||
+          activeOutlet?.name ||
+          "Singaraja"
+        }
       />
 
       {/* POS Thermal Receipt Modal for Reprinting (Customer) */}

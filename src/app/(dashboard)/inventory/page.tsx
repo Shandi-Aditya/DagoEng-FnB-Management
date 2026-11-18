@@ -48,8 +48,8 @@ export default function InventoryPage() {
     filteredIngredients,
     recipes,
     filteredPurchaseOrders,
-    logs,
-    stockOpnames,
+    filteredLogs,
+    filteredStockOpnames,
     recordStockOpname,
     adjustStock,
     simulateBOMDeduction,
@@ -100,29 +100,26 @@ export default function InventoryPage() {
 
   const reorderEntries = useMemo(() => buildReorderList(filteredIngredients), [filteredIngredients]);
 
-  // Opname summary metrics
   const opnameSummary = useMemo(() => {
-    return calculateOpnameSummary(stockOpnames, filteredIngredients);
-  }, [stockOpnames, filteredIngredients]);
+    return calculateOpnameSummary(filteredStockOpnames, filteredIngredients);
+  }, [filteredStockOpnames, filteredIngredients]);
 
-  // Filtered Stock Ingredients
   const displayedIngredients = useMemo(() => {
     return filterStockIngredients(filteredIngredients, statusFilter, categoryFilter, searchQuery);
   }, [filteredIngredients, statusFilter, categoryFilter, searchQuery]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [displayedIngredients.length, statusFilter, categoryFilter, searchQuery]);
+  }, [activeOutletId, statusFilter, categoryFilter, searchQuery, pageSize]);
 
   const paginatedIngredients = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return displayedIngredients.slice(start, start + pageSize);
   }, [displayedIngredients, currentPage, pageSize]);
 
-  // Filtered Opnames
   const displayedOpnames = useMemo(() => {
-    return filterStockOpnames(stockOpnames, opnameReasonFilter, opnameSearchQuery);
-  }, [stockOpnames, opnameReasonFilter, opnameSearchQuery]);
+    return filterStockOpnames(filteredStockOpnames, opnameReasonFilter, opnameSearchQuery);
+  }, [filteredStockOpnames, opnameReasonFilter, opnameSearchQuery]);
 
   // Handlers
   const handleStockAdjustment = (
@@ -184,13 +181,13 @@ export default function InventoryPage() {
   };
 
   const handleExportStockCSV = () => {
-    const { headers, rows } = buildStockExportData(filteredIngredients);
+    const { headers, rows } = buildStockExportData(displayedIngredients);
     downloadCSV(`Master_Stok_Bahan_Baku_${Date.now()}`, headers, rows);
     notify.success("Stok diekspor ke CSV");
   };
 
   const handleExportStockExcel = () => {
-    const { headers, rows } = buildStockExportData(filteredIngredients);
+    const { headers, rows } = buildStockExportData(displayedIngredients);
     downloadExcel(`Master_Stok_Bahan_Baku_${Date.now()}`, "Master Stok", headers, rows);
     notify.success("Stok diekspor ke Excel");
   };
@@ -241,13 +238,13 @@ export default function InventoryPage() {
   };
 
   const handleExportOpnameCSV = () => {
-    const { headers, rows } = buildOpnameExportData(stockOpnames);
+    const { headers, rows } = buildOpnameExportData(displayedOpnames);
     downloadCSV(`Laporan_Stock_Opname_${Date.now()}`, headers, rows);
     notify.success("Opname diekspor ke CSV");
   };
 
   const handleExportOpnameExcel = () => {
-    const { headers, rows } = buildOpnameExportData(stockOpnames);
+    const { headers, rows } = buildOpnameExportData(displayedOpnames);
     downloadExcel(`Laporan_Stock_Opname_${Date.now()}`, "Stock Opname", headers, rows);
     notify.success("Opname diekspor ke Excel");
   };
@@ -294,7 +291,7 @@ export default function InventoryPage() {
           </TabsTrigger>
           <TabsTrigger value="OPNAME">
             Opname
-            <Badge variant="secondary">{stockOpnames.length}</Badge>
+            <Badge variant="secondary">{filteredStockOpnames.length}</Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -309,7 +306,7 @@ export default function InventoryPage() {
               searchQuery={searchQuery}
               currentPage={currentPage}
               pageSize={pageSize}
-              logs={logs}
+              logs={filteredLogs}
               onStatusFilterChange={setStatusFilter}
               onCategoryFilterChange={setCategoryFilter}
               onSearchChange={setSearchQuery}
@@ -424,19 +421,17 @@ export default function InventoryPage() {
         onSaveOpname={handleSaveStockOpname}
       />
 
-      {/* PDF Inventory Valuation Report Modal */}
       <InventoryReportPDFModal
         isOpen={isPDFModalOpen}
         onClose={() => setIsPDFModalOpen(false)}
-        ingredients={filteredIngredients}
+        ingredients={displayedIngredients}
         outletName={outletName}
       />
 
-      {/* PDF Official Stock Opname Report Modal */}
       <StockOpnameReportPDFModal
         isOpen={isOpnamePDFModalOpen}
         onClose={() => setIsOpnamePDFModalOpen(false)}
-        opnames={stockOpnames}
+        opnames={displayedOpnames}
         outletName={outletName}
       />
 

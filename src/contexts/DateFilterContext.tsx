@@ -22,33 +22,54 @@ const SHORT_MONTH_LABELS = [
   "Feb",
   "Mar",
   "Apr",
-  "May",
+  "Mei",
   "Jun",
   "Jul",
-  "Aug",
+  "Agu",
   "Sep",
-  "Oct",
+  "Okt",
   "Nov",
-  "Dec",
+  "Des",
 ] as const;
 
 const MONTH_INDEX_BY_NAME: Record<string, string> = {
   jan: "01",
+  januari: "01",
+  january: "01",
   feb: "02",
+  februari: "02",
+  february: "02",
   mar: "03",
+  maret: "03",
+  march: "03",
   apr: "04",
+  april: "04",
   may: "05",
   mei: "05",
   jun: "06",
+  juni: "06",
+  june: "06",
   jul: "07",
+  juli: "07",
+  july: "07",
   aug: "08",
   agu: "08",
+  agt: "08",
+  agustus: "08",
+  august: "08",
   sep: "09",
+  sept: "09",
+  september: "09",
   oct: "10",
   okt: "10",
+  oktober: "10",
+  october: "10",
   nov: "11",
+  november: "11",
   dec: "12",
   des: "12",
+  desember: "12",
+  december: "12",
 };
 
 const WITA_PARTS_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -120,7 +141,10 @@ function extractWitaParts(isoOrDate: string | Date): WitaDateTimeParts | null {
   const unzonedWita = parseUnzonedWitaTimestamp(raw);
   if (unzonedWita) return unzonedWita;
 
-  const dmyMatch = /^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/.exec(raw);
+  const dmyMatch =
+    /^(\d{1,2})\s+([A-Za-z]+)\.?\s+(\d{4})(?:[,\s]+(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?(?:\s*(?:WITA|WIB|WIT))?)?$/i.exec(
+      raw
+    );
   if (dmyMatch) {
     const month = MONTH_INDEX_BY_NAME[dmyMatch[2].toLowerCase()];
     if (month) {
@@ -128,9 +152,28 @@ function extractWitaParts(isoOrDate: string | Date): WitaDateTimeParts | null {
         year: dmyMatch[3],
         month,
         day: dmyMatch[1].padStart(2, "0"),
-        hour: 0,
-        minute: 0,
-        second: 0,
+        hour: Number(dmyMatch[4] ?? 0),
+        minute: Number(dmyMatch[5] ?? 0),
+        second: Number(dmyMatch[6] ?? 0),
+      };
+    }
+  }
+
+  const slashDmyMatch =
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[,\sT]+(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?(?:\s*(?:WITA|WIB|WIT))?)?$/i.exec(
+      raw
+    );
+  if (slashDmyMatch) {
+    const dayNum = Number(slashDmyMatch[1]);
+    const monthNum = Number(slashDmyMatch[2]);
+    if (dayNum >= 1 && dayNum <= 31 && monthNum >= 1 && monthNum <= 12) {
+      return {
+        year: slashDmyMatch[3],
+        month: String(monthNum).padStart(2, "0"),
+        day: String(dayNum).padStart(2, "0"),
+        hour: Number(slashDmyMatch[4] ?? 0),
+        minute: Number(slashDmyMatch[5] ?? 0),
+        second: Number(slashDmyMatch[6] ?? 0),
       };
     }
   }
@@ -178,6 +221,21 @@ export function formatWitaDateTime(
     ss: String(parts.second).padStart(2, "0"),
   };
   return pattern.replace(/yyyy|MMM|MM|dd|HH|mm|ss/g, (token) => tokens[token] ?? token);
+}
+
+export function normalizeDateRange(
+  start: string,
+  end: string,
+  fallbackDate: string = getTodayWitaDateString()
+): { startDate: string; endDate: string } {
+  const startKey = toWitaDateKey(start);
+  const endKey = toWitaDateKey(end);
+  const resolvedStart = startKey || endKey || fallbackDate;
+  const resolvedEnd = endKey || startKey || fallbackDate;
+  if (resolvedStart <= resolvedEnd) {
+    return { startDate: resolvedStart, endDate: resolvedEnd };
+  }
+  return { startDate: resolvedEnd, endDate: resolvedStart };
 }
 
 function addDaysToDateKey(dateKey: string, deltaDays: number): string {
@@ -236,14 +294,18 @@ export function DateFilterProvider({ children }: { children: React.ReactNode }) 
   }, []);
 
   const setCustomRange = useCallback((start: string, end: string) => {
+    const normalized = normalizeDateRange(start, end, getTodayWitaDateString());
     setShortcutState("CUSTOM");
-    setStartDate(start);
-    setEndDate(end);
+    setStartDate(normalized.startDate);
+    setEndDate(normalized.endDate);
   }, []);
 
   const formattedRangeLabel = useMemo(() => {
     if (startDate === endDate) {
       return formatWitaDateTime(startDate, "dd MMM yyyy");
+    }
+    if (startDate.slice(0, 4) !== endDate.slice(0, 4)) {
+      return `${formatWitaDateTime(startDate, "dd MMM yyyy")} - ${formatWitaDateTime(endDate, "dd MMM yyyy")}`;
     }
     return `${formatWitaDateTime(startDate, "dd MMM")} - ${formatWitaDateTime(endDate, "dd MMM yyyy")}`;
   }, [startDate, endDate]);
@@ -252,7 +314,10 @@ export function DateFilterProvider({ children }: { children: React.ReactNode }) 
     const diffDays = diffDaysInclusive(startDate, endDate);
     const prevEnd = addDaysToDateKey(startDate, -1);
     const prevStart = addDaysToDateKey(prevEnd, -(diffDays - 1));
-    return `${formatWitaDateTime(prevStart, "dd MMM")} - ${formatWitaDateTime(prevEnd, "dd MMM")}`;
+    if (prevStart === prevEnd) {
+      return formatWitaDateTime(prevStart, "dd MMM yyyy");
+    }
+    return `${formatWitaDateTime(prevStart, "dd MMM")} - ${formatWitaDateTime(prevEnd, "dd MMM yyyy")}`;
   }, [startDate, endDate]);
 
   const isDateInRange = useCallback(

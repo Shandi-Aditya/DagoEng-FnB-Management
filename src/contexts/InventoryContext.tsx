@@ -39,7 +39,9 @@ interface InventoryContextType {
   purchaseOrders: PurchaseOrder[];
   filteredPurchaseOrders: PurchaseOrder[];
   logs: StockAdjustmentLog[];
+  filteredLogs: StockAdjustmentLog[];
   stockOpnames: StockOpnameRecord[];
+  filteredStockOpnames: StockOpnameRecord[];
   adjustStock: (
     ingredientId: string,
     delta: number,
@@ -119,6 +121,19 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     if (isAllOutlets) return true;
     const poOutletId = (po as { outletId?: string }).outletId;
     return poOutletId === activeOutletId || !poOutletId;
+  });
+
+  const filteredStockOpnames = stockOpnames.filter((opn) => {
+    if (isAllOutlets) return true;
+    return opn.outletId === activeOutletId || !opn.outletId;
+  });
+
+  const filteredIngIds = new Set(filteredIngredients.map((i) => i.id));
+  const filteredLogs = logs.filter((log) => {
+    if (isAllOutlets) return true;
+    const logOutletId = (log as { outletId?: string }).outletId;
+    if (logOutletId) return logOutletId === activeOutletId;
+    return filteredIngIds.has(log.ingredientId);
   });
 
   const checkProductStockStatus = (
@@ -527,7 +542,9 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     inventoryOpSeq += 1;
     const sysStock = Number(record.systemStock);
     const physStock = Math.max(0, Number(record.physicalStock));
+    const targetIng = ingredientsRef.current.find((ing) => ing.id === record.ingredientId);
     const variance = +(physStock - sysStock).toFixed(3);
+    const varianceValue = Math.round(variance * (targetIng?.costPerUnit ?? 0));
     const varianceType: "SURPLUS" | "DEFICIT" | "MATCH" =
       variance > 0 ? "SURPLUS" : variance < 0 ? "DEFICIT" : "MATCH";
 
@@ -538,6 +555,7 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       id: `opn-${Date.now()}-${inventoryOpSeq}`,
       opnameNumber: `SOP-${new Date().toISOString().slice(0, 7).replace("-", "")}-${Date.now().toString().slice(-4)}`,
       variance,
+      varianceValue,
       varianceType,
       status: "APPLIED",
       createdAt: new Date().toISOString(),
@@ -632,7 +650,9 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         purchaseOrders,
         filteredPurchaseOrders,
         logs,
+        filteredLogs,
         stockOpnames,
+        filteredStockOpnames,
         adjustStock,
         recordStockOpname,
         checkProductStockStatus,

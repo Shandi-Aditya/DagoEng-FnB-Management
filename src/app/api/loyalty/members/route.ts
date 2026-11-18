@@ -197,11 +197,13 @@ export async function GET(req: NextRequest) {
         (m) => m.registeredOutletId === outletId || !m.registeredOutletId
       );
     }
-    if (tier) {
-      members = members.filter((m) => m.tier === tier);
+    if (tier && tier !== "ALL") {
+      const targetTier = tier.trim().toLowerCase();
+      members = members.filter((m) => (m.tier || "").toLowerCase() === targetTier);
     }
-    if (status) {
-      members = members.filter((m) => m.status === status);
+    if (status && status !== "ALL") {
+      const targetStatus = status.trim().toUpperCase();
+      members = members.filter((m) => (m.status || "").toUpperCase() === targetStatus);
     }
 
     return NextResponse.json({

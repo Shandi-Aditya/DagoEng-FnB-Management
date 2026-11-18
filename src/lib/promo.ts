@@ -51,11 +51,31 @@ export interface VoucherValidationResult {
 
 export type PromoComputedStatus = "ACTIVE" | "SCHEDULED" | "EXPIRED" | "QUOTA_EXHAUSTED" | "INACTIVE";
 
+function getPromoStartBoundMs(validFrom: string): number {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(validFrom.trim())) {
+    return new Date(`${validFrom.trim()}T00:00:00+08:00`).getTime();
+  }
+  return new Date(validFrom).getTime();
+}
+
+function getPromoEndBoundMs(validUntil: string): number {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(validUntil.trim())) {
+    return new Date(`${validUntil.trim()}T23:59:59.999+08:00`).getTime();
+  }
+  return new Date(validUntil).getTime();
+}
+
 export function getPromoComputedStatus(promo: PromoConfig, atDate: Date = new Date()): PromoComputedStatus {
   if (!promo.isActive) return "INACTIVE";
-  const nowIso = atDate.toISOString();
-  if (promo.validUntil && promo.validUntil < nowIso) return "EXPIRED";
-  if (promo.validFrom && promo.validFrom > nowIso) return "SCHEDULED";
+  const nowMs = atDate.getTime();
+  if (promo.validUntil) {
+    const endMs = getPromoEndBoundMs(promo.validUntil);
+    if (!Number.isNaN(endMs) && nowMs > endMs) return "EXPIRED";
+  }
+  if (promo.validFrom) {
+    const startMs = getPromoStartBoundMs(promo.validFrom);
+    if (!Number.isNaN(startMs) && nowMs < startMs) return "SCHEDULED";
+  }
   if (promo.quota !== undefined && promo.quota > 0 && (promo.usageCount || 0) >= promo.quota) {
     return "QUOTA_EXHAUSTED";
   }
@@ -105,18 +125,25 @@ export function checkPromoValidity(
     customerId?: string;
     scope?: PromoScope;
     tenantId?: string;
+    atDate?: Date;
   }
 ): { isValid: boolean; reason?: string } {
   if (!promo.isActive) {
     return { isValid: false, reason: "Promo / voucher saat ini sedang tidak aktif." };
   }
-  
-  const now = new Date().toISOString();
-  if (promo.validUntil && promo.validUntil < now) {
-    return { isValid: false, reason: "Masa berlaku voucher sudah berakhir (Expired)." };
+
+  const nowMs = (context?.atDate ?? new Date()).getTime();
+  if (promo.validUntil) {
+    const endMs = getPromoEndBoundMs(promo.validUntil);
+    if (!Number.isNaN(endMs) && nowMs > endMs) {
+      return { isValid: false, reason: "Masa berlaku voucher sudah berakhir (Expired)." };
+    }
   }
-  if (promo.validFrom && promo.validFrom > now) {
-    return { isValid: false, reason: "Promo voucher belum dimulai." };
+  if (promo.validFrom) {
+    const startMs = getPromoStartBoundMs(promo.validFrom);
+    if (!Number.isNaN(startMs) && nowMs < startMs) {
+      return { isValid: false, reason: "Promo voucher belum dimulai." };
+    }
   }
   
   if (promo.minimumAmount && originalSubtotal < promo.minimumAmount) {

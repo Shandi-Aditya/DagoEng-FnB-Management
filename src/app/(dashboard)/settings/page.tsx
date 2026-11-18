@@ -1405,21 +1405,26 @@ export default function SettingsPage() {
                     targetType: "ALL",
                     scope: "FNB",
                     tenantId: myTenantId,
-                    quota: 50,
-                    validFrom: new Date().toISOString().slice(0, 10),
-                    validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-                    isActive: true,
-                  },
-                ]);
-              }}
-              isProductModalOpen={isPromoProductModalOpen}
-              onProductModalOpenChange={setIsPromoProductModalOpen}
-              onOpenPromoProductSelect={(id) => {
-                const p = promos.find((item) => item.id === id);
-                setActivePromoIdForProductSelect(id);
-                setSelectedProductIdsInModal(p?.applicableProductIds || []);
-                setIsPromoProductModalOpen(true);
-              }}
+                     quota: 50,
+                     validFrom: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date()),
+                     validUntil: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(
+                       new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                     ),
+                     isActive: true,
+                   },
+                 ]);
+               }}
+               isProductModalOpen={isPromoProductModalOpen}
+               onProductModalOpenChange={setIsPromoProductModalOpen}
+               onOpenPromoProductSelect={(id) => {
+                 const p = promos.find((item) => item.id === id);
+                 setActivePromoIdForProductSelect(id);
+                 setSelectedProductIdsInModal(p?.applicableProductIds || []);
+                 setPromoProductSearch("");
+                 setPromoProductCategoryFilter("ALL");
+                 setPromoProductTenantFilter("ALL");
+                 setIsPromoProductModalOpen(true);
+               }}
               selectedProductIdsInModal={selectedProductIdsInModal}
               onToggleModalProduct={(pid) =>
                 setSelectedProductIdsInModal((prev) =>
@@ -1809,21 +1814,26 @@ export default function SettingsPage() {
                     discountValue: 10,
                     targetType: "ALL",
                     scope: "ALL",
-                    quota: 50,
-                    validFrom: new Date().toISOString().slice(0, 10),
-                    validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-                    isActive: true,
-                  },
-                ]);
-              }}
-              isProductModalOpen={isPromoProductModalOpen}
-              onProductModalOpenChange={setIsPromoProductModalOpen}
-              onOpenPromoProductSelect={(id) => {
-                const p = promos.find((item) => item.id === id);
-                setActivePromoIdForProductSelect(id);
-                setSelectedProductIdsInModal(p?.applicableProductIds || []);
-                setIsPromoProductModalOpen(true);
-              }}
+                     quota: 50,
+                     validFrom: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date()),
+                     validUntil: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(
+                       new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                     ),
+                     isActive: true,
+                   },
+                 ]);
+               }}
+               isProductModalOpen={isPromoProductModalOpen}
+               onProductModalOpenChange={setIsPromoProductModalOpen}
+               onOpenPromoProductSelect={(id) => {
+                 const p = promos.find((item) => item.id === id);
+                 setActivePromoIdForProductSelect(id);
+                 setSelectedProductIdsInModal(p?.applicableProductIds || []);
+                 setPromoProductSearch("");
+                 setPromoProductCategoryFilter("ALL");
+                 setPromoProductTenantFilter("ALL");
+                 setIsPromoProductModalOpen(true);
+               }}
               selectedProductIdsInModal={selectedProductIdsInModal}
               onToggleModalProduct={(pid) =>
                 setSelectedProductIdsInModal((prev) =>

@@ -44,7 +44,7 @@ export function computeEmployeesReportPdfMetrics(
 
   for (const s of shifts) {
     if (s.status === "CLOSED") completedShifts++;
-    else if (s.status === "OPEN") openShifts++;
+    else if (s.status === "OPEN" || s.status === "ACTIVE") openShifts++;
 
     const cash = s.cashSales || 0;
     const nonCash = s.nonCashSales || 0;
@@ -123,6 +123,7 @@ export function formatEmployeeStatusLabel(status?: string): string {
     case "CUTI":
       return "Cuti";
     case "NONAKTIF":
+    case "NON-AKTIF":
       return "Nonaktif";
     default:
       return status || "—";
@@ -139,6 +140,7 @@ export function formatEmployeeStatusTone(status?: string): StatusBadgeTone {
     case "CUTI":
       return "warning";
     case "NONAKTIF":
+    case "NON-AKTIF":
       return "neutral";
     default:
       return "neutral";

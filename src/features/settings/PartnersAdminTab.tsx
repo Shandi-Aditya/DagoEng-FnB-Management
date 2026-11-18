@@ -305,6 +305,22 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
                 <NativeSelectOption value="ACTIVE">Aktif</NativeSelectOption>
                 <NativeSelectOption value="INACTIVE">Nonaktif</NativeSelectOption>
               </NativeSelect>
+
+              {hasPartnerFilter ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    onPartnerSearchQueryChange("");
+                    onPartnerTypeFilterChange("ALL");
+                    onPartnerStatusFilterChange("ALL");
+                    setCurrentPage(1);
+                  }}
+                >
+                  Reset filter
+                </Button>
+              ) : null}
             </div>
 
             <div className="flex items-center gap-2">
@@ -385,8 +401,14 @@ export function PartnersAdminTab(props: PartnersAdminTabProps) {
 
                         <TableCell>
                           {p.type === "EVENT" ? (
-                            <StatusBadge status={organizerActivationTone(p.activationStatus)}>
-                              {organizerActivationLabel(p.activationStatus)}
+                            <StatusBadge
+                              status={organizerActivationTone(
+                                p.status === "INACTIVE" ? "INACTIVE" : p.activationStatus
+                              )}
+                            >
+                              {organizerActivationLabel(
+                                p.status === "INACTIVE" ? "INACTIVE" : p.activationStatus
+                              )}
                             </StatusBadge>
                           ) : (
                             <StatusBadge status={productStatusTone(p.status)}>

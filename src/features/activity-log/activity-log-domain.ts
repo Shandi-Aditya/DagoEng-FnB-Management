@@ -12,6 +12,12 @@
  */
 
 import type { StatusTone } from "@/components/app/status-badge";
+import {
+  formatWitaDateTime,
+  getTodayWitaDateString,
+  normalizeDateRange,
+  toWitaDateKey,
+} from "@/contexts/DateFilterContext";
 import type {
   ActivityLogEntry,
   ActivitySeverity,
@@ -19,7 +25,7 @@ import type {
 } from "@/types/audit";
 
 export type ViewMode = "TABLE" | "TIMELINE";
-export type DateFilterType = "ALL" | "TODAY" | "LAST_7_DAYS" | "LAST_30_DAYS";
+export type DateFilterType = "ALL" | "TODAY" | "LAST_7_DAYS" | "LAST_30_DAYS" | "CUSTOM";
 
 export interface ActivityLogFilterOptions {
   activeOutletId?: string;
@@ -31,6 +37,8 @@ export interface ActivityLogFilterOptions {
   selectedRole?: string;
   selectedActor?: string;
   dateFilter?: DateFilterType;
+  customStartDate?: string;
+  customEndDate?: string;
   searchTerm?: string;
 }
 
@@ -59,8 +67,11 @@ export const MODULE_OPTIONS: ModuleOption[] = [
   { key: "COMMERCIAL", label: "Komersial" },
   { key: "EMPLOYEES_SHIFT", label: "Karyawan dan shift" },
   { key: "FINANCE", label: "Keuangan" },
+  { key: "USER_RBAC", label: "Hak akses" },
   { key: "SETTINGS", label: "Pengaturan" },
-  { key: "AUTH", label: "Keamanan" },
+  { key: "AUTH", label: "Autentikasi" },
+  { key: "SECURITY", label: "Keamanan" },
+  { key: "SYSTEM", label: "Sistem" },
   { key: "AI_INSIGHT", label: "Asisten analisis" },
 ];
 
@@ -197,12 +208,23 @@ export function getSeverityTone(severity?: ActivitySeverity): StatusTone {
 /**
  * Membangun label periode berdasarkan filter tanggal.
  */
-export function getPeriodLabel(dateFilter: DateFilterType): string {
+export function getPeriodLabel(
+  dateFilter: DateFilterType,
+  customStartDate?: string,
+  customEndDate?: string
+): string {
   if (dateFilter === "TODAY") {
     return `Hari Ini (${new Date().toLocaleDateString("id-ID", { timeZone: "Asia/Makassar" })})`;
   }
   if (dateFilter === "LAST_7_DAYS") return "7 Hari Terakhir";
   if (dateFilter === "LAST_30_DAYS") return "30 Hari Terakhir";
+  if (dateFilter === "CUSTOM" && (customStartDate || customEndDate)) {
+    const normalized = normalizeDateRange(customStartDate || "", customEndDate || "");
+    if (normalized.startDate === normalized.endDate) {
+      return formatWitaDateTime(normalized.startDate, "dd MMM yyyy");
+    }
+    return `${formatWitaDateTime(normalized.startDate, "dd MMM yyyy")} s/d ${formatWitaDateTime(normalized.endDate, "dd MMM yyyy")}`;
+  }
   return "Semua Rekam Audit";
 }
 
@@ -248,11 +270,18 @@ export function filterActivityLogs(
     selectedRole = "ALL",
     selectedActor = "ALL",
     dateFilter = "ALL",
+    customStartDate = "",
+    customEndDate = "",
     searchTerm = "",
   } = options;
 
   const now = Date.now();
+  const todayWitaKey = getTodayWitaDateString();
   const search = searchTerm.trim().toLowerCase();
+  const normalizedCustom =
+    dateFilter === "CUSTOM" && (customStartDate || customEndDate)
+      ? normalizeDateRange(customStartDate, customEndDate, todayWitaKey)
+      : null;
 
   return logs.filter((log) => {
     const actorName = resolveLogActorName(log);
@@ -266,7 +295,12 @@ export function filterActivityLogs(
       }
     }
 
-    if (activeOutletId !== "ALL" && log.outletId && log.outletId !== activeOutletId) {
+    if (
+      activeOutletId !== "ALL" &&
+      log.outletId &&
+      log.outletId !== "ALL" &&
+      log.outletId !== activeOutletId
+    ) {
       return false;
     }
 
@@ -282,35 +316,68 @@ export function filterActivityLogs(
       return false;
     }
 
-    if (
-      selectedRole !== "ALL" &&
-      actorRole !== selectedRole &&
-      log.role !== selectedRole
-    ) {
-      return false;
+    if (selectedRole !== "ALL") {
+      const targetRole = selectedRole.toLowerCase().replace(/[\s_-]+/g, "");
+      const candA = actorRole.toLowerCase().replace(/[\s_-]+/g, "");
+      const candB = (log.role || "").toLowerCase().replace(/[\s_-]+/g, "");
+      if (candA !== targetRole && candB !== targetRole) {
+        return false;
+      }
     }
 
     if (selectedActor !== "ALL" && actorName !== selectedActor) {
       return false;
     }
 
-    const logTime = new Date(log.timestamp).getTime();
-    if (dateFilter === "TODAY") {
-      const startOfDay = new Date();
-      startOfDay.setHours(0, 0, 0, 0);
-      if (logTime < startOfDay.getTime()) return false;
-    } else if (dateFilter === "LAST_7_DAYS") {
-      const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
-      if (logTime < sevenDaysAgo) return false;
-    } else if (dateFilter === "LAST_30_DAYS") {
-      const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-      if (logTime < thirtyDaysAgo) return false;
+    if (dateFilter !== "ALL") {
+      const logKey = toWitaDateKey(log.timestamp);
+      const logTime = new Date(log.timestamp).getTime();
+      if (dateFilter === "TODAY") {
+        if (!logKey || logKey !== todayWitaKey) return false;
+      } else if (dateFilter === "LAST_7_DAYS") {
+        const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+        if (Number.isNaN(logTime)) {
+          const minKey = new Date(Date.UTC(
+            Number(todayWitaKey.slice(0, 4)),
+            Number(todayWitaKey.slice(5, 7)) - 1,
+            Number(todayWitaKey.slice(8, 10)) - 6
+          )).toISOString().slice(0, 10);
+          if (!logKey || logKey < minKey || logKey > todayWitaKey) return false;
+        } else if (logTime < sevenDaysAgo) {
+          return false;
+        }
+      } else if (dateFilter === "LAST_30_DAYS") {
+        const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+        if (Number.isNaN(logTime)) {
+          const minKey = new Date(Date.UTC(
+            Number(todayWitaKey.slice(0, 4)),
+            Number(todayWitaKey.slice(5, 7)) - 1,
+            Number(todayWitaKey.slice(8, 10)) - 29
+          )).toISOString().slice(0, 10);
+          if (!logKey || logKey < minKey || logKey > todayWitaKey) return false;
+        } else if (logTime < thirtyDaysAgo) {
+          return false;
+        }
+      } else if (dateFilter === "CUSTOM" && normalizedCustom) {
+        if (
+          !logKey ||
+          logKey < normalizedCustom.startDate ||
+          logKey > normalizedCustom.endDate
+        ) {
+          return false;
+        }
+      }
     }
 
     if (search) {
       const matchActor = actorName.toLowerCase().includes(search);
       const matchRole = actorRole.toLowerCase().includes(search);
-      const matchAction = log.action?.toLowerCase().includes(search);
+      const matchAction =
+        log.action?.toLowerCase().includes(search) ||
+        auditActionLabel(log.action).toLowerCase().includes(search);
+      const matchModule =
+        log.module?.toLowerCase().includes(search) ||
+        auditModuleLabel(log.module).toLowerCase().includes(search);
       const matchDesc = log.description?.toLowerCase().includes(search);
       const matchReason = log.reason?.toLowerCase().includes(search);
       const matchRecord = recordId.toLowerCase().includes(search);
@@ -321,6 +388,7 @@ export function filterActivityLogs(
         !matchActor &&
         !matchRole &&
         !matchAction &&
+        !matchModule &&
         !matchDesc &&
         !matchReason &&
         !matchRecord &&

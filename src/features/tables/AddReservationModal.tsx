@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import type { AreaItem } from "@/contexts/TableContext";
 
-import { formatReservationDateTime } from "./tables-domain";
+import { formatReservationDateTime, getWitaDatePlusDays } from "./tables-domain";
 
 interface AddReservationModalProps {
   isOpen: boolean;
@@ -43,18 +43,14 @@ export function AddReservationModal({
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
   const [tableId, setTableId] = useState(defaultTable);
-  const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(() => getWitaDatePlusDays(0));
   const [time, setTime] = useState("19:00");
   const [pax, setPax] = useState(4);
   const [downPayment, setDownPayment] = useState(0);
   const [notes, setNotes] = useState("");
 
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
-  const tomorrowStr = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split("T")[0];
-  }, []);
+  const todayStr = useMemo(() => getWitaDatePlusDays(0), []);
+  const tomorrowStr = useMemo(() => getWitaDatePlusDays(1), []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,9 +85,7 @@ export function AddReservationModal({
   };
 
   const setShortcutDate = (daysAhead: number) => {
-    const d = new Date();
-    d.setDate(d.getDate() + daysAhead);
-    setDate(d.toISOString().split("T")[0]);
+    setDate(getWitaDatePlusDays(daysAhead));
   };
 
   return (

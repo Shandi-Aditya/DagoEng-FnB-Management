@@ -223,7 +223,7 @@ export function buildReprintKitchenTicket(
       };
     }),
     cashierName: cashierName || order.cashierName || "Kasir / Petugas",
-    timestamp: `${new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WITA`,
+    timestamp: `${new Date().toLocaleTimeString("id-ID", { timeZone: "Asia/Makassar", hour: "2-digit", minute: "2-digit" })} WITA`,
     reprintedBy: purpose === "REPRINT" ? cashierName || "Petugas" : undefined,
     kitchenNotes: order.notes,
   };
@@ -252,6 +252,7 @@ export function buildOrderReceiptData(order: OrderRecord): POSReceiptData {
   return {
     orderNumber: order.orderNumber,
     date: new Date(order.createdAt).toLocaleDateString("id-ID", {
+      timeZone: "Asia/Makassar",
       day: "numeric",
       month: "short",
       year: "numeric",
@@ -331,9 +332,9 @@ export function buildOrderExportData(
     const payStatusLabel = paymentStatusLabel(o.paymentStatus);
 
     const settlementTime = o.completedAt
-      ? new Date(o.completedAt).toLocaleString("id-ID")
+      ? new Date(o.completedAt).toLocaleString("id-ID", { timeZone: "Asia/Makassar" })
       : o.paymentStatus === "PAID"
-        ? new Date(o.createdAt).toLocaleString("id-ID")
+        ? new Date(o.createdAt).toLocaleString("id-ID", { timeZone: "Asia/Makassar" })
         : "-";
 
     return [
@@ -348,7 +349,7 @@ export function buildOrderExportData(
       payStatusLabel,
       o.paymentMethod || "-",
       o.items.length,
-      new Date(o.createdAt).toLocaleString("id-ID"),
+      new Date(o.createdAt).toLocaleString("id-ID", { timeZone: "Asia/Makassar" }),
       settlementTime,
     ];
   });

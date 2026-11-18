@@ -393,6 +393,24 @@ export function WifiManagementTab(props: WifiManagementTabProps) {
                 <NativeSelectOption value="EXPIRED">Kedaluwarsa</NativeSelectOption>
                 <NativeSelectOption value="CANCELLED">Dibatalkan</NativeSelectOption>
               </NativeSelect>
+
+              {voucherSearchQuery.trim() !== "" ||
+              voucherServiceFilter !== "ALL" ||
+              voucherStatusFilter !== "ALL" ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    onVoucherSearchQueryChange("");
+                    onVoucherServiceFilterChange("ALL");
+                    onVoucherStatusFilterChange("ALL");
+                    setCurrentPage(1);
+                  }}
+                >
+                  Reset filter
+                </Button>
+              ) : null}
             </div>
 
             <span className="text-xs text-muted-foreground tabular-nums">

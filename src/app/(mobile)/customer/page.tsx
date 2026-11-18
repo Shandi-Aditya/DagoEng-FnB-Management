@@ -67,7 +67,7 @@ function CustomerApp() {
   const { filteredProducts } = useProducts();
   const { members, addPoints } = useLoyalty();
   const { orders, createOrder, advanceOrderStatus } = useOrders();
-  const { areas, releaseTableToAvailable, occupyTableWithOrder } = useTables();
+  const { filteredAreas, releaseTableToAvailable, occupyTableWithOrder } = useTables();
   const { deductOrderBOM } = useInventory();
   const { spaces, bookings, bookSpace, confirmBookingPayment, cancelBooking } = useCoworking();
   const { settings, redeemPromo } = useSettings();
@@ -98,12 +98,11 @@ function CustomerApp() {
     }
   }, [currentMember, activeOutletId, setOutlet]);
 
-  // Table from the QR sticker (?meja=T-04), checked against the outlet's real tables.
-  const allTableNumbers = useMemo(() => areas.flatMap((area) => area.tables.map((table) => table.number)), [areas]);
+  const allTableNumbers = useMemo(() => filteredAreas.flatMap((area) => area.tables.map((table) => table.number)), [filteredAreas]);
   const lockedTable = useMemo(() => parseTableParam(searchParams.get("meja"), allTableNumbers), [searchParams, allTableNumbers]);
   const freeTables = useMemo(
-    () => areas.flatMap((area) => area.tables.filter((t) => t.status === "AVAILABLE").map((t) => ({ number: t.number, areaName: area.name }))),
-    [areas],
+    () => filteredAreas.flatMap((area) => area.tables.filter((t) => t.status === "AVAILABLE").map((t) => ({ number: t.number, areaName: area.name }))),
+    [filteredAreas],
   );
 
   // Menu

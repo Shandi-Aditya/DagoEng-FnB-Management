@@ -638,6 +638,15 @@ export default function POSPage() {
   const handleApplyVoucher = (voucher: LoyaltyVoucher) => {
     if (!selectedMember) return;
     if (selectedMember.points < voucher.pointsCost) return;
+    const tierRank: Record<string, number> = { bronze: 1, silver: 2, gold: 3, platinum: 4 };
+    if (
+      voucher.minTier &&
+      (tierRank[(selectedMember.tier || "bronze").toLowerCase()] ?? 0) <
+        (tierRank[voucher.minTier.toLowerCase()] ?? 0)
+    ) {
+      notify.warning("Tier belum memenuhi syarat", `Voucher ini khusus member ${voucher.minTier}.`);
+      return;
+    }
 
     if (appliedVoucher?.id === voucher.id) {
       setAppliedVoucher(null);
@@ -971,15 +980,34 @@ export default function POSPage() {
   };
 
   const filteredCwSpaces = useMemo(() => {
+    const query = cwSearchQuery.trim().toLowerCase();
     return cwSpaces.filter((sp) => {
       const matchType = cwSpaceTypeFilter === "ALL" || sp.type === cwSpaceTypeFilter;
-      const matchSearch =
-        sp.name.toLowerCase().includes(cwSearchQuery.toLowerCase()) ||
-        sp.area.toLowerCase().includes(cwSearchQuery.toLowerCase()) ||
-        sp.amenities.some((a) => a.toLowerCase().includes(cwSearchQuery.toLowerCase()));
-      return matchType && matchSearch;
+      if (!matchType) return false;
+      if (!query) return true;
+      return (
+        sp.name.toLowerCase().includes(query) ||
+        sp.area.toLowerCase().includes(query) ||
+        sp.type.toLowerCase().includes(query) ||
+        sp.type.toLowerCase().replace(/_/g, " ").includes(query) ||
+        sp.amenities.some((a) => a.toLowerCase().includes(query))
+      );
     });
   }, [cwSpaces, cwSpaceTypeFilter, cwSearchQuery]);
+
+  const availableCwSpacesCount = useMemo(() => {
+    const startH = parseHour(cwStartTime);
+    return filteredCwSpaces.filter((sp) =>
+      checkSlotAvailabilityHelper({
+        spaceId: sp.id,
+        spaces: cwSpaces,
+        bookings: cwBookings,
+        targetDate: cwDate,
+        startHour: startH,
+        durationHours: cwDuration,
+      }).isAvailable
+    ).length;
+  }, [filteredCwSpaces, cwSpaces, cwBookings, cwDate, cwStartTime, cwDuration]);
 
   const checkSlotAvailability = (
     spaceId: string,
@@ -1094,7 +1122,11 @@ export default function POSPage() {
       return;
     }
 
-    // Anti Double-Booking Collision Check (Revisi 3)
+    if (selectedSpace.status === "MAINTENANCE") {
+      notify.warning("Ruang tidak tersedia", "Ruang ini sedang dalam pemeliharaan.");
+      return;
+    }
+
     const conflict = checkCoworkingBookingConflict(cwBookings, {
       spaceId: selectedSpace.id,
       spaceName: selectedSpace.name,
@@ -1102,6 +1134,7 @@ export default function POSPage() {
       date: cwDate,
       startTime: cwStartTime,
       endTime: `${startH + cwDuration}:00 WITA`,
+      maxCapacity: selectedSpace.type === "HOT_DESK" ? Math.max(1, selectedSpace.capacity || 8) : 1,
     });
     if (!activeShift) {
       notify.warning("Shift kasir belum dibuka", "Buka shift dengan modal awal sebelum menerima pembayaran.");
@@ -1551,7 +1584,7 @@ export default function POSPage() {
                     </div>
                   </div>
                   <span className="text-xs font-mono tabular-nums text-foreground bg-card px-2.5 py-1 rounded-md border border-border shrink-0 self-start sm:self-auto">
-                    {filteredCwSpaces.length} ruang tersedia
+                    {availableCwSpacesCount} ruang tersedia
                   </span>
                 </div>
               ) : (
@@ -1796,6 +1829,7 @@ export default function POSPage() {
         onClose={() => setIsVoucherModalOpen(false)}
         memberName={selectedMember?.name}
         memberPoints={selectedMember?.points || 0}
+        memberTier={selectedMember?.tier}
         vouchers={LOYALTY_VOUCHERS}
         appliedVoucherId={appliedVoucher?.id}
         onApplyVoucher={handleApplyVoucher}

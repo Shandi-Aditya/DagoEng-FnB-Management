@@ -1,7 +1,7 @@
-import type { EventCategory, PublicCommunityEvent } from "@/types/event";
+import type { EventTicketTier, PublicCommunityEvent } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { isEventInWitaPeriod, type DateRange } from "@/components/events/EventDateRangeFilter";
 
-// Reuse event category label from existing landing/admin domain logic
 export { eventCategoryLabel } from "@/features/landing/landing-logic";
 
 export type EventTimeTab = "UPCOMING" | "PAST";
@@ -15,74 +15,100 @@ export const CATALOG_CATEGORIES: readonly { key: string; label: string }[] = [
   { key: "TECH", label: "Teknologi" },
   { key: "COMMUNITY", label: "Komunitas" },
   { key: "SEMINAR", label: "Seminar" },
+  { key: "OTHER", label: "Lainnya" },
 ] as const;
 
-/**
- * Pisahkan dan urutkan event mendatang (terdekat dulu) vs selesai (terbaru selesai dulu).
- * Fungsi murni tanpa mutasi input.
- */
+export function resolveEventEffectiveMinPrice(
+  evt: Pick<PublicCommunityEvent, "isPaid" | "price" | "ticketTiers">
+): number {
+  if (!evt.isPaid) return 0;
+  if (evt.price > 0) return evt.price;
+  const paidTiers = (evt.ticketTiers ?? []).filter(
+    (tier) => tier.isActive !== false && tier.price > 0
+  );
+  if (paidTiers.length === 0) return 0;
+  return Math.min(...paidTiers.map((tier) => tier.price));
+}
+
 export function sortPublicEvents(
   events: readonly PublicCommunityEvent[],
   tab: EventTimeTab,
   nowMs: number = Date.now()
 ): PublicCommunityEvent[] {
   const isPast = (e: PublicCommunityEvent) => {
-    const end = new Date(e.endDate).getTime();
+    const end = new Date(e.endDate || e.startDate).getTime();
     return !Number.isNaN(end) && end < nowMs;
   };
 
   if (tab === "PAST") {
     return events
       .filter(isPast)
-      .sort((a, b) => new Date(b.endDate).getTime() - new Date(a.endDate).getTime());
+      .sort((a, b) => new Date(b.endDate || b.startDate).getTime() - new Date(a.endDate || a.startDate).getTime());
   }
 
-  // Upcoming
   return events
     .filter((e) => !isPast(e))
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 }
 
-/**
- * Filter event publik berdasarkan tab waktu, kategori, filter harga, dan pencarian kata kunci.
- */
 export function filterPublicEvents(
   events: readonly PublicCommunityEvent[],
   tab: EventTimeTab,
   category: string,
   priceFilter: EventPriceFilter,
   searchQuery: string,
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  dateRange?: DateRange | null
 ): PublicCommunityEvent[] {
   const basePool = sortPublicEvents(events, tab, nowMs);
   const q = searchQuery.trim().toLowerCase();
 
   return basePool.filter((evt) => {
     const matchesCategory = category === "ALL" || evt.category === category;
+    const effectivePrice = resolveEventEffectiveMinPrice(evt);
     const matchesPrice =
       priceFilter === "ALL" ||
-      (priceFilter === "FREE" && (!evt.isPaid || evt.price === 0)) ||
-      (priceFilter === "PAID" && evt.isPaid && evt.price > 0);
+      (priceFilter === "FREE" && (!evt.isPaid || effectivePrice === 0)) ||
+      (priceFilter === "PAID" && evt.isPaid && effectivePrice > 0);
+
+    if (dateRange && !isEventInWitaPeriod(evt, dateRange)) {
+      return false;
+    }
 
     const matchesSearch =
       !q ||
-      evt.title.toLowerCase().includes(q) ||
-      (evt.description && evt.description.toLowerCase().includes(q)) ||
-      (evt.location && evt.location.toLowerCase().includes(q)) ||
-      (evt.organizerName && evt.organizerName.toLowerCase().includes(q));
+      (evt.title || "").toLowerCase().includes(q) ||
+      Boolean(evt.description && evt.description.toLowerCase().includes(q)) ||
+      Boolean(evt.location && evt.location.toLowerCase().includes(q)) ||
+      Boolean(evt.organizerName && evt.organizerName.toLowerCase().includes(q));
 
     return matchesCategory && matchesPrice && matchesSearch;
   });
 }
 
-/**
- * Format label harga yang ramah dan konsisten.
- */
-export function eventPriceLabel(isPaid?: boolean, price?: number): string {
-  if (!isPaid || !price || price === 0) {
+export function eventPriceLabel(
+  isPaid?: boolean,
+  price?: number,
+  ticketTiers?: readonly Pick<EventTicketTier, "price" | "isActive">[]
+): string {
+  if (!isPaid) {
     return "Gratis";
   }
-  return formatCurrencyIDR(price);
+  if (price && price > 0) {
+    return formatCurrencyIDR(price);
+  }
+  const paidTiers = (ticketTiers ?? []).filter(
+    (tier) => tier.isActive !== false && tier.price > 0
+  );
+  if (paidTiers.length === 0) {
+    return "Gratis";
+  }
+  const minTierPrice = Math.min(...paidTiers.map((tier) => tier.price));
+  const maxTierPrice = Math.max(...paidTiers.map((tier) => tier.price));
+  if (minTierPrice !== maxTierPrice) {
+    return `Mulai ${formatCurrencyIDR(minTierPrice)}`;
+  }
+  return formatCurrencyIDR(minTierPrice);
 }
 
 /**

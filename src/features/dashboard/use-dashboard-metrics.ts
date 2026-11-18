@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useOrders } from "@/contexts/OrderContext";
+import { useOutlet } from "@/contexts/OutletContext";
 
 import {
   averageOrderValue,
@@ -100,6 +101,7 @@ export function useDashboardMetrics() {
   const { user, activeOrgModules } = useAuth();
   const { isDateInRange } = useDateFilter();
   const { filteredOrders } = useOrders();
+  const { activeOutletId, isAllOutlets } = useOutlet();
   const { bookings: coworkingBookings } = useCoworking();
 
   const isDagoOwner =
@@ -147,18 +149,18 @@ export function useDashboardMetrics() {
     () =>
       coworkingBookings.filter(
         (booking) =>
+          (isAllOutlets || !booking.outletId || booking.outletId === activeOutletId) &&
           booking.paymentStatus === "PAID" &&
           booking.checkInStatus !== "CANCELLED" &&
           isDateInRange(booking.createdAt || booking.date),
       ),
-    [coworkingBookings, isDateInRange],
+    [coworkingBookings, isAllOutlets, activeOutletId, isDateInRange],
   );
 
   const coworkingRevenue = isTenantOwner
     ? 0
     : paidCoworkingBookings.reduce((sum, booking) => sum + (booking.paidAmount || booking.totalAmount || 0), 0);
 
-  // Dago earns the platform fee from events, not the full ticket turnover
   const eventRevenue = isDagoOwner ? eventStats.platformRevenue : 0;
   const consolidatedRevenue = fnbRevenue + coworkingRevenue + eventRevenue;
   const revenue = isDagoOwner ? consolidatedRevenue : fnbRevenue;
@@ -166,7 +168,24 @@ export function useDashboardMetrics() {
   const transactions =
     scopedOrders.length + (isDagoOwner ? paidCoworkingBookings.length + eventStats.paidBookingsCount : 0);
   const completedOrders = scopedOrders.filter((order) => order.status === "COMPLETED" || order.status === "SERVED").length;
-  const preparingOrders = scopedOrders.filter((order) => order.status === "COOKING" || order.status === "KITCHEN_RECEIVED").length;
+  const liveTenantOrders = useMemo(
+    () =>
+      scopeDashboardOrders(filteredOrders, {
+        tenantId,
+        isTenantOwner,
+        requirePaid: false,
+      }),
+    [filteredOrders, isTenantOwner, tenantId],
+  );
+  const preparingOrders = liveTenantOrders.filter((order) => {
+    const effectiveStatus = (isTenantOwner && tenantId && order.tenantStatuses?.[tenantId]) || order.status;
+    return (
+      effectiveStatus === "NEW" ||
+      effectiveStatus === "CONFIRMED" ||
+      effectiveStatus === "KITCHEN_RECEIVED" ||
+      effectiveStatus === "COOKING"
+    );
+  }).length;
 
   return {
     isDagoOwner,

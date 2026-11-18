@@ -134,10 +134,14 @@ export function formatCommercialReportPrintDate(date: Date): string {
  */
 export function formatCommercialLeaseStatusLabel(status?: string): string {
   switch (status) {
+    case "DRAFT":
+      return "Draf";
     case "ACTIVE":
       return "Aktif";
     case "EXPIRING_SOON":
       return "Segera berakhir";
+    case "EXPIRED":
+      return "Berakhir";
     case "TERMINATED":
       return "Selesai";
     default:

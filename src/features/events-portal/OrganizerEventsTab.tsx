@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { CalendarDays, Search } from "lucide-react";
 
@@ -65,6 +65,16 @@ export function OrganizerEventsTab({
   );
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (initialSection) {
+      setSection(initialSection);
+    }
+  }, [initialSection]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [groups, section, search]);
 
   const query = search.trim().toLowerCase();
   const visible = useMemo(() => groups[section].filter((e) => matches(e, query)), [groups, section, query]);

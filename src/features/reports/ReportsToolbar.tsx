@@ -15,6 +15,7 @@ import { DateRangePicker } from "@/features/dashboard/DateRangePicker";
 export interface ReportsToolbarProps {
   scopeName: string;
   periodLabel: string;
+  isTemplateXlsx?: boolean;
   onExportExcel: () => void;
   onExportCSV: () => void;
   onOpenPDF: () => void;
@@ -23,6 +24,7 @@ export interface ReportsToolbarProps {
 export function ReportsToolbar({
   scopeName,
   periodLabel,
+  isTemplateXlsx = true,
   onExportExcel,
   onExportCSV,
   onOpenPDF,
@@ -44,7 +46,7 @@ export function ReportsToolbar({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={onExportExcel}>
                 <FileSpreadsheet />
-                Excel (.xlsx)
+                {isTemplateXlsx ? "Excel (.xlsx)" : "Excel (.xls)"}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={onExportCSV}>
                 <Download />

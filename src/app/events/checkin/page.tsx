@@ -63,29 +63,56 @@ export default function EventCheckInDashboardPage() {
 
     setIsLoading(true);
     try {
-      const [evtRes, bRes] = await Promise.all([
-        fetch("/api/events"),
-        fetch("/api/events/bookings"),
-      ]);
+      let accessibleEvents: CommunityEvent[] = [];
+      let allBookings: EventTicketOrder[] = [];
 
-      const [evtJson, bJson] = await Promise.all([evtRes.json(), bRes.json()]);
-      const allEvents: CommunityEvent[] = evtJson.success ? evtJson.data : [];
-      const allBookings: EventTicketOrder[] = bJson.success && Array.isArray(bJson.data) ? bJson.data : [];
+      if (isHubAdmin || isEventStaff) {
+        const bookingsUrl = isHubAdmin ? "/api/events/bookings?unmasked=true" : "/api/events/bookings";
+        const [evtRes, bRes] = await Promise.all([
+          fetch("/api/events"),
+          fetch(bookingsUrl),
+        ]);
+        const [evtJson, bJson] = await Promise.all([evtRes.json(), bRes.json()]);
+        const allEvents: CommunityEvent[] = evtJson.success && Array.isArray(evtJson.data) ? evtJson.data : [];
+        allBookings = bJson.success && Array.isArray(bJson.data) ? bJson.data : [];
+        accessibleEvents = allEvents.filter((e) => e.status === "APPROVED");
+      } else {
+        const portalRes = await fetch("/api/events/portal");
+        const portalJson = await portalRes.json();
+        if (portalRes.ok && portalJson.success && portalJson.data) {
+          const portalEvents: CommunityEvent[] = Array.isArray(portalJson.data.events)
+            ? portalJson.data.events
+            : [];
+          accessibleEvents = portalEvents.filter((e) => e.status === "APPROVED");
+          const todayOrgEvents = filterTodayEventsWita(accessibleEvents);
+          const perEventResponses = await Promise.all(
+            todayOrgEvents.map((evt) =>
+              fetch(`/api/events/bookings?eventId=${encodeURIComponent(evt.id)}`)
+                .then((r) => r.json())
+                .catch(() => null)
+            )
+          );
+          const merged = new Map<string, EventTicketOrder>();
+          for (const item of perEventResponses) {
+            if (item?.success && Array.isArray(item.data)) {
+              for (const b of item.data as EventTicketOrder[]) {
+                merged.set(b.id, b);
+              }
+            }
+          }
+          if (merged.size === 0 && Array.isArray(portalJson.data.bookings)) {
+            allBookings = portalJson.data.bookings;
+          } else {
+            allBookings = Array.from(merged.values());
+          }
+        }
+      }
+
       setBookings(allBookings);
 
-      const userEmail = (user?.email || "").toLowerCase();
-      const accessibleEvents =
-        isHubAdmin || isEventStaff
-          ? allEvents.filter((e) => e.status === "APPROVED")
-          : allEvents.filter(
-              (e) => e.status === "APPROVED" && (e.organizerEmail || "").toLowerCase() === userEmail
-            );
-
-      // S-06: Meja check-in hanya untuk event hari ini (WITA). Event lampau dan mendatang tidak dapat dipilih.
       const todayEvents = filterTodayEventsWita(accessibleEvents);
       setEvents(todayEvents);
 
-      // Prioritize selecting an event that has registered attendee bookings or is currently ongoing today
       if (todayEvents.length > 0) {
         setSelectedEventId((prev) => {
           if (prev && todayEvents.some((e) => e.id === prev)) {
@@ -117,10 +144,14 @@ export default function EventCheckInDashboardPage() {
     return events.find((e) => e.id === selectedEventId) || null;
   }, [events, selectedEventId]);
 
-  // Tickets for selected event
   const eventTickets = useMemo(() => {
     if (!selectedEventId) return [];
-    return bookings.filter((b) => b.eventId === selectedEventId);
+    return bookings.filter(
+      (b) =>
+        b.eventId === selectedEventId &&
+        b.paymentStatus !== "CANCELLED" &&
+        b.paymentStatus !== "EXPIRED"
+    );
   }, [bookings, selectedEventId]);
 
   // Calculated attendance stats
@@ -404,6 +435,8 @@ export default function EventCheckInDashboardPage() {
                 onSwitchToCheckedTab={() => setActiveTab("CHECKED")}
                 activeTab={activeTab}
                 totalUnfilteredCount={eventTickets.length}
+                hasSearch={Boolean(ticketSearch.trim())}
+                selectedEventId={selectedEventId}
               />
             </div>
           </div>

@@ -52,11 +52,16 @@ export async function GET(req: NextRequest) {
 
     let shifts = await loadAndReconcileServerShifts();
 
-    if (status) {
-      shifts = shifts.filter((s) => s.status === status);
+    if (status && status !== "ALL") {
+      const target = status.toUpperCase();
+      shifts = shifts.filter((s) =>
+        target === "ACTIVE" || target === "OPEN"
+          ? s.status === "ACTIVE" || s.status === "OPEN"
+          : s.status === target
+      );
     }
     if (outletId && outletId !== "ALL") {
-      shifts = shifts.filter((s) => s.outletId === outletId);
+      shifts = shifts.filter((s) => !s.outletId || s.outletId === outletId);
     }
     if (cashierId) {
       shifts = shifts.filter((s) => s.assignedCashierId === cashierId);

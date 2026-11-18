@@ -182,13 +182,17 @@ export function NewBookingModal({
       return;
     }
 
-    const dateFormatted = new Date(bookStartDate).toLocaleDateString("id-ID", {
+    const parseLocalWitaDate = (ymd: string) =>
+      /^\d{4}-\d{2}-\d{2}$/.test(ymd) ? new Date(`${ymd}T00:00:00+08:00`) : new Date(ymd);
+    const dateFormatted = parseLocalWitaDate(bookStartDate).toLocaleDateString("id-ID", {
+      timeZone: "Asia/Makassar",
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
     const endDateFormatted = pricing.computedEndDate
-      ? new Date(pricing.computedEndDate).toLocaleDateString("id-ID", {
+      ? parseLocalWitaDate(pricing.computedEndDate).toLocaleDateString("id-ID", {
+          timeZone: "Asia/Makassar",
           day: "2-digit",
           month: "short",
           year: "numeric",
@@ -427,7 +431,13 @@ export function NewBookingModal({
                     id="daily-start"
                     type="date"
                     value={bookStartDate}
-                    onChange={(e) => setBookStartDate(e.target.value)}
+                    onChange={(e) => {
+                      const nextStart = e.target.value;
+                      setBookStartDate(nextStart);
+                      if (nextStart && bookEndDate && nextStart > bookEndDate) {
+                        setBookEndDate(nextStart);
+                      }
+                    }}
                     className="text-xs font-mono"
                     required
                   />

@@ -8,13 +8,13 @@ export interface SpaceSlot {
   isTaken: boolean;
 }
 
-/** True when [start, start + hours) on that date does not overlap any live booking of the space. */
 export function isRangeFree(
   bookings: readonly CoworkingBooking[],
   spaceId: string,
   date: string,
   start: string,
   hours: number,
+  maxCapacity: number = 1,
 ): boolean {
   const result = checkCoworkingBookingConflict([...bookings], {
     spaceId,
@@ -22,16 +22,20 @@ export function isRangeFree(
     date,
     startTime: start,
     endTime: calculateEndTime(start, hours),
+    maxCapacity,
   });
   return !result.hasConflict;
 }
 
-/** One-hour slots for a space on a date, each marked taken when an existing booking covers it. */
 export function slotAvailability(
   bookings: readonly CoworkingBooking[],
   spaceId: string,
   date: string,
   slots: readonly string[],
+  maxCapacity: number = 1,
 ): SpaceSlot[] {
-  return slots.map((time) => ({ time, isTaken: !isRangeFree(bookings, spaceId, date, time, 1) }));
+  return slots.map((time) => ({
+    time,
+    isTaken: !isRangeFree(bookings, spaceId, date, time, 1, maxCapacity),
+  }));
 }

@@ -598,6 +598,8 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           ? "Perlu rekonsiliasi"
           : s.status === "CLOSED"
           ? "Ditutup"
+          : s.status === "ACTIVE" || s.status === "OPEN"
+          ? "Aktif"
           : s.status,
       ]);
 

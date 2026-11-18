@@ -1,6 +1,7 @@
 import type { MasterProduct } from "@/types/product";
 import type { PromoConfig } from "@/lib/promo";
 import type { OrderRecord } from "@/types/order";
+import { normalizeTenantId } from "@/features/orders/orders-domain";
 
 export type CustomerBadgeTone = "success" | "warning" | "info" | "destructive" | "neutral";
 
@@ -76,6 +77,8 @@ export function spaceTypeLabel(type: string): string {
       return "Dedicated desk";
     case "MEETING_ROOM":
       return "Ruang rapat";
+    case "PRIVATE_POD":
+      return "Private pod";
     case "PRIVATE_OFFICE":
       return "Kantor privat";
     default:
@@ -85,6 +88,8 @@ export function spaceTypeLabel(type: string): string {
 
 export function bookingStatusLabel(status: string): string {
   switch (status) {
+    case "RESERVED":
+      return "Dipesan";
     case "CONFIRMED":
       return "Terkonfirmasi";
     case "CHECKED_IN":
@@ -100,6 +105,8 @@ export function bookingStatusLabel(status: string): string {
 
 export function bookingStatusTone(status: string): CustomerBadgeTone {
   switch (status) {
+    case "RESERVED":
+      return "info";
     case "CONFIRMED":
     case "CHECKED_IN":
       return "success";
@@ -121,9 +128,14 @@ export function filterCustomerProducts(
 ): MasterProduct[] {
   const { partnerId = "ALL", category = "ALL", searchQuery = "" } = options;
   const needle = searchQuery.trim().toLowerCase();
+  const normalizedPartner = partnerId !== "ALL" ? normalizeTenantId(partnerId) : "ALL";
 
   return products.filter((p) => {
-    if (partnerId !== "ALL" && p.tenantId !== partnerId) return false;
+    if (p.status && p.status !== "ACTIVE") return false;
+    if (normalizedPartner !== "ALL") {
+      const productTenant = normalizeTenantId(p.tenantId || "tenant-ks");
+      if (productTenant !== normalizedPartner) return false;
+    }
     if (category !== "ALL" && p.category !== category) return false;
     if (needle) {
       const matchName = p.name.toLowerCase().includes(needle);

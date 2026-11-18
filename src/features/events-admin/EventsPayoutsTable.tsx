@@ -16,6 +16,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { PayoutRecord } from "@/types/event";
+import {
+  EventDateRangeFilter,
+  isTimestampInWitaPeriod,
+  type DateRange,
+} from "@/components/events/EventDateRangeFilter";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
   formatDateSafe,
@@ -34,6 +39,8 @@ export interface EventsPayoutsTableProps {
   onFilterStatusChange: (status: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  dateRange?: DateRange | null;
+  onDateRangeChange?: (range: DateRange | null) => void;
   currentPage: number;
   pageSize: number;
   onPageChange: (page: number) => void;
@@ -58,6 +65,8 @@ export function EventsPayoutsTable({
   onFilterStatusChange,
   searchQuery,
   onSearchChange,
+  dateRange = null,
+  onDateRangeChange,
   currentPage,
   pageSize,
   onPageChange,
@@ -69,23 +78,28 @@ export function EventsPayoutsTable({
 
   const filtered = payouts.filter((p) => {
     if (filterStatus !== "ALL" && p.status !== filterStatus) return false;
+    if (dateRange && !isTimestampInWitaPeriod(p.requestedAt, dateRange)) return false;
     if (needle) {
       const matchTitle = p.eventTitle?.toLowerCase().includes(needle);
       const matchOrg = p.organizerName?.toLowerCase().includes(needle);
       const matchBank = p.bankName?.toLowerCase().includes(needle);
       const matchAcc = p.accountNumber?.toLowerCase().includes(needle);
-      if (!matchTitle && !matchOrg && !matchBank && !matchAcc) return false;
+      const matchHolder = p.accountHolder?.toLowerCase().includes(needle);
+      const matchRef = p.referenceNo?.toLowerCase().includes(needle);
+      if (!matchTitle && !matchOrg && !matchBank && !matchAcc && !matchHolder && !matchRef) {
+        return false;
+      }
     }
     return true;
   });
 
   const startIndex = (currentPage - 1) * pageSize;
   const pagedPayouts = filtered.slice(startIndex, startIndex + pageSize);
+  const hasFilter = Boolean(needle || dateRange || filterStatus !== "ALL");
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filter and Search Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <Tabs value={filterStatus} onValueChange={onFilterStatusChange}>
           <TabsList className="overflow-x-auto no-scrollbar">
             <TabsTrigger value="ALL">Semua</TabsTrigger>
@@ -96,19 +110,30 @@ export function EventsPayoutsTable({
           </TabsList>
         </Tabs>
 
-        <div className="max-w-sm flex-1">
-          <InputGroup>
-            <InputGroupAddon align="inline-start">
-              <Search />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              placeholder="Cari event, mitra, bank…"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              aria-label="Cari pencairan saldo"
+        <div className="flex flex-wrap items-center gap-2.5 flex-1 lg:justify-end">
+          <div className="min-w-[200px] flex-1 sm:max-w-xs">
+            <InputGroup>
+              <InputGroupAddon align="inline-start">
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="search"
+                placeholder="Cari event, mitra, bank…"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                aria-label="Cari pencairan saldo"
+              />
+            </InputGroup>
+          </div>
+
+          {onDateRangeChange ? (
+            <EventDateRangeFilter
+              initialRange={dateRange}
+              onApplyFilter={onDateRangeChange}
+              label="Periode pengajuan"
+              align="right"
             />
-          </InputGroup>
+          ) : null}
         </div>
       </div>
 
@@ -116,10 +141,12 @@ export function EventsPayoutsTable({
         <EmptyState
           className="border"
           icon={<Wallet />}
-          title={searchQuery ? "Tidak ada pencairan yang cocok" : "Belum ada permohonan pencairan saldo"}
+          title={hasFilter ? "Tidak ada pencairan yang cocok" : "Belum ada permohonan pencairan saldo"}
           description={
             searchQuery
               ? `Tidak ditemukan pencairan saldo dengan kata kunci "${searchQuery}".`
+              : dateRange
+              ? "Tidak ada pengajuan pencairan saldo pada rentang tanggal yang dipilih."
               : "Mitra penyelenggara yang mengajukan penarikan bagi hasil tiket akan muncul di sini."
           }
         />

@@ -3,6 +3,7 @@
 import { GitCommit, Search, Table as TableIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,8 +20,14 @@ export interface ActivityLogFilterBarProps {
   onSearchChange: (v: string) => void;
   dateFilter: DateFilterType;
   onDateFilterChange: (v: DateFilterType) => void;
+  customStartDate?: string;
+  customEndDate?: string;
+  onCustomStartDateChange?: (v: string) => void;
+  onCustomEndDateChange?: (v: string) => void;
   selectedStatus: string;
   onStatusChange: (v: string) => void;
+  selectedSeverity?: string;
+  onSeverityChange?: (v: string) => void;
   selectedActor: string;
   onActorChange: (v: string) => void;
   uniqueActors: string[];
@@ -38,6 +45,7 @@ const DATE_OPTIONS: readonly { key: DateFilterType; label: string }[] = [
   { key: "TODAY", label: "Hari ini" },
   { key: "LAST_7_DAYS", label: "7 hari terakhir" },
   { key: "LAST_30_DAYS", label: "30 hari terakhir" },
+  { key: "CUSTOM", label: "Rentang khusus" },
 ];
 
 const STATUS_OPTIONS = [
@@ -47,6 +55,15 @@ const STATUS_OPTIONS = [
   { key: "FAILED", label: "Gagal" },
 ] as const;
 
+const SEVERITY_OPTIONS = [
+  { key: "ALL", label: "Semua tingkat" },
+  { key: "INFO", label: "Info" },
+  { key: "LOW", label: "Rendah" },
+  { key: "MEDIUM", label: "Sedang" },
+  { key: "HIGH", label: "Tinggi" },
+  { key: "CRITICAL", label: "Kritis" },
+] as const;
+
 export function ActivityLogFilterBar({
   viewMode,
   onViewModeChange,
@@ -54,8 +71,14 @@ export function ActivityLogFilterBar({
   onSearchChange,
   dateFilter,
   onDateFilterChange,
+  customStartDate = "",
+  customEndDate = "",
+  onCustomStartDateChange,
+  onCustomEndDateChange,
   selectedStatus,
   onStatusChange,
+  selectedSeverity = "ALL",
+  onSeverityChange,
   selectedActor,
   onActorChange,
   uniqueActors,
@@ -112,6 +135,26 @@ export function ActivityLogFilterBar({
           ))}
         </NativeSelect>
 
+        {dateFilter === "CUSTOM" && onCustomStartDateChange && onCustomEndDateChange ? (
+          <div className="flex items-center gap-1.5">
+            <Input
+              type="date"
+              value={customStartDate}
+              onChange={(e) => onCustomStartDateChange(e.target.value)}
+              aria-label="Tanggal mulai audit"
+              className="w-36"
+            />
+            <span className="text-xs text-muted-foreground">s/d</span>
+            <Input
+              type="date"
+              value={customEndDate}
+              onChange={(e) => onCustomEndDateChange(e.target.value)}
+              aria-label="Tanggal akhir audit"
+              className="w-36"
+            />
+          </div>
+        ) : null}
+
         <NativeSelect
           value={selectedStatus}
           onChange={(e) => onStatusChange(e.target.value)}
@@ -123,6 +166,20 @@ export function ActivityLogFilterBar({
             </NativeSelectOption>
           ))}
         </NativeSelect>
+
+        {onSeverityChange ? (
+          <NativeSelect
+            value={selectedSeverity}
+            onChange={(e) => onSeverityChange(e.target.value)}
+            aria-label="Filter tingkat risiko"
+          >
+            {SEVERITY_OPTIONS.map((opt) => (
+              <NativeSelectOption key={opt.key} value={opt.key}>
+                {opt.label}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        ) : null}
 
         <NativeSelect
           value={selectedModule}

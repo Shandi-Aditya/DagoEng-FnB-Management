@@ -54,9 +54,14 @@ function buildTrustedAuditEntry(
     "Authenticated Staff";
   const resolvedStatus = rawEntry.status || "SUCCESS";
 
+  const preservedTimestamp =
+    typeof rawEntry.timestamp === "string" && !Number.isNaN(Date.parse(rawEntry.timestamp))
+      ? rawEntry.timestamp
+      : new Date().toISOString();
+
   return {
     id: rawEntry.id || `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    timestamp: new Date().toISOString(),
+    timestamp: preservedTimestamp,
     formattedTime: rawEntry.formattedTime,
     userId: auth.userId,
     userName: trustedActorName,

@@ -121,7 +121,7 @@ export function ActivityLogProvider({ children }: { children: React.ReactNode })
 
   const filteredLogs = logs.filter((l) => {
     if (isAllOutlets) return true;
-    return l.outletId === activeOutletId || !l.outletId;
+    return l.outletId === activeOutletId || l.outletId === "ALL" || !l.outletId;
   });
 
   const logActivity = (payload: LogActivityPayload) => {

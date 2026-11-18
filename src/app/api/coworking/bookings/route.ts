@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   DEFAULT_COWORKING_HOLIDAY_CONFIG,
+  normalizeDateToYMD,
   validateCoworkingBookingSchedule,
   type CoworkingHolidayConfig,
 } from "@/lib/operating-hours";
@@ -86,11 +87,22 @@ export async function GET(req: NextRequest) {
     let bookings = await getCoworkingBookings();
 
     if (date) {
-      bookings = bookings.filter((b) => b.date === date);
+      const targetYmd = normalizeDateToYMD(date);
+      bookings = bookings.filter((b: Record<string, unknown>) => {
+        const rawStart = typeof b.date === "string" ? b.date : "";
+        const rawEnd = typeof b.endDate === "string" ? b.endDate : rawStart;
+        const startYmd = normalizeDateToYMD(rawStart);
+        const endYmd = normalizeDateToYMD(rawEnd) || startYmd;
+        if (!targetYmd) return rawStart === date;
+        return Boolean(startYmd) && targetYmd >= startYmd && targetYmd <= endYmd;
+      });
     }
     if (status) {
       bookings = bookings.filter(
-        (b) => b.paymentStatus === status || b.status === status
+        (b: Record<string, unknown>) =>
+          b.checkInStatus === status ||
+          b.paymentStatus === status ||
+          b.status === status
       );
     }
 

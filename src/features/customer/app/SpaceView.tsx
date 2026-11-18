@@ -50,9 +50,12 @@ function upcomingDays(): { value: string; weekday: string; day: string }[] {
 }
 
 
-/** Current hour in WITA as "HH:00", for hiding today's past slots. */
 function currentHourWita(): string {
-  const hour = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, timeZone: WITA }).format(new Date());
+  const hour = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hourCycle: "h23",
+    timeZone: WITA,
+  }).format(new Date());
   return `${hour}:00`;
 }
 
@@ -149,8 +152,14 @@ export function SpaceView(props: SpaceViewProps) {
                 </span>
               </div>
               <div className="grid grid-cols-5 gap-1.5">
-                {slotAvailability(props.bookings, space.id, date, slots)
-                  .map((slot) => ({ ...slot, isTaken: slot.isTaken || (pastCutoff !== null && slot.time <= pastCutoff) }))
+                {slotAvailability(
+                  props.bookings,
+                  space.id,
+                  date,
+                  slots,
+                  space.type === "HOT_DESK" ? Math.max(1, space.capacity || 8) : 1
+                )
+                  .map((slot) => ({ ...slot, isTaken: slot.isTaken || (pastCutoff !== null && slot.time < pastCutoff) }))
                   .map((slot) => (
                   <button
                     key={slot.time}

@@ -6,6 +6,7 @@ import { Clock, Printer } from "lucide-react";
 import { DataPagination } from "@/components/app/data-pagination";
 import { DataTableToolbar } from "@/components/app/data-table-toolbar";
 import { EmptyState } from "@/components/app/empty-state";
+import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,7 @@ import type { ShiftRecord } from "@/types/shift";
 import {
   emptyShiftMessage,
   filterShifts,
+  formatShiftWitaTimestamp,
   getShiftStatusLabel,
   getShiftStatusTone,
 } from "./employees-domain";
@@ -31,6 +33,12 @@ import {
 export interface EmployeesShiftsTabProps {
   shifts: ShiftRecord[];
   activeShift: ShiftRecord | null;
+  searchQuery?: string;
+  onSearchChange?: (val: string) => void;
+  statusFilter?: string;
+  onStatusFilterChange?: (val: string) => void;
+  dateFilter?: string;
+  onDateFilterChange?: (val: string) => void;
   onOpenCloseShiftModal: (shift: ShiftRecord) => void;
   onOpenStartShiftModal: () => void;
   onOpenClosingPDF: (shift: ShiftRecord) => void;
@@ -39,26 +47,55 @@ export interface EmployeesShiftsTabProps {
 export function EmployeesShiftsTab({
   shifts,
   activeShift,
+  searchQuery: controlledSearch,
+  onSearchChange,
+  statusFilter: controlledStatus,
+  onStatusFilterChange,
+  dateFilter: controlledDate,
+  onDateFilterChange,
   onOpenCloseShiftModal,
   onOpenStartShiftModal,
   onOpenClosingPDF,
 }: EmployeesShiftsTabProps) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [localSearch, setLocalSearch] = useState("");
+  const [localStatus, setLocalStatus] = useState("ALL");
+  const [localDate, setLocalDate] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const isFiltered = searchQuery.trim() !== "" || statusFilter !== "ALL";
+  const searchQuery = controlledSearch ?? localSearch;
+  const statusFilter = controlledStatus ?? localStatus;
+  const dateFilter = controlledDate ?? localDate;
+
+  const updateSearch = (val: string) => {
+    if (onSearchChange) onSearchChange(val);
+    else setLocalSearch(val);
+    setCurrentPage(1);
+  };
+  const updateStatus = (val: string) => {
+    if (onStatusFilterChange) onStatusFilterChange(val);
+    else setLocalStatus(val);
+    setCurrentPage(1);
+  };
+  const updateDate = (val: string) => {
+    if (onDateFilterChange) onDateFilterChange(val);
+    else setLocalDate(val);
+    setCurrentPage(1);
+  };
+
+  const isFiltered =
+    searchQuery.trim() !== "" || statusFilter !== "ALL" || dateFilter !== "";
 
   const handleResetFilters = () => {
-    setSearchQuery("");
-    setStatusFilter("ALL");
+    updateSearch("");
+    updateStatus("ALL");
+    updateDate("");
     setCurrentPage(1);
   };
 
   const filteredShifts = useMemo(() => {
-    return filterShifts(shifts, searchQuery, statusFilter);
-  }, [shifts, searchQuery, statusFilter]);
+    return filterShifts(shifts, searchQuery, statusFilter, dateFilter);
+  }, [shifts, searchQuery, statusFilter, dateFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredShifts.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -104,7 +141,7 @@ export function EmployeesShiftsTab({
             <div>
               <span className="block text-muted-foreground">Dibuka</span>
               <span className="font-mono tabular-nums text-muted-foreground">
-                {activeShift.startTime}
+                {formatShiftWitaTimestamp(activeShift.startTime)}
               </span>
             </div>
             <div>
@@ -137,21 +174,22 @@ export function EmployeesShiftsTab({
 
       <DataTableToolbar
         searchValue={searchQuery}
-        onSearchChange={(val) => {
-          setSearchQuery(val);
-          setCurrentPage(1);
-        }}
+        onSearchChange={updateSearch}
         searchPlaceholder="Cari shift atau kasir"
         searchAriaLabel="Cari shift"
         hasActiveFilters={isFiltered}
         onResetFilters={handleResetFilters}
       >
+        <Input
+          type="date"
+          value={dateFilter}
+          onChange={(e) => updateDate(e.target.value)}
+          aria-label="Filter tanggal shift"
+          className="w-38"
+        />
         <NativeSelect
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setCurrentPage(1);
-          }}
+          onChange={(e) => updateStatus(e.target.value)}
           aria-label="Filter status shift"
         >
           <NativeSelectOption value="ALL">Semua status</NativeSelectOption>
@@ -200,7 +238,7 @@ export function EmployeesShiftsTab({
                             {s.assignedCashierName}
                           </span>
                           <span className="text-xs text-muted-foreground sm:hidden">
-                            {getShiftStatusLabel(s.status)} · {s.startTime}
+                            {getShiftStatusLabel(s.status)} · {formatShiftWitaTimestamp(s.startTime)}
                           </span>
                         </div>
                       </TableCell>
@@ -208,10 +246,12 @@ export function EmployeesShiftsTab({
                       <TableCell className="hidden lg:table-cell">
                         <div className="flex flex-col">
                           <span className="font-mono text-xs font-medium tabular-nums text-foreground">
-                            {s.startTime}
+                            {formatShiftWitaTimestamp(s.startTime)}
                           </span>
                           <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                            {s.closedAt || s.endTime || "Belum ditutup"}
+                            {s.closedAt || s.endTime
+                              ? formatShiftWitaTimestamp(s.closedAt || s.endTime)
+                              : "Belum ditutup"}
                           </span>
                         </div>
                       </TableCell>

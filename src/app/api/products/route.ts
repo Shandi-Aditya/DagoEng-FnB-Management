@@ -206,7 +206,10 @@ export async function GET(req: NextRequest) {
       products = products.filter((p) => p.category === category);
     }
     if (tenantId) {
-      products = products.filter((p) => p.tenantId === tenantId);
+      const normTarget = normalizeTenantId(tenantId);
+      products = products.filter(
+        (p) => normalizeTenantId(p.tenantId || "tenant-ks") === normTarget
+      );
     }
     if (status) {
       products = products.filter((p) => p.status === status);

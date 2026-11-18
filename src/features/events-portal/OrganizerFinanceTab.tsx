@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Landmark, Wallet } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,10 @@ const PAGE_SIZE = 10;
 /** Balance first with one way to withdraw it, then where it came from, then what was already paid. */
 export function OrganizerFinanceTab({ rows, totals, payouts, bankSettings, onOpenPayout, onGoToSettings }: OrganizerFinanceTabProps) {
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [payouts]);
   const hasBankAccount = Boolean(bankSettings.accountNumber && bankSettings.bankName);
   const earningRows = rows.filter((row) => row.gross > 0 || row.paidOut > 0 || row.pending > 0);
   const pagePayouts = payouts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);

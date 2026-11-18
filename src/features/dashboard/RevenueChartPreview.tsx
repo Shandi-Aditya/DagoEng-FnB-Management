@@ -21,7 +21,7 @@ import { formatCurrencyIDR } from "@/lib/utils";
 
 import {
   bucketHourly,
-  bucketLastSevenDays,
+  bucketOrdersByDateRange,
   formatCompactIDR,
   projectDashboardOrdersForTenant,
   scopeDashboardOrders,
@@ -31,7 +31,7 @@ import {
 type ChartView = "weekly" | "hourly" | "promo";
 
 const VIEW_DESCRIPTIONS: Record<ChartView, string> = {
-  weekly: "Omzet 7 hari terakhir dibanding HPP dan diskon promo",
+  weekly: "Omzet harian pada periode terpilih dibanding HPP dan diskon promo",
   hourly: "Omzet per jam untuk melihat jam sibuk",
   promo: "Omzet transaksi promo dibanding transaksi reguler",
 };
@@ -56,7 +56,7 @@ function Summary({ label, value }: { label: string; value: string }) {
 
 export function RevenueChartPreview() {
   const { user } = useAuth();
-  const { isDateInRange } = useDateFilter();
+  const { startDate, endDate, isDateInRange } = useDateFilter();
   const { filteredOrders } = useOrders();
   const [view, setView] = useState<ChartView>("weekly");
 
@@ -73,18 +73,21 @@ export function RevenueChartPreview() {
     return isTenantOwner && tenantId ? projectDashboardOrdersForTenant(paid, tenantId) : paid;
   }, [filteredOrders, tenantId, isTenantOwner, isDateInRange]);
 
-  const weekly = useMemo(() => bucketLastSevenDays(scopedOrders), [scopedOrders]);
+  const daily = useMemo(
+    () => bucketOrdersByDateRange(scopedOrders, startDate, endDate),
+    [scopedOrders, startDate, endDate],
+  );
   const hourly = useMemo(() => bucketHourly(scopedOrders), [scopedOrders]);
   const promo = useMemo(() => splitPromoOrders(scopedOrders), [scopedOrders]);
 
-  const weeklyRevenue = weekly.reduce((sum, day) => sum + day.revenue, 0);
-  const weeklyCost = weekly.reduce((sum, day) => sum + day.cost, 0);
-  const weeklyDiscount = weekly.reduce((sum, day) => sum + day.discount, 0);
-  const grossMargin = weeklyRevenue > 0 ? Math.round(((weeklyRevenue - weeklyCost) / weeklyRevenue) * 100) : 0;
+  const periodRevenue = daily.reduce((sum, day) => sum + day.revenue, 0);
+  const periodCost = daily.reduce((sum, day) => sum + day.cost, 0);
+  const periodDiscount = daily.reduce((sum, day) => sum + day.discount, 0);
+  const grossMargin = periodRevenue > 0 ? Math.round(((periodRevenue - periodCost) / periodRevenue) * 100) : 0;
 
   const hasData =
     view === "weekly"
-      ? weeklyRevenue > 0
+      ? periodRevenue > 0
       : view === "hourly"
         ? hourly.some((slot) => slot.revenue > 0)
         : promo.some((bucket) => bucket.revenue > 0);
@@ -100,7 +103,7 @@ export function RevenueChartPreview() {
         <CardAction>
           <Tabs value={view} onValueChange={(value) => setView(value as ChartView)}>
             <TabsList>
-              <TabsTrigger value="weekly">7 hari</TabsTrigger>
+              <TabsTrigger value="weekly">Harian</TabsTrigger>
               <TabsTrigger value="hourly">Jam sibuk</TabsTrigger>
               <TabsTrigger value="promo">Promo</TabsTrigger>
             </TabsList>
@@ -112,7 +115,7 @@ export function RevenueChartPreview() {
         {hasData ? (
           <ChartContainer config={chartConfig} className="aspect-auto h-72 w-full">
             {view === "weekly" ? (
-              <ComposedChart data={weekly} margin={{ left: 0, right: 8 }}>
+              <ComposedChart data={daily} margin={{ left: 0, right: 8 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} />
                 {yAxis}
@@ -151,9 +154,9 @@ export function RevenueChartPreview() {
         )}
 
         <div className="grid grid-cols-3 gap-4 border-t pt-4">
-          <Summary label="Omzet 7 hari" value={formatCurrencyIDR(weeklyRevenue)} />
+          <Summary label="Omzet periode" value={formatCurrencyIDR(periodRevenue)} />
           <Summary label="Margin kotor (estimasi)" value={`${grossMargin}%`} />
-          <Summary label="Diskon promo" value={formatCurrencyIDR(weeklyDiscount)} />
+          <Summary label="Diskon promo" value={formatCurrencyIDR(periodDiscount)} />
         </div>
       </CardContent>
     </Card>

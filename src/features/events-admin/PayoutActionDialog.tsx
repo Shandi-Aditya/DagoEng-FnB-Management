@@ -83,7 +83,7 @@ export function PayoutActionDialog({
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="payoutInput">
-              {isPaid ? "Nomor referensi / mutasi bank (opsional)" : "Alasan penolakan"}
+              {isPaid ? "Nomor referensi / mutasi bank" : "Alasan penolakan"}
             </Label>
             <Input
               id="payoutInput"
@@ -95,7 +95,7 @@ export function PayoutActionDialog({
               }
               value={inputText}
               onChange={(e) => onInputTextChange(e.target.value)}
-              required={!isPaid}
+              required
             />
           </div>
         </div>
@@ -115,7 +115,7 @@ export function PayoutActionDialog({
             size="lg"
             variant={isPaid ? "default" : "destructive"}
             onClick={onConfirm}
-            disabled={(!isPaid && !inputText.trim()) || isProcessing}
+            disabled={!inputText.trim() || isProcessing}
           >
             {isProcessing ? (
               "Menyimpan…"

@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/components/app/status-badge";
+import { normalizeTenantId } from "@/features/orders/orders-domain";
 import { resolveItemTenantId } from "@/lib/settlement";
 import type { OrderItemRecord, OrderRecord, OrderStatus, SLAStatus } from "@/types/order";
 import type { KitchenTicketData } from "@/types/printer";
@@ -48,6 +49,7 @@ const BARISTA_KEYWORDS = [
   "latte",
   "espresso",
   "ice",
+  "es",
   "matcha",
   "americano",
   "teh",
@@ -57,6 +59,10 @@ const BARISTA_KEYWORDS = [
   "squash",
   "juice",
   "jus",
+  "coklat",
+  "cokelat",
+  "air",
+  "mineral",
 ];
 const PASTRY_KEYWORDS = [
   "croissant",
@@ -82,13 +88,14 @@ function includesAny(name: string, keywords: readonly string[]): boolean {
 }
 
 export function effectiveKitchenStatus(order: OrderRecord, tenantId?: string): OrderStatus {
-  if (tenantId && tenantId !== "ALL" && order.tenantStatuses?.[tenantId]) {
-    return order.tenantStatuses[tenantId];
+  const normTenant = normalizeTenantId(tenantId);
+  if (normTenant && normTenant !== "ALL" && order.tenantStatuses) {
+    if (order.tenantStatuses[normTenant]) return order.tenantStatuses[normTenant];
+    if (tenantId && order.tenantStatuses[tenantId]) return order.tenantStatuses[tenantId];
   }
   return order.status;
 }
 
-/** Station an item is prepared at, guessed from its name. Hot kitchen is everything else. */
 export function stationFor(productName: string): Exclude<KitchenStation, "ALL"> {
   const name = productName.toLowerCase();
   if (includesAny(name, BARISTA_KEYWORDS)) return "BARISTA";
@@ -96,13 +103,23 @@ export function stationFor(productName: string): Exclude<KitchenStation, "ALL"> 
   return "KITCHEN";
 }
 
-/** Items a kitchen should see on a ticket: a tenant only sees its own. */
-export function ticketItems(order: OrderRecord, tenantId: string | undefined): OrderItemRecord[] {
-  if (!tenantId || tenantId === "ALL") return order.items;
-  return order.items.filter((item) => {
-    const itemTenant = resolveItemTenantId(item);
-    return itemTenant === tenantId;
-  });
+export function ticketItems(
+  order: OrderRecord,
+  tenantId: string | undefined,
+  station: KitchenStation = "ALL"
+): OrderItemRecord[] {
+  const normTenant = normalizeTenantId(tenantId);
+  const fallbackTenantId = (order as { tenantId?: string }).tenantId;
+  const byTenant =
+    !normTenant || normTenant === "ALL"
+      ? order.items
+      : order.items.filter((item) => {
+          const itemTenant = normalizeTenantId(resolveItemTenantId(item, fallbackTenantId));
+          return itemTenant === normTenant;
+        });
+
+  if (!station || station === "ALL") return byTenant;
+  return byTenant.filter((item) => stationFor(item.productName) === station);
 }
 
 function matchesType(order: OrderRecord, type: KitchenTypeFilter): boolean {

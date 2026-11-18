@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Calendar, History, Laptop, Users } from "lucide-react";
 
@@ -22,6 +22,8 @@ import { CoworkingBookingsTab } from "@/features/coworking/CoworkingBookingsTab"
 import {
   buildCoworkingExportData,
   calculateCoworkingKPIs,
+  filterCoworkingBookings,
+  filterCoworkingMembers,
 } from "@/features/coworking/coworking-domain";
 import { CoworkingLogsTab } from "@/features/coworking/CoworkingLogsTab";
 import { CoworkingMembersTab } from "@/features/coworking/CoworkingMembersTab";
@@ -54,6 +56,9 @@ export default function CoworkingPage() {
   } = useCoworking();
 
   const [activeTab, setActiveTab] = useState<"SPACES" | "BOOKINGS" | "MEMBERS" | "LOGS">("SPACES");
+  const [bookingSearchQuery, setBookingSearchQuery] = useState("");
+  const [bookingStatusFilter, setBookingStatusFilter] = useState("ALL");
+  const [bookingDateFilter, setBookingDateFilter] = useState("");
   const [searchMemberQuery, setSearchMemberQuery] = useState("");
   const [memberStatusFilter, setMemberStatusFilter] = useState<"ALL" | "ACTIVE" | "EXPIRED">("ALL");
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
@@ -92,6 +97,30 @@ export default function CoworkingPage() {
     );
   }
 
+  const outletBookings = useMemo(
+    () =>
+      bookings.filter(
+        (b) => activeOutletId === "ALL" || !b.outletId || b.outletId === activeOutletId
+      ),
+    [bookings, activeOutletId]
+  );
+
+  const displayedBookings = useMemo(
+    () =>
+      filterCoworkingBookings(
+        outletBookings,
+        bookingStatusFilter,
+        bookingSearchQuery,
+        bookingDateFilter
+      ),
+    [outletBookings, bookingStatusFilter, bookingSearchQuery, bookingDateFilter]
+  );
+
+  const displayedMembers = useMemo(
+    () => filterCoworkingMembers(members, memberStatusFilter, searchMemberQuery),
+    [members, memberStatusFilter, searchMemberQuery]
+  );
+
   const kpis = calculateCoworkingKPIs(spaces, members);
   const canManageSettings =
     user?.role?.slug === "OWNER" ||
@@ -103,8 +132,8 @@ export default function CoworkingPage() {
   const handleExportCSV = () => {
     const { filename, headers, rows } = buildCoworkingExportData(
       activeTab === "MEMBERS" ? "MEMBERS" : "BOOKINGS",
-      bookings,
-      members,
+      displayedBookings,
+      displayedMembers,
       outletScopeName
     );
     downloadCSV(`${filename}_${Date.now()}`, headers, rows);
@@ -114,8 +143,8 @@ export default function CoworkingPage() {
   const handleExportExcel = () => {
     const { filename, sheet, headers, rows } = buildCoworkingExportData(
       activeTab === "MEMBERS" ? "MEMBERS" : "BOOKINGS",
-      bookings,
-      members,
+      displayedBookings,
+      displayedMembers,
       outletScopeName
     );
     downloadExcel(`${filename}_${Date.now()}`, sheet, headers, rows);
@@ -383,7 +412,13 @@ export default function CoworkingPage() {
 
         <TabsContent value="BOOKINGS">
           <CoworkingBookingsTab
-            bookings={bookings}
+            bookings={outletBookings}
+            searchQuery={bookingSearchQuery}
+            onSearchChange={setBookingSearchQuery}
+            statusFilter={bookingStatusFilter}
+            onStatusFilterChange={setBookingStatusFilter}
+            dateFilter={bookingDateFilter}
+            onDateFilterChange={setBookingDateFilter}
             onOpenReceipt={handleOpenReceipt}
             onCheckIn={handleCheckInBooking}
             onCheckout={handleCheckoutSpace}
@@ -438,9 +473,9 @@ export default function CoworkingPage() {
         <CoworkingReportPDFModal
           isOpen={isPDFModalOpen}
           onClose={() => setIsPDFModalOpen(false)}
-          bookings={bookings}
+          bookings={displayedBookings}
           spaces={spaces}
-          members={members}
+          members={displayedMembers}
           outletName={activeOutlet?.name || "Semua Gerai"}
         />
       )}

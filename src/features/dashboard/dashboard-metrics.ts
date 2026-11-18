@@ -1,7 +1,9 @@
 import type { BusinessUnit } from "@/components/app/unit-dot";
 import {
+  formatWitaDateTime,
   getTodayWitaDateString,
   getWitaHour,
+  normalizeDateRange,
   toWitaDateKey,
 } from "@/contexts/DateFilterContext";
 import { calculateSettlement, resolveItemTenantId } from "@/lib/settlement";
@@ -97,6 +99,49 @@ export function bucketLastSevenDays(orders: readonly MetricOrder[], now: Date = 
       date: date.toISOString().slice(0, 10),
       day: DAY_NAMES[date.getUTCDay()],
       isToday: offset === 0,
+      revenue: 0,
+      cost: 0,
+      discount: 0,
+      orders: 0,
+    });
+  }
+
+  const byDate = new Map(days.map((day) => [day.date, day]));
+  for (const order of orders) {
+    const dateKey = order.createdAt ? toWitaDateKey(order.createdAt) : "";
+    const bucket = dateKey ? byDate.get(dateKey) : undefined;
+    if (!bucket) continue;
+    bucket.revenue += order.total || 0;
+    bucket.discount += order.discount || 0;
+    bucket.cost += Math.round((order.total || 0) * ESTIMATED_COST_RATIO);
+    bucket.orders += 1;
+  }
+
+  return days;
+}
+
+export function bucketOrdersByDateRange(
+  orders: readonly MetricOrder[],
+  startDate: string,
+  endDate: string,
+  now: Date = new Date()
+): DayBucket[] {
+  const todayKey = getTodayWitaDateString(now);
+  const normalized = normalizeDateRange(startDate, endDate, todayKey);
+  const [sy, sm, sd] = normalized.startDate.split("-").map(Number);
+  const [ey, em, ed] = normalized.endDate.split("-").map(Number);
+  const startUtc = Date.UTC(sy, sm - 1, sd);
+  const endUtc = Date.UTC(ey, em - 1, ed);
+  const spanDays = Math.max(1, Math.min(366, Math.round((endUtc - startUtc) / 86_400_000) + 1));
+
+  const days: DayBucket[] = [];
+  for (let offset = 0; offset < spanDays; offset += 1) {
+    const date = new Date(Date.UTC(sy, sm - 1, sd + offset));
+    const dateKey = date.toISOString().slice(0, 10);
+    days.push({
+      date: dateKey,
+      day: spanDays <= 7 ? DAY_NAMES[date.getUTCDay()] : formatWitaDateTime(dateKey, "dd MMM"),
+      isToday: dateKey === todayKey,
       revenue: 0,
       cost: 0,
       discount: 0,

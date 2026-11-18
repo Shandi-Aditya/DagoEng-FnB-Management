@@ -54,6 +54,9 @@ export default function EmployeesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [deptFilter, setDeptFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [shiftSearchQuery, setShiftSearchQuery] = useState("");
+  const [shiftStatusFilter, setShiftStatusFilter] = useState("ALL");
+  const [shiftDateFilter, setShiftDateFilter] = useState("");
 
   // Modal States
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -81,15 +84,15 @@ export default function EmployeesPage() {
   );
 
   const displayedShifts = useMemo(
-    () => filterShifts(filteredShifts, searchQuery),
-    [filteredShifts, searchQuery]
+    () => filterShifts(filteredShifts, shiftSearchQuery, shiftStatusFilter, shiftDateFilter),
+    [filteredShifts, shiftSearchQuery, shiftStatusFilter, shiftDateFilter]
   );
 
   const handleExportCSV = () => {
     const { filename, headers, rows } = buildEmployeeExportData(
       activeTab,
-      filteredShifts,
-      filteredEmployees,
+      displayedShifts,
+      displayedEmployees,
       activeOutlet?.name || "Singaraja"
     );
     downloadCSV(`${filename}_${Date.now()}`, headers, rows);
@@ -99,8 +102,8 @@ export default function EmployeesPage() {
   const handleExportExcel = () => {
     const { filename, sheet, headers, rows } = buildEmployeeExportData(
       activeTab,
-      filteredShifts,
-      filteredEmployees,
+      displayedShifts,
+      displayedEmployees,
       activeOutlet?.name || "Singaraja"
     );
     downloadExcel(`${filename}_${Date.now()}`, sheet, headers, rows);
@@ -242,7 +245,6 @@ export default function EmployeesPage() {
         value={activeTab}
         onValueChange={(val) => {
           setActiveTab(val as "SHIFTS" | "EMPLOYEES");
-          setSearchQuery("");
         }}
         className="space-y-4"
       >
@@ -265,8 +267,14 @@ export default function EmployeesPage() {
 
         <TabsContent value="SHIFTS">
           <EmployeesShiftsTab
-            shifts={displayedShifts}
+            shifts={filteredShifts}
             activeShift={activeShift}
+            searchQuery={shiftSearchQuery}
+            onSearchChange={setShiftSearchQuery}
+            statusFilter={shiftStatusFilter}
+            onStatusFilterChange={setShiftStatusFilter}
+            dateFilter={shiftDateFilter}
+            onDateFilterChange={setShiftDateFilter}
             onOpenCloseShiftModal={(shift) => setClosingShiftTarget(shift)}
             onOpenStartShiftModal={() => setIsOpenShiftModalOpen(true)}
             onOpenClosingPDF={handleOpenClosingPDF}
@@ -355,8 +363,8 @@ export default function EmployeesPage() {
       <EmployeesReportPDFModal
         isOpen={isHRReportPDFOpen}
         onClose={() => setIsHRReportPDFOpen(false)}
-        employees={filteredEmployees}
-        shifts={filteredShifts}
+        employees={displayedEmployees}
+        shifts={displayedShifts}
         outletName={activeOutlet?.name || "Semua Outlet"}
       />
 

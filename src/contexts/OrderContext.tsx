@@ -477,9 +477,12 @@ export function OrderProvider({ children }: { children: React.ReactNode }) {
   }, [orders, isInitialized]);
 
   const filteredOrders = orders.filter((o) => {
-    const matchOutlet = isAllOutlets || o.outletId === activeOutletId;
+    const matchOutlet = isAllOutlets || !o.outletId || o.outletId === activeOutletId;
+    const isUnpaidOpenBill =
+      o.paymentStatus !== "PAID" && o.paymentStatus !== "REFUNDED" && o.status !== "CANCELLED";
     const isActiveOrder =
-      o.status !== "SERVED" && o.status !== "COMPLETED" && o.status !== "CANCELLED";
+      isUnpaidOpenBill ||
+      (o.status !== "SERVED" && o.status !== "COMPLETED" && o.status !== "CANCELLED");
     const matchDate = isDateInRange(o.createdAt);
     return matchOutlet && (isActiveOrder || matchDate);
   });

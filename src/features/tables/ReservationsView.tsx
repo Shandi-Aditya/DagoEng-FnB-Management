@@ -57,7 +57,9 @@ export function ReservationsView({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [reservations.length, statusFilter, searchQuery]);
+  }, [statusFilter, searchQuery, pageSize]);
+
+  const isFiltered = statusFilter !== "ALL" || searchQuery.trim() !== "";
 
   const totalPages = Math.max(1, Math.ceil(reservations.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -71,18 +73,33 @@ export function ReservationsView({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <InputGroup className="sm:max-w-xs">
-          <InputGroupAddon>
-            <Search />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Cari nama, WhatsApp, atau meja"
-            aria-label="Cari reservasi"
-          />
-        </InputGroup>
+        <div className="flex flex-wrap items-center gap-2">
+          <InputGroup className="sm:max-w-xs">
+            <InputGroupAddon>
+              <Search />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Cari nama, WhatsApp, atau meja"
+              aria-label="Cari reservasi"
+            />
+          </InputGroup>
+          {isFiltered ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onFilterChange("ALL");
+                onSearchChange("");
+              }}
+            >
+              Reset filter
+            </Button>
+          ) : null}
+        </div>
 
         <div className="max-w-full overflow-x-auto no-scrollbar">
           <Tabs value={statusFilter} onValueChange={(val) => onFilterChange(val as string)}>
