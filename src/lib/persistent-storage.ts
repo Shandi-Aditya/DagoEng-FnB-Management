@@ -11,7 +11,6 @@ import { ShiftRecord, EmployeeProfile } from "@/types/shift";
 import { OrderRecord } from "@/types/order";
 import { MasterProduct } from "@/types/product";
 import { LoyaltyMember } from "@/types/loyalty";
-import { resolveAuthoritativeMemberTier } from "@/features/customers/customers-domain";
 import {
   INITIAL_EMPLOYEES,
   INITIAL_PRODUCTS,
@@ -619,42 +618,31 @@ export async function savePersistentCustomCategory(category: string): Promise<st
 }
 
 export async function getPersistentLoyaltyMembers(): Promise<LoyaltyMember[]> {
-  const list = await readSeededPersistentData<LoyaltyMember[]>(
+  return readSeededPersistentData<LoyaltyMember[]>(
     FILE_LOYALTY_MEMBERS,
     () => [...INITIAL_MEMBERS]
   );
-  return list.map((m) => {
-    const authoritativeTier = resolveAuthoritativeMemberTier(m);
-    if (m.tier !== authoritativeTier) {
-      return { ...m, tier: authoritativeTier };
-    }
-    return m;
-  });
 }
 
 export async function savePersistentLoyaltyMember(member: LoyaltyMember): Promise<LoyaltyMember> {
-  const normalizedMember: LoyaltyMember = {
-    ...member,
-    tier: resolveAuthoritativeMemberTier(member),
-  };
-  let saved: LoyaltyMember = normalizedMember;
+  let saved: LoyaltyMember = member;
   await mutateSeededPersistentData<LoyaltyMember[]>(
     FILE_LOYALTY_MEMBERS,
     () => [...INITIAL_MEMBERS],
     (existing) => {
       const list = Array.isArray(existing) ? existing : [...INITIAL_MEMBERS];
-      const normPhone = normalizeLoyaltyPhone(normalizedMember.phone);
+      const normPhone = normalizeLoyaltyPhone(member.phone);
       const index = list.findIndex(
-        (m) => m.id === normalizedMember.id || (normPhone && normalizeLoyaltyPhone(m.phone) === normPhone)
+        (m) => m.id === member.id || (normPhone && normalizeLoyaltyPhone(m.phone) === normPhone)
       );
       if (index >= 0) {
         const updated = [...list];
-        updated[index] = normalizedMember;
-        saved = normalizedMember;
+        updated[index] = member;
+        saved = member;
         return updated;
       }
-      saved = normalizedMember;
-      return [normalizedMember, ...list];
+      saved = member;
+      return [member, ...list];
     }
   );
   return saved;

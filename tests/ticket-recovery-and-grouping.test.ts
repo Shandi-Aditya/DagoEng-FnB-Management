@@ -631,21 +631,31 @@ describe("Check-in Validation Engine (updateBookingCheckIn)", () => {
   });
 });
 
-describe("Denial of Unauthenticated Search via Ticket Code + Email (/api/events/bookings/my)", () => {
+describe("Specific Ticket Code + Email Lookup Rate Limiting (/api/events/bookings/my)", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("should reject unauthenticated search by ticketCode and email with HTTP 401", async () => {
-    const req = new NextRequest("http://localhost:3000/api/events/bookings/my?ticketCode=DAGO-EVT-99999&email=target@example.com", {
-      method: "GET",
-    });
+  it("should rate limit unauthenticated brute force attempts on ticketCode + email lookup", async () => {
+    const ip = "10.0.0.88";
+    const createReq = () =>
+      new NextRequest("http://localhost:3000/api/events/bookings/my?ticketCode=DAGO-EVT-99999&email=target@example.com", {
+        method: "GET",
+        headers: { "x-forwarded-for": ip },
+      });
 
-    const res = await getMyBookingsGet(req);
-    expect(res.status).toBe(401);
-    const json = await res.json();
-    expect(json.success).toBe(false);
-    expect(json.error).toContain("Akses ditolak: Pencarian riwayat tiket tanpa login telah dinonaktifkan");
+    // 10 requests allowed
+    for (let i = 0; i < 10; i++) {
+      const res = await getMyBookingsGet(createReq());
+      expect(res.status).toBe(200);
+    }
+
+    // 11th request must be rejected with 429
+    const blockedRes = await getMyBookingsGet(createReq());
+    expect(blockedRes.status).toBe(429);
+    const blockedJson = await blockedRes.json();
+    expect(blockedJson.success).toBe(false);
+    expect(blockedJson.error).toContain("Terlalu banyak percobaan pencarian");
   });
 });
 

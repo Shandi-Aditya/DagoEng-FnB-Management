@@ -5577,7 +5577,7 @@ export async function organizerCheckInAttendee(
 
     if (dateStatus === "UPCOMING") {
       throw new Error(
-        `Meja check-in belum dibuka untuk event "${event.title}". Check-in hanya aktif pada hari pelaksanaan event (WITA).`
+        `Meja check-in belum dibuka (pintu check-in belum dibuka) untuk event "${event.title}". Check-in hanya aktif pada hari pelaksanaan event (WITA).`
       );
     }
 
