@@ -9,12 +9,12 @@ Dokumen ini merupakan laporan serah terima teknis dan hasil regression test meny
 - **Modul**: Web Event Dago Creative Hub
 - **Pelaksana (PIC)**: Shandy (Mahasiswa Magang Undiksha)
 - **Penerima**: Ka Ari (Lead Developer / Supervisor)
-- **Tanggal**: 18 November 2026
+- **Tanggal**: 19 November 2026
 - **Cabang Git**: `shandi-dev`
 - **Target Integrasi**: `develop`
 - **Repositori**: `https://gitlab.com/devdagoeng/dagoeng-management.git`
-- **Total Test Web Event**: 24 file uji (370 skenario uji otomatis)
-- **Tingkat Kelulusan Uji**: 100% (370 lulus, 0 gagal)
+- **Total Test Web Event**: 24 file uji (369 skenario uji otomatis)
+- **Tingkat Kelulusan Uji**: 100% (369 lulus, 0 gagal)
 
 ---
 
@@ -22,7 +22,7 @@ Dokumen ini merupakan laporan serah terima teknis dan hasil regression test meny
 
 Pekerjaan magang modul Web Event telah menyelesaikan seluruh milestone dari M1 hingga M5 (Task S-01 sampai S-15). Cakupan fitur mencakup pengelolaan rekening penampung resmi, pembersihan data uji, validasi harga dan kuota, sentralisasi nomor CS, pengiriman e-tiket dan pemulihan kode via email, pembatasan meja check-in WITA hari ini, siklus transaksi event berbayar end-to-end, isolasi RBAC kasir dan tier loyalty, standarisasi coworking WITA dan nota resmi, konsistensi omzet pesanan lunas, sistem tiket bertingkat (*multi-tier*), kode promo dan tiket undangan, kebijakan refund per event, serta dashboard penjualan penyelenggara.
 
-Seluruh 370 skenario uji otomatis khusus Web Event berhasil dijalankan ulang pada tanggal 18 November 2026 tanpa ada kegagalan sama sekali.
+Seluruh 369 skenario uji otomatis khusus Web Event berhasil dijalankan ulang pada tanggal 19 November 2026 tanpa ada kegagalan sama sekali.
 
 ---
 
@@ -101,7 +101,7 @@ Seluruh 370 skenario uji otomatis khusus Web Event berhasil dijalankan ulang pad
 ### S-14: Kebijakan Refund & Pembatalan Tiket
 - Penyelenggara dapat menentukan kebijakan pembatalan event: tidak dapat di-refund (`NO_REFUND`) atau dapat di-refund hingga H-x hari sebelum acara (`REFUNDABLE_UNTIL_H_MINUS`) dengan potongan biaya admin.
 - Peserta dapat mengajukan refund dari halaman e-tiket mereka dengan memasukkan rincian rekening tujuan.
-- Admin keuangan memproses pengajuan (setuju atau tolak) melalui antarmuka moderasi refund di `/events/admin`.
+- Admin keuangan memproses pengajuan (setuju atau tolak) melalui antarmuka moderasi refund di `/events-admin`.
 - File uji: `tests/event-refund-policy.test.ts`.
 
 ### S-15: Dashboard Penjualan Tiket Penyelenggara
@@ -118,31 +118,33 @@ Pengujian regresi dijalankan serentak menggunakan Vitest pada environment node t
 
 | No | File Test Suite | Jumlah Test | Durasi | Status | Modul / Task Terkait |
 | :--- | :--- | :---: | :---: | :---: | :--- |
-| 1 | `tests/official-bank-guard.test.ts` | 9 | 57 ms | **LULUS** | S-01 (Rekening Resmi Penampung) |
-| 2 | `tests/admin-event-bank-cloud-first-persistence.test.ts` | 22 | 232 ms | **LULUS** | S-01 (Cloud-First CAS Persistence) |
-| 3 | `tests/manual-payment-and-bank-settings.test.ts` | 40 | 473 ms | **LULUS** | S-01 (Pengaturan Rekening Bank) |
-| 4 | `tests/admin-event-delete-and-cleanup.test.ts` | 22 | 205 ms | **LULUS** | S-02 (Pembersihan Event Uji) |
-| 5 | `tests/admin-event-validation-hardening.test.ts` | 46 | 400 ms | **LULUS** | S-03 (Hardening Validasi Event) |
-| 6 | `tests/events-admin-domain.test.ts` | 11 | 10 ms | **LULUS** | S-04 (Domain Admin & CS WhatsApp) |
-| 7 | `tests/ticket-recovery-and-grouping.test.ts` | 29 | 223 ms | **LULUS** | S-05 (Pemulihan Tiket & Sub-Tiket) |
-| 8 | `tests/ticket-recovery-domain.test.ts` | 26 | 9 ms | **LULUS** | S-05 (Domain Pemulihan Tiket) |
-| 9 | `tests/events-checkin-domain.test.ts` | 16 | 25 ms | **LULUS** | S-06 (Domain Check-In Hari Ini) |
-| 10 | `tests/critical-checkin-bugfixes.test.ts` | 12 | 85 ms | **LULUS** | S-06 (Perbaikan Check-In WITA) |
-| 11 | `tests/checkin-security-and-atomic-resilience.test.ts` | 9 | 384 ms | **LULUS** | S-06 (Resiliensi Atomik Check-In) |
-| 12 | `tests/paid-event-e2e.test.ts` | 13 | 426 ms | **LULUS** | S-07 (End-to-End Event Berbayar) |
-| 13 | `tests/ticket-paid-email.test.ts` | 8 | 95 ms | **LULUS** | S-08 (Dispatcher Email Tiket Lunas) |
-| 14 | `tests/customer-role-access-and-tier.test.ts` | 8 | 12 ms | **LULUS** | S-09 (RBAC Kasir & Tier Member) |
-| 15 | `tests/coworking-wita-receipt-tax.test.ts` | 8 | 54 ms | **LULUS** | S-10 (Nota Coworking & Pajak WITA) |
-| 16 | `tests/receipt-publisher-a6.test.ts` | 5 | 8 ms | **LULUS** | S-10 (Penerbit Nota Resmi Dago) |
-| 17 | `tests/reports-products-margin.test.ts` | 8 | 28 ms | **LULUS** | S-11 (Laporan Produk & Margin) |
-| 18 | `tests/event-ticket-tiers.test.ts` | 14 | 120 ms | **LULUS** | S-12 (Tiket Bertingkat / Multi-Tier) |
-| 19 | `tests/event-promo-and-invitations.test.ts` | 16 | 135 ms | **LULUS** | S-13 (Kode Promo & Tiket Undangan) |
-| 20 | `tests/event-refund-policy.test.ts` | 12 | 110 ms | **LULUS** | S-14 (Kebijakan Refund Per Event) |
-| 21 | `tests/organizer-sales-dashboard.test.ts` | 4 | 10 ms | **LULUS** | S-15 (Dashboard Penjualan Tier) |
-| 22 | `tests/events-portal-domain.test.ts` | 8 | 50 ms | **LULUS** | S-15 (Domain Portal Penyelenggara) |
-| 23 | `tests/events-portal-groups.test.ts` | 18 | 25 ms | **LULUS** | S-15 (Pengelompokan Status Event) |
-| 24 | `tests/events-catalog-domain.test.ts` | 7 | 39 ms | **LULUS** | S-01 s/d S-15 (Katalog Publik) |
-| **TOTAL** | **24 File Test Suite** | **370** | **~26.8 detik** | **100% LULUS** | **Seluruh Modul Web Event** |
+| 1 | `tests/official-bank-guard.test.ts` | 9 | 154 ms | **LULUS** | S-01 (Rekening Resmi Penampung) |
+| 2 | `tests/admin-event-bank-cloud-first-persistence.test.ts` | 22 | 384 ms | **LULUS** | S-01 (Cloud-First CAS Persistence) |
+| 3 | `tests/manual-payment-and-bank-settings.test.ts` | 40 | 1679 ms | **LULUS** | S-01 (Pengaturan Rekening Bank) |
+| 4 | `tests/admin-event-delete-and-cleanup.test.ts` | 22 | 731 ms | **LULUS** | S-02 (Pembersihan Event Uji) |
+| 5 | `tests/admin-event-validation-hardening.test.ts` | 46 | 1694 ms | **LULUS** | S-03 (Hardening Validasi Event) |
+| 6 | `tests/events-admin-domain.test.ts` | 11 | 31 ms | **LULUS** | S-04 (Domain Admin & CS WhatsApp) |
+| 7 | `tests/ticket-recovery-and-grouping.test.ts` | 26 | 708 ms | **LULUS** | S-05 (Pemulihan Tiket & Sub-Tiket) |
+| 8 | `tests/ticket-recovery-domain.test.ts` | 26 | 54 ms | **LULUS** | S-05 (Domain Pemulihan Tiket) |
+| 9 | `tests/events-checkin-domain.test.ts` | 29 | 136 ms | **LULUS** | S-06 (Domain Check-In Hari Ini) |
+| 10 | `tests/critical-checkin-bugfixes.test.ts` | 9 | 792 ms | **LULUS** | S-06 (Perbaikan Check-In WITA) |
+| 11 | `tests/checkin-security-and-atomic-resilience.test.ts` | 9 | 959 ms | **LULUS** | S-06 (Resiliensi Atomik Check-In) |
+| 12 | `tests/paid-event-e2e.test.ts` | 13 | 801 ms | **LULUS** | S-07 (End-to-End Event Berbayar) |
+| 13 | `tests/ticket-paid-email.test.ts` | 10 | 615 ms | **LULUS** | S-08 (Dispatcher Email Tiket Lunas) |
+| 14 | `tests/customer-role-access-and-tier.test.ts` | 8 | 39 ms | **LULUS** | S-09 (RBAC Kasir & Tier Member - POS/CRM) |
+| 15 | `tests/coworking-wita-receipt-tax.test.ts` | 8 | 28 ms | **LULUS** | S-10 (Nota Coworking & Pajak WITA - Coworking) |
+| 16 | `tests/receipt-publisher-a6.test.ts` | 5 | 28 ms | **LULUS** | S-10 (Penerbit Nota Resmi Dago - POS) |
+| 17 | `tests/reports-products-margin.test.ts` | 8 | 51 ms | **LULUS** | S-11 (Laporan Produk & Margin - POS) |
+| 18 | `tests/event-ticket-tiers.test.ts` | 8 | 233 ms | **LULUS** | S-12 (Tiket Bertingkat / Multi-Tier) |
+| 19 | `tests/event-promo-and-invitations.test.ts` | 11 | 599 ms | **LULUS** | S-13 (Kode Promo & Tiket Undangan) |
+| 20 | `tests/event-refund-policy.test.ts` | 12 | 356 ms | **LULUS** | S-14 (Kebijakan Refund Per Event) |
+| 21 | `tests/organizer-sales-dashboard.test.ts` | 4 | 28 ms | **LULUS** | S-15 (Dashboard Penjualan Tier) |
+| 22 | `tests/events-portal-domain.test.ts` | 8 | 118 ms | **LULUS** | S-15 (Domain Portal Penyelenggara) |
+| 23 | `tests/events-portal-groups.test.ts` | 18 | 70 ms | **LULUS** | S-15 (Pengelompokan Status Event) |
+| 24 | `tests/events-catalog-domain.test.ts` | 7 | 107 ms | **LULUS** | S-01 s/d S-15 (Katalog Publik) |
+| **TOTAL** | **24 File Test Suite** | **369** | **~102 detik** | **100% LULUS** | **Seluruh Modul Web Event & Pendukung** |
+
+> [!NOTE] Keterangan Suite: File 1–13 dan 18–24 merupakan suite inti Web Event, sedangkan File 14–17 merupakan suite pendukung POS/CRM/Coworking (`S-09`, `S-10`, `S-11`) yang telah terintegrasi dan lulus regresi penuh.
 
 Perintah untuk menjalankan ulang seluruh regresi di atas:
 ```bash
@@ -157,7 +159,7 @@ Berikut adalah daftar akun yang dapat digunakan oleh Ka Ari dan tim QA untuk ver
 
 | Peran (Role) | Email | Password Standar | Lingkup Hak Akses | URL Akses Utama |
 | :--- | :--- | :--- | :--- | :--- |
-| **Super Admin** | `admin@dagoeng.com` | `Password123!` | Moderasi penuh platform, verifikasi bayar, persetujuan event & refund, pengaturan rekening | `/events/admin` |
+| **Super Admin** | `admin@dagoeng.com` | `Password123!` | Moderasi penuh platform, verifikasi bayar, persetujuan event & refund, pengaturan rekening | `/events-admin` |
 | **Petugas Check-In** | `eventstaff@dagoeng.com` | `Password123!` | Meja check-in lapangan, scan QR tiket hari ini (WITA) | `/events/checkin` |
 | **Penyelenggara 1** | `baristaguild@dagocreative.id` | `Password123!` | Manajemen event komunitas Barista Guild, ajukan event, buat tier tiket & promo, lihat dashboard penjualan | `/events/portal` |
 | **Penyelenggara 2** | `halo@bandungdev.org` | `Password123!` | Komunitas game dev, kelola event milik sendiri | `/events/portal` |
@@ -165,23 +167,30 @@ Berikut adalah daftar akun yang dapat digunakan oleh Ka Ari dan tim QA untuk ver
 | **Kasir Outlet** | `cashier.sgr@kopisenja.com` | `Password123!` | Operasional kasir F&B/POS (akses data pelanggan tersamar, ekspor dimatikan) | `/pos` |
 | **Pelanggan / Tamu** | `customer@gmail.com` | `Password123!` | Pemesanan tiket, riwayat pesanan, ajukan refund e-tiket | `/events`, `/events/tickets/[token]` |
 
+> [!NOTE] Catatan Autentikasi Demo: Pada environment `NODE_ENV=production`, pastikan menyetel `ALLOW_DEMO_UAT=true` pada `.env` atau menjalankan migrasi/seeding tabel `User` (`npx prisma db seed`) agar akun statis di atas dapat login tanpa kendala verifikasi hash password.
+
 ---
 
 ## 6. Catatan Teknis, Kendala Lingkungan, & Batasan Sistem
 
-1. **Pemeriksaan Build Produksi Next.js pada Windows (Node 22)**:
-   - Perintah `npm run build` lokal di Windows menggunakan Node v22.11.0 menemui kendala internal modul Tailwind CSS v4 (`@tailwindcss/node/node_modules/magic-string` yang memicu `require() of ES Module`).
-   - Kendala ini murni batasan runtime bundler webpack Windows di versi tersebut.
-   - Pemeriksaan tipe statis `npx tsc --noEmit -p .` berhasil 100% tanpa ada kesalahan tipe.
-   - Pengecekan style shadcn `npm run lint:ui` pada seluruh komponen yang disentuh memperoleh 0 temuan.
+1. **Pemeriksaan Build Produksi Next.js**:
+   - Perintah `npm run build` dijalankan menggunakan `$env:NODE_OPTIONS="--experimental-require-module"` pada environment Node v22 Windows.
+   - Hasil build: **Lulus penuh (exit code 0)** dengan seluruh 37 rute halaman statis berhasil di-generate (`✓ Generating static pages (37/37)`).
+   - Pemeriksaan tipe statis `npx tsc --noEmit -p .` berhasil **100% (0 error)**.
+   - Pemeriksaan tipe test `npx tsc --noEmit -p tests/tsconfig.json` berhasil **100% (0 error)**.
+   - Pengecekan style shadcn `npm run lint:ui -- --strict src` memperoleh **0 temuan**.
 
 2. **Layanan Pengiriman Email (SMTP Provider)**:
-   - Fitur pengiriman email e-tiket (S-08) dan pemulihan tiket (S-05) telah memiliki modul dispatcher siap pakai.
-   - Jika kredensial `SMTP_HOST`, `SMTP_USER`, dan `SMTP_PASS` di environment belum diisi oleh tim infrastruktur, sistem secara aman mencatat URL e-tiket privat ke log konsol (`[Email Dispatcher]`) tanpa memutus transaksi pengguna.
+   - Fitur pengiriman email e-tiket (S-08) dan pemulihan tiket (S-05) telah diintegrasikan dengan transport `nodemailer` di `src/lib/email.ts`.
+   - Jika kredensial `SMTP_HOST`, `SMTP_USER`, dan `SMTP_PASS` di environment belum diisi, sistem secara aman mencatat payload dan URL e-tiket privat ke log konsol (`[Email Dispatcher]`) tanpa memutus transaksi pengguna (`sent: false`, tidak melempar uncaught error).
 
 3. **Baseline Suite Non-Web Event Workspace**:
-   - Terdapat 3 file pengujian non-Web Event peninggalan demo awal yang berstatus gagal pada vitest global: `tests/etl-data-validation.test.ts`, `tests/final-demo-readiness.test.ts` (mengunci tanggal 30 Okt 2026), dan `tests/storage-sync-safety.test.ts` (simulasi timeout latency).
-   - Ketiga file tersebut berada di luar modul Web Event dan merupakan baseline yang memang sudah ada sebelumnya.
+   - Sesuai dengan dokumentasi `AGENTS.md` bagian Perintah Verifikasi, terdapat tepat 4 file test non-Web Event yang merupakan baseline gagal bawaan:
+     1. `tests/etl-data-validation.test.ts`
+     2. `tests/final-demo-readiness.test.ts`
+     3. `tests/organizer-activation-hardening.test.ts`
+     4. `tests/storage-sync-safety.test.ts`
+   - Keempat file tersebut berada di luar lingkup modul Web Event. Seluruh suite Web Event (24 file) berstatus **100% lulus**.
 
 ---
 
@@ -197,8 +206,8 @@ Untuk pengujian manual secara visual di browser, ikuti tahapan berikut:
    - Simpan event. Status akan masuk ke antrean *Menunggu Persetujuan Admin*.
 
 2. **Persetujuan Event oleh Super Admin**:
-   - Buka `/events/admin` dan login sebagai `admin@dagoeng.com`.
-   - Pada tab **Moderasi Event**, pilih event yang baru diajukan lalu klik **Setujui Event**.
+   - Buka `/events-admin` dan login sebagai `admin@dagoeng.com`.
+   - Pada tab **Moderasi**, pilih event yang baru diajukan lalu klik **Setujui Event**.
    - Event kini aktif dan muncul di katalog publik `/events`.
 
 3. **Pemesanan Tiket & Kode Promo oleh Pembeli**:
@@ -208,20 +217,20 @@ Untuk pengujian manual secara visual di browser, ikuti tahapan berikut:
    - Unggah bukti transfer pada halaman pembayaran.
 
 4. **Verifikasi Pembayaran oleh Admin**:
-   - Kembali ke `/events/admin` pada tab **Verifikasi Pembayaran**.
-   - Periksa bukti bayar, lalu klik **Verifikasi Pembayaran (Setujui)**.
+   - Kembali ke `/events-admin` pada tab **Pembayaran tiket**.
+   - Periksa bukti bayar, lalu klik **Setujui pembayaran**.
    - Status pesanan berubah menjadi `PAID` (Lunas).
 
 5. **Akses E-Tiket & Simulasi Pengajuan Refund**:
-   - Buka halaman e-tiket peserta melalui tautan tiket.
+   - Buka halaman e-tiket peserta melalui tautan tiket (`/events/tickets/[token]`).
    - QR Code aktif untuk setiap sub-tiket peserta.
-   - Klik tombol **Ajukan Refund / Pembatalan Tiket**.
+   - Klik tombol **Ajukan refund**.
    - Masukkan nomor rekening pengembalian dana dan alasan pembatalan, lalu kirim.
-   - Buka `/events/admin` tab **Pengajuan Refund**, lalu setujui permohonan refund tersebut.
+   - Buka `/events-admin` tab **Pengajuan refund**, lalu setujui permohonan refund tersebut.
 
 6. **Dashboard Penjualan Tiket**:
    - Masuk kembali ke `/events/portal` sebagai penyelenggara.
-   - Pada tab ringkasan beranda dan modal detail event, periksa tabel **Penjualan tiket per jenis**.
+   - Pada tab ringkasan beranda dan modal detail event, periksa tabel **Penjualan per jenis tiket**.
    - Pastikan angka tiket terjual, sisa kuota, badge habis, dan omzet terhitung tepat sesuai transaksi yang telah terjadi.
 
 7. **Meja Check-in Hari Acara**:

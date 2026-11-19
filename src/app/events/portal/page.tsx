@@ -44,6 +44,7 @@ import { EventPromosDialog } from "@/components/events/EventPromosDialog";
 import type { EventTicketTier, EventRefundPolicy } from "@/types/event";
 import type { SectionId } from "@/features/events-portal/OrganizerEventsTab";
 import { eventBalances, groupOrganizerEvents } from "@/features/events-portal/events-portal-groups";
+import { buildAttendeesExportRows } from "@/features/events-portal/events-portal-domain";
 import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE } from "@/lib/event-validation";
 
 const ALL_COMMUNITIES_VALUE = "all_admin";
@@ -558,20 +559,7 @@ export default function CommunityOrganizerPortalPage() {
       "Check In",
       "Waktu Check In",
     ];
-    const rows = rowsToExport.map((b) => [
-      b.ticketCode,
-      b.eventTitle || "—",
-      b.ticketTierName || (b.isInvitation ? "Tiket Undangan" : "Standar"),
-      b.guestName,
-      b.guestPhone || "—",
-      b.institution || "—",
-      String(b.ticketCount || 1),
-      b.paymentStatus,
-      b.checkInStatus,
-      b.checkInTime
-        ? new Date(b.checkInTime).toLocaleString("id-ID", { timeZone: "Asia/Makassar" })
-        : "—",
-    ]);
+    const rows = buildAttendeesExportRows(rowsToExport);
 
     downloadCSV(`peserta-komunitas-${Date.now()}.csv`, headers, rows);
     notify.info("File CSV diunduh");

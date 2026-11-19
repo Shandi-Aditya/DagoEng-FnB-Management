@@ -265,22 +265,50 @@ export function emptyOrganizerAttendeeMessage(hasSearch: boolean): {
 export function buildAttendeesExportRows(
   bookings: readonly EventTicketOrder[]
 ): string[][] {
-  return bookings.map((b) => [
-    b.ticketCode,
-    b.eventTitle || "—",
-    b.ticketTierName || (b.isInvitation ? "Tiket Undangan" : "Standar"),
-    b.guestName,
-    b.guestPhone || "—",
-    b.institution || "—",
-    String(b.ticketCount || 1),
-    b.paymentStatus === "PAID"
-      ? "Lunas"
-      : b.paymentStatus === "CANCELLED"
-      ? "Batal"
-      : "Menunggu pembayaran",
-    b.checkInStatus === "CHECKED_IN" ? "Hadir" : "Belum hadir",
-    b.checkInTime ? new Date(b.checkInTime).toLocaleString("id-ID") : "—",
-  ]);
+  return bookings.map((b) => {
+    const isCheckedIn = b.checkInStatus === "CHECKED_IN";
+    const checkedQty = b.checkedInQty || 0;
+    const isPartiallyCheckedIn =
+      b.checkInStatus === "PARTIALLY_CHECKED_IN" || (!isCheckedIn && checkedQty > 0);
+
+    const paymentLabel =
+      b.paymentStatus === "PAID"
+        ? "Lunas"
+        : b.paymentStatus === "REFUNDED"
+        ? "Dikembalikan"
+        : b.paymentStatus === "CANCELLED"
+        ? "Dibatalkan"
+        : b.paymentStatus === "EXPIRED"
+        ? "Kedaluwarsa"
+        : b.refundStatus === "REQUESTED"
+        ? "Pengajuan refund"
+        : "Menunggu pembayaran";
+
+    const checkInLabel = isCheckedIn
+      ? "Hadir"
+      : isPartiallyCheckedIn
+      ? "Sebagian hadir"
+      : "Belum hadir";
+
+    const formattedTime = b.checkInTime
+      ? new Date(b.checkInTime).toLocaleString("id-ID", {
+          timeZone: "Asia/Makassar",
+        })
+      : "—";
+
+    return [
+      b.ticketCode,
+      b.eventTitle || "—",
+      b.ticketTierName || (b.isInvitation ? "Tiket Undangan" : "Standar"),
+      b.guestName,
+      b.guestPhone || "—",
+      b.institution || "—",
+      String(b.ticketCount || 1),
+      paymentLabel,
+      checkInLabel,
+      formattedTime,
+    ];
+  });
 }
 
 export interface EventTierSalesStats {
