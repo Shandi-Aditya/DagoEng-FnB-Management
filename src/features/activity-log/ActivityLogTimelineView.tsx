@@ -151,9 +151,9 @@ export function ActivityLogTimelineView({
                     <div className="flex flex-wrap items-center gap-1.5 text-muted-foreground">
                       <User className="size-3.5" aria-hidden />
                       <span>Oleh</span>
-                      <span className="font-medium text-foreground">{log.actorName || "—"}</span>
-                      {log.actorRole ? (
-                        <span>({log.actorRole})</span>
+                      <span className="font-medium text-foreground">{log.actorName || log.userName || "—"}</span>
+                      {log.actorRole || log.role ? (
+                        <span>({log.actorRole || log.role})</span>
                       ) : null}
                       {log.outletName ? <span>· {log.outletName}</span> : null}
                     </div>

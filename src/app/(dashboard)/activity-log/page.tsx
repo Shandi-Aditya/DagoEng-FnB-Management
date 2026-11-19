@@ -47,14 +47,14 @@ export default function ActivityLogPage() {
   const [selectedRole, setSelectedRole] = useState<string>("ALL");
   const [selectedActor, setSelectedActor] = useState<string>("ALL");
   const [dateFilter, setDateFilter] = useState<DateFilterType>("ALL");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
   const [selectedLog, setSelectedLog] = useState<ActivityLogEntry | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
-  // Pagination State
   const [pageSize, setPageSize] = useState<number>(15);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
-  // Reset page whenever filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [
@@ -65,6 +65,8 @@ export default function ActivityLogPage() {
     selectedRole,
     selectedActor,
     dateFilter,
+    customStartDate,
+    customEndDate,
     pageSize,
     activeOutletId,
   ]);
@@ -84,6 +86,8 @@ export default function ActivityLogPage() {
         selectedRole,
         selectedActor,
         dateFilter,
+        customStartDate,
+        customEndDate,
         searchTerm,
       }),
     [
@@ -97,6 +101,8 @@ export default function ActivityLogPage() {
       selectedRole,
       selectedActor,
       dateFilter,
+      customStartDate,
+      customEndDate,
       searchTerm,
     ]
   );
@@ -110,7 +116,9 @@ export default function ActivityLogPage() {
     selectedSeverity !== "ALL" ||
     selectedRole !== "ALL" ||
     selectedActor !== "ALL" ||
-    dateFilter !== "ALL";
+    dateFilter !== "ALL" ||
+    customStartDate !== "" ||
+    customEndDate !== "";
 
   const handleResetFilters = () => {
     setSearchTerm("");
@@ -120,6 +128,8 @@ export default function ActivityLogPage() {
     setSelectedRole("ALL");
     setSelectedActor("ALL");
     setDateFilter("ALL");
+    setCustomStartDate("");
+    setCustomEndDate("");
   };
 
   const currentRoleStr =
@@ -188,8 +198,14 @@ export default function ActivityLogPage() {
           onSearchChange={setSearchTerm}
           dateFilter={dateFilter}
           onDateFilterChange={setDateFilter}
+          customStartDate={customStartDate}
+          customEndDate={customEndDate}
+          onCustomStartDateChange={setCustomStartDate}
+          onCustomEndDateChange={setCustomEndDate}
           selectedStatus={selectedStatus}
           onStatusChange={setSelectedStatus}
+          selectedSeverity={selectedSeverity}
+          onSeverityChange={setSelectedSeverity}
           selectedActor={selectedActor}
           onActorChange={setSelectedActor}
           uniqueActors={uniqueActors}
@@ -237,7 +253,7 @@ export default function ActivityLogPage() {
           outletName={outletScopeName}
           generatedBy={user?.name || "Staf operasional"}
           generatedRole={currentRoleStr}
-          periodLabel={getPeriodLabel(dateFilter)}
+          periodLabel={getPeriodLabel(dateFilter, customStartDate, customEndDate)}
         />
       )}
     </div>

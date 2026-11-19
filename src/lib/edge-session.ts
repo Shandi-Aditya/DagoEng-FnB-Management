@@ -8,6 +8,7 @@ export interface EdgeSessionPayload {
   userId: string;
   role: RoleSlug;
   scopeLevel?: ScopeLevel;
+  tenantId?: string | null;
   email?: string;
   sessionHash?: string;
   iat: number; // issued at (ms)
@@ -227,6 +228,7 @@ export function signEdgeSessionToken(
     userId: input.userId,
     role: input.role,
     scopeLevel: input.scopeLevel,
+    ...(input.tenantId ? { tenantId: input.tenantId } : {}),
     email: input.email,
     sessionHash: input.sessionHash,
     iat: now,

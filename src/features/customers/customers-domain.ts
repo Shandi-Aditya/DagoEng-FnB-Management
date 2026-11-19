@@ -71,12 +71,20 @@ export function filterMembers(
   tierFilter = "ALL"
 ): LoyaltyMember[] {
   const query = rawQuery.trim().toLowerCase();
+  const qDigits = query.replace(/\D+/g, "");
 
   return members.filter((c) => {
+    const pDigits = (c.phone || "").replace(/\D+/g, "");
+    const matchPhoneDigits =
+      qDigits.length >= 3 &&
+      (pDigits.includes(qDigits) ||
+        (qDigits.startsWith("0") && pDigits.includes(`62${qDigits.slice(1)}`)));
+
     const matchQuery =
       !query ||
       c.name.toLowerCase().includes(query) ||
-      c.phone.includes(query) ||
+      c.phone.toLowerCase().includes(query) ||
+      matchPhoneDigits ||
       c.tier.toLowerCase().includes(query) ||
       Boolean(c.email && c.email.toLowerCase().includes(query));
 

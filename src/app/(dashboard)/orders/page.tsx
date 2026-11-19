@@ -1,22 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { notify } from "@/components/app/notify";
 import { useActivityLog } from "@/contexts/ActivityLogContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useInventory } from "@/contexts/InventoryContext";
-import { useLoyalty } from "@/contexts/LoyaltyContext";
+import { normalizeLoyaltyPhone, useLoyalty } from "@/contexts/LoyaltyContext";
 import { useOrders } from "@/contexts/OrderContext";
+import { useOutlet } from "@/contexts/OutletContext";
 import { usePrinter } from "@/contexts/PrinterContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { useTables } from "@/contexts/TableContext";
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
 import { PaymentModal } from "@/features/pos/PaymentModal";
+import { PosOpenShiftModal } from "@/features/pos/PosOpenShiftModal";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import type { POSCartItem, POSPaymentMethod, POSReceiptData, SplitGuestBill } from "@/features/pos/types";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
+import type { QRISVerificationDetail } from "@/lib/qris-verification";
 import { getOrderTaxBreakdown } from "@/lib/tax-breakdown";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { OrderRecord } from "@/types/order";
@@ -38,14 +42,16 @@ import { RefundOrderModal } from "@/features/orders/RefundOrderModal";
 
 export default function OrdersPage() {
   const { user } = useAuth();
-  const { filteredOrders, advanceOrderStatus, refundOrder } = useOrders();
-  const { deductOrderBOM } = useInventory();
+  const { startDate, endDate } = useDateFilter();
+  const { activeOutletId, activeOutlet } = useOutlet();
+  const { filteredOrders, advanceOrderStatus, refundOrder, voidOrder } = useOrders();
+  const { deductOrderBOM, restoreOrderBOM, recordOrderWasteBOM } = useInventory();
   const { members, addPoints, reverseTransactionPoints } = useLoyalty();
   const { releaseTableToAvailable } = useTables();
   const { logActivity } = useActivityLog();
   const { settings } = useSettings();
-  const { recordShiftTransaction, recordShiftRefund } = useEmployeeShift();
-  const { queue } = usePrinter();
+  const { activeShift, openShift, recordShiftTransaction, recordShiftRefund } = useEmployeeShift();
+  const { canReceiveCashierReceipt, canReceiveKitchenReceipt } = usePrinter();
 
   const isTenantOwner = user?.scopeLevel === "TENANT" && !!user?.tenant?.id;
   const userTenantId = user?.tenant?.id;
@@ -56,6 +62,8 @@ export default function OrdersPage() {
     roleSlug === "SUPER_ADMIN" ||
     roleSlug === "OWNER" ||
     roleSlug === "MANAGER";
+  const isHubSupervisor = isSupervisor && !isTenantOwner;
+  const isTenantScoped = isTenantOwner || (isKitchenStaff && !!userTenantId);
   const canExportNominalReports =
     isSupervisor ||
     (user?.scopeLevel === "TENANT" && !!user?.tenant?.id);
@@ -63,11 +71,15 @@ export default function OrdersPage() {
   const canProcessPayment =
     roleSlug === "CASHIER" ||
     isSupervisor;
+  const canVoidOrRefund = isSupervisor || roleSlug === "CASHIER";
+  const requiresPinForVoidRefund = roleSlug === "CASHIER" || isTenantOwner;
+  const canPrintCashierReceipt = canReceiveCashierReceipt(roleSlug);
+  const canPrintKitchenReceipt = canReceiveKitchenReceipt(roleSlug);
 
   // Strict tenant-aware order list
   const displayedOrders = useMemo(() => {
-    return filterOrdersByTenant(filteredOrders, userTenantId, isTenantOwner);
-  }, [filteredOrders, userTenantId, isTenantOwner]);
+    return filterOrdersByTenant(filteredOrders, userTenantId, isTenantScoped);
+  }, [filteredOrders, userTenantId, isTenantScoped]);
 
   // Cashiers land on what needs action; everyone else on the full list
   const [orderQueue, setOrderQueue] = useState<OrderQueueId>("ALL");
@@ -92,7 +104,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [orderQueue, searchQuery, displayedOrders.length]);
+  }, [orderQueue, searchQuery, startDate, endDate, activeOutletId, pageSize]);
 
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -108,17 +120,24 @@ export default function OrdersPage() {
   const [kitchenModalTicket, setKitchenModalTicket] = useState<KitchenTicketData | null>(null);
   const [isKitchenModalOpen, setIsKitchenModalOpen] = useState<boolean>(false);
   const [refundOrderTarget, setRefundOrderTarget] = useState<OrderRecord | null>(null);
+  const [refundModalMode, setRefundModalMode] = useState<"REFUND" | "VOID">("REFUND");
   const [isRefundModalOpen, setIsRefundModalOpen] = useState<boolean>(false);
+  const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState<boolean>(false);
+  const [pendingShiftOrder, setPendingShiftOrder] = useState<OrderRecord | null>(null);
+  const [shiftNameInput, setShiftNameInput] = useState("Shift Pagi");
+  const [openingCashInput, setOpeningCashInput] = useState<number | "">(200000);
+  const [isOpeningShift, setIsOpeningShift] = useState(false);
+  const paymentSubmittingRef = useRef(false);
 
   const handleExportOrdersCSV = () => {
     if (!canExportNominalReports) return;
-    const { headers, rows } = buildOrderExportData(displayedOrders, settings.promos);
+    const { headers, rows } = buildOrderExportData(visibleOrders, settings.promos);
     downloadCSV(`Daftar_Pesanan_Transaksi_${Date.now()}`, headers, rows);
   };
 
   const handleExportOrdersExcel = () => {
     if (!canExportNominalReports) return;
-    const { headers, rows } = buildOrderExportData(displayedOrders, settings.promos);
+    const { headers, rows } = buildOrderExportData(visibleOrders, settings.promos);
     downloadExcel(`Daftar_Pesanan_Transaksi_${Date.now()}`, "Riwayat Pesanan", headers, rows);
   };
 
@@ -131,8 +150,40 @@ export default function OrdersPage() {
       notify.error("Tidak bisa memproses pembayaran", "Peran Anda tidak punya akses kasir.");
       return;
     }
+    if (!activeShift) {
+      notify.warning(
+        "Shift kasir belum dibuka",
+        "Buka shift dengan modal awal sebelum menerima pembayaran."
+      );
+      setPendingShiftOrder(order);
+      setIsOpenShiftModalOpen(true);
+      return;
+    }
     setPaymentOrder(order);
     setIsPaymentModalOpen(true);
+  };
+
+  const handleOpenShiftSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isOpeningShift) return;
+    setIsOpeningShift(true);
+    try {
+      openShift(shiftNameInput, Number(openingCashInput) || 0, user?.name);
+      notify.success("Shift kasir dibuka", `${shiftNameInput} siap menerima pembayaran.`);
+      setIsOpenShiftModalOpen(false);
+      if (pendingShiftOrder && pendingShiftOrder.paymentStatus !== "PAID") {
+        setPaymentOrder(pendingShiftOrder);
+        setIsPaymentModalOpen(true);
+      }
+      setPendingShiftOrder(null);
+    } catch (err) {
+      notify.error(
+        "Gagal membuka shift",
+        err instanceof Error ? err.message : "Periksa nominal modal awal kasir."
+      );
+    } finally {
+      setIsOpeningShift(false);
+    }
   };
 
   const handlePaymentSuccess = (paymentData: {
@@ -140,52 +191,77 @@ export default function OrdersPage() {
     amountPaid: number;
     changeDue: number;
     splitDetails?: SplitGuestBill[];
+    qrisVerification?: QRISVerificationDetail;
   }) => {
-    if (!paymentOrder) return;
+    if (!paymentOrder || paymentSubmittingRef.current) return;
+    if (!activeShift) {
+      setIsPaymentModalOpen(false);
+      notify.warning(
+        "Shift kasir belum dibuka",
+        "Buka shift dengan modal awal sebelum menerima pembayaran."
+      );
+      setPendingShiftOrder(paymentOrder);
+      setIsOpenShiftModalOpen(true);
+      return;
+    }
 
-    const chosenMethod = paymentData.method;
-    const pBreakdown = getOrderTaxBreakdown(paymentOrder);
+    paymentSubmittingRef.current = true;
+    try {
+      const chosenMethod = paymentData.method;
+      const pBreakdown = getOrderTaxBreakdown(paymentOrder);
+      const mappedSplitDetails = paymentData.splitDetails?.map((guest, idx) => ({
+        guestNumber: idx + 1,
+        label: guest.guestLabel,
+        amount: guest.assignedAmount,
+        method: guest.paymentMethod,
+      }));
 
-    // 1. Advance order status to COMPLETED and update payment
-    advanceOrderStatus(
-      paymentOrder.id,
-      "COMPLETED",
-      `Pembayaran lunas via ${paymentData.method} (${formatCurrencyIDR(paymentOrder.total)})`,
-      {
-        paymentStatus: "PAID",
-        paymentMethod: chosenMethod,
-        tax: pBreakdown.pb1,
-        serviceCharge: pBreakdown.serviceCharge,
-      }
-    );
+      advanceOrderStatus(
+        paymentOrder.id,
+        "COMPLETED",
+        `Pembayaran lunas via ${paymentData.method} (${formatCurrencyIDR(paymentOrder.total)})`,
+        {
+          paymentStatus: "PAID",
+          paymentMethod: chosenMethod,
+          qrisVerification: paymentData.qrisVerification,
+          splitDetails: mappedSplitDetails,
+          cashierName: user?.name,
+          tax: pBreakdown.pb1,
+          serviceCharge: pBreakdown.serviceCharge,
+        }
+      );
 
-    const cashPortion =
-      paymentData.method === "SPLIT"
-        ? (paymentData.splitDetails || [])
-            .filter((guest) => guest.paymentMethod === "CASH")
-            .reduce((sum, guest) => sum + guest.assignedAmount, 0)
-        : paymentData.method === "CASH"
-          ? paymentOrder.total
-          : 0;
-    recordShiftTransaction(cashPortion, paymentOrder.total - cashPortion, paymentOrder.outletId, paymentOrder.id);
+      const cashPortion =
+        paymentData.method === "SPLIT"
+          ? (paymentData.splitDetails || [])
+              .filter((guest) => guest.paymentMethod === "CASH")
+              .reduce((sum, guest) => sum + guest.assignedAmount, 0)
+          : paymentData.method === "CASH"
+            ? paymentOrder.total
+            : 0;
+      recordShiftTransaction(cashPortion, paymentOrder.total - cashPortion, paymentOrder.outletId, paymentOrder.id);
 
-    // 2. Inventory: Deduct ingredients based on Recipe BOM
-    const bomItems = paymentOrder.items.map((it) => ({
-      productId: it.productId,
-      productName: it.productName,
-      quantity: it.quantity,
-      modifiers: it.modifiers,
-    }));
-    deductOrderBOM(bomItems);
+      const bomItems = paymentOrder.items.map((it) => ({
+        productId: it.productId || it.id,
+        productName: it.productName,
+        quantity: it.quantity,
+        modifiers: it.modifiers,
+      }));
+      deductOrderBOM(bomItems);
 
-    // 3. Loyalty: Add points if customer is registered
-    const matchingMember = members.find(
-      (m) => m.name.toLowerCase().trim() === paymentOrder.customerName.toLowerCase().trim()
-    );
-    let pointsAdded = 0;
-    if (matchingMember) {
-      pointsAdded = Math.floor(paymentOrder.total / 1000);
-      if (pointsAdded > 0) {
+      const orderNormPhone = paymentOrder.customerPhone
+        ? normalizeLoyaltyPhone(paymentOrder.customerPhone)
+        : "";
+      const matchingMember =
+        (orderNormPhone
+          ? members.find((m) => normalizeLoyaltyPhone(m.phone) === orderNormPhone)
+          : undefined) ??
+        members.find(
+          (m) => m.name.toLowerCase().trim() === paymentOrder.customerName.toLowerCase().trim()
+        );
+      let pointsAdded = 0;
+      if (matchingMember) {
+        pointsAdded = Math.floor(paymentOrder.total / 1000);
         addPoints(
           matchingMember.id,
           pointsAdded,
@@ -194,57 +270,63 @@ export default function OrdersPage() {
           paymentOrder.total
         );
       }
-    }
 
-    // 4. Table: Release table to AVAILABLE if Dine-in
-    if (
-      paymentOrder.orderType === "DINE_IN" &&
-      paymentOrder.tableNumber &&
-      paymentOrder.tableNumber !== "TAKEAWAY"
-    ) {
-      releaseTableToAvailable(paymentOrder.tableNumber);
-    }
+      if (
+        paymentOrder.orderType === "DINE_IN" &&
+        paymentOrder.tableNumber &&
+        paymentOrder.tableNumber !== "TAKEAWAY"
+      ) {
+        releaseTableToAvailable(paymentOrder.tableNumber);
+      }
 
-    // 5. Activity Log: Record transaction settlement audit trail
-    logActivity({
-      module: "POS",
-      action: "ORDER_PAYMENT_AND_COMPLETED",
-      recordId: paymentOrder.orderNumber,
-      previousValue: `Status: ${paymentOrder.status} (${paymentOrder.paymentStatus})`,
-      newValue: `Status: COMPLETED (PAID via ${paymentData.method})`,
-      description: `Pesanan ${paymentOrder.orderNumber} (Meja ${paymentOrder.tableNumber}, ${paymentOrder.customerName}) lunas & diselesaikan`,
-      reason: `Pembayaran kasir selesai via ${paymentData.method}`,
-      status: "SUCCESS",
-      outletId: paymentOrder.outletId,
-      outletName: paymentOrder.outletName,
-    });
+      logActivity({
+        module: "POS",
+        action: "ORDER_PAYMENT_AND_COMPLETED",
+        recordId: paymentOrder.orderNumber,
+        previousValue: `Status: ${paymentOrder.status} (${paymentOrder.paymentStatus})`,
+        newValue: `Status: COMPLETED (PAID via ${paymentData.method})`,
+        description: `Pesanan ${paymentOrder.orderNumber} (Meja ${paymentOrder.tableNumber}, ${paymentOrder.customerName}) lunas & diselesaikan`,
+        reason: `Pembayaran kasir selesai via ${paymentData.method}`,
+        status: "SUCCESS",
+        outletId: paymentOrder.outletId,
+        outletName: paymentOrder.outletName,
+      });
 
-    // 6. UI Toast Feedback
-    const memberMsg = matchingMember ? ` · ${matchingMember.name} +${pointsAdded} poin` : "";
-    notify.success(
-      `Pesanan ${paymentOrder.orderNumber} dibayar`,
-      `${paymentMethodLabel(paymentData.method as OrderRecord["paymentMethod"])}${memberMsg}`
-    );
-    setIsPaymentModalOpen(false);
-
-    if (selectedOrder?.id === paymentOrder.id) {
-      setSelectedOrder((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: "COMPLETED",
-              paymentStatus: "PAID",
-              paymentMethod: chosenMethod,
-            }
-          : null
+      const memberMsg = matchingMember
+        ? pointsAdded > 0
+          ? ` · ${matchingMember.name} +${pointsAdded} poin`
+          : ` · ${matchingMember.name}`
+        : "";
+      notify.success(
+        `Pesanan ${paymentOrder.orderNumber} dibayar`,
+        `${paymentMethodLabel(paymentData.method as OrderRecord["paymentMethod"])}${memberMsg}`
       );
+      setIsPaymentModalOpen(false);
+
+      if (selectedOrder?.id === paymentOrder.id) {
+        setSelectedOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: "COMPLETED",
+                paymentStatus: "PAID",
+                paymentMethod: chosenMethod,
+                qrisVerification: paymentData.qrisVerification ?? prev.qrisVerification,
+                splitDetails: mappedSplitDetails ?? prev.splitDetails,
+                cashierName: user?.name || prev.cashierName,
+              }
+            : null
+        );
+      }
+    } finally {
+      paymentSubmittingRef.current = false;
     }
   };
 
   const modalCartItems: POSCartItem[] = paymentOrder
     ? paymentOrder.items.map((it, idx) => ({
         cartItemId: it.id || `ord-it-${idx}`,
-        productId: it.id || `prod-${idx}`,
+        productId: it.productId || it.id || `prod-${idx}`,
         productName: it.productName,
         quantity: it.quantity,
         basePrice: it.unitPrice,
@@ -256,59 +338,153 @@ export default function OrdersPage() {
     : [];
 
   const handlePrintReceipt = (order: OrderRecord) => {
+    if (!canPrintCashierReceipt) {
+      notify.error(
+        "Akses struk kasir dibatasi",
+        "Peran Anda tidak diizinkan mencetak struk pelanggan."
+      );
+      return;
+    }
     setReceiptModalOrder(buildOrderReceiptData(order));
     setIsReceiptModalOpen(true);
   };
 
   const handlePrintKitchenTicket = (order: OrderRecord, purpose: PrintPurpose) => {
-    setKitchenModalTicket(buildReprintKitchenTicket(order, purpose, user?.name));
+    if (!canPrintKitchenReceipt) {
+      notify.error(
+        "Akses nota dapur dibatasi",
+        "Peran Anda tidak diizinkan mencetak nota dapur."
+      );
+      return;
+    }
+    setKitchenModalTicket(
+      buildReprintKitchenTicket(
+        order,
+        purpose,
+        user?.name,
+        isTenantScoped ? userTenantId : undefined
+      )
+    );
     setIsKitchenModalOpen(true);
   };
 
   const handleOpenRefund = (order: OrderRecord) => {
+    if (!canVoidOrRefund) {
+      notify.error("Akses ditolak", "Peran Anda tidak diizinkan melakukan refund pesanan.");
+      return;
+    }
     if (order.paymentStatus !== "PAID") {
       notify.warning("Hanya pesanan yang sudah lunas yang dapat di-refund");
       return;
     }
+    setRefundModalMode("REFUND");
     setRefundOrderTarget(order);
     setIsRefundModalOpen(true);
   };
 
-  const handleConfirmRefund = (params: {
+  const handleOpenVoid = (order: OrderRecord) => {
+    if (!canVoidOrRefund) {
+      notify.error("Akses ditolak", "Peran Anda tidak diizinkan membatalkan pesanan.");
+      return;
+    }
+    if (order.paymentStatus === "PAID") {
+      notify.warning("Pesanan sudah lunas", "Gunakan aksi refund untuk membatalkan pesanan lunas.");
+      return;
+    }
+    if (order.status === "CANCELLED") {
+      notify.warning("Pesanan sudah dibatalkan");
+      return;
+    }
+    setRefundModalMode("VOID");
+    setRefundOrderTarget(order);
+    setIsRefundModalOpen(true);
+  };
+
+  const handleConfirmRefund = async (params: {
     reason: string;
     supervisorName: string;
     supervisorRole?: string;
-  }) => {
-    if (!refundOrderTarget) return;
+    supervisorPin?: string;
+  }): Promise<{ ok: boolean; error?: string }> => {
+    if (!refundOrderTarget) return { ok: false, error: "Pesanan tidak ditemukan." };
 
-    const result = refundOrder(refundOrderTarget.id, {
-      reason: params.reason,
-      supervisorName: params.supervisorName,
-      supervisorRole: params.supervisorRole,
-      refundMethod: "CASH",
-    });
+    const isVoid = refundModalMode === "VOID";
+    const result = isVoid
+      ? voidOrder(refundOrderTarget.id, {
+          reason: params.reason,
+          supervisorName: params.supervisorName,
+          supervisorRole: params.supervisorRole,
+          supervisorPin: params.supervisorPin,
+        })
+      : refundOrder(refundOrderTarget.id, {
+          reason: params.reason,
+          supervisorName: params.supervisorName,
+          supervisorRole: params.supervisorRole,
+          supervisorPin: params.supervisorPin,
+          refundMethod: "CASH",
+        });
 
     if (!result.success) {
-      notify.error("Gagal melakukan refund", result.error);
-      return;
+      notify.error(isVoid ? "Gagal membatalkan pesanan" : "Gagal melakukan refund", result.error);
+      return { ok: false, error: result.error };
     }
 
-    recordShiftRefund(
-      refundOrderTarget.total,
-      refundOrderTarget.id,
-      refundOrderTarget.outletId
-    );
+    if (result.serverSync) {
+      const syncResult = await result.serverSync;
+      if (syncResult.rejected) {
+        const errorMessage = syncResult.error || "Otorisasi supervisor ditolak oleh server.";
+        notify.error(
+          isVoid ? "Pembatalan pesanan ditolak" : "Refund pesanan ditolak",
+          errorMessage
+        );
+        return { ok: false, error: errorMessage };
+      }
+    }
 
-    const matchingMember = members.find(
-      (m) =>
-        m.name.toLowerCase().trim() === refundOrderTarget.customerName.toLowerCase().trim() ||
-        (refundOrderTarget.customerPhone && m.phone === refundOrderTarget.customerPhone)
-    );
+    if (!isVoid) {
+      recordShiftRefund(
+        refundOrderTarget.total,
+        refundOrderTarget.id,
+        refundOrderTarget.outletId
+      );
+    }
+
+    const bomItems = refundOrderTarget.items.map((it) => ({
+      productId: it.productId || it.id,
+      productName: it.productName,
+      quantity: it.quantity,
+      modifiers: it.modifiers,
+    }));
+    const isBeforeCooking =
+      !refundOrderTarget.cookingStartedAt &&
+      ["NEW", "CONFIRMED", "KITCHEN_RECEIVED"].includes(refundOrderTarget.status);
+
+    if (!isBeforeCooking) {
+      recordOrderWasteBOM(
+        bomItems,
+        refundOrderTarget.paymentStatus !== "PAID",
+        refundOrderTarget.orderNumber
+      );
+    } else if (refundOrderTarget.paymentStatus === "PAID") {
+      restoreOrderBOM(bomItems, refundOrderTarget.orderNumber);
+    }
+
+    const targetNormPhone = refundOrderTarget.customerPhone
+      ? normalizeLoyaltyPhone(refundOrderTarget.customerPhone)
+      : "";
+    const matchingMember =
+      (targetNormPhone
+        ? members.find((m) => normalizeLoyaltyPhone(m.phone) === targetNormPhone)
+        : undefined) ??
+      members.find(
+        (m) => m.name.toLowerCase().trim() === refundOrderTarget.customerName.toLowerCase().trim()
+      );
     if (matchingMember) {
       reverseTransactionPoints(
         matchingMember.id,
         refundOrderTarget.id,
-        `Refund pesanan #${refundOrderTarget.orderNumber}: ${params.reason}`
+        `${isVoid ? "Pembatalan" : "Refund"} pesanan #${refundOrderTarget.orderNumber}: ${params.reason}`,
+        !isVoid ? refundOrderTarget.total : 0
       );
     }
 
@@ -321,21 +497,33 @@ export default function OrdersPage() {
     }
 
     notify.success(
-      `Pesanan ${refundOrderTarget.orderNumber} di-refund`,
-      `Uang tunai ${formatCurrencyIDR(refundOrderTarget.total)} dikembalikan ke pelanggan`
+      isVoid
+        ? `Pesanan ${refundOrderTarget.orderNumber} dibatalkan`
+        : `Pesanan ${refundOrderTarget.orderNumber} di-refund`,
+      isVoid
+        ? `Alasan: ${params.reason}`
+        : `Uang tunai ${formatCurrencyIDR(refundOrderTarget.total)} dikembalikan ke pelanggan`
     );
 
     if (selectedOrder?.id === refundOrderTarget.id) {
       setSelectedOrder((prev) =>
         prev
-          ? {
+          ? result.order || {
               ...prev,
               status: "CANCELLED",
-              paymentStatus: "REFUNDED",
-              refundReason: params.reason,
-              refundApprovedBy: params.supervisorName,
-              refundedAt: new Date().toISOString(),
-              refundMethod: "CASH",
+              ...(isVoid
+                ? {
+                    voidReason: params.reason,
+                    voidApprovedBy: params.supervisorName,
+                    voidedAt: new Date().toISOString(),
+                  }
+                : {
+                    paymentStatus: "REFUNDED",
+                    refundReason: params.reason,
+                    refundApprovedBy: params.supervisorName,
+                    refundedAt: new Date().toISOString(),
+                    refundMethod: "CASH",
+                  }),
             }
           : null
       );
@@ -343,6 +531,7 @@ export default function OrdersPage() {
 
     setIsRefundModalOpen(false);
     setRefundOrderTarget(null);
+    return { ok: true };
   };
 
   return (
@@ -353,6 +542,7 @@ export default function OrdersPage() {
         counts={queueCounts}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        onResetFilters={() => setSearchQuery("")}
         canExport={canExportNominalReports}
         onExportExcel={handleExportOrdersExcel}
         onExportCSV={handleExportOrdersCSV}
@@ -378,11 +568,28 @@ export default function OrdersPage() {
         onClose={() => setSelectedOrder(null)}
         canViewNominals={canViewNominals}
         canProcessPayment={canProcessPayment}
+        canPrintCashierReceipt={canPrintCashierReceipt}
+        canPrintKitchenReceipt={canPrintKitchenReceipt}
         promos={settings.promos}
         onOpenPayment={handleOpenPayment}
         onPrintReceipt={handlePrintReceipt}
         onPrintKitchenTicket={handlePrintKitchenTicket}
-        onOpenRefund={handleOpenRefund}
+        onOpenRefund={canVoidOrRefund ? handleOpenRefund : undefined}
+        onOpenVoid={canVoidOrRefund ? handleOpenVoid : undefined}
+      />
+
+      <PosOpenShiftModal
+        isOpen={isOpenShiftModalOpen}
+        onClose={() => {
+          setIsOpenShiftModalOpen(false);
+          setPendingShiftOrder(null);
+        }}
+        isSubmitting={isOpeningShift}
+        shiftName={shiftNameInput}
+        onShiftNameChange={setShiftNameInput}
+        openingCash={openingCashInput}
+        onOpeningCashChange={setOpeningCashInput}
+        onSubmit={handleOpenShiftSubmit}
       />
 
       {/* POS Payment Modal Integration */}
@@ -406,7 +613,6 @@ export default function OrdersPage() {
         );
       })()}
 
-      {/* Refund Order Modal */}
       <RefundOrderModal
         isOpen={isRefundModalOpen}
         onClose={() => {
@@ -414,18 +620,24 @@ export default function OrdersPage() {
           setRefundOrderTarget(null);
         }}
         order={refundOrderTarget}
+        mode={refundModalMode}
         currentUserName={user?.name}
         currentUserRole={roleSlug}
-        isSupervisor={isSupervisor}
+        isSupervisor={isHubSupervisor}
+        requiresPin={requiresPinForVoidRefund}
         onConfirmRefund={handleConfirmRefund}
       />
 
-      {/* PDF Report Modal */}
       <OrdersReportPDFModal
         isOpen={isPDFModalOpen}
         onClose={() => setIsPDFModalOpen(false)}
-        orders={filteredOrders}
-        outletName={filteredOrders[0]?.outletName || "Singaraja"}
+        orders={visibleOrders}
+        outletName={
+          visibleOrders[0]?.outletName ||
+          displayedOrders[0]?.outletName ||
+          activeOutlet?.name ||
+          "Singaraja"
+        }
       />
 
       {/* POS Thermal Receipt Modal for Reprinting (Customer) */}

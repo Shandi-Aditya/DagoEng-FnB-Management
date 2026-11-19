@@ -39,12 +39,14 @@ export function CreateLeaseModal({
   onClose,
   onSubmit,
 }: CreateLeaseModalProps) {
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const todayStr = useMemo(
+    () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(new Date()),
+    []
+  );
   const nextYearStr = useMemo(() => {
-    const d = new Date();
-    d.setFullYear(d.getFullYear() + 1);
-    return d.toISOString().split("T")[0];
-  }, []);
+    const [y, m, d] = todayStr.split("-").map(Number);
+    return new Date(Date.UTC(y + 1, m - 1, d)).toISOString().slice(0, 10);
+  }, [todayStr]);
 
   const [tenantName, setTenantName] = useState("");
   const [tenantContact, setTenantContact] = useState("");
@@ -79,6 +81,10 @@ export function CreateLeaseModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenantName.trim() || !unitCode.trim()) return;
+    const rawStart = startDate.trim();
+    const rawEnd = endDate.trim();
+    const [normStart, normEnd] =
+      rawStart && rawEnd && rawStart > rawEnd ? [rawEnd, rawStart] : [rawStart, rawEnd];
 
     onSubmit({
       tenantName: tenantName.trim(),
@@ -88,8 +94,8 @@ export function CreateLeaseModal({
       areaSquareMeters: Number(areaM2) || 0,
       monthlyRent: Number(monthlyRent) || 0,
       depositAmount: Number(deposit) || 0,
-      startDate: startDate.trim(),
-      endDate: endDate.trim(),
+      startDate: normStart,
+      endDate: normEnd,
       paymentSchedule: schedule,
       notes: notes.trim() || undefined,
     });

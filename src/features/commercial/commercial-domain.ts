@@ -39,7 +39,9 @@ export function filterLeases(
       !query ||
       l.tenantName.toLowerCase().includes(query) ||
       l.unitCode.toLowerCase().includes(query) ||
-      l.leaseNumber.toLowerCase().includes(query);
+      l.leaseNumber.toLowerCase().includes(query) ||
+      Boolean(l.tenantContact && l.tenantContact.toLowerCase().includes(query)) ||
+      Boolean(l.tenantEmail && l.tenantEmail.toLowerCase().includes(query));
     const matchStatus = statusFilter === "ALL" || l.status === statusFilter;
     return matchSearch && matchStatus;
   });

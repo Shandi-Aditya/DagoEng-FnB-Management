@@ -1,64 +1,64 @@
-# Spesifikasi Otorisasi 3-Dimensi & RBAC — DagoEng F&B Management
+# Otorisasi 3-dimensi dan matriks RBAC
 
-Platform: **DagoEng F&B Management**  
-Brand: **DagoEng Creative Hub**  
-Tagline: *Smarter F&B. Better Operations.*
-
----
-
-## 1. Konsep Otorisasi 3-Dimensi (3D Authorization Matrix)
-
-Akses pengguna di dalam sistem DagoEng F&B Management dihitung berdasarkan irisan 3 sumbu independen:
+DagoEng Management mengevaluasi hak akses setiap pengguna melalui irisan tiga sumbu independen di sisi klien maupun server:
 
 $$\text{Akses Diizinkan} = \text{Role Permission} \cap \text{Scope Hierarchy} \cap \text{Active Business Module}$$
 
 ```mermaid
-graph LR
-    subgraph Axis1 ["1. Role & Permissions"]
-        P1["Izin Fungsional (CRUD, Checkout, KDS)"]
+flowchart LR
+    subgraph Axis1 ["1. Peran (9 RoleSlug)"]
+        R1["Izin fungsional di src/lib/rbac.ts"]
     end
 
-    subgraph Axis2 ["2. Scope Level"]
-        S1["PLATFORM"]
-        S2["ORGANIZATION (Dago Creative Hub)"]
-        S3["BUSINESS_UNIT (F&B / Cowork / Commercial)"]
-        S4["TENANT (Brand Tertentu e.g. Kopi Senja)"]
-        S5["OUTLET (Gerai e.g. Singaraja / Renon)"]
+    subgraph Axis2 ["2. Hierarki Lingkup (5 ScopeLevel)"]
+        S1["5: PLATFORM"]
+        S2["4: ORGANIZATION (Dago Creative Hub)"]
+        S3["3: BUSINESS_UNIT (Cowork / Commercial)"]
+        S4["2: TENANT (Mitra F&B)"]
+        S5["1: OUTLET (Singaraja Pusat)"]
     end
 
-    subgraph Axis3 ["3. Business Module"]
-        M1["CORE (Dasar & Autentikasi)"]
-        M2["FNB (POS, KDS, Menu, Meja)"]
-        M3["CO_WORKING (Meja, Ruang Rapat, Member)"]
-        M4["COMMERCIAL (Sewa Ruang & Event)"]
+    subgraph Axis3 ["3. Modul Bisnis (4 Kode)"]
+        M1["CORE (Selalu aktif)"]
+        M2["FNB"]
+        M3["CO_WORKING"]
+        M4["COMMERCIAL"]
     end
 
-    Axis1 --> Decision["Evaluasi Izin Server-Side"]
-    Axis2 --> Decision
-    Axis3 --> Decision
-    Decision --> Verdict{"Akses Diberikan / Ditolak"}
+    Axis1 --> Guard["Middleware Edge & Guard API Server"]
+    Axis2 --> Guard
+    Axis3 --> Guard
+    Guard --> Result{"Diizinkan atau Ditolak (401/403/Redirect)"}
 ```
 
----
+## 1. Sembilan peran sistem dan cakupan rute
 
-## 2. Persona Pengguna Bawaan (Default Personas)
+Penegakan akses rute dijalankan oleh `src/middleware.ts` dan `src/lib/route-guard.ts` pada 18 awalan rute dashboard, serta diperkuat di tiap endpoint API menggunakan `getRequestAuthUser` di `src/lib/server-auth.ts`:
 
-| Persona / Role | Scope Level | Tenant / Brand | Modul Terkait | Cakupan Akses |
-| :--- | :--- | :--- | :--- | :--- |
-| **Dago Creative Hub Owner** | `ORGANIZATION` | Konsolidasi Semua | `FNB`, `CO_WORKING`, `COMMERCIAL` | Laporan eksekutif seluruh unit bisnis Dago Creative Hub |
-| **Kopi Senja Brand Owner** | `TENANT` | Kopi Senja | `FNB` | Seluruh gerai Kopi Senja (Singaraja, Denpasar, Ubud) |
-| **Co-working Space Manager** | `BUSINESS_UNIT` | Dago Co-work Hub | `CO_WORKING` | Manajemen ruang kerja, member, dan reservasi |
-| **Commercial Space Manager** | `BUSINESS_UNIT` | Dago Commercial | `COMMERCIAL` | Manajemen tenant sewa komersial dan area event |
-| **Outlet Manager Singaraja** | `OUTLET` | Kopi Senja Singaraja | `FNB` | Operasional lengkap gerai Singaraja |
-| **Kasir Gerai Singaraja** | `OUTLET` | Kopi Senja Singaraja | `FNB` | POS Kasir dan kelola shift laci kasir |
-| **Dapur / Kitchen Staff** | `OUTLET` | Kopi Senja Singaraja | `FNB` | Antrean KDS dan pencatatan waktu masak |
-| **Pelayan / Waiter** | `OUTLET` | Kopi Senja Singaraja | `FNB` | Pemesanan meja dan penyajian pesanan |
-| **Super Admin Platform** | `PLATFORM` | Multi-Tenant Global | `CORE`, `FNB`, `CO_WORKING`, `COMMERCIAL` | Pengaturan tenant, lisensi modul, dan kesehatan sistem |
+| `RoleSlug` | Lingkup umum | Rute bawaan | Hak operasional dan pembatasan utama |
+|---|---|---|---|
+| `SUPER_ADMIN` | `PLATFORM` | `/dashboard` | Akses penuh lintas modul, pengaturan platform, pengelolaan kebijakan bagi hasil, manajemen karyawan, dan diagnostik `/api/system/health`. |
+| `OWNER` (Hub) | `ORGANIZATION` | `/dashboard` | Akses eksekutif konsolidasi seluruh unit bisnis Dago Creative Hub, pengubahan kebijakan bagi hasil mitra, dan persetujuan langsung void atau refund. |
+| `OWNER` (Mitra F&B) | `TENANT` | `/dashboard` | Terkunci ketat pada `tenantId` miliknya di dashboard, pesanan, menu, KDS, inventori, dan laporan bagi hasil. Diblokir oleh `TENANT_OWNER_BLOCKED_PREFIXES` dari `/coworking`, `/commercial`, `/employees`, `/events-admin`, `/activity-log`, `/customers`, dan `/events/checkin`. |
+| `MANAGER` | `BUSINESS_UNIT` / `ORGANIZATION` | `/commercial` atau `/coworking` | Mengelola operasional unit bisnis, inventori, laporan, dan persetujuan void atau refund tanpa perlu memasukkan PIN supervisor. |
+| `CASHIER` | `OUTLET` | `/pos` | Mengoperasikan kasir POS, buka/tutup shift laci kas, dan klaim pesanan meja. Diblokir dari ekspor data pelanggan CRM dengan nomor telepon dan email pelanggan tersamar (`S-09`). Wajib memasukkan `SUPERVISOR_OVERRIDE_PIN` untuk konfirmasi manual QRIS statis, void, dan refund (`V-05`, `V-13`). |
+| `KITCHEN_STAFF` | `OUTLET` | `/kitchen` | Mengelola papan KDS (`/kitchen`) yang difilter ketat hanya untuk item milik mitranya (`V-09`). Nominal rupiah pada pesanan disembunyikan (`—`), tombol refund dinonaktifkan, dan akses ke `/customers` maupun `/pos` ditolak (`V-19`). |
+| `INVENTORY_STAFF` | `OUTLET` | `/inventory` | Mengelola stok bahan baku, Purchase Order, dan Stock Opname pada `/inventory`. |
+| `WAITER` | `OUTLET` | `/waiter` | Mengelola status meja lantai dan menerima notifikasi pesanan siap saji dari dapur pada `/waiter` serta `/tables`. |
+| `CHECKIN_STAFF` | `ORGANIZATION` | `/events/checkin` | Khusus meja registrasi tiket event hari berjalan WITA (`/events/checkin`). Diblokir penuh dari POS, KDS, CRM, dan AI Insight (`V-19`). |
+| `CUSTOMER` | `OUTLET` / `TENANT` | `/customer` atau `/events/portal` | Pemesanan mandiri via QR meja, pemesanan tiket event, atau pengelolaan acara komunitas bagi akun yang terdaftar sebagai organizer. |
 
----
+Daftar email dan kata sandi akun pengujian untuk setiap peran tersedia di [AKUN_SISTEM.md](./AKUN_SISTEM.md).
 
-## 3. Developer Role Simulator
+## 2. Matriks peran cetak struk (`V-18`)
 
-Simulator peran memungkinkan pengujian instan antar semua kombinasi scope dan modul:
-- Dikendalikan oleh environment variable: `ENABLE_ROLE_SIMULATOR=true`.
-- **Dinonaktifkan di Produksi**: Pada mode produksi (`NODE_ENV === 'production'`), bilah simulator otomatis dihilangkan dari DOM dan ditolak pada level API.
+Pengaturan distribusi cetak struk disimpan di `STORAGE_settlement_receipt_policy.json` dan hanya dapat diubah oleh `SUPER_ADMIN` atau `OWNER` tingkat organisasi (`PUT /api/settings/settlement-receipt`):
+
+- **Struk kasir dan pelanggan (`cashierReceiptRoles`).** Secara bawaan diizinkan bagi `SUPER_ADMIN`, `OWNER`, `MANAGER`, dan `CASHIER`.
+- **Tiket dapur tanpa harga (`kitchenReceiptRoles`).** Secara bawaan diizinkan bagi `SUPER_ADMIN`, `OWNER`, `MANAGER`, `CASHIER`, `KITCHEN_STAFF`, dan `WAITER`.
+
+## 3. Keamanan sesi, simulator peran, dan mode UAT vs produksi
+
+- **Verifikasi tanpa header klien.** `getRequestAuthUser` di `src/lib/server-auth.ts` tidak pernah mempercayai header `x-user-*` dari peramban. Identitas pengguna selalu diverifikasi dari `dagoeng_session` (hash SHA-256 di database), `dagoeng_edge_token` (HMAC-SHA256 `SESSION_SECRET`), serta pemeriksaan daftar pencabutan di `STORAGE_session_revocations.json`.
+- **Bilah simulator peran (`ENABLE_ROLE_SIMULATOR`).** Mengaktifkan bilah pengalih persona cepat untuk pengembangan lokal dan QA. Pada `NODE_ENV=production`, bilah simulator disembunyikan dari antarmuka, dan variabel `ENABLE_ROLE_SIMULATOR` saja tetap menolak login demo untuk peran berhak tinggi (`SUPER_ADMIN`, `OWNER`, `MANAGER`).
+- **Sakelar UAT (`ALLOW_DEMO_UAT`) dan penguncian produksi (`DISABLE_DEMO_LOGIN`).** Saat ini `next.config.js` menyetel `ALLOW_DEMO_UAT: 'true'` supaya pimpinan dan penguji UAT dapat masuk ke ke-16 akun demo pada server staging. Ketika aplikasi beralih ke produksi publik pasca-UAT, operator wajib menyetel `DISABLE_DEMO_LOGIN=true` pada environment server untuk mematikan seluruh login demo dan cookie `dagoeng_active_persona`.

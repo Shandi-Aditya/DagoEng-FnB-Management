@@ -54,6 +54,9 @@ export default function EmployeesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [deptFilter, setDeptFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [shiftSearchQuery, setShiftSearchQuery] = useState("");
+  const [shiftStatusFilter, setShiftStatusFilter] = useState("ALL");
+  const [shiftDateFilter, setShiftDateFilter] = useState("");
 
   // Modal States
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -65,7 +68,7 @@ export default function EmployeesPage() {
   const [deletingEmp, setDeletingEmp] = useState<EmployeeProfile | null>(null);
 
   const [isOpenShiftModalOpen, setIsOpenShiftModalOpen] = useState(false);
-  const [isCloseShiftModalOpen, setIsCloseShiftModalOpen] = useState(false);
+  const [closingShiftTarget, setClosingShiftTarget] = useState<ShiftRecord | null>(null);
   const [isHRReportPDFOpen, setIsHRReportPDFOpen] = useState(false);
   const [selectedShiftForClosingPDF, setSelectedShiftForClosingPDF] = useState<ShiftRecord | null>(null);
   const [isClosingPDFModalOpen, setIsClosingPDFModalOpen] = useState(false);
@@ -81,15 +84,15 @@ export default function EmployeesPage() {
   );
 
   const displayedShifts = useMemo(
-    () => filterShifts(filteredShifts, searchQuery),
-    [filteredShifts, searchQuery]
+    () => filterShifts(filteredShifts, shiftSearchQuery, shiftStatusFilter, shiftDateFilter),
+    [filteredShifts, shiftSearchQuery, shiftStatusFilter, shiftDateFilter]
   );
 
   const handleExportCSV = () => {
     const { filename, headers, rows } = buildEmployeeExportData(
       activeTab,
-      filteredShifts,
-      filteredEmployees,
+      displayedShifts,
+      displayedEmployees,
       activeOutlet?.name || "Singaraja"
     );
     downloadCSV(`${filename}_${Date.now()}`, headers, rows);
@@ -99,8 +102,8 @@ export default function EmployeesPage() {
   const handleExportExcel = () => {
     const { filename, sheet, headers, rows } = buildEmployeeExportData(
       activeTab,
-      filteredShifts,
-      filteredEmployees,
+      displayedShifts,
+      displayedEmployees,
       activeOutlet?.name || "Singaraja"
     );
     downloadExcel(`${filename}_${Date.now()}`, sheet, headers, rows);
@@ -183,12 +186,14 @@ export default function EmployeesPage() {
   };
 
   const handleCloseShiftSubmit = (params: { actualCash: number; closingNotes?: string }) => {
-    if (!activeShift) return;
+    const target = closingShiftTarget || activeShift;
+    if (!target) return;
     closeShift(
-      activeShift.id,
+      target.id,
       params.actualCash,
       params.closingNotes
     );
+    setClosingShiftTarget(null);
     notify.success("Shift ditutup", "Selisih kas sudah tercatat.");
   };
 
@@ -240,7 +245,6 @@ export default function EmployeesPage() {
         value={activeTab}
         onValueChange={(val) => {
           setActiveTab(val as "SHIFTS" | "EMPLOYEES");
-          setSearchQuery("");
         }}
         className="space-y-4"
       >
@@ -263,9 +267,15 @@ export default function EmployeesPage() {
 
         <TabsContent value="SHIFTS">
           <EmployeesShiftsTab
-            shifts={displayedShifts}
+            shifts={filteredShifts}
             activeShift={activeShift}
-            onOpenCloseShiftModal={() => setIsCloseShiftModalOpen(true)}
+            searchQuery={shiftSearchQuery}
+            onSearchChange={setShiftSearchQuery}
+            statusFilter={shiftStatusFilter}
+            onStatusFilterChange={setShiftStatusFilter}
+            dateFilter={shiftDateFilter}
+            onDateFilterChange={setShiftDateFilter}
+            onOpenCloseShiftModal={(shift) => setClosingShiftTarget(shift)}
             onOpenStartShiftModal={() => setIsOpenShiftModalOpen(true)}
             onOpenClosingPDF={handleOpenClosingPDF}
           />
@@ -334,9 +344,9 @@ export default function EmployeesPage() {
       />
 
       <CloseShiftModal
-        shift={activeShift}
-        isOpen={isCloseShiftModalOpen}
-        onClose={() => setIsCloseShiftModalOpen(false)}
+        shift={closingShiftTarget}
+        isOpen={Boolean(closingShiftTarget)}
+        onClose={() => setClosingShiftTarget(null)}
         onSubmit={handleCloseShiftSubmit}
       />
 
@@ -353,8 +363,8 @@ export default function EmployeesPage() {
       <EmployeesReportPDFModal
         isOpen={isHRReportPDFOpen}
         onClose={() => setIsHRReportPDFOpen(false)}
-        employees={filteredEmployees}
-        shifts={filteredShifts}
+        employees={displayedEmployees}
+        shifts={displayedShifts}
         outletName={activeOutlet?.name || "Semua Outlet"}
       />
 
@@ -364,6 +374,7 @@ export default function EmployeesPage() {
           setIsClosingPDFModalOpen(false);
           setSelectedShiftForClosingPDF(null);
         }}
+        shiftId={selectedShiftForClosingPDF?.id}
         managerPhone="+62 812-3456-7890"
         reportData={buildClosingReportData(
           selectedShiftForClosingPDF || activeShift,

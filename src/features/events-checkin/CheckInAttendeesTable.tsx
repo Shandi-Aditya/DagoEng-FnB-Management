@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { QrCode, Check, RotateCcw, Loader2, Ticket, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -23,6 +23,8 @@ interface CheckInAttendeesTableProps {
   onSwitchToCheckedTab?: () => void;
   activeTab: "UNCHECKED" | "CHECKED" | "ALL";
   totalUnfilteredCount: number;
+  hasSearch?: boolean;
+  selectedEventId?: string;
 }
 
 export function CheckInAttendeesTable({
@@ -34,16 +36,24 @@ export function CheckInAttendeesTable({
   onSwitchToCheckedTab,
   activeTab,
   totalUnfilteredCount,
+  hasSearch = false,
+  selectedEventId,
 }: CheckInAttendeesTableProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, hasSearch, selectedEventId]);
+
   const totalItems = tickets.length;
-  const startIndex = (currentPage - 1) * pageSize;
+  const maxPage = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(currentPage, maxPage);
+  const startIndex = (safePage - 1) * pageSize;
   const paginatedTickets = tickets.slice(startIndex, startIndex + pageSize);
 
   if (totalItems === 0) {
-    if (activeTab === "UNCHECKED" && totalUnfilteredCount > 0) {
+    if (activeTab === "UNCHECKED" && totalUnfilteredCount > 0 && !hasSearch) {
       return (
         <EmptyState
           icon={<CheckCircle2 />}
@@ -224,7 +234,7 @@ export function CheckInAttendeesTable({
       </div>
 
       <DataPagination
-        currentPage={currentPage}
+        currentPage={safePage}
         totalItems={totalItems}
         pageSize={pageSize}
         onPageChange={setCurrentPage}

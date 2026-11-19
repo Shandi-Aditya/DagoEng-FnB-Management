@@ -1,5 +1,6 @@
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
 import { getTodayWitaDateString } from "@/features/coworking/coworking-domain";
+import { normalizeDateToYMD, parseTimeToMinutes } from "@/lib/operating-hours";
 
 export const COWORKING_TIME_SLOTS = [
   "09:00",
@@ -93,22 +94,34 @@ export function checkSlotAvailability({
   durationHours,
 }: CheckSlotParams): SlotAvailabilityResult {
   const space = spaces.find((s) => s.id === spaceId);
+  if (space?.status === "MAINTENANCE") {
+    return {
+      isAvailable: false,
+      reason: "Sedang pemeliharaan",
+    };
+  }
+
   const maxCapacity = space?.type === "HOT_DESK" ? space.capacity || 8 : 1;
-  const targetEndHour = startHour + durationHours;
+  const targetYmd = normalizeDateToYMD(targetDate);
+  const reqStartMin = startHour * 60;
+  const reqEndMin = (startHour + durationHours) * 60;
 
-  const activeBookings = bookings.filter(
-    (b) =>
-      b.spaceId === spaceId &&
-      b.date === targetDate &&
-      b.checkInStatus !== "CANCELLED" &&
-      b.checkInStatus !== "COMPLETED"
-  );
+  const activeBookings = bookings.filter((b) => {
+    if (b.spaceId !== spaceId) return false;
+    if (b.checkInStatus === "CANCELLED" || b.checkInStatus === "COMPLETED") return false;
+    const bStartYmd = normalizeDateToYMD(b.date);
+    const bEndYmd = b.endDate ? normalizeDateToYMD(b.endDate) : bStartYmd;
+    return Boolean(bStartYmd) && targetYmd >= bStartYmd && targetYmd <= bEndYmd;
+  });
 
-  for (let h = startHour; h < targetEndHour; h++) {
+  for (let min = reqStartMin; min < reqEndMin; min += 30) {
+    const windowEnd = min + 30;
     const overlapping = activeBookings.filter((b) => {
-      const bStart = parseHour(b.startTime);
-      const bEnd = bStart + (b.duration || 1);
-      return h >= bStart && h < bEnd;
+      if (b.bookingType === "DAILY" || b.bookingType === "MONTHLY") return true;
+      const bStartMin = parseTimeToMinutes(b.startTime) ?? parseHour(b.startTime) * 60;
+      const bEndMin =
+        parseTimeToMinutes(b.endTime) ?? bStartMin + (b.duration || 1) * 60;
+      return min < bEndMin && windowEnd > bStartMin;
     });
 
     if (overlapping.length >= maxCapacity) {

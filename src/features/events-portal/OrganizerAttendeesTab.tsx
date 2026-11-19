@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Search,
   Download,
@@ -11,6 +11,7 @@ import {
   Users,
   Check,
   Clock,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -67,7 +68,13 @@ export function OrganizerAttendeesTab({
 }: OrganizerAttendeesTabProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("ALL");
+  const [checkInStatusFilter, setCheckInStatusFilter] = useState("ALL");
   const [expandedBookingIds, setExpandedBookingIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [bookings, selectedEventId, searchQuery, dateRange, paymentStatusFilter, checkInStatusFilter, pageSize]);
 
   const toggleExpand = (id: string) => {
     setExpandedBookingIds((prev) => {
@@ -79,8 +86,15 @@ export function OrganizerAttendeesTab({
   };
 
   const filteredAttendees = useMemo(() => {
-    return filterOrganizerAttendees(bookings, selectedEventId, searchQuery, dateRange);
-  }, [bookings, selectedEventId, searchQuery, dateRange]);
+    return filterOrganizerAttendees(
+      bookings,
+      selectedEventId,
+      searchQuery,
+      dateRange,
+      paymentStatusFilter,
+      checkInStatusFilter
+    );
+  }, [bookings, selectedEventId, searchQuery, dateRange, paymentStatusFilter, checkInStatusFilter]);
 
   const paginatedAttendees = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
@@ -93,14 +107,30 @@ export function OrganizerAttendeesTab({
     .reduce((sum, b) => sum + (b.ticketCount || 1), 0);
   const checkedIn = checkedInGuests(selectedEventId, bookings);
 
-  const emptyMsg = emptyOrganizerAttendeeMessage(Boolean(searchQuery.trim() || selectedEventId !== "ALL" || dateRange));
+  const hasActiveFilter = Boolean(
+    searchQuery.trim() ||
+      selectedEventId !== "ALL" ||
+      dateRange ||
+      paymentStatusFilter !== "ALL" ||
+      checkInStatusFilter !== "ALL"
+  );
+
+  const handleResetFilters = () => {
+    onSelectEventId("ALL");
+    onSearchChange("");
+    onDateRangeChange(null);
+    setPaymentStatusFilter("ALL");
+    setCheckInStatusFilter("ALL");
+    setCurrentPage(1);
+  };
+
+  const emptyMsg = emptyOrganizerAttendeeMessage(hasActiveFilter);
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 1. Toolbar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-1 flex-wrap sm:flex-nowrap">
-          <div className="w-full sm:w-52">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-1 flex-wrap">
+          <div className="w-full sm:w-48">
             <NativeSelect
               value={selectedEventId}
               onChange={(e) => {
@@ -115,6 +145,40 @@ export function OrganizerAttendeesTab({
                   {e.title}
                 </NativeSelectOption>
               ))}
+            </NativeSelect>
+          </div>
+
+          <div className="w-full sm:w-40">
+            <NativeSelect
+              value={paymentStatusFilter}
+              onChange={(e) => {
+                setPaymentStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              aria-label="Filter status pembayaran"
+            >
+              <NativeSelectOption value="ALL">Semua bayar</NativeSelectOption>
+              <NativeSelectOption value="PAID">Lunas</NativeSelectOption>
+              <NativeSelectOption value="PENDING">Menunggu</NativeSelectOption>
+              <NativeSelectOption value="REJECTED">Ditolak</NativeSelectOption>
+              <NativeSelectOption value="CANCELLED">Dibatalkan</NativeSelectOption>
+              <NativeSelectOption value="EXPIRED">Kedaluwarsa</NativeSelectOption>
+            </NativeSelect>
+          </div>
+
+          <div className="w-full sm:w-44">
+            <NativeSelect
+              value={checkInStatusFilter}
+              onChange={(e) => {
+                setCheckInStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              aria-label="Filter status kehadiran"
+            >
+              <NativeSelectOption value="ALL">Semua kehadiran</NativeSelectOption>
+              <NativeSelectOption value="CHECKED_IN">Sudah hadir</NativeSelectOption>
+              <NativeSelectOption value="PARTIALLY_CHECKED_IN">Sebagian hadir</NativeSelectOption>
+              <NativeSelectOption value="REGISTERED">Belum hadir</NativeSelectOption>
             </NativeSelect>
           </div>
 
@@ -146,12 +210,17 @@ export function OrganizerAttendeesTab({
           />
         </div>
 
-        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+        <div className="flex items-center gap-2 self-end lg:self-auto shrink-0">
+          {hasActiveFilter ? (
+            <Button variant="ghost" size="sm" onClick={handleResetFilters}>
+              <RotateCcw />
+              <span>Reset</span>
+            </Button>
+          ) : null}
           <Button variant="outline" size="sm" onClick={() => onExportCSV(filteredAttendees)} disabled={filteredAttendees.length === 0}>
             <Download />
             <span>Ekspor</span>
           </Button>
-
         </div>
       </div>
 
@@ -195,7 +264,15 @@ export function OrganizerAttendeesTab({
               <TableBody>
                 {paginatedAttendees.map((b) => {
                   const isExpanded = expandedBookingIds.has(b.id);
-                  const isCheckedIn = b.checkInStatus === "CHECKED_IN";
+                  const qty = b.ticketCount || 1;
+                  const checkedQty =
+                    typeof b.checkedInQty === "number"
+                      ? b.checkedInQty
+                      : b.checkInStatus === "CHECKED_IN"
+                      ? qty
+                      : 0;
+                  const isCheckedIn = b.checkInStatus === "CHECKED_IN" || checkedQty >= qty;
+                  const isPartial = !isCheckedIn && checkedQty > 0;
                   const waUrl = formatWhatsAppUrl(b.guestPhone);
 
                   return (
@@ -282,6 +359,11 @@ export function OrganizerAttendeesTab({
                             <StatusBadge status="success">
                               <Check className="size-3 mr-1" />
                               <span>Hadir</span>
+                            </StatusBadge>
+                          ) : isPartial ? (
+                            <StatusBadge status="info">
+                              <Clock className="size-3 mr-1" />
+                              <span>Hadir {checkedQty}/{qty}</span>
                             </StatusBadge>
                           ) : (
                             <StatusBadge status="neutral">

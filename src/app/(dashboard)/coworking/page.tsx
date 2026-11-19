@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Calendar, History, Laptop, Users } from "lucide-react";
 
@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
+import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
+import { normalizeLoyaltyPhone, useLoyalty } from "@/contexts/LoyaltyContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useSettings } from "@/contexts/SettingsContext";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
@@ -20,6 +22,8 @@ import { CoworkingBookingsTab } from "@/features/coworking/CoworkingBookingsTab"
 import {
   buildCoworkingExportData,
   calculateCoworkingKPIs,
+  filterCoworkingBookings,
+  filterCoworkingMembers,
 } from "@/features/coworking/coworking-domain";
 import { CoworkingLogsTab } from "@/features/coworking/CoworkingLogsTab";
 import { CoworkingMembersTab } from "@/features/coworking/CoworkingMembersTab";
@@ -36,8 +40,10 @@ import { NewMemberModal } from "@/features/coworking/NewMemberModal";
 
 export default function CoworkingPage() {
   const { user } = useAuth();
-  const { activeOutlet } = useOutlet();
+  const { activeOutlet, activeOutletId } = useOutlet();
   const { settings } = useSettings();
+  const { members: loyaltyMembers, addPoints } = useLoyalty();
+  const { recordShiftTransaction } = useEmployeeShift();
   const {
     spaces,
     bookings,
@@ -50,6 +56,9 @@ export default function CoworkingPage() {
   } = useCoworking();
 
   const [activeTab, setActiveTab] = useState<"SPACES" | "BOOKINGS" | "MEMBERS" | "LOGS">("SPACES");
+  const [bookingSearchQuery, setBookingSearchQuery] = useState("");
+  const [bookingStatusFilter, setBookingStatusFilter] = useState("ALL");
+  const [bookingDateFilter, setBookingDateFilter] = useState("");
   const [searchMemberQuery, setSearchMemberQuery] = useState("");
   const [memberStatusFilter, setMemberStatusFilter] = useState<"ALL" | "ACTIVE" | "EXPIRED">("ALL");
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
@@ -88,6 +97,30 @@ export default function CoworkingPage() {
     );
   }
 
+  const outletBookings = useMemo(
+    () =>
+      bookings.filter(
+        (b) => activeOutletId === "ALL" || !b.outletId || b.outletId === activeOutletId
+      ),
+    [bookings, activeOutletId]
+  );
+
+  const displayedBookings = useMemo(
+    () =>
+      filterCoworkingBookings(
+        outletBookings,
+        bookingStatusFilter,
+        bookingSearchQuery,
+        bookingDateFilter
+      ),
+    [outletBookings, bookingStatusFilter, bookingSearchQuery, bookingDateFilter]
+  );
+
+  const displayedMembers = useMemo(
+    () => filterCoworkingMembers(members, memberStatusFilter, searchMemberQuery),
+    [members, memberStatusFilter, searchMemberQuery]
+  );
+
   const kpis = calculateCoworkingKPIs(spaces, members);
   const canManageSettings =
     user?.role?.slug === "OWNER" ||
@@ -99,8 +132,8 @@ export default function CoworkingPage() {
   const handleExportCSV = () => {
     const { filename, headers, rows } = buildCoworkingExportData(
       activeTab === "MEMBERS" ? "MEMBERS" : "BOOKINGS",
-      bookings,
-      members,
+      displayedBookings,
+      displayedMembers,
       outletScopeName
     );
     downloadCSV(`${filename}_${Date.now()}`, headers, rows);
@@ -110,12 +143,46 @@ export default function CoworkingPage() {
   const handleExportExcel = () => {
     const { filename, sheet, headers, rows } = buildCoworkingExportData(
       activeTab === "MEMBERS" ? "MEMBERS" : "BOOKINGS",
-      bookings,
-      members,
+      displayedBookings,
+      displayedMembers,
       outletScopeName
     );
     downloadExcel(`${filename}_${Date.now()}`, sheet, headers, rows);
     notify.success(`Data ${activeTab === "MEMBERS" ? "member" : "booking"} diekspor ke Excel`);
+  };
+
+  const creditCoworkingPayment = (booking: CoworkingBooking) => {
+    const method = (booking.paymentMethod || "QRIS").toUpperCase();
+    const cashAmount = method === "CASH" ? booking.totalAmount : 0;
+    const nonCashAmount = method !== "CASH" ? booking.totalAmount : 0;
+    const targetOutletId = booking.outletId || (activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr");
+
+    if (booking.totalAmount > 0) {
+      recordShiftTransaction(cashAmount, nonCashAmount, targetOutletId, `cw-${booking.id}`);
+    }
+
+    const normPhone = normalizeLoyaltyPhone(booking.guestPhone || "");
+    const cleanEmail = booking.guestEmail?.trim().toLowerCase();
+    const cleanName = booking.guestName.trim().toLowerCase();
+
+    const matchedMember = loyaltyMembers.find((m) => {
+      if (normPhone && normalizeLoyaltyPhone(m.phone) === normPhone) return true;
+      if (cleanEmail && cleanEmail !== "-" && m.email?.trim().toLowerCase() === cleanEmail) return true;
+      return Boolean(cleanName) && m.name.trim().toLowerCase() === cleanName;
+    });
+
+    if (matchedMember && booking.totalAmount > 0) {
+      const earnedPoints = Math.floor(booking.totalAmount / 1000);
+      if (earnedPoints > 0) {
+        addPoints(
+          matchedMember.id,
+          earnedPoints,
+          `Booking Coworking #${booking.bookingCode}`,
+          booking.id,
+          booking.totalAmount
+        );
+      }
+    }
   };
 
   const handleCreateBooking = (bookingData: {
@@ -135,6 +202,8 @@ export default function CoworkingPage() {
     paymentMethod: string;
   }) => {
     const isQris = bookingData.paymentMethod === "QRIS";
+    const nowIso = new Date().toISOString();
+    const targetOutletId = activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr";
     const createdBooking = bookSpace({
       guestName: bookingData.guestName,
       guestPhone: bookingData.guestPhone,
@@ -151,13 +220,18 @@ export default function CoworkingPage() {
       duration: bookingData.duration,
       price: bookingData.totalAmount,
       discount: 0,
+      tax: 0,
+      taxType: "NON_TAX",
+      taxRatePercent: 0,
+      outletId: targetOutletId,
+      createdAt: nowIso,
       totalAmount: bookingData.totalAmount,
       paidAmount: isQris ? 0 : bookingData.totalAmount,
       remainingAmount: isQris ? bookingData.totalAmount : 0,
       paymentStatus: isQris ? "PENDING" : "PAID",
       paymentMethod: bookingData.paymentMethod,
       paymentRef: isQris ? undefined : `PAY-CWK-${Date.now().toString().slice(-6)}`,
-      paymentTimestamp: isQris ? undefined : new Date().toISOString(),
+      paymentTimestamp: isQris ? undefined : nowIso,
       checkInStatus: !isQris && bookingData.isImmediateCheckIn ? "CHECKED_IN" : "RESERVED",
     });
 
@@ -169,6 +243,7 @@ export default function CoworkingPage() {
         `Booking ${createdBooking.bookingCode} dibuat. Tampilkan QRIS statis dan minta otorisasi supervisor.`
       );
     } else {
+      creditCoworkingPayment(createdBooking);
       notify.success("Booking dibuat", bookingData.guestName);
     }
   };
@@ -227,10 +302,14 @@ export default function CoworkingPage() {
   };
 
   const handleOpenReceipt = (b: CoworkingBooking) => {
-    const [startH, startM] = (b.startTime || "09:00").split(":").map(Number);
+    const [rawH = "09", rawM = "00"] = (b.startTime || "09:00").split(":");
+    const startH = Number.parseInt(rawH, 10) || 9;
+    const startM = Number.parseInt(rawM, 10) || 0;
     const endH = (startH + (b.duration || 1)) % 24;
-    const endTime = `${endH.toString().padStart(2, "0")}:${(startM || 0).toString().padStart(2, "0")}`;
+    const computedEndTime = `${endH.toString().padStart(2, "0")}:${startM.toString().padStart(2, "0")}`;
+    const endTime = b.endTime ? b.endTime.replace(/\s*WITA$/i, "").trim() : computedEndTime;
     const cwPublisher = resolveCoworkingReceiptPublisher(activeOutlet);
+    const storedTax = b.tax ?? 0;
 
     setSelectedBookingForReceipt({
       bookingCode: b.bookingCode || b.id,
@@ -250,10 +329,12 @@ export default function CoworkingPage() {
       endTime,
       duration: b.duration,
       bookingType: b.bookingType || "HOURLY",
-      basePrice: b.totalAmount,
-      tax: 0,
-      taxType: "NON_TAX",
-      taxRatePercent: 0,
+      basePrice: b.price ?? b.totalAmount,
+      discount: b.discount && b.discount > 0 ? b.discount : undefined,
+      promoTitle: b.promoTitle,
+      tax: storedTax,
+      taxType: b.taxType ?? (storedTax > 0 ? "PPN" : "NON_TAX"),
+      taxRatePercent: b.taxRatePercent ?? 0,
       totalAmount: b.totalAmount,
       paymentMethod: b.paymentMethod || "QRIS",
       paymentStatus: b.paymentStatus || "PAID",
@@ -331,7 +412,13 @@ export default function CoworkingPage() {
 
         <TabsContent value="BOOKINGS">
           <CoworkingBookingsTab
-            bookings={bookings}
+            bookings={outletBookings}
+            searchQuery={bookingSearchQuery}
+            onSearchChange={setBookingSearchQuery}
+            statusFilter={bookingStatusFilter}
+            onStatusFilterChange={setBookingStatusFilter}
+            dateFilter={bookingDateFilter}
+            onDateFilterChange={setBookingDateFilter}
             onOpenReceipt={handleOpenReceipt}
             onCheckIn={handleCheckInBooking}
             onCheckout={handleCheckoutSpace}
@@ -386,9 +473,9 @@ export default function CoworkingPage() {
         <CoworkingReportPDFModal
           isOpen={isPDFModalOpen}
           onClose={() => setIsPDFModalOpen(false)}
-          bookings={bookings}
+          bookings={displayedBookings}
           spaces={spaces}
-          members={members}
+          members={displayedMembers}
           outletName={activeOutlet?.name || "Semua Gerai"}
         />
       )}
@@ -401,10 +488,11 @@ export default function CoworkingPage() {
           setSelectedQrisBooking(null);
         }}
         booking={selectedQrisBooking}
-        onSuccess={() => {
+        onSuccess={(verifiedBooking) => {
+          creditCoworkingPayment(verifiedBooking);
           setIsQrisModalOpen(false);
           setSelectedQrisBooking(null);
-          notify.success("Pembayaran QRIS berhasil disetujui supervisor.");
+          notify.success("Pembayaran QRIS disetujui", verifiedBooking.bookingCode);
         }}
       />
     </div>

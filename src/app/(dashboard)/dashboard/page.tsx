@@ -51,8 +51,16 @@ export default function DashboardPage() {
   // Non-executive personas are routed to their own working station
   useEffect(() => {
     if (!user || !isMounted || isLoading) return;
-    if (user.role?.slug === "WAITER" || user.permissions?.includes("events:checkin")) {
+    if (user.role?.slug === "WAITER") {
+      router.replace("/waiter");
+    } else if (user.role?.slug === "CHECKIN_STAFF" || user.permissions?.includes("events:checkin")) {
       router.replace("/events/checkin");
+    } else if (user.role?.slug === "KITCHEN_STAFF") {
+      router.replace("/kitchen");
+    } else if (user.role?.slug === "CASHIER") {
+      router.replace("/pos");
+    } else if (user.role?.slug === "INVENTORY_STAFF") {
+      router.replace("/inventory");
     } else if (user.role?.slug === "CUSTOMER") {
       router.replace("/customer");
     }
@@ -117,9 +125,9 @@ export default function DashboardPage() {
         {metrics.isDagoOwner ? <UnitContributionCard units={metrics.unitBreakdown} /> : <OutletCompareCard />}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className={metrics.isTenantOwner ? "grid gap-4" : "grid gap-4 lg:grid-cols-2"}>
         <DailyProgressSummary />
-        <InventoryRiskCard />
+        {!metrics.isTenantOwner ? <InventoryRiskCard /> : null}
       </div>
     </div>
   );

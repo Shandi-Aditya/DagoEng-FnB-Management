@@ -56,13 +56,18 @@ export function ingredientCategoryLabel(category: string): string {
   return CATEGORY_LABEL[category as IngredientItem["category"]] ?? category;
 }
 
-const ADJUSTMENT_REASON_LABEL: Record<StockAdjustmentLog["reason"], string> = {
+const ADJUSTMENT_REASON_LABEL: Record<string, string> = {
   PENJUALAN_RESEP: "Terjual",
   PO_MASUK: "PO diterima",
   OPNAME_HILANG_RUSAK: "Opname",
   MANUAL_ADJUSTMENT: "Penyesuaian manual",
+  PRODUKSI_BOM: "Pemakaian produksi",
+  WASTE_RUSAK: "Limbah atau rusak",
+  KADALUWARSA: "Kedaluwarsa",
+  KOREKSI_OPNAME: "Koreksi opname",
+  LAINNYA: "Penyesuaian lain",
 };
 
-export function adjustmentReasonLabel(reason: StockAdjustmentLog["reason"]): string {
+export function adjustmentReasonLabel(reason: StockAdjustmentLog["reason"] | string): string {
   return ADJUSTMENT_REASON_LABEL[reason] ?? reason;
 }

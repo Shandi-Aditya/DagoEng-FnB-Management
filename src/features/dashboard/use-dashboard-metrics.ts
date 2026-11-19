@@ -6,8 +6,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useCoworking } from "@/contexts/CoworkingContext";
 import { useDateFilter } from "@/contexts/DateFilterContext";
 import { useOrders } from "@/contexts/OrderContext";
+import { useOutlet } from "@/contexts/OutletContext";
 
-import { averageOrderValue, buildUnitBreakdown } from "./dashboard-metrics";
+import {
+  averageOrderValue,
+  buildUnitBreakdown,
+  computeDashboardFnbRevenue,
+  scopeDashboardOrders,
+} from "./dashboard-metrics";
 
 export interface PendingActions {
   moderation: number;
@@ -19,15 +25,22 @@ export interface PendingActions {
 interface EventStats {
   totalRevenue: number;
   ticketsSold: number;
+  paidBookingsCount: number;
   platformRevenue: number;
 }
 
-const EMPTY_EVENT_STATS: EventStats = { totalRevenue: 0, ticketsSold: 0, platformRevenue: 0 };
+const EMPTY_EVENT_STATS: EventStats = {
+  totalRevenue: 0,
+  ticketsSold: 0,
+  paidBookingsCount: 0,
+  platformRevenue: 0,
+};
 const EMPTY_ACTIONS: PendingActions = { moderation: 0, payouts: 0, revenueSplits: 0, manualPayments: 0 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- event API payloads are untyped JSON */
 function useEventAdminData(enabled: boolean) {
   const [bookings, setBookings] = useState<any[]>([]);
+  const [hasLoadedBookings, setHasLoadedBookings] = useState(false);
   const [fallbackStats, setFallbackStats] = useState<EventStats>(EMPTY_EVENT_STATS);
   const [actions, setActions] = useState<PendingActions>(EMPTY_ACTIONS);
 
@@ -42,11 +55,13 @@ function useEventAdminData(enabled: boolean) {
           setFallbackStats({
             totalRevenue: json.stats.totalTicketRevenue || 0,
             ticketsSold: json.stats.totalTicketsSold || 0,
+            paidBookingsCount: json.stats.totalAttendees || 0,
             platformRevenue: json.stats.platformCommissionRevenue || 0,
           });
         }
         if (Array.isArray(json.data)) {
           setBookings(json.data);
+          setHasLoadedBookings(true);
           const manualPayments = json.data.filter(
             (b: any) =>
               b.totalPrice > 0 &&
@@ -78,7 +93,7 @@ function useEventAdminData(enabled: boolean) {
       .catch(() => {});
   }, [enabled]);
 
-  return { bookings, fallbackStats, actions };
+  return { bookings, hasLoadedBookings, fallbackStats, actions };
 }
 
 /** All numbers shown on the executive dashboard, scoped to the signed-in user. */
@@ -86,6 +101,7 @@ export function useDashboardMetrics() {
   const { user, activeOrgModules } = useAuth();
   const { isDateInRange } = useDateFilter();
   const { filteredOrders } = useOrders();
+  const { activeOutletId, isAllOutlets } = useOutlet();
   const { bookings: coworkingBookings } = useCoworking();
 
   const isDagoOwner =
@@ -94,60 +110,82 @@ export function useDashboardMetrics() {
   const isTenantOwner = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
   const tenantId = user?.tenant?.id;
 
-  const { bookings: eventBookings, fallbackStats, actions } = useEventAdminData(isDagoOwner);
+  const { bookings: eventBookings, hasLoadedBookings, fallbackStats, actions } = useEventAdminData(isDagoOwner);
 
   const eventStats = useMemo<EventStats>(() => {
-    if (!eventBookings.length) return fallbackStats;
-    const paid = eventBookings.filter((b: any) => b.paymentStatus === "PAID" && isDateInRange(b.createdAt));
+    if (!hasLoadedBookings) return fallbackStats;
+    const paidInRange = eventBookings.filter(
+      (b: any) => b.paymentStatus === "PAID" && isDateInRange(b.createdAt)
+    );
+    const paidRevenueBookings = paidInRange.filter(
+      (b: any) => (b.totalPrice || 0) > 0 && b.paymentMethod !== "FREE"
+    );
     return {
-      totalRevenue: paid.reduce((sum: number, b: any) => sum + (b.totalPrice || 0), 0),
-      ticketsSold: paid.reduce((sum: number, b: any) => sum + (b.ticketCount || 1), 0),
-      platformRevenue: paid.reduce((sum: number, b: any) => sum + (b.platformFeeAmount || 0), 0),
+      totalRevenue: paidRevenueBookings.reduce((sum: number, b: any) => sum + (b.totalPrice || 0), 0),
+      ticketsSold: paidInRange.reduce((sum: number, b: any) => sum + (b.ticketCount || 1), 0),
+      paidBookingsCount: paidRevenueBookings.length,
+      platformRevenue: paidRevenueBookings.reduce((sum: number, b: any) => sum + (b.platformFeeAmount || 0), 0),
     };
-  }, [eventBookings, fallbackStats, isDateInRange]);
+  }, [eventBookings, hasLoadedBookings, fallbackStats, isDateInRange]);
   /* eslint-enable @typescript-eslint/no-explicit-any */
 
   const scopedOrders = useMemo(
     () =>
-      isTenantOwner && tenantId
-        ? filteredOrders.filter((order) => order.items.some((item) => item.tenantId === tenantId))
-        : filteredOrders,
-    [filteredOrders, isTenantOwner, tenantId],
+      scopeDashboardOrders(filteredOrders, {
+        tenantId,
+        isTenantOwner,
+        isDateInRange,
+        requirePaid: true,
+      }),
+    [filteredOrders, isTenantOwner, tenantId, isDateInRange],
   );
 
-  const fnbRevenue = useMemo(() => {
-    if (!isTenantOwner || !tenantId) return filteredOrders.reduce((sum, order) => sum + order.total, 0);
-    return scopedOrders.reduce(
-      (sum, order) =>
-        sum +
-        order.items
-          .filter((item) => item.tenantId === tenantId)
-          .reduce((itemSum, item) => itemSum + (item.unitPrice || 0) * (item.quantity || 1), 0),
-      0,
-    );
-  }, [filteredOrders, scopedOrders, isTenantOwner, tenantId]);
+  const fnbRevenue = useMemo(
+    () => computeDashboardFnbRevenue(scopedOrders, { isTenantOwner, tenantId }),
+    [scopedOrders, isTenantOwner, tenantId],
+  );
 
   const paidCoworkingBookings = useMemo(
     () =>
       coworkingBookings.filter(
-        (booking) => booking.paymentStatus === "PAID" && booking.checkInStatus !== "CANCELLED" && isDateInRange(booking.date),
+        (booking) =>
+          (isAllOutlets || !booking.outletId || booking.outletId === activeOutletId) &&
+          booking.paymentStatus === "PAID" &&
+          booking.checkInStatus !== "CANCELLED" &&
+          isDateInRange(booking.createdAt || booking.date),
       ),
-    [coworkingBookings, isDateInRange],
+    [coworkingBookings, isAllOutlets, activeOutletId, isDateInRange],
   );
 
   const coworkingRevenue = isTenantOwner
     ? 0
     : paidCoworkingBookings.reduce((sum, booking) => sum + (booking.paidAmount || booking.totalAmount || 0), 0);
 
-  // Dago earns the platform fee from events, not the full ticket turnover
   const eventRevenue = isDagoOwner ? eventStats.platformRevenue : 0;
   const consolidatedRevenue = fnbRevenue + coworkingRevenue + eventRevenue;
   const revenue = isDagoOwner ? consolidatedRevenue : fnbRevenue;
 
   const transactions =
-    scopedOrders.length + (isDagoOwner ? paidCoworkingBookings.length + eventStats.ticketsSold : 0);
+    scopedOrders.length + (isDagoOwner ? paidCoworkingBookings.length + eventStats.paidBookingsCount : 0);
   const completedOrders = scopedOrders.filter((order) => order.status === "COMPLETED" || order.status === "SERVED").length;
-  const preparingOrders = scopedOrders.filter((order) => order.status === "COOKING" || order.status === "KITCHEN_RECEIVED").length;
+  const liveTenantOrders = useMemo(
+    () =>
+      scopeDashboardOrders(filteredOrders, {
+        tenantId,
+        isTenantOwner,
+        requirePaid: false,
+      }),
+    [filteredOrders, isTenantOwner, tenantId],
+  );
+  const preparingOrders = liveTenantOrders.filter((order) => {
+    const effectiveStatus = (isTenantOwner && tenantId && order.tenantStatuses?.[tenantId]) || order.status;
+    return (
+      effectiveStatus === "NEW" ||
+      effectiveStatus === "CONFIRMED" ||
+      effectiveStatus === "KITCHEN_RECEIVED" ||
+      effectiveStatus === "COOKING"
+    );
+  }).length;
 
   return {
     isDagoOwner,

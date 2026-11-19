@@ -77,7 +77,7 @@ export default function CommercialPage() {
   }
 
   const handleExportCSV = () => {
-    const { headers, rows } = buildCommercialExportData(filteredLeases);
+    const { headers, rows } = buildCommercialExportData(displayedLeases);
     downloadCSV(
       `Kontrak_Tenant_Commercial_${activeOutlet?.name || "All"}_${Date.now()}`,
       headers,
@@ -87,7 +87,7 @@ export default function CommercialPage() {
   };
 
   const handleExportExcel = () => {
-    const { headers, rows } = buildCommercialExportData(filteredLeases);
+    const { headers, rows } = buildCommercialExportData(displayedLeases);
     downloadExcel(
       `Kontrak_Tenant_Commercial_${activeOutlet?.name || "All"}_${Date.now()}`,
       "Kontrak Tenant Commercial",
@@ -267,7 +267,7 @@ export default function CommercialPage() {
       <CommercialReportPDFModal
         isOpen={isPDFModalOpen}
         onClose={() => setIsPDFModalOpen(false)}
-        leases={filteredLeases}
+        leases={displayedLeases}
         outletName={activeOutlet?.name || "Semua Outlet"}
       />
     </div>

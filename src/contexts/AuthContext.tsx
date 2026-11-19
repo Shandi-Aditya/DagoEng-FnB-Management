@@ -1,10 +1,68 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { AuthenticatedUser, RoleSlug, BusinessModuleCode, ScopeLevel, PersonaKey } from "@/types/auth";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import {
+  AuthenticatedUser,
+  RoleSlug,
+  BusinessModuleCode,
+  PersonaKey,
+} from "@/types/auth";
 import { getTenantName } from "@/lib/tenant";
+import {
+  applyPlatformSettingsCommand,
+  mutateConfigDomain,
+  platformSettingsStorageMirror,
+  platformSettingsSyncClient,
+} from "@/lib/sync-domains/config-spec";
 
 export type { PersonaKey } from "@/types/auth";
+
+export const STAFF_IDLE_TIMEOUT_MS = 8 * 60 * 60 * 1000;
+export const STAFF_ACTIVITY_STORAGE_KEY = "dagoeng_last_activity_at";
+
+export function isStaffRole(role: RoleSlug | string | null | undefined): boolean {
+  return Boolean(role && role !== "CUSTOMER");
+}
+
+export function isStaffIdleExpired(
+  lastActivityAtMs: number | null | undefined,
+  nowMs: number = Date.now(),
+  timeoutMs: number = STAFF_IDLE_TIMEOUT_MS
+): boolean {
+  if (
+    lastActivityAtMs === null ||
+    lastActivityAtMs === undefined ||
+    !Number.isFinite(lastActivityAtMs)
+  ) {
+    return false;
+  }
+  return nowMs - lastActivityAtMs >= timeoutMs;
+}
+
+export function getCookieValue(name: string, cookieString?: string): string | null {
+  const rawCookie =
+    cookieString !== undefined
+      ? cookieString
+      : typeof document !== "undefined"
+        ? document.cookie
+        : "";
+  if (!rawCookie) return null;
+  const prefix = `${name}=`;
+  for (const part of rawCookie.split(";")) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(prefix)) {
+      return decodeURIComponent(trimmed.slice(prefix.length));
+    }
+  }
+  return null;
+}
 
 interface AuthContextType {
   user: AuthenticatedUser | null;
@@ -18,9 +76,7 @@ interface AuthContextType {
   switchPersona: (personaKey: PersonaKey) => Promise<void>;
 }
 
-// Seeded Multi-Business Users matching the 3-Dimensional Authorization Model
 export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
-  // 1. Dago Creative Hub Owner (Scope: ORGANIZATION -> sees all F&B, Coworking, Commercial)
   DAGO_OWNER: {
     id: "user-dago-owner",
     email: "owner.dago@dagoeng.com",
@@ -30,7 +86,7 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     scopeLevel: "ORGANIZATION",
     allowedModules: ["FNB", "CO_WORKING", "COMMERCIAL"],
     organization: { id: "org-dago-hub", name: "Dago Creative Hub", code: "DAGO-HUB" },
-    tenant: null, // Full organization scope
+    tenant: null,
     outlet: null,
     permissions: [
       "dashboard:view", "dashboard:compare_outlets", "orders:view", "tables:view",
@@ -38,8 +94,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
       "employees:manage", "settings:manage"
     ],
   },
-
-  // 2a. F&B Tenant Owner: Kopi Senja (Scope: TENANT -> sees ONLY Kopi Senja F&B)
   TENANT_OWNER_KS: {
     id: "user-owner-ks",
     email: "owner.kopisenja@dagoeng.com",
@@ -56,8 +110,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
       "menu:view", "menu:manage", "customers:view", "reports:view"
     ],
   },
-
-  // 2b. F&B Tenant Owner: Dapur Mama (Scope: TENANT -> sees ONLY Dapur Mama F&B)
   TENANT_OWNER_KITCHEN: {
     id: "user-owner-kitchen",
     email: "owner.dapurmama@dagoeng.com",
@@ -74,8 +126,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
       "menu:view", "menu:manage", "customers:view", "reports:view"
     ],
   },
-
-  // 2c. F&B Tenant Owner: Manis Bakery (Scope: TENANT -> sees ONLY Manis Bakery F&B)
   TENANT_OWNER_BAKERY: {
     id: "user-owner-bakery",
     email: "owner.manisbakery@dagoeng.com",
@@ -92,8 +142,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
       "menu:view", "menu:manage", "customers:view", "reports:view"
     ],
   },
-
-  // 2d. F&B Tenant Owner: Warung Bu Narti (Scope: TENANT -> sees ONLY Warung Bu Narti F&B)
   TENANT_OWNER_TEA: {
     id: "user-owner-tea",
     email: "owner.warungbunarti@dagoeng.com",
@@ -110,8 +158,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
       "menu:view", "menu:manage", "customers:view", "reports:view"
     ],
   },
-
-  // 3. Co-working Space Manager (Scope: BUSINESS_UNIT -> Co-working only)
   COWORK_MANAGER: {
     id: "user-mgr-cowork",
     email: "manager.cowork@dagoeng.com",
@@ -125,8 +171,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["dashboard:view", "reports:view", "employees:manage"],
   },
-
-  // 4. Commercial Leases Manager (Scope: BUSINESS_UNIT -> Commercial only)
   COMMERCIAL_MANAGER: {
     id: "user-mgr-commercial",
     email: "manager.commercial@dagoeng.com",
@@ -140,8 +184,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["dashboard:view", "reports:view"],
   },
-
-  // 5. F&B Cashier Singaraja (Scope: OUTLET -> Single outlet POS & Coworking Frontdesk)
   CASHIER_SGR: {
     id: "user-cashier-sgr",
     email: "cashier.sgr@kopisenja.com",
@@ -155,8 +197,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: { id: "outlet-sgr", name: "Singaraja", code: "KS-SGR" },
     permissions: ["pos:operate", "orders:view", "tables:view"],
   },
-
-  // 6. Kitchen Staff (Scope: OUTLET -> KDS Station Singaraja)
   KITCHEN_SGR: {
     id: "user-kitchen-sgr",
     email: "kitchen.sgr@kopisenja.com",
@@ -170,8 +210,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: { id: "outlet-sgr", name: "Singaraja", code: "KS-SGR" },
     permissions: ["kitchen:kds", "orders:view"],
   },
-
-  // 7. Waiter Floor (Scope: OUTLET -> Tables Singaraja)
   WAITER_SGR: {
     id: "user-waiter-sgr",
     email: "waiter.sgr@kopisenja.com",
@@ -185,8 +223,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: { id: "outlet-sgr", name: "Singaraja", code: "KS-SGR" },
     permissions: ["tables:view", "tables:manage", "orders:view"],
   },
-
-  // 8. Customer Self-Order QR
   CUSTOMER_DEMO: {
     id: "user-customer-demo",
     email: "customer@gmail.com",
@@ -200,8 +236,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["menu:view"],
   },
-
-  // 9. Platform Super Admin (Scope: PLATFORM)
   SUPER_ADMIN: {
     id: "user-admin",
     email: "admin@dagoeng.com",
@@ -215,8 +249,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["*"],
   },
-
-  // 10. Community Organizer: Dago Barista Guild
   COMMUNITY_BARISTA: {
     id: "user-comm-barista",
     email: "baristaguild@dagocreative.id",
@@ -230,8 +262,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["events:manage_own"],
   },
-
-  // 11. Community Organizer: Bandung Game Creators / Dev
   COMMUNITY_BANDUNGDEV: {
     id: "user-comm-bandungdev",
     email: "halo@bandungdev.org",
@@ -245,8 +275,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["events:manage_own"],
   },
-
-  // 12. Community Organizer: Aksara Priangan
   COMMUNITY_AKSARAPRIANGAN: {
     id: "user-comm-aksara",
     email: "info@aksarapriangan.id",
@@ -260,8 +288,6 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
     outlet: null,
     permissions: ["events:manage_own"],
   },
-
-  // 13. Event Field Staff with explicit check-in permission
   EVENT_STAFF: {
     id: "user-event-staff-demo",
     email: "eventstaff@dagoeng.com",
@@ -279,7 +305,8 @@ export const DEMO_PERSONAS: Record<PersonaKey, AuthenticatedUser> = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const OPERATIONAL_COOKIE_MAX_AGE = 16 * 60 * 60; // 16 hours (POS-23)
+const OPERATIONAL_COOKIE_MAX_AGE = 16 * 60 * 60;
+const DEFAULT_ORG_MODULES: BusinessModuleCode[] = ["CORE", "FNB", "CO_WORKING"];
 
 function syncPersonaCookie(personaKey: string | null) {
   if (typeof document === "undefined") return;
@@ -293,40 +320,139 @@ function syncPersonaCookie(personaKey: string | null) {
   }
 }
 
+function ensurePersonaCookieSynced(
+  personaKey: string,
+  currentCookie: string | null,
+  currentExpCookie: string | null
+) {
+  if (currentCookie !== personaKey || !currentExpCookie) {
+    syncPersonaCookie(personaKey);
+  }
+}
+
+function syncStaffActivityKey(roleSlug: RoleSlug | string | undefined): void {
+  if (isStaffRole(roleSlug)) {
+    localStorage.setItem(STAFF_ACTIVITY_STORAGE_KEY, String(Date.now()));
+  } else {
+    localStorage.removeItem(STAFF_ACTIVITY_STORAGE_KEY);
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Default perspective: null (Guest / Unauthenticated until explicit login or saved session)
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
-  // Default Active Modules in Organization: F&B + Co-working (Commercial is INACTIVE by default)
-  const [activeOrgModules, setActiveOrgModules] = useState<BusinessModuleCode[]>(["CORE", "FNB", "CO_WORKING"]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
+
+  const platformState = useSyncExternalStore(
+    platformSettingsSyncClient.subscribe,
+    platformSettingsSyncClient.getSnapshot,
+    platformSettingsSyncClient.getServerSnapshot
+  );
+
+  const activeOrgModules: BusinessModuleCode[] =
+    platformState.activeOrgModules && platformState.activeOrgModules.length > 0
+      ? platformState.activeOrgModules
+      : DEFAULT_ORG_MODULES;
+
+  const clearClientSessionStorage = useCallback(() => {
+    localStorage.removeItem("dagoeng_active_persona");
+    localStorage.removeItem("dagoeng_custom_customer");
+    localStorage.removeItem(STAFF_ACTIVITY_STORAGE_KEY);
+    syncPersonaCookie(null);
+  }, []);
+
+  const logout = useCallback(async () => {
+    setIsLoggingOut(true);
+    setUser(null);
+    clearClientSessionStorage();
+    localStorage.setItem("dagoeng_is_logged_out", "true");
+
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        keepalive: true,
+      });
+    } catch (e) {
+      console.error("Logout network call error:", e);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }, [clearClientSessionStorage]);
 
   useEffect(() => {
     const isLoggedOut = localStorage.getItem("dagoeng_is_logged_out") === "true";
     if (isLoggedOut) {
       setUser(null);
-      syncPersonaCookie(null);
+      clearClientSessionStorage();
       setIsLoading(false);
       return;
     }
+
+    const params = new URLSearchParams(window.location.search);
+    const authReason = params.get("reason");
+    const personaCookie = getCookieValue("dagoeng_active_persona");
+    const personaExpCookie = getCookieValue("dagoeng_persona_exp");
+    const hasExpiredPersonaExp =
+      personaExpCookie !== null &&
+      (!Number.isFinite(Number(personaExpCookie)) || Number(personaExpCookie) <= Date.now());
+    const savedKey = localStorage.getItem("dagoeng_active_persona") as PersonaKey | null;
+    const isMissingPersonaCookie = Boolean(savedKey) && !personaCookie;
+
+    const hasInvalidatedSessionSignal =
+      authReason === "expired" ||
+      authReason === "revoked" ||
+      hasExpiredPersonaExp ||
+      isMissingPersonaCookie;
+
+    if (hasInvalidatedSessionSignal) {
+      setUser(null);
+      clearClientSessionStorage();
+      setIsLoading(false);
+      return;
+    }
+
+    const abortIfStaffIdleExpired = (roleSlug: RoleSlug | string | undefined): boolean => {
+      if (!isStaffRole(roleSlug)) return false;
+      const lastActivityRaw = localStorage.getItem(STAFF_ACTIVITY_STORAGE_KEY);
+      if (
+        lastActivityRaw &&
+        isStaffIdleExpired(Number(lastActivityRaw), Date.now(), STAFF_IDLE_TIMEOUT_MS)
+      ) {
+        setUser(null);
+        clearClientSessionStorage();
+        localStorage.setItem("dagoeng_is_logged_out", "true");
+        void fetch("/api/auth/logout", { method: "POST", keepalive: true }).catch(() => {});
+        setIsLoading(false);
+        if (window.location.pathname !== "/login") {
+          window.location.assign("/login?reason=expired");
+        }
+        return true;
+      }
+      if (!lastActivityRaw) {
+        localStorage.setItem(STAFF_ACTIVITY_STORAGE_KEY, String(Date.now()));
+      }
+      return false;
+    };
+
     const savedCustom = localStorage.getItem("dagoeng_custom_customer");
     if (savedCustom) {
       try {
         const parsed = JSON.parse(savedCustom);
         if (parsed) {
-          // If this was actually a demo persona saved to custom_customer, resolve to canonical persona
           const personaMatch = Object.entries(DEMO_PERSONAS).find(
             ([_, p]) => p.email.toLowerCase() === parsed.email?.toLowerCase()
           );
           if (personaMatch) {
-            setUser(personaMatch[1]);
+            const matchedUser = personaMatch[1];
+            if (abortIfStaffIdleExpired(matchedUser.role.slug)) return;
+            setUser(matchedUser);
             localStorage.setItem("dagoeng_active_persona", personaMatch[0]);
             localStorage.removeItem("dagoeng_custom_customer");
-            syncPersonaCookie(personaMatch[0]);
+            ensurePersonaCookieSynced(personaMatch[0], personaCookie, personaExpCookie);
             setIsLoading(false);
             return;
           }
 
-          // Normalize role if stored as string
           if (typeof parsed.role === "string") {
             const rSlug = parsed.role as RoleSlug;
             parsed.role = {
@@ -336,8 +462,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             };
           }
 
+          if (abortIfStaffIdleExpired(parsed.role?.slug)) return;
+
           setUser(parsed);
-          // Do not poison custom user session with CUSTOMER_DEMO persona; rely on verified session
           syncPersonaCookie(null);
           setIsLoading(false);
           return;
@@ -346,9 +473,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error(e);
       }
     }
-    const savedKey = localStorage.getItem("dagoeng_active_persona") as PersonaKey | null;
+
     if (savedKey && DEMO_PERSONAS[savedKey]) {
       let initialUser = DEMO_PERSONAS[savedKey];
+      if (abortIfStaffIdleExpired(initialUser.role.slug)) return;
       if (initialUser?.tenant?.id) {
         const freshName = getTenantName(initialUser.tenant.id);
         if (freshName && freshName !== initialUser.tenant.name) {
@@ -359,13 +487,126 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
       setUser(initialUser);
-      syncPersonaCookie(savedKey);
+      ensurePersonaCookieSynced(savedKey, personaCookie, personaExpCookie);
     } else {
       setUser(null);
       syncPersonaCookie(null);
     }
     setIsLoading(false);
-  }, []);
+  }, [clearClientSessionStorage]);
+
+  useEffect(() => {
+    if (isLoading || !user || !isStaffRole(user.role.slug)) return;
+    if (typeof window === "undefined") return;
+
+    let cancelled = false;
+    const recordActivity = () => {
+      try {
+        localStorage.setItem(STAFF_ACTIVITY_STORAGE_KEY, String(Date.now()));
+      } catch {}
+    };
+
+    if (!localStorage.getItem(STAFF_ACTIVITY_STORAGE_KEY)) {
+      recordActivity();
+    }
+
+    const checkIdleTimeout = () => {
+      if (cancelled) return;
+      const raw = localStorage.getItem(STAFF_ACTIVITY_STORAGE_KEY);
+      const lastMs = raw ? Number(raw) : NaN;
+      if (Number.isFinite(lastMs) && isStaffIdleExpired(lastMs, Date.now(), STAFF_IDLE_TIMEOUT_MS)) {
+        cancelled = true;
+        void logout().finally(() => {
+          if (window.location.pathname !== "/login") {
+            window.location.assign("/login?reason=expired");
+          }
+        });
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        checkIdleTimeout();
+      }
+    };
+
+    window.addEventListener("pointerdown", recordActivity, { passive: true });
+    window.addEventListener("keydown", recordActivity, { passive: true });
+    window.addEventListener("focus", checkIdleTimeout);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const intervalId = window.setInterval(checkIdleTimeout, 30_000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("pointerdown", recordActivity);
+      window.removeEventListener("keydown", recordActivity);
+      window.removeEventListener("focus", checkIdleTimeout);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.clearInterval(intervalId);
+    };
+  }, [user, isLoading, logout]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "test") return;
+    if (isLoading || !user) return;
+    if (typeof window === "undefined") return;
+
+    let cancelled = false;
+    let isChecking = false;
+
+    const verifyServerSession = async () => {
+      if (cancelled || isChecking) return;
+      isChecking = true;
+      try {
+        let res: Response;
+        try {
+          res = await fetch("/api/auth/session", {
+            method: "GET",
+            cache: "no-store",
+            credentials: "same-origin",
+          });
+        } catch {
+          return;
+        }
+        if (cancelled) return;
+        if (res.status === 401) {
+          const data = await res.json().catch(() => ({}));
+          const reason = data?.code === "SESSION_EXPIRED" ? "expired" : "revoked";
+          cancelled = true;
+          await logout();
+          if (window.location.pathname !== "/login") {
+            window.location.assign(`/login?reason=${reason}`);
+          }
+        }
+      } finally {
+        isChecking = false;
+      }
+    };
+
+    void verifyServerSession();
+
+    const handleFocus = () => {
+      void verifyServerSession();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        void verifyServerSession();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const intervalId = window.setInterval(() => {
+      void verifyServerSession();
+    }, 60_000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.clearInterval(intervalId);
+    };
+  }, [user, isLoading, logout]);
 
   useEffect(() => {
     const handleTenantUpdated = () => {
@@ -389,21 +630,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("tenant_settings_updated", handleTenantUpdated);
   }, []);
 
-  const toggleOrgModule = (moduleCode: BusinessModuleCode) => {
-    setActiveOrgModules((prev) =>
-      prev.includes(moduleCode) ? prev.filter((m) => m !== moduleCode) : [...prev, moduleCode]
+  const toggleOrgModule = useCallback((moduleCode: BusinessModuleCode) => {
+    if (moduleCode === "CORE") return;
+    const command = {
+      op: "TOGGLE_ORG_MODULE" as const,
+      moduleCode,
+    };
+    mutateConfigDomain(
+      platformSettingsSyncClient,
+      platformSettingsStorageMirror,
+      (prev) => applyPlatformSettingsCommand(prev, command),
+      {
+        id: `org-module-toggle-${moduleCode}-${Date.now()}`,
+        command,
+      }
     );
-  };
+  }, []);
 
-  const login = async (personaKey?: PersonaKey, customUser?: any) => {
+  const login = async (personaKey?: PersonaKey, customUser?: AuthenticatedUser) => {
     setIsLoading(true);
 
-    // If personaKey is provided or customUser matches a known demo persona email, ALWAYS prioritize canonical DEMO_PERSONAS
-    const matchedKey = personaKey || (customUser?.email
-      ? (Object.keys(DEMO_PERSONAS) as PersonaKey[]).find(
-          (k) => DEMO_PERSONAS[k].email.toLowerCase() === customUser.email.toLowerCase()
-        )
-      : undefined);
+    const matchedKey =
+      personaKey ||
+      (customUser?.email
+        ? (Object.keys(DEMO_PERSONAS) as PersonaKey[]).find(
+            (k) => DEMO_PERSONAS[k].email.toLowerCase() === customUser.email.toLowerCase()
+          )
+        : undefined);
 
     if (matchedKey && DEMO_PERSONAS[matchedKey]) {
       const targetUser = DEMO_PERSONAS[matchedKey];
@@ -411,6 +664,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("dagoeng_is_logged_out");
       localStorage.removeItem("dagoeng_custom_customer");
       localStorage.setItem("dagoeng_active_persona", matchedKey);
+      syncStaffActivityKey(targetUser.role.slug);
       if (typeof document !== "undefined") {
         document.cookie = "dagoeng_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
       }
@@ -419,13 +673,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem("dago_organizer_email", targetUser.email);
       }
     } else if (customUser) {
-      const roleSlug: RoleSlug = typeof customUser.role === "string" ? customUser.role : customUser.role?.slug || "CUSTOMER";
+      const rawRole = customUser.role as RoleSlug | { id?: string; slug?: RoleSlug; name?: string } | undefined;
+      const roleSlug: RoleSlug =
+        typeof rawRole === "string" ? rawRole : rawRole?.slug || "CUSTOMER";
       const normalizedRole = {
         id: `role-${roleSlug.toLowerCase()}`,
         slug: roleSlug,
-        name: typeof customUser.role === "object" && customUser.role?.name
-          ? customUser.role.name
-          : roleSlug === "OWNER" ? "Owner" : roleSlug === "CUSTOMER" ? "Customer" : roleSlug,
+        name:
+          typeof rawRole === "object" && rawRole?.name
+            ? rawRole.name
+            : roleSlug === "OWNER"
+              ? "Owner"
+              : roleSlug === "CUSTOMER"
+                ? "Customer"
+                : roleSlug,
       };
 
       const normalizedUser: AuthenticatedUser = {
@@ -440,6 +701,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("dagoeng_is_logged_out");
       localStorage.setItem("dagoeng_custom_customer", JSON.stringify(normalizedUser));
       localStorage.removeItem("dagoeng_active_persona");
+      syncStaffActivityKey(normalizedUser.role.slug);
       syncPersonaCookie(null);
       if (normalizedUser.email) {
         localStorage.setItem("dago_organizer_email", normalizedUser.email);
@@ -449,7 +711,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return true;
   };
 
-  const loginCustomer = async (customerData: { name: string; phone: string; email?: string }): Promise<AuthenticatedUser> => {
+  const loginCustomer = async (customerData: {
+    name: string;
+    phone: string;
+    email?: string;
+  }): Promise<AuthenticatedUser> => {
     setIsLoading(true);
     const customCustomer: AuthenticatedUser = {
       id: `user-cust-${Date.now()}`,
@@ -466,30 +732,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     setUser(customCustomer);
     localStorage.removeItem("dagoeng_is_logged_out");
+    localStorage.removeItem(STAFF_ACTIVITY_STORAGE_KEY);
     localStorage.setItem("dagoeng_custom_customer", JSON.stringify(customCustomer));
     localStorage.setItem("dagoeng_active_persona", "CUSTOMER_DEMO");
     syncPersonaCookie("CUSTOMER_DEMO");
     setIsLoading(false);
     return customCustomer;
-  };
-
-  const logout = async () => {
-    // Immediate, clean client state reset (best practice)
-    setUser(null);
-    localStorage.removeItem("dagoeng_active_persona");
-    localStorage.removeItem("dagoeng_custom_customer");
-    localStorage.setItem("dagoeng_is_logged_out", "true");
-    syncPersonaCookie(null);
-
-    // Server-side session invalidation with keepalive so network doesn't delay UI
-    try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        keepalive: true,
-      });
-    } catch (e) {
-      console.error("Logout network call error:", e);
-    }
   };
 
   const switchPersona = async (personaKey: PersonaKey) => {
@@ -499,6 +747,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("dagoeng_is_logged_out");
       localStorage.removeItem("dagoeng_custom_customer");
       localStorage.setItem("dagoeng_active_persona", personaKey);
+      syncStaffActivityKey(target.role.slug);
       if (typeof document !== "undefined") {
         document.cookie = "dagoeng_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax";
       }
@@ -516,7 +765,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         activeOrgModules,
         toggleOrgModule,
         isLoading,
-        isLoggingOut: false,
+        isLoggingOut,
         login,
         loginCustomer,
         logout,
@@ -532,4 +781,8 @@ export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
+}
+
+export function useOptionalAuth(): AuthContextType | null {
+  return useContext(AuthContext) ?? null;
 }

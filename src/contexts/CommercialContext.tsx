@@ -1,121 +1,56 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { CommercialLease, LeaseStatus, LeasePaymentRecord } from "@/types/commercial";
+import React, { createContext, useContext } from "react";
+import type {
+  CommercialLease,
+  LeasePaymentRecord,
+  LeaseStatus,
+} from "@/types/commercial";
+import type { CommercialCommand } from "@/lib/domain-sync-types";
+import {
+  applyCommercialCommand,
+  commercialSyncClient,
+  INITIAL_LEASES,
+} from "@/lib/sync-domains/spaces-spec";
+import { useSyncedDomain } from "@/lib/use-synced-domain";
 import { useOutlet } from "./OutletContext";
 import { useActivityLog } from "./ActivityLogContext";
 
-export const INITIAL_LEASES: CommercialLease[] = [
-  {
-    id: "lse-001",
-    leaseNumber: "LSE-DAGO-2026-001",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    tenantName: "Artisan Leather Goods & Studio",
-    tenantContact: "+62 812-3344-5566",
-    tenantEmail: "contact@artisanleather.id",
-    unitCode: "Lot A-01 (Ground Floor Main)",
-    areaSquareMeters: 45,
-    monthlyRent: 8500000,
-    totalContractValue: 102000000,
-    depositAmount: 17000000,
-    startDate: "01 Jan 2026",
-    endDate: "31 Des 2026",
-    paymentSchedule: "MONTHLY",
-    status: "ACTIVE",
-    notes: "Tenant retail kerajinan kulit lokal. Tagihan sewa diterbitkan setiap tanggal 1.",
-    createdAt: "2026-01-01T00:00:00Z",
-    updatedAt: "2026-09-01T00:00:00Z",
-    paymentHistory: [],
-  },
-  {
-    id: "lse-002",
-    leaseNumber: "LSE-DAGO-2026-002",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    tenantName: "Bali Organic Skincare Lab",
-    tenantContact: "+62 818-7788-9900",
-    tenantEmail: "info@baliorganic.co.id",
-    unitCode: "Lot A-02 (Ground Floor)",
-    areaSquareMeters: 35,
-    monthlyRent: 6800000,
-    totalContractValue: 81600000,
-    depositAmount: 13600000,
-    startDate: "01 Feb 2026",
-    endDate: "31 Jan 2027",
-    paymentSchedule: "MONTHLY",
-    status: "ACTIVE",
-    notes: "Tenant perawatan kulit organik. Wajib mematuhi standar kebersihan komersial.",
-    createdAt: "2026-02-01T00:00:00Z",
-    updatedAt: "2026-09-01T00:00:00Z",
-    paymentHistory: [],
-  },
-  {
-    id: "lse-003",
-    leaseNumber: "LSE-DAGO-2026-003",
-    outletId: "outlet-sgr",
-    outletName: "Singaraja",
-    tenantName: "Creative Sound & Podcast Studio",
-    tenantContact: "+62 819-2233-1100",
-    tenantEmail: "podcast@creativestudio.com",
-    unitCode: "Lot B-04 (Lantai 2 Mezzanine)",
-    areaSquareMeters: 28,
-    monthlyRent: 4200000,
-    totalContractValue: 50400000,
-    depositAmount: 8400000,
-    startDate: "01 Jul 2026",
-    endDate: "30 Jun 2027",
-    paymentSchedule: "MONTHLY",
-    status: "ACTIVE",
-    notes: "Ruang podcast kedap suara untuk konten kreator.",
-    createdAt: "2026-07-01T00:00:00Z",
-    updatedAt: "2026-09-01T00:00:00Z",
-    paymentHistory: [],
-  },
-];
+export { INITIAL_LEASES };
 
 interface CommercialContextType {
   leases: CommercialLease[];
   filteredLeases: CommercialLease[];
-  createLease: (leaseData: Omit<CommercialLease, "id" | "leaseNumber" | "createdAt" | "updatedAt" | "paymentHistory">) => CommercialLease;
+  createLease: (
+    leaseData: Omit<
+      CommercialLease,
+      "id" | "leaseNumber" | "createdAt" | "updatedAt" | "paymentHistory"
+    >
+  ) => CommercialLease;
   updateLeaseStatus: (id: string, status: LeaseStatus, reason?: string) => void;
-  recordPayment: (leaseId: string, payment: Omit<LeasePaymentRecord, "id" | "leaseId">) => void;
+  recordPayment: (
+    leaseId: string,
+    payment: Omit<LeasePaymentRecord, "id" | "leaseId">
+  ) => void;
   resetCommercialData: () => void;
 }
 
-const CommercialContext = createContext<CommercialContextType | undefined>(undefined);
-const STORAGE_KEY_COMMERCIAL = "dagoeng_commercial_leases_v3";
+const CommercialContext = createContext<CommercialContextType | undefined>(
+  undefined
+);
 
-export function CommercialProvider({ children }: { children: React.ReactNode }) {
-  const { activeOutletId, isAllOutlets, activeOutlet } = useOutlet();
+export function CommercialProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const { activeOutletId, isAllOutlets } = useOutlet();
   const { logActivity } = useActivityLog();
-  const [leases, setLeases] = useState<CommercialLease[]>(INITIAL_LEASES);
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_COMMERCIAL);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setLeases(parsed);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to load commercial leases", e);
-    } finally {
-      setIsInitialized(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!isInitialized) return;
-    try {
-      localStorage.setItem(STORAGE_KEY_COMMERCIAL, JSON.stringify(leases));
-    } catch (e) {
-      console.error("Failed to save commercial leases", e);
-    }
-  }, [leases, isInitialized]);
+  const [domainState, mutateCommercial] = useSyncedDomain(
+    commercialSyncClient,
+    { pollMs: 10000 }
+  );
+  const { leases } = domainState;
 
   const filteredLeases = leases.filter((l) => {
     if (isAllOutlets) return true;
@@ -123,10 +58,20 @@ export function CommercialProvider({ children }: { children: React.ReactNode }) 
   });
 
   const createLease = (
-    leaseData: Omit<CommercialLease, "id" | "leaseNumber" | "createdAt" | "updatedAt" | "paymentHistory">
+    leaseData: Omit<
+      CommercialLease,
+      "id" | "leaseNumber" | "createdAt" | "updatedAt" | "paymentHistory"
+    >
   ): CommercialLease => {
+    const currentLeases = commercialSyncClient.getSnapshot().leases;
     const nowIso = new Date().toISOString();
-    const leaseNumber = `LSE-DAGO-${new Date().getFullYear()}-${String(leases.length + 1).padStart(3, "0")}`;
+    const year = new Date().getFullYear();
+    const existingSeqs = currentLeases.map((l) => {
+      const match = l.leaseNumber.match(/(\d+)$/);
+      return match ? parseInt(match[1], 10) : 0;
+    });
+    const nextSeq = Math.max(currentLeases.length, ...existingSeqs, 0) + 1;
+    const leaseNumber = `LSE-DAGO-${year}-${String(nextSeq).padStart(3, "0")}`;
 
     const newLease: CommercialLease = {
       ...leaseData,
@@ -137,7 +82,15 @@ export function CommercialProvider({ children }: { children: React.ReactNode }) 
       paymentHistory: [],
     };
 
-    setLeases((prev) => [newLease, ...prev]);
+    const cmd: CommercialCommand = {
+      op: "UPSERT_LEASE",
+      lease: newLease,
+    };
+
+    mutateCommercial(
+      (prev) => applyCommercialCommand(prev, cmd),
+      { id: `lease-${newLease.id}`, isCreate: true, command: cmd }
+    );
 
     logActivity({
       module: "COMMERCIAL",
@@ -154,14 +107,27 @@ export function CommercialProvider({ children }: { children: React.ReactNode }) 
     return newLease;
   };
 
-  const updateLeaseStatus = (id: string, status: LeaseStatus, reason?: string) => {
-    const existing = leases.find((l) => l.id === id);
+  const updateLeaseStatus = (
+    id: string,
+    status: LeaseStatus,
+    reason?: string
+  ) => {
+    const existing = commercialSyncClient
+      .getSnapshot()
+      .leases.find((l) => l.id === id);
     if (!existing) return;
 
-    setLeases((prev) =>
-      prev.map((l) =>
-        l.id === id ? { ...l, status, updatedAt: new Date().toISOString() } : l
-      )
+    const updatedAt = new Date().toISOString();
+    const cmd: CommercialCommand = {
+      op: "PATCH_LEASE_STATUS",
+      leaseId: id,
+      status,
+      updatedAt,
+    };
+
+    mutateCommercial(
+      (prev) => applyCommercialCommand(prev, cmd),
+      { id: `lease-status-${id}`, isCreate: false, command: cmd }
     );
 
     logActivity({
@@ -178,8 +144,13 @@ export function CommercialProvider({ children }: { children: React.ReactNode }) 
     });
   };
 
-  const recordPayment = (leaseId: string, paymentData: Omit<LeasePaymentRecord, "id" | "leaseId">) => {
-    const lease = leases.find((l) => l.id === leaseId);
+  const recordPayment = (
+    leaseId: string,
+    paymentData: Omit<LeasePaymentRecord, "id" | "leaseId">
+  ) => {
+    const lease = commercialSyncClient
+      .getSnapshot()
+      .leases.find((l) => l.id === leaseId);
     if (!lease) return;
 
     const newPayment: LeasePaymentRecord = {
@@ -188,16 +159,17 @@ export function CommercialProvider({ children }: { children: React.ReactNode }) 
       ...paymentData,
     };
 
-    setLeases((prev) =>
-      prev.map((l) =>
-        l.id === leaseId
-          ? {
-              ...l,
-              paymentHistory: [newPayment, ...l.paymentHistory],
-              updatedAt: new Date().toISOString(),
-            }
-          : l
-      )
+    const updatedAt = new Date().toISOString();
+    const cmd: CommercialCommand = {
+      op: "RECORD_LEASE_PAYMENT",
+      leaseId,
+      payment: newPayment,
+      updatedAt,
+    };
+
+    mutateCommercial(
+      (prev) => applyCommercialCommand(prev, cmd),
+      { id: `lease-pay-${newPayment.id}`, isCreate: true, command: cmd }
     );
 
     logActivity({
@@ -214,12 +186,11 @@ export function CommercialProvider({ children }: { children: React.ReactNode }) 
   };
 
   const resetCommercialData = () => {
-    setLeases(INITIAL_LEASES);
-    try {
-      localStorage.removeItem(STORAGE_KEY_COMMERCIAL);
-    } catch (e) {
-      console.error(e);
-    }
+    const cmd: CommercialCommand = { op: "RESET_COMMERCIAL" };
+    mutateCommercial(
+      (prev) => applyCommercialCommand(prev, cmd),
+      { id: "commercial-reset", isCreate: false, command: cmd }
+    );
   };
 
   return (

@@ -136,7 +136,11 @@ export function EventsSettingsView({
                 <Label htmlFor="activePaymentMethod">Metode pembayaran tiket</Label>
                 <NativeSelect
                   id="activePaymentMethod"
-                  value={businessPolicy.activePaymentMethod ?? "MANUAL_TRANSFER"}
+                  value={
+                    businessPolicy.activePaymentMethod === "PAYMENT_GATEWAY"
+                      ? "DOKU_CHECKOUT"
+                      : businessPolicy.activePaymentMethod ?? "MANUAL_TRANSFER"
+                  }
                   onChange={(e) =>
                     setBusinessPolicy({
                       ...businessPolicy,
@@ -145,7 +149,7 @@ export function EventsSettingsView({
                   }
                 >
                   <NativeSelectOption value="MANUAL_TRANSFER">Transfer manual (Verifikasi admin)</NativeSelectOption>
-                  <NativeSelectOption value="PAYMENT_GATEWAY">Payment gateway otomatis</NativeSelectOption>
+                  <NativeSelectOption value="DOKU_CHECKOUT">Payment gateway otomatis (DOKU)</NativeSelectOption>
                 </NativeSelect>
                 <span className="text-xs text-muted-foreground">
                   Metode pembayaran yang aktif di form checkout tiket publik.

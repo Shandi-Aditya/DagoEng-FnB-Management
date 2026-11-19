@@ -93,14 +93,15 @@ export function filterStockIngredients(
   const query = searchQuery.toLowerCase().trim();
 
   return ingredients.filter((item) => {
+    const isOutOfStock = item.stockNumber <= 0;
+    const isCritical = !isOutOfStock && (item.status === "CRITICAL" || item.stockNumber <= item.min * 0.4);
+    const isLow = !isOutOfStock && !isCritical && item.status === "LOW";
     const matchStatus =
       statusFilter === "ALL" ||
-      (statusFilter === "OUT_OF_STOCK" && item.stockNumber <= 0) ||
-      (statusFilter === "CRITICAL" &&
-        (item.status === "CRITICAL" ||
-          (item.stockNumber <= item.min * 0.4 && item.stockNumber > 0))) ||
-      (statusFilter === "LOW" && item.status === "LOW" && item.stockNumber > 0) ||
-      (statusFilter === "SAFE" && item.status === "SAFE") ||
+      (statusFilter === "OUT_OF_STOCK" && isOutOfStock) ||
+      (statusFilter === "CRITICAL" && (isCritical || isOutOfStock)) ||
+      (statusFilter === "LOW" && isLow) ||
+      (statusFilter === "SAFE" && item.status === "SAFE" && !isOutOfStock) ||
       item.status === statusFilter;
 
     const matchCategory = categoryFilter === "ALL" || item.category === categoryFilter;

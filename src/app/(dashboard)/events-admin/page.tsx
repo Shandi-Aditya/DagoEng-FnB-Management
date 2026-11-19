@@ -12,7 +12,11 @@ import type {
   EventTicketOrder,
   PayoutRecord,
 } from "@/types/event";
-import type { DateRange } from "@/components/events/EventDateRangeFilter";
+import {
+  isEventInWitaPeriod,
+  isTimestampInWitaPeriod,
+  type DateRange,
+} from "@/components/events/EventDateRangeFilter";
 import { downloadCSV } from "@/lib/export-utils";
 
 // Sub-komponen modular yang sudah diredesign
@@ -76,9 +80,9 @@ export default function AdminEventsPage() {
   const [moderationPage, setModerationPage] = useState(1);
   const [moderationPageSize, setModerationPageSize] = useState(10);
 
-  // Payment Verification State
   const [paymentFilterStatus, setPaymentFilterStatus] = useState<string>("PENDING_PROOF");
   const [paymentSearchQuery, setPaymentSearchQuery] = useState("");
+  const [paymentDateRange, setPaymentDateRange] = useState<DateRange | null>(null);
   const [paymentsPage, setPaymentsPage] = useState(1);
   const [paymentsPageSize, setPaymentsPageSize] = useState(10);
   const [selectedProofBooking, setSelectedProofBooking] = useState<EventTicketOrder | null>(null);
@@ -87,9 +91,9 @@ export default function AdminEventsPage() {
   const [rejectPaymentCancelBooking, setRejectPaymentCancelBooking] = useState(false);
   const [isProcessingPaymentAction, setIsProcessingPaymentAction] = useState(false);
 
-  // Payout State
   const [payoutFilterStatus, setPayoutFilterStatus] = useState<string>("ALL");
   const [payoutSearchQuery, setPayoutSearchQuery] = useState("");
+  const [payoutDateRange, setPayoutDateRange] = useState<DateRange | null>(null);
   const [payoutsPage, setPayoutsPage] = useState(1);
   const [payoutsPageSize, setPayoutsPageSize] = useState(10);
   const [payoutTarget, setPayoutTarget] = useState<PayoutTarget | null>(null);
@@ -216,29 +220,48 @@ export default function AdminEventsPage() {
     }
   };
 
-  // KPI Calculation
-  const kpi = useMemo(() => calculateEventsKPI(events, allBookings), [events, allBookings]);
+  const eventsWithBookedCount = useMemo(() => {
+    const bookedByEvent = new Map<string, number>();
+    for (const b of allBookings) {
+      if (b.paymentStatus === "PAID") {
+        bookedByEvent.set(b.eventId, (bookedByEvent.get(b.eventId) ?? 0) + (b.ticketCount || 1));
+      }
+    }
+    return events.map((e) => ({
+      ...e,
+      bookedCount: bookedByEvent.get(e.id) ?? (e as CommunityEvent & { bookedCount?: number }).bookedCount ?? 0,
+    }));
+  }, [events, allBookings]);
 
-  // Filtered Moderation Events
+  const kpi = useMemo(
+    () => calculateEventsKPI(eventsWithBookedCount, allBookings),
+    [eventsWithBookedCount, allBookings]
+  );
+
+  const moderationKpi = useMemo(() => {
+    if (!dateRange) return kpi;
+    const periodEvents = eventsWithBookedCount.filter((e) => isEventInWitaPeriod(e, dateRange));
+    return calculateEventsKPI(periodEvents, allBookings);
+  }, [eventsWithBookedCount, allBookings, dateRange, kpi]);
+
   const filteredEvents = useMemo(
-    () => filterEvents(events, selectedStatusTab, searchQuery, dateRange),
-    [events, selectedStatusTab, searchQuery, dateRange]
+    () => filterEvents(eventsWithBookedCount, selectedStatusTab, searchQuery, dateRange),
+    [eventsWithBookedCount, selectedStatusTab, searchQuery, dateRange]
   );
 
-  // Filtered Payment Bookings
   const filteredBookings = useMemo(
-    () => filterBookings(allBookings, paymentFilterStatus, paymentSearchQuery),
-    [allBookings, paymentFilterStatus, paymentSearchQuery]
+    () => filterBookings(allBookings, paymentFilterStatus, paymentSearchQuery, paymentDateRange),
+    [allBookings, paymentFilterStatus, paymentSearchQuery, paymentDateRange]
   );
 
-  // Payout Records
   const allPayouts = useMemo(() => {
     const list: any[] = [];
-    events.forEach((e) => {
+    eventsWithBookedCount.forEach((e) => {
       if (e.payoutHistory && Array.isArray(e.payoutHistory)) {
         e.payoutHistory.forEach((pr: PayoutRecord) => {
           list.push({
             ...pr,
+            eventId: pr.eventId || e.id,
             eventTitle: e.title,
             organizerName: e.organizerName,
             bankName: pr.bankName || "BCA",
@@ -249,7 +272,32 @@ export default function AdminEventsPage() {
       }
     });
     return list.sort((a, b) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime());
-  }, [events]);
+  }, [eventsWithBookedCount]);
+
+  const pendingPayoutsCount = useMemo(
+    () => allPayouts.filter((p) => p.status === "REQUESTED" || p.status === "PROCESSING").length,
+    [allPayouts]
+  );
+
+  const filteredPayoutsForExport = useMemo(() => {
+    const needle = payoutSearchQuery.trim().toLowerCase();
+    return allPayouts.filter((p) => {
+      if (payoutFilterStatus !== "ALL" && p.status !== payoutFilterStatus) return false;
+      if (payoutDateRange && !isTimestampInWitaPeriod(p.requestedAt, payoutDateRange)) return false;
+      if (needle) {
+        const matchTitle = p.eventTitle?.toLowerCase().includes(needle);
+        const matchOrg = p.organizerName?.toLowerCase().includes(needle);
+        const matchBank = p.bankName?.toLowerCase().includes(needle);
+        const matchAcc = p.accountNumber?.toLowerCase().includes(needle);
+        const matchHolder = p.accountHolder?.toLowerCase().includes(needle);
+        const matchRef = p.referenceNo?.toLowerCase().includes(needle);
+        if (!matchTitle && !matchOrg && !matchBank && !matchAcc && !matchHolder && !matchRef) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [allPayouts, payoutFilterStatus, payoutDateRange, payoutSearchQuery]);
 
   // Moderation Action Handlers
   const openModerationDialog = (event: CommunityEvent, action: ModerationActionType) => {
@@ -380,19 +428,25 @@ export default function AdminEventsPage() {
     }
   };
 
-  // Payout Handlers
   const handleConfirmPayoutAction = async () => {
     if (!payoutTarget) return;
+    const resolvedEventId =
+      payoutTarget.eventId ||
+      events.find((e) => e.payoutHistory?.some((pr) => pr.id === payoutTarget.id))?.id;
+    if (!resolvedEventId) {
+      setActionErrorMessage("ID event untuk permohonan pencairan ini tidak ditemukan.");
+      return;
+    }
     try {
       setIsProcessingPayout(true);
-      const res = await fetch("/api/events/payouts", {
+      const res = await fetch(`/api/events/${encodeURIComponent(resolvedEventId)}/payout`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          id: payoutTarget.id,
-          status: payoutTarget.status,
+          payoutId: payoutTarget.id,
+          newStatus: payoutTarget.status,
           rejectionReason: payoutTarget.status === "REJECTED" ? payoutInputText.trim() : undefined,
-          referenceNumber: payoutTarget.status === "PAID" ? payoutInputText.trim() : undefined,
+          referenceNo: payoutTarget.status === "PAID" ? payoutInputText.trim() : undefined,
         }),
       });
       const data = await res.json();
@@ -661,8 +715,66 @@ export default function AdminEventsPage() {
     }
   };
 
-  // Export Data
   const handleExportData = () => {
+    const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Makassar" }).format(
+      new Date()
+    );
+    if (adminSection === "PAYMENTS") {
+      const headers = [
+        "Kode Tiket",
+        "Event",
+        "Nama Peserta",
+        "Email",
+        "Telepon",
+        "Jumlah Tiket",
+        "Total Bayar",
+        "Status Pembayaran",
+        "Waktu Pesan",
+      ];
+      const rows = filteredBookings.map((b) => [
+        b.ticketCode,
+        b.eventTitle || "—",
+        b.guestName,
+        b.guestEmail,
+        b.guestPhone || "—",
+        b.ticketCount || 1,
+        b.totalPrice,
+        b.paymentStatus === "PENDING" && b.paymentRejectionReason ? "REJECTED" : b.paymentStatus,
+        b.createdAt,
+      ]);
+      downloadCSV(`Events_Payments_${todayIso}.csv`, headers, rows);
+      return;
+    }
+
+    if (adminSection === "PAYOUTS") {
+      const headers = [
+        "ID Pencairan",
+        "Event",
+        "Penyelenggara",
+        "Bank",
+        "No Rekening",
+        "Atas Nama",
+        "Nominal",
+        "Status",
+        "No Referensi",
+        "Waktu Pengajuan",
+      ];
+      const rows = filteredPayoutsForExport.map((p) => [
+        p.id,
+        p.eventTitle || "—",
+        p.organizerName || "—",
+        p.bankName || "—",
+        p.accountNumber || "—",
+        p.accountHolder || "—",
+        p.amount,
+        p.status,
+        p.referenceNo || "—",
+        p.requestedAt,
+      ]);
+      downloadCSV(`Events_Payouts_${todayIso}.csv`, headers, rows);
+      return;
+    }
+
     const headers = [
       "ID",
       "Judul",
@@ -678,7 +790,7 @@ export default function AdminEventsPage() {
       "Waktu Mulai",
       "Dibuat Pada",
     ];
-    const rows = events.map((e) => [
+    const rows = filteredEvents.map((e) => [
       e.id,
       e.title,
       e.category,
@@ -693,7 +805,7 @@ export default function AdminEventsPage() {
       e.startDate,
       e.createdAt,
     ]);
-    downloadCSV(`Events_Admin_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows);
+    downloadCSV(`Events_Admin_${todayIso}.csv`, headers, rows);
   };
 
   // Auth Guard
@@ -737,21 +849,20 @@ export default function AdminEventsPage() {
         isLoading={isLoading}
       />
 
-      {/* Admin Section Tabs */}
       <EventsAdminTabs
         currentSection={adminSection}
         onSectionChange={setAdminSection}
         pendingReviewsCount={kpi.pendingReviewsCount}
         pendingPaymentsCount={kpi.pendingPaymentsCount}
+        pendingPayoutsCount={pendingPayoutsCount}
       />
 
-      {/* Section Content */}
       {adminSection === "MODERATION" && (
         <div className="flex flex-col gap-6">
           <EventsModerationKPI
-            pendingCount={kpi.pendingReviewsCount}
-            approvedCount={kpi.approvedEventsCount}
-            revisionCount={kpi.revisionEventsCount}
+            pendingCount={moderationKpi.pendingReviewsCount}
+            approvedCount={moderationKpi.approvedEventsCount}
+            revisionCount={moderationKpi.revisionEventsCount}
           />
 
           <EventsModerationToolbar
@@ -811,10 +922,18 @@ export default function AdminEventsPage() {
             setPaymentSearchQuery(q);
             setPaymentsPage(1);
           }}
+          dateRange={paymentDateRange}
+          onDateRangeChange={(r) => {
+            setPaymentDateRange(r);
+            setPaymentsPage(1);
+          }}
           currentPage={paymentsPage}
           pageSize={paymentsPageSize}
           onPageChange={setPaymentsPage}
-          onPageSizeChange={setPaymentsPageSize}
+          onPageSizeChange={(s) => {
+            setPaymentsPageSize(s);
+            setPaymentsPage(1);
+          }}
           onApprove={handleApprovePayment}
           onReject={(b) => {
             setRejectPaymentTarget(b);
@@ -839,10 +958,18 @@ export default function AdminEventsPage() {
             setPayoutSearchQuery(q);
             setPayoutsPage(1);
           }}
+          dateRange={payoutDateRange}
+          onDateRangeChange={(r) => {
+            setPayoutDateRange(r);
+            setPayoutsPage(1);
+          }}
           currentPage={payoutsPage}
           pageSize={payoutsPageSize}
           onPageChange={setPayoutsPage}
-          onPageSizeChange={setPayoutsPageSize}
+          onPageSizeChange={(s) => {
+            setPayoutsPageSize(s);
+            setPayoutsPage(1);
+          }}
           onActionClick={(target) => {
             setPayoutTarget(target);
             setPayoutInputText("");

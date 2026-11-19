@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { useOrders } from "@/contexts/OrderContext";
@@ -32,16 +33,23 @@ import { ReceiptModal } from "@/features/pos/ReceiptModal";
 import { KitchenOrderReceiptModal } from "@/features/pos/KitchenOrderReceiptModal";
 import { usePrinter } from "@/contexts/PrinterContext";
 import { KitchenTicketData } from "@/types/printer";
-import { CashDrawerShiftModal } from "@/features/pos/CashDrawerShiftModal";
+import { CashDrawerShiftModal, buildCashDrawerShiftSummary } from "@/features/pos/CashDrawerShiftModal";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { isTenantActive, DEFAULT_FNB_TENANTS, getAllFnbTenants, getTenantName } from "@/lib/tenant";
 import { resolveProductModifierGroups } from "@/lib/pos-modifiers";
-import { resolvePosReceiptPublisher, resolveCoworkingReceiptPublisher } from "@/lib/receipt-publisher";
 import {
+  generateSequentialReceiptNumber,
+  resolveCoworkingReceiptPublisher,
+  resolvePosReceiptPublisher,
+  resolvePublisherCode,
+} from "@/lib/receipt-publisher";
+import {
+  getNextOpenCoworkingDate,
   isCoworkingDateOpen,
   checkCoworkingBookingConflict,
   isTenantAcceptingOrders,
   isServiceWithinHours,
+  isWithinCoworkingHours,
 } from "@/lib/operating-hours";
 import {
   Calculator,
@@ -75,6 +83,8 @@ import {
   Building,
   Eye,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { notify } from "@/components/app/notify";
 import { EmptyState } from "@/components/app/empty-state";
@@ -110,7 +120,7 @@ import {
 export default function POSPage() {
   const { user } = useAuth();
   const { activeOutlet, activeOutletId } = useOutlet();
-  const { createPosOrder, filteredOrders } = useOrders();
+  const { orders, createPosOrder } = useOrders();
   const { getAvailableTables, occupyTableWithOrder, areas, filteredAreas } = useTables();
   const { simulateBOMDeduction, deductOrderBOM, checkProductStockStatus } = useInventory();
   const { filteredProducts: masterProducts, categories } = useProducts();
@@ -118,7 +128,14 @@ export default function POSPage() {
   const { logActivity } = useActivityLog();
   const { settings, redeemPromo } = useSettings();
   const { spaces: cwSpaces, bookings: cwBookings, bookSpace: cwBookSpace } = useCoworking();
-  const { activeShift, openShift, closeShift, recordShiftTransaction } = useEmployeeShift();
+  const { shifts, activeShift, openShift, closeShift, recordShiftTransaction } = useEmployeeShift();
+
+  const isTenantScoped = user?.scopeLevel === "TENANT" && Boolean(user?.tenant?.id);
+  const lockedTenantId = isTenantScoped ? user?.tenant?.id : undefined;
+
+  const isSubmittingOrderRef = useRef(false);
+  const isSubmittingCoworkRef = useRef(false);
+  const lastPrefilledTableCustomerRef = useRef<string | null>(null);
 
   // Mode: FNB vs COWORKING
   const [posMode, setPosMode] = useState<"FNB" | "COWORKING">("FNB");
@@ -127,7 +144,9 @@ export default function POSPage() {
   const [cwSelectedSpaceId, setCwSelectedSpaceId] = useState<string>("");
   const [cwSpaceTypeFilter, setCwSpaceTypeFilter] = useState<string>("ALL");
   const [cwSearchQuery, setCwSearchQuery] = useState<string>("");
-  const [cwDate, setCwDate] = useState<string>(() => getTodayWitaDateString());
+  const [cwDate, setCwDate] = useState<string>(() =>
+    getNextOpenCoworkingDate(getTodayWitaDateString(), settings?.coworkingHolidays)
+  );
   const [cwStartTime, setCwStartTime] = useState<string>("09:00");
   const [isManualTimeSet, setIsManualTimeSet] = useState<boolean>(false);
   const [cwDuration, setCwDuration] = useState<number>(2); // hours
@@ -185,12 +204,19 @@ export default function POSPage() {
   // Filter Active Mitra (Tenant) - Priority Filter Utama
   const activeTenants = useMemo(() => {
     const all = getAllFnbTenants();
-    if (!isMounted) return all;
-    return all.filter((t) => isTenantActive(t.id));
-  }, [tenantSettingsVersion, isMounted]);
+    const scoped = lockedTenantId ? all.filter((t) => t.id === lockedTenantId) : all;
+    if (!isMounted) return scoped;
+    return scoped.filter((t) => isTenantActive(t.id));
+  }, [tenantSettingsVersion, isMounted, lockedTenantId]);
 
   // Primary Filter: Selected Mitra/Tenant
-  const [selectedTenantId, setSelectedTenantId] = useState<string>("ALL");
+  const [selectedTenantId, setSelectedTenantId] = useState<string>(lockedTenantId || "ALL");
+
+  useEffect(() => {
+    if (!lockedTenantId) return;
+    setSelectedTenantId(lockedTenantId);
+    setPosMode("FNB");
+  }, [lockedTenantId]);
 
   // Secondary Filter: Category & Search
   const [selectedCategory, setSelectedCategory] = useState<string>("Semua Kategori");
@@ -205,6 +231,11 @@ export default function POSPage() {
   const [selectedPromoId, setSelectedPromoId] = useState<string>("");
   const [fnbVoucherCode, setFnbVoucherCode] = useState<string>("");
   const [fnbVoucherValidationMsg, setFnbVoucherValidationMsg] = useState<{ type: "SUCCESS" | "ERROR"; text: string } | null>(null);
+  const [manualDiscount, setManualDiscount] = useState<{
+    type: "FIXED" | "PERCENT";
+    value: number;
+    reason: string;
+  } | null>(null);
 
   // Loyalty & Voucher States
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
@@ -243,32 +274,22 @@ export default function POSPage() {
   const [isClosingShiftModalOpen, setIsClosingShiftModalOpen] = useState<boolean>(false);
   const [lastReceiptData, setLastReceiptData] = useState<POSReceiptData | null>(null);
 
-  // Live Shift Metrics for Instant Closing
-  const livePaidOrders = useMemo(() => {
-    return filteredOrders.filter((o) => o.paymentStatus === "PAID");
-  }, [filteredOrders]);
+  const needsReconciliationShift = useMemo(() => {
+    if (!user?.id) return null;
+    return (
+      shifts.find(
+        (s) =>
+          s.status === "NEEDS_RECONCILIATION" &&
+          s.assignedCashierId === user.id &&
+          (activeOutletId === "ALL" || !s.outletId || s.outletId === activeOutletId)
+      ) || null
+    );
+  }, [shifts, user?.id, activeOutletId]);
 
-  const liveCashSales = useMemo(() => {
-    return livePaidOrders
-      .filter((o) => o.paymentMethod === "CASH")
-      .reduce((sum, o) => sum + (o.total || 0), 0);
-  }, [livePaidOrders]);
-
-  const liveQrisSales = useMemo(() => {
-    return livePaidOrders
-      .filter((o) => o.paymentMethod === "QRIS" || !o.paymentMethod)
-      .reduce((sum, o) => sum + (o.total || 0), 0);
-  }, [livePaidOrders]);
-
-  const liveEdcSales = useMemo(() => {
-    return livePaidOrders
-      .filter((o) => o.paymentMethod === "EDC")
-      .reduce((sum, o) => sum + (o.total || 0), 0);
-  }, [livePaidOrders]);
-
-  const liveNonCashSales = liveQrisSales + liveEdcSales;
-  const liveTransactionsCount = livePaidOrders.length;
-  const liveDiscounts = livePaidOrders.reduce((sum, o) => sum + (o.discount || 0), 0);
+  const closingShiftSummary = useMemo(
+    () => buildCashDrawerShiftSummary(orders, activeShift),
+    [orders, activeShift]
+  );
 
   // Real-time Available Tables for the Selected Outlet Scope ONLY
   const availableTables = useMemo(() => {
@@ -289,9 +310,9 @@ export default function POSPage() {
 
   // Convert Master Products to POS format with Live Stock Status & Tenant Active Guard
   const posProducts = useMemo(() => {
-    // Strictly filter out products from inactive F&B partners
     const activeTenantProducts = masterProducts.filter((prod) => {
       const tenantId = prod.tenantId || "tenant-ks";
+      if (lockedTenantId && tenantId !== lockedTenantId) return false;
       if (!isMounted) return true;
       return isTenantActive(tenantId);
     });
@@ -318,13 +339,14 @@ export default function POSPage() {
         modifierGroups: resolveProductModifierGroups(prod),
       };
     });
-  }, [masterProducts, checkProductStockStatus, tenantSettingsVersion]);
+  }, [masterProducts, checkProductStockStatus, tenantSettingsVersion, lockedTenantId, isMounted]);
 
   // 1. Scoped to Selected Mitra (Primary Filter)
   const tenantScopedProducts = useMemo(() => {
-    if (selectedTenantId === "ALL") return posProducts;
-    return posProducts.filter((p) => (p.tenantId || "tenant-ks") === selectedTenantId);
-  }, [posProducts, selectedTenantId]);
+    const effectiveTenantId = lockedTenantId || selectedTenantId;
+    if (effectiveTenantId === "ALL") return posProducts;
+    return posProducts.filter((p) => (p.tenantId || "tenant-ks") === effectiveTenantId);
+  }, [posProducts, selectedTenantId, lockedTenantId]);
 
   // 2. Dynamic Categories for the chosen Mitra (Secondary Filter)
   const categoryTabs = useMemo(() => {
@@ -383,7 +405,124 @@ export default function POSPage() {
     }
   }, [appliedVoucher, subtotal]);
 
-  const totalDiscount = promoDiscountAmount + voucherDiscountAmount;
+  const manualDiscountAmount = useMemo(() => {
+    if (!manualDiscount || subtotal <= 0) return 0;
+    if (manualDiscount.type === "PERCENT") {
+      const pct = Math.min(100, Math.max(0, manualDiscount.value));
+      return Math.min(subtotal, Math.round((subtotal * pct) / 100));
+    }
+    return Math.min(subtotal, Math.max(0, Math.round(manualDiscount.value)));
+  }, [manualDiscount, subtotal]);
+
+  const totalDiscount = Math.min(
+    subtotal,
+    promoDiscountAmount + voucherDiscountAmount + manualDiscountAmount
+  );
+
+  const isSupervisorRole =
+    user?.role?.slug === "SUPER_ADMIN" ||
+    user?.role?.slug === "OWNER" ||
+    user?.role?.slug === "MANAGER";
+
+  const handleSelectTable = (tableValue: string) => {
+    setSelectedTable(tableValue);
+    if (selectedMember) return;
+
+    const matchedTable = filteredAreas
+      .flatMap((a) => a.tables)
+      .find((t) => (t.number || t.id) === tableValue || t.id === tableValue);
+
+    if (matchedTable?.status === "OCCUPIED" && matchedTable.customer) {
+      if (!customerName.trim() || customerName === lastPrefilledTableCustomerRef.current) {
+        setCustomerName(matchedTable.customer);
+        lastPrefilledTableCustomerRef.current = matchedTable.customer;
+      }
+    } else if (lastPrefilledTableCustomerRef.current && customerName === lastPrefilledTableCustomerRef.current) {
+      setCustomerName("");
+      lastPrefilledTableCustomerRef.current = null;
+    }
+  };
+
+  const handleApplyManualDiscount = async (params: {
+    type: "FIXED" | "PERCENT";
+    value: number;
+    reason: string;
+    supervisorPin?: string;
+  }): Promise<{ ok: boolean; error?: string }> => {
+    if (subtotal <= 0) {
+      return { ok: false, error: "Tambahkan menu ke keranjang sebelum menerapkan diskon." };
+    }
+
+    const computedAmount =
+      params.type === "PERCENT"
+        ? Math.min(subtotal, Math.round((subtotal * Math.min(100, Math.max(0, params.value))) / 100))
+        : Math.min(subtotal, Math.max(0, Math.round(params.value)));
+
+    if (computedAmount <= 0) {
+      return { ok: false, error: "Nominal diskon harus lebih besar dari 0." };
+    }
+
+    if (!isSupervisorRole) {
+      const cleanPin = (params.supervisorPin || "").trim();
+      if (cleanPin.length < 4) {
+        return { ok: false, error: "PIN supervisor wajib diisi." };
+      }
+
+      const pinSessionId = `PIN-DISC-${Date.now()}`;
+      try {
+        await fetch("/api/pos/qris/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "INIT",
+            invoiceNumber: pinSessionId,
+            expectedAmount: Math.max(1, computedAmount),
+          }),
+        });
+
+        const verifyRes = await fetch("/api/pos/qris/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "SUPERVISOR_OVERRIDE",
+            invoiceNumber: pinSessionId,
+            expectedAmount: Math.max(1, computedAmount),
+            pin: cleanPin,
+            referenceNumber: "MANUAL-DISCOUNT",
+            note: params.reason,
+          }),
+        });
+        const verifyData = await verifyRes.json().catch(() => null);
+        if (!verifyRes.ok || !verifyData?.allowed) {
+          return { ok: false, error: verifyData?.error || "PIN supervisor tidak valid." };
+        }
+      } catch {
+        return { ok: false, error: "Gagal memverifikasi PIN supervisor ke server." };
+      }
+    }
+
+    setManualDiscount({
+      type: params.type,
+      value: params.value,
+      reason: params.reason,
+    });
+
+    logActivity({
+      module: "POS",
+      action: "APPLY_DISCOUNT",
+      recordId: "cart-manual-discount",
+      previousValue: `Subtotal: Rp ${subtotal.toLocaleString("id-ID")}`,
+      newValue: `Diskon manual: -Rp ${computedAmount.toLocaleString("id-ID")} (${params.reason})`,
+      description: `Diskon manual Rp ${computedAmount.toLocaleString("id-ID")} diterapkan (${params.reason})`,
+      reason: params.reason,
+      status: "SUCCESS",
+      outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
+      outletName: activeOutlet?.name || "Singaraja",
+    });
+
+    notify.success("Diskon manual diterapkan", `Potongan Rp ${computedAmount.toLocaleString("id-ID")}`);
+    return { ok: true };
+  };
 
   // Single centralized tax & service charge calculation (POS-11, POS-27 / B2)
   const cartTaxBreakdown = useMemo(() => {
@@ -499,6 +638,15 @@ export default function POSPage() {
   const handleApplyVoucher = (voucher: LoyaltyVoucher) => {
     if (!selectedMember) return;
     if (selectedMember.points < voucher.pointsCost) return;
+    const tierRank: Record<string, number> = { bronze: 1, silver: 2, gold: 3, platinum: 4 };
+    if (
+      voucher.minTier &&
+      (tierRank[(selectedMember.tier || "bronze").toLowerCase()] ?? 0) <
+        (tierRank[voucher.minTier.toLowerCase()] ?? 0)
+    ) {
+      notify.warning("Tier belum memenuhi syarat", `Voucher ini khusus member ${voucher.minTier}.`);
+      return;
+    }
 
     if (appliedVoucher?.id === voucher.id) {
       setAppliedVoucher(null);
@@ -542,242 +690,271 @@ export default function POSPage() {
     splitDetails?: SplitGuestBill[];
     qrisVerification?: QRISVerificationDetail;
   }) => {
-    setIsPaymentModalOpen(false);
+    if (isSubmittingOrderRef.current) return;
+    isSubmittingOrderRef.current = true;
+    try {
+      setIsPaymentModalOpen(false);
 
-    const nowFormatted = new Date().toLocaleString("id-ID", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
+      const nowFormatted = new Date().toLocaleString("id-ID", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
 
-    const receiptNo = `INV-${new Date().getFullYear()}${(new Date().getMonth() + 1)
-      .toString()
-      .padStart(2, "0")}${new Date().getDate().toString().padStart(2, "0")}-${Math.floor(
-        1000 + Math.random() * 9000
-      )}`;
+      const primaryTenantId =
+        cartItems[0]?.tenantId ||
+        lockedTenantId ||
+        (selectedTenantId !== "ALL" ? selectedTenantId : "tenant-ks");
+      const posPublisher = resolvePosReceiptPublisher(
+        cartItems.map((item) => ({ tenantId: item.tenantId })),
+        activeOutlet,
+        primaryTenantId
+      );
+      const publisherCode = posPublisher.isMultiTenant
+        ? "DAGO"
+        : resolvePublisherCode(posPublisher.tenantId);
+      const receiptNo = generateSequentialReceiptNumber({
+        publisherCode,
+        existingNumbers: orders.map((o) => o.orderNumber),
+      });
 
-    const effectiveCustomerName = customerName.trim() || (orderType === "DINE_IN" ? `Tamu Meja ${selectedTable}` : "Pelanggan Takeaway");
+      const effectiveCustomerName =
+        customerName.trim() ||
+        (orderType === "DINE_IN" ? `Tamu Meja ${selectedTable}` : "Pelanggan Takeaway");
 
-    // 1. Create Live POS Order in OrderContext
-    const createdOrder = createPosOrder({
-      tableNumber: orderType === "DINE_IN" ? selectedTable : "TAKEAWAY",
-      customerName: effectiveCustomerName,
-      orderType,
-      subtotal,
-      discount: totalDiscount,
-      promoId: selectedPromoId || undefined,
-      tax: taxPB1,
-      serviceCharge: serviceCharge,
-      taxRatePercent: isTaxEnabled ? Number(taxRatePercent) || 10 : 0,
-      serviceChargePercent: orderType === "DINE_IN" ? Number(settings.serviceChargePercent) || 0 : 0,
-      total: grandTotal,
-      notes: orderNotes.trim() || undefined,
-      paymentMethod: paymentData.method,
-      paymentReference: paymentData.qrisVerification?.referenceNumber,
-      qrisVerification: paymentData.qrisVerification,
-      items: cartItems.map((c, i) => ({
-        id: `pos-it-${i}-${Date.now()}`,
+      const createdOrder = createPosOrder({
+        orderNumber: receiptNo,
+        cashierName: user?.name,
+        tableNumber: orderType === "DINE_IN" ? selectedTable : "TAKEAWAY",
+        customerName: effectiveCustomerName,
+        customerPhone: selectedMember?.phone,
+        orderType,
+        subtotal,
+        discount: totalDiscount,
+        promoId: selectedPromoId || undefined,
+        tax: taxPB1,
+        serviceCharge: serviceCharge,
+        taxRatePercent: isTaxEnabled ? Number(taxRatePercent) || 10 : 0,
+        serviceChargePercent: orderType === "DINE_IN" ? Number(settings.serviceChargePercent) || 0 : 0,
+        total: grandTotal,
+        notes: orderNotes.trim() || undefined,
+        paymentMethod: paymentData.method,
+        paymentReference: paymentData.qrisVerification?.referenceNumber,
+        qrisVerification: paymentData.qrisVerification,
+        splitDetails: paymentData.splitDetails?.map((g, idx) => ({
+          guestNumber: idx + 1,
+          label: g.guestLabel,
+          amount: g.assignedAmount,
+          method: g.paymentMethod,
+        })),
+        items: cartItems.map((c, i) => ({
+          id: `pos-it-${i}-${Date.now()}`,
+          productId: c.productId,
+          tenantId: c.tenantId || posProducts.find((p) => p.id === c.productId)?.tenantId || "tenant-ks",
+          productName: c.productName,
+          quantity: c.quantity,
+          unitPrice: c.unitFinalPrice,
+          modifiers: [
+            ...(c.selectedVariant ? [c.selectedVariant.name] : []),
+            ...c.selectedModifiers.map((m) => m.name),
+          ],
+          notes: c.notes,
+        })),
+      });
+
+      const kitchenTicket: KitchenTicketData = {
+        orderId: createdOrder.id,
+        orderNumber: createdOrder.orderNumber,
+        outletId: createdOrder.outletId,
+        outletName: activeOutlet?.name || "Singaraja",
+        tableNumber: orderType === "DINE_IN" ? selectedTable : "TAKEAWAY",
+        customerName: effectiveCustomerName,
+        orderType,
+        purpose: "NEW_ORDER",
+        items: cartItems.map((c, i) => ({
+          id: `kit-${i}-${Date.now()}`,
+          productName: c.productName,
+          quantity: c.quantity,
+          variantName: c.selectedVariant?.name,
+          modifiers: c.selectedModifiers.map((m) => m.name),
+          notes: c.notes,
+          tenantId: c.tenantId,
+          tenantName: getTenantName(c.tenantId),
+        })),
+        cashierName: user?.name || "Kasir Bertugas",
+        timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
+        kitchenNotes: orderNotes.trim() || undefined,
+        isSilent: true,
+      };
+      setKitchenModalTicket(kitchenTicket);
+
+      if (printerSettings.autoPrintKitchenOrder) {
+        printKitchenOrder(kitchenTicket, "NEW_ORDER", { isSilent: true }).then((res) => {
+          if (res.success) {
+            setKitchenPrintNotification({
+              type: "success",
+              text: res.message,
+              jobId: res.job.id,
+            });
+            setTimeout(() => setKitchenPrintNotification(null), 5000);
+          } else {
+            setKitchenPrintNotification({
+              type: "error",
+              text: `Nota Dapur: ${res.message}`,
+              jobId: res.job.id,
+            });
+          }
+        });
+      }
+
+      const bomItems = cartItems.map((c) => ({
         productId: c.productId,
-        tenantId: c.tenantId || posProducts.find((p) => p.id === c.productId)?.tenantId || "tenant-ks",
         productName: c.productName,
         quantity: c.quantity,
-        unitPrice: c.unitFinalPrice,
         modifiers: [
           ...(c.selectedVariant ? [c.selectedVariant.name] : []),
           ...c.selectedModifiers.map((m) => m.name),
         ],
-        notes: c.notes,
-      })),
-    });
+      }));
+      deductOrderBOM(bomItems);
 
-    // 1.5. Dual Receipt: Automatic Kitchen Order Dispatch (Non-blocking)
-    const kitchenTicket: KitchenTicketData = {
-      orderId: createdOrder.id,
-      orderNumber: createdOrder.orderNumber,
-      outletId: createdOrder.outletId,
-      outletName: activeOutlet?.name || "Singaraja",
-      tableNumber: orderType === "DINE_IN" ? selectedTable : "TAKEAWAY",
-      customerName: effectiveCustomerName,
-      orderType,
-      purpose: "NEW_ORDER",
-      items: cartItems.map((c, i) => ({
-        id: `kit-${i}-${Date.now()}`,
-        productName: c.productName,
-        quantity: c.quantity,
-        variantName: c.selectedVariant?.name,
-        modifiers: c.selectedModifiers.map((m) => m.name),
-        notes: c.notes,
-        tenantId: c.tenantId,
-        tenantName: getTenantName(c.tenantId),
-      })),
-      cashierName: user?.name || "Kasir Bertugas",
-      timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + " WITA",
-      kitchenNotes: orderNotes.trim() || undefined,
-      isSilent: true,
-    };
-    setKitchenModalTicket(kitchenTicket);
-
-    if (printerSettings.autoPrintKitchenOrder) {
-      printKitchenOrder(kitchenTicket, "NEW_ORDER", { isSilent: true }).then((res) => {
-        if (res.success) {
-          setKitchenPrintNotification({
-            type: "success",
-            text: res.message,
-            jobId: res.job.id,
-          });
-          setTimeout(() => setKitchenPrintNotification(null), 5000);
-        } else {
-          setKitchenPrintNotification({
-            type: "error",
-            text: `Nota Dapur: ${res.message}`,
-            jobId: res.job.id,
-          });
-        }
-      });
-    }
-
-    // 2. Cross-Module: Auto-deduct inventory ingredients based on Recipe BOM (POS-36 / B4)
-    const bomItems = cartItems.map((c) => ({
-      productId: c.productId,
-      productName: c.productName,
-      quantity: c.quantity,
-      modifiers: [
-        ...(c.selectedVariant ? [c.selectedVariant.name] : []),
-        ...c.selectedModifiers.map((m) => m.name),
-      ],
-    }));
-    deductOrderBOM(bomItems);
-
-    // 3. Cross-Module: If Dine-in, occupy table in TableContext
-    if (orderType === "DINE_IN" && selectedTable) {
-      occupyTableWithOrder(selectedTable, {
-        customerName: effectiveCustomerName,
-        totalFormatted: formatCurrencyIDR(grandTotal),
-        itemsCount: cartItems.reduce((s, i) => s + i.quantity, 0),
-        orderId: createdOrder.id,
-      });
-    }
-
-    // 4. Cross-Module: Update Loyalty points and tier calculation
-    let loyaltyReceiptInfo = undefined;
-    if (selectedMember) {
-      if (appliedVoucher) {
-        redeemPoints(selectedMember.id, appliedVoucher.pointsCost, `Voucher "${appliedVoucher.title}" pada ${receiptNo}`);
+      if (orderType === "DINE_IN" && selectedTable) {
+        occupyTableWithOrder(selectedTable, {
+          customerName: effectiveCustomerName,
+          totalFormatted: formatCurrencyIDR(grandTotal),
+          itemsCount: cartItems.reduce((s, i) => s + i.quantity, 0),
+          orderId: createdOrder.id,
+        });
       }
-      const earnedPoints = Math.floor(grandTotal / 1000); // 1 pt per Rp 1.000 spend
-      addPoints(selectedMember.id, earnedPoints, `Transaksi POS #${receiptNo}`, createdOrder.id, grandTotal);
 
-      loyaltyReceiptInfo = {
-        name: selectedMember.name,
-        tier: selectedMember.tier,
-        pointsUsed: appliedVoucher ? appliedVoucher.pointsCost : 0,
-        pointsRemaining: selectedMember.points - (appliedVoucher ? appliedVoucher.pointsCost : 0) + earnedPoints,
-        voucherTitle: appliedVoucher?.title,
-      };
-    }
+      let loyaltyReceiptInfo = undefined;
+      if (selectedMember) {
+        if (appliedVoucher) {
+          redeemPoints(
+            selectedMember.id,
+            appliedVoucher.pointsCost,
+            `Voucher "${appliedVoucher.title}" pada ${createdOrder.orderNumber}`,
+            createdOrder.id
+          );
+        }
+        const earnedPoints = Math.floor(grandTotal / 1000);
+        addPoints(
+          selectedMember.id,
+          earnedPoints,
+          `Transaksi POS #${createdOrder.orderNumber}`,
+          createdOrder.id,
+          grandTotal
+        );
 
-    // 5. Deduct Promo Quota upon verified payment
-    if (selectedPromoId) {
-      redeemPromo(selectedPromoId, selectedMember?.phone || user?.id || "walk-in-customer");
-    }
+        loyaltyReceiptInfo = {
+          name: selectedMember.name,
+          tier: selectedMember.tier,
+          pointsUsed: appliedVoucher ? appliedVoucher.pointsCost : 0,
+          pointsRemaining:
+            selectedMember.points - (appliedVoucher ? appliedVoucher.pointsCost : 0) + earnedPoints,
+          voucherTitle: appliedVoucher?.title,
+        };
+      }
 
-    // 6. Cross-Module: Record shift cash and non-cash sales metrics
-    const cashPortion =
-      paymentData.method === "SPLIT"
-        ? (paymentData.splitDetails || [])
-            .filter((guest) => guest.paymentMethod === "CASH")
-            .reduce((sum, guest) => sum + guest.assignedAmount, 0)
-        : paymentData.method === "CASH"
-          ? grandTotal
-          : 0;
-    recordShiftTransaction(cashPortion, grandTotal - cashPortion, activeOutletId, createdOrder.id);
+      if (selectedPromoId) {
+        redeemPromo(selectedPromoId, selectedMember?.phone || user?.id || "walk-in-customer");
+      }
 
-    // 6. Audit Trail Logging
-    logActivity({
-      module: "POS",
-      action: "PAYMENT_SUCCESS",
-      recordId: receiptNo,
-      newValue: `Total: Rp ${grandTotal.toLocaleString()} (${paymentData.method}) - Bayar: Rp ${paymentData.amountPaid.toLocaleString()}`,
-      description: `Pembayaran transaksi kasir POS ${receiptNo} berhasil`,
-      reason: `Pembayaran kasir selesai via ${paymentData.method}`,
-      status: "SUCCESS",
-    });
+      const cashPortion =
+        paymentData.method === "SPLIT"
+          ? (paymentData.splitDetails || [])
+              .filter((guest) => guest.paymentMethod === "CASH")
+              .reduce((sum, guest) => sum + guest.assignedAmount, 0)
+          : paymentData.method === "CASH"
+            ? grandTotal
+            : 0;
+      recordShiftTransaction(cashPortion, grandTotal - cashPortion, activeOutletId, createdOrder.id);
 
-    // 7. Prepare Receipt Data
-    const primaryTenantId = cartItems[0]?.tenantId || (selectedTenantId !== "ALL" ? selectedTenantId : "tenant-ks");
-    const posPublisher = resolvePosReceiptPublisher(
-      cartItems.map((item) => ({ tenantId: item.tenantId })),
-      activeOutlet,
-      primaryTenantId
-    );
-
-    const receipt: POSReceiptData = {
-      orderNumber: receiptNo,
-      date: nowFormatted,
-      cashierName: user?.name || "Kasir Bertugas",
-      tenantId: posPublisher.tenantId || primaryTenantId,
-      tenantName: posPublisher.brandName,
-      outletName: posPublisher.outletName,
-      outletAddress: posPublisher.outletAddress,
-      outletPhone: posPublisher.outletPhone,
-      tableNumber: selectedTable,
-      customerName: effectiveCustomerName,
-      orderType,
-      items: cartItems.map((item) => ({
-        name: item.productName,
-        quantity: item.quantity,
-        unitPrice: item.unitFinalPrice,
-        subtotal: item.itemTotal,
-        variantName: item.selectedVariant?.name,
-        modifiers: item.selectedModifiers.map((m) => m.name),
-        notes: item.notes,
-        tenantId: item.tenantId,
-        tenantName: getTenantName(item.tenantId),
-      })),
-      subtotal,
-      tax: taxPB1,
-      serviceCharge,
-      promoName: activePromo?.name || (appliedVoucher ? appliedVoucher.title : undefined),
-      discount: totalDiscount,
-      grandTotal,
-      paymentMethod: paymentData.method,
-      amountPaid: paymentData.amountPaid,
-      changeDue: paymentData.changeDue,
-      splitDetails: paymentData.splitDetails,
-      qrisVerification: paymentData.qrisVerification,
-      loyaltyMember: loyaltyReceiptInfo,
-    };
-
-    if (totalDiscount > 0) {
       logActivity({
         module: "POS",
-        action: "APPLY_DISCOUNT",
-        recordId: receiptNo,
-        previousValue: `Subtotal: Rp ${subtotal.toLocaleString("id-ID")}`,
-        newValue: `Diskon: -Rp ${totalDiscount.toLocaleString("id-ID")} (Grand Total: Rp ${grandTotal.toLocaleString("id-ID")})`,
-        description: `Diskon Rp ${totalDiscount.toLocaleString("id-ID")} diterapkan pada pesanan ${receiptNo}${receipt.promoName ? ` via ${receipt.promoName}` : ""}`,
-        reason: receipt.promoName || "Penerapan diskon kasir",
+        action: "PAYMENT_SUCCESS",
+        recordId: createdOrder.orderNumber,
+        newValue: `Total: Rp ${grandTotal.toLocaleString()} (${paymentData.method}) - Bayar: Rp ${paymentData.amountPaid.toLocaleString()}`,
+        description: `Pembayaran transaksi kasir POS ${createdOrder.orderNumber} berhasil`,
+        reason: `Pembayaran kasir selesai via ${paymentData.method}`,
         status: "SUCCESS",
-        outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
-        outletName: activeOutlet?.name || "Singaraja",
       });
-    }
 
-    setLastReceiptData(receipt);
-    setIsReceiptModalOpen(true);
+      const receipt: POSReceiptData = {
+        orderNumber: createdOrder.orderNumber,
+        date: nowFormatted,
+        cashierName: user?.name || "Kasir Bertugas",
+        tenantId: posPublisher.tenantId || primaryTenantId,
+        tenantName: posPublisher.brandName,
+        outletName: posPublisher.outletName,
+        outletAddress: posPublisher.outletAddress,
+        outletPhone: posPublisher.outletPhone,
+        tableNumber: selectedTable,
+        customerName: effectiveCustomerName,
+        customerPhone: selectedMember?.phone,
+        orderType,
+        items: cartItems.map((item) => ({
+          name: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitFinalPrice,
+          subtotal: item.itemTotal,
+          variantName: item.selectedVariant?.name,
+          modifiers: item.selectedModifiers.map((m) => m.name),
+          notes: item.notes,
+          tenantId: item.tenantId,
+          tenantName: getTenantName(item.tenantId),
+        })),
+        subtotal,
+        tax: taxPB1,
+        serviceCharge,
+        promoName:
+          activePromo?.name ||
+          (appliedVoucher ? appliedVoucher.title : manualDiscount ? manualDiscount.reason : undefined),
+        discount: totalDiscount,
+        grandTotal,
+        paymentMethod: paymentData.method,
+        amountPaid: paymentData.amountPaid,
+        changeDue: paymentData.changeDue,
+        splitDetails: paymentData.splitDetails,
+        qrisVerification: paymentData.qrisVerification,
+        loyaltyMember: loyaltyReceiptInfo,
+      };
+
+      if (totalDiscount > 0) {
+        logActivity({
+          module: "POS",
+          action: "APPLY_DISCOUNT",
+          recordId: createdOrder.orderNumber,
+          previousValue: `Subtotal: Rp ${subtotal.toLocaleString("id-ID")}`,
+          newValue: `Diskon: -Rp ${totalDiscount.toLocaleString("id-ID")} (Grand Total: Rp ${grandTotal.toLocaleString("id-ID")})`,
+          description: `Diskon Rp ${totalDiscount.toLocaleString("id-ID")} diterapkan pada pesanan ${createdOrder.orderNumber}${receipt.promoName ? ` via ${receipt.promoName}` : ""}`,
+          reason: receipt.promoName || "Penerapan diskon kasir",
+          status: "SUCCESS",
+          outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
+          outletName: activeOutlet?.name || "Singaraja",
+        });
+      }
+
+      setLastReceiptData(receipt);
+      setIsReceiptModalOpen(true);
+    } finally {
+      isSubmittingOrderRef.current = false;
+    }
   };
 
   const handleStartNewTransaction = () => {
     setIsReceiptModalOpen(false);
     setCartItems([]);
     setCustomerName("");
+    lastPrefilledTableCustomerRef.current = null;
     setOrderNotes("");
     setSelectedMemberId("");
     setAppliedVoucher(null);
     setSelectedPromoId("");
     setFnbVoucherCode("");
     setFnbVoucherValidationMsg(null);
+    setManualDiscount(null);
     setSearchQuery("");
-    setSelectedCategory("Semua Menu");
+    setSelectedCategory("Semua Kategori");
     setSelectedTable("");
     setOrderType("DINE_IN");
     notify.success("Transaksi baru siap", "Keranjang dan formulir kasir sudah dikosongkan.");
@@ -803,15 +980,34 @@ export default function POSPage() {
   };
 
   const filteredCwSpaces = useMemo(() => {
+    const query = cwSearchQuery.trim().toLowerCase();
     return cwSpaces.filter((sp) => {
       const matchType = cwSpaceTypeFilter === "ALL" || sp.type === cwSpaceTypeFilter;
-      const matchSearch =
-        sp.name.toLowerCase().includes(cwSearchQuery.toLowerCase()) ||
-        sp.area.toLowerCase().includes(cwSearchQuery.toLowerCase()) ||
-        sp.amenities.some((a) => a.toLowerCase().includes(cwSearchQuery.toLowerCase()));
-      return matchType && matchSearch;
+      if (!matchType) return false;
+      if (!query) return true;
+      return (
+        sp.name.toLowerCase().includes(query) ||
+        sp.area.toLowerCase().includes(query) ||
+        sp.type.toLowerCase().includes(query) ||
+        sp.type.toLowerCase().replace(/_/g, " ").includes(query) ||
+        sp.amenities.some((a) => a.toLowerCase().includes(query))
+      );
     });
   }, [cwSpaces, cwSpaceTypeFilter, cwSearchQuery]);
+
+  const availableCwSpacesCount = useMemo(() => {
+    const startH = parseHour(cwStartTime);
+    return filteredCwSpaces.filter((sp) =>
+      checkSlotAvailabilityHelper({
+        spaceId: sp.id,
+        spaces: cwSpaces,
+        bookings: cwBookings,
+        targetDate: cwDate,
+        startHour: startH,
+        durationHours: cwDuration,
+      }).isAvailable
+    ).length;
+  }, [filteredCwSpaces, cwSpaces, cwBookings, cwDate, cwStartTime, cwDuration]);
 
   const checkSlotAvailability = (
     spaceId: string,
@@ -906,6 +1102,13 @@ export default function POSPage() {
     }
 
     const startH = parseHour(cwStartTime);
+    if (!isWithinCoworkingHours(cwStartTime, cwDuration)) {
+      notify.warning(
+        "Di luar jam operasional",
+        "Jam operasional Dago Creative Hub dan co-working adalah 09.00 sampai 18.00 WITA."
+      );
+      return;
+    }
     const avail = checkSlotAvailability(selectedSpace.id, cwDate, startH, cwDuration);
     if (!avail.isAvailable) {
       notify.warning("Slot sudah terisi", `${cwStartTime}, ${cwDuration} jam pada ${cwDate} tidak tersedia.`);
@@ -919,7 +1122,11 @@ export default function POSPage() {
       return;
     }
 
-    // Anti Double-Booking Collision Check (Revisi 3)
+    if (selectedSpace.status === "MAINTENANCE") {
+      notify.warning("Ruang tidak tersedia", "Ruang ini sedang dalam pemeliharaan.");
+      return;
+    }
+
     const conflict = checkCoworkingBookingConflict(cwBookings, {
       spaceId: selectedSpace.id,
       spaceName: selectedSpace.name,
@@ -927,6 +1134,7 @@ export default function POSPage() {
       date: cwDate,
       startTime: cwStartTime,
       endTime: `${startH + cwDuration}:00 WITA`,
+      maxCapacity: selectedSpace.type === "HOT_DESK" ? Math.max(1, selectedSpace.capacity || 8) : 1,
     });
     if (!activeShift) {
       notify.warning("Shift kasir belum dibuka", "Buka shift dengan modal awal sebelum menerima pembayaran.");
@@ -939,121 +1147,140 @@ export default function POSPage() {
       return;
     }
 
-    const effectiveCompany = cwUsageType === "GROUP" ? (cwCompanyName.trim() || "Group / Company") : "Personal";
-    const isQris = cwPaymentMethod === "QRIS";
+    if (isSubmittingCoworkRef.current) return;
+    isSubmittingCoworkRef.current = true;
 
-    let createdBooking: any;
     try {
-      createdBooking = cwBookSpace({
+      const effectiveCompany =
+        cwUsageType === "GROUP" ? cwCompanyName.trim() || "Group / Company" : "Personal";
+      const isQris = cwPaymentMethod === "QRIS";
+      const resolvedPromoTitle = cwAppliedPromo
+        ? cwAppliedPromo.code
+          ? `[${cwAppliedPromo.code}] ${cwAppliedPromo.name}`
+          : cwAppliedPromo.name
+        : undefined;
+
+      let createdBooking: CoworkingBooking;
+      try {
+        createdBooking = cwBookSpace({
+          guestName: effectiveGuestName,
+          guestPhone: effectiveGuestPhone,
+          guestEmail: effectiveGuestEmail,
+          company: effectiveCompany,
+          spaceId: selectedSpace.id,
+          spaceName: selectedSpace.name,
+          spaceType: selectedSpace.type,
+          bookingType: "HOURLY",
+          date: cwDate,
+          startTime: cwStartTime,
+          duration: cwDuration,
+          price: cwPricing.originalSubtotal,
+          discount: cwPricing.discountAmount,
+          promoTitle: resolvedPromoTitle,
+          tax: cwPricing.tax,
+          taxType: cwPricing.taxType,
+          taxRatePercent: cwPricing.taxRatePercent,
+          outletId: activeOutletId !== "ALL" ? activeOutletId : "outlet-sgr",
+          createdAt: new Date().toISOString(),
+          totalAmount: cwPricing.total,
+          paymentMethod: cwPaymentMethod,
+          paidAmount: isQris ? 0 : cwPricing.total,
+          remainingAmount: isQris ? cwPricing.total : 0,
+          paymentStatus: isQris ? "PENDING" : "PAID",
+          fnbVoucherApplied: cwAppliedPromo?.code,
+          notes: cwNotes || undefined,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Booking gagal disimpan.";
+        notify.error("Booking gagal", message);
+        return;
+      }
+
+      if (isQris) {
+        setPendingCwQrisBooking(createdBooking);
+        setIsCwQrisModalOpen(true);
+        notify.warning(
+          "Menunggu konfirmasi QRIS",
+          `Booking ${createdBooking.bookingCode} dibuat. Tampilkan QRIS statis dan minta persetujuan supervisor.`
+        );
+        return;
+      }
+
+      if (cwAppliedPromo?.id) {
+        redeemPromo(cwAppliedPromo.id, effectiveGuestPhone || "cw-guest");
+      }
+
+      if (cwCustomerType === "MEMBER" && cwSelectedMember) {
+        const earnedPoints = Math.floor(cwPricing.total / 1000);
+        if (earnedPoints > 0) {
+          addPoints(cwSelectedMember.id, earnedPoints, `Booking Coworking #${createdBooking.bookingCode}`);
+        }
+      }
+
+      recordShiftTransaction(
+        cwPaymentMethod === "CASH" ? cwPricing.total : 0,
+        cwPaymentMethod !== "CASH" ? cwPricing.total : 0,
+        activeOutletId,
+        createdBooking?.id ? `cw-${createdBooking.id}` : undefined
+      );
+
+      logActivity({
+        module: "COWORKING",
+        action: "PAYMENT_SUCCESS",
+        recordId: createdBooking.bookingCode,
+        newValue: `Booking: ${selectedSpace.name} - ${effectiveGuestName} (${formatCurrencyIDR(cwPricing.total)} via ${cwPaymentMethod})`,
+        description: `Transaksi booking Co-working ${createdBooking.bookingCode} berhasil di Kasir`,
+        reason: `Pembayaran kasir selesai via ${cwPaymentMethod}`,
+        status: "SUCCESS",
+      });
+
+      const endTimeFormatted = calculateEndTime(cwStartTime, cwDuration);
+      const cwPublisher = resolveCoworkingReceiptPublisher(activeOutlet);
+      const coworkReceipt: CoworkingReceiptData = {
+        bookingCode: createdBooking.bookingCode,
+        transactionDate:
+          new Date().toLocaleString("id-ID", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          }) + " WITA",
         guestName: effectiveGuestName,
         guestPhone: effectiveGuestPhone,
         guestEmail: effectiveGuestEmail,
         company: effectiveCompany,
-        spaceId: selectedSpace.id,
         spaceName: selectedSpace.name,
         spaceType: selectedSpace.type,
-        bookingType: "HOURLY",
-        date: cwDate,
+        outletName: cwPublisher.outletName,
+        outletAddress: cwPublisher.outletAddress,
+        outletPhone: cwPublisher.outletPhone,
+        bookingDate: cwDate,
         startTime: cwStartTime,
+        endTime: endTimeFormatted,
         duration: cwDuration,
-        price: cwPricing.originalSubtotal,
-        discount: cwPricing.discountAmount,
+        bookingType: "HOURLY",
+        basePrice: cwPricing.originalSubtotal,
+        discount: cwPricing.discountAmount > 0 ? cwPricing.discountAmount : undefined,
+        promoTitle: resolvedPromoTitle,
+        tax: cwPricing.tax > 0 ? cwPricing.tax : 0,
+        taxType: cwPricing.taxType,
+        taxRatePercent: cwPricing.taxRatePercent,
+        serviceCharge: 0,
         totalAmount: cwPricing.total,
         paymentMethod: cwPaymentMethod,
-        paidAmount: isQris ? 0 : cwPricing.total,
-        remainingAmount: isQris ? cwPricing.total : 0,
-        paymentStatus: isQris ? "PENDING" : "PAID",
-        fnbVoucherApplied: cwAppliedPromo?.code,
+        paymentStatus: "PAID",
         notes: cwNotes || undefined,
-      });
-    } catch (err: any) {
-      notify.error("Booking gagal", err.message);
-      return;
+      };
+
+      setLastCoworkReceiptData(coworkReceipt);
+      setIsCoworkReceiptModalOpen(true);
+      setCwSelectedSpaceId("");
+      setIsManualTimeSet(false);
+      notify.success(`Booking ${createdBooking.bookingCode} tersimpan`);
+    } finally {
+      isSubmittingCoworkRef.current = false;
     }
-
-    if (isQris) {
-      // QRIS tidak boleh langsung lunas tanpa konfirmasi supervisor (Task V-05)
-      setPendingCwQrisBooking(createdBooking);
-      setIsCwQrisModalOpen(true);
-      notify.warning(
-        "Menunggu konfirmasi QRIS",
-        `Booking ${createdBooking.bookingCode} dibuat. Tampilkan QRIS statis dan minta persetujuan supervisor.`
-      );
-      return;
-    }
-
-    if (cwAppliedPromo?.id) {
-      redeemPromo(cwAppliedPromo.id, effectiveGuestPhone || "cw-guest");
-    }
-
-    if (cwCustomerType === "MEMBER" && cwSelectedMember) {
-      const earnedPoints = Math.floor(cwPricing.total / 1000);
-      if (earnedPoints > 0) {
-        addPoints(cwSelectedMember.id, earnedPoints, `Booking Coworking #${createdBooking.bookingCode}`);
-      }
-    }
-
-    // Record Shift Transaction for Co-Working Payment
-    recordShiftTransaction(
-      cwPaymentMethod === "CASH" ? cwPricing.total : 0,
-      cwPaymentMethod !== "CASH" ? cwPricing.total : 0,
-      activeOutletId,
-      createdBooking?.id ? `cw-${createdBooking.id}` : undefined
-    );
-
-    logActivity({
-      module: "COWORKING",
-      action: "PAYMENT_SUCCESS",
-      recordId: createdBooking.bookingCode,
-      newValue: `Booking: ${selectedSpace.name} - ${effectiveGuestName} (${formatCurrencyIDR(cwPricing.total)} via ${cwPaymentMethod})`,
-      description: `Transaksi booking Co-working ${createdBooking.bookingCode} berhasil di Kasir`,
-      reason: `Pembayaran kasir selesai via ${cwPaymentMethod}`,
-      status: "SUCCESS",
-    });
-
-    const endTimeFormatted = calculateEndTime(cwStartTime, cwDuration);
-    const cwPublisher = resolveCoworkingReceiptPublisher(activeOutlet);
-    const coworkReceipt: CoworkingReceiptData = {
-      bookingCode: createdBooking.bookingCode,
-      transactionDate: new Date().toLocaleString("id-ID", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }) + " WITA",
-      guestName: effectiveGuestName,
-      guestPhone: effectiveGuestPhone,
-      guestEmail: effectiveGuestEmail,
-      company: effectiveCompany,
-      spaceName: selectedSpace.name,
-      spaceType: selectedSpace.type,
-      outletName: cwPublisher.outletName,
-      outletAddress: cwPublisher.outletAddress,
-      outletPhone: cwPublisher.outletPhone,
-      bookingDate: cwDate,
-      startTime: cwStartTime,
-      endTime: endTimeFormatted,
-      duration: cwDuration,
-      bookingType: "HOURLY",
-      basePrice: cwPricing.originalSubtotal,
-      discount: cwPricing.discountAmount > 0 ? cwPricing.discountAmount : undefined,
-      promoTitle: cwAppliedPromo ? (cwAppliedPromo.code ? `[${cwAppliedPromo.code}] ${cwAppliedPromo.name}` : cwAppliedPromo.name) : undefined,
-      tax: cwPricing.tax > 0 ? cwPricing.tax : 0,
-      taxType: cwPricing.taxType,
-      taxRatePercent: cwPricing.taxRatePercent,
-      serviceCharge: 0,
-      totalAmount: cwPricing.total,
-      paymentMethod: cwPaymentMethod,
-      paymentStatus: "PAID",
-      notes: cwNotes || undefined,
-    };
-
-    setLastCoworkReceiptData(coworkReceipt);
-    setIsCoworkReceiptModalOpen(true);
-    setCwSelectedSpaceId("");
-    setIsManualTimeSet(false);
-    notify.success(`Booking ${createdBooking.bookingCode} tersimpan`);
   };
 
   const handleCwQrisSuccess = (verifiedBooking: CoworkingBooking) => {
@@ -1068,7 +1295,6 @@ export default function POSPage() {
       }
     }
 
-    // Record Shift Transaction for Co-Working Payment
     recordShiftTransaction(
       0,
       verifiedBooking.totalAmount,
@@ -1080,13 +1306,14 @@ export default function POSPage() {
     const cwPublisher = resolveCoworkingReceiptPublisher(activeOutlet);
     const coworkReceipt: CoworkingReceiptData = {
       bookingCode: verifiedBooking.bookingCode,
-      transactionDate: new Date().toLocaleString("id-ID", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }) + " WITA",
+      transactionDate:
+        new Date().toLocaleString("id-ID", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }) + " WITA",
       guestName: verifiedBooking.guestName,
       guestPhone: verifiedBooking.guestPhone,
       guestEmail: verifiedBooking.guestEmail,
@@ -1101,8 +1328,13 @@ export default function POSPage() {
       endTime: endTimeFormatted,
       duration: verifiedBooking.duration,
       bookingType: "HOURLY",
-      basePrice: verifiedBooking.totalAmount,
-      tax: 0,
+      basePrice: verifiedBooking.price ?? verifiedBooking.totalAmount,
+      discount: verifiedBooking.discount && verifiedBooking.discount > 0 ? verifiedBooking.discount : undefined,
+      promoTitle: verifiedBooking.promoTitle,
+      tax: verifiedBooking.tax ?? 0,
+      taxType: verifiedBooking.taxType || "NON_TAX",
+      taxRatePercent: verifiedBooking.taxRatePercent ?? 0,
+      serviceCharge: 0,
       totalAmount: verifiedBooking.totalAmount,
       paymentMethod: "QRIS",
       paymentStatus: "PAID",
@@ -1154,29 +1386,80 @@ export default function POSPage() {
     setIsPaymentModalOpen(true);
   };
 
-  const posUnit = posMode === "COWORKING" ? "coworking" : "fnb";
+  const posUnit = !isTenantScoped && posMode === "COWORKING" ? "coworking" : "fnb";
 
   return (
     // Co-working mode switches the accent from F&B orange to co-working blue
     <div data-unit={posUnit} className="flex flex-col gap-4">
       <UnitScope unit={posUnit} />
-      <PosToolbar
-        mode={posMode}
-        onModeChange={setPosMode}
-        cartCount={cartCount}
-        activeShift={activeShift}
-        onOpenShift={handleOpenShiftModal}
-        onCloseShift={() => setIsClosingShiftModalOpen(true)}
-      />
+      {isTenantScoped ? (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className="gap-1.5 px-2.5 py-1 text-xs">
+              <Utensils className="size-3.5" />
+              <span>F&B · {user?.tenant?.name || getTenantName(lockedTenantId) || "Mitra"}</span>
+              {cartCount > 0 ? (
+                <Badge variant="outline" className="ml-1 tabular-nums">
+                  {cartCount}
+                </Badge>
+              ) : null}
+            </Badge>
+          </div>
+          {activeShift ? (
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="hidden h-8 gap-1.5 px-2.5 sm:inline-flex">
+                <span className="size-1.5 rounded-full bg-success" aria-hidden />
+                {activeShift.shiftName} · {activeShift.assignedCashierName}
+              </Badge>
+              <Button variant="outline" size="lg" onClick={() => setIsClosingShiftModalOpen(true)}>
+                Tutup shift
+              </Button>
+            </div>
+          ) : (
+            <Button size="lg" onClick={handleOpenShiftModal}>
+              <Clock />
+              Buka shift
+            </Button>
+          )}
+        </div>
+      ) : (
+        <PosToolbar
+          mode={posMode}
+          onModeChange={setPosMode}
+          cartCount={cartCount}
+          activeShift={activeShift}
+          onOpenShift={handleOpenShiftModal}
+          onCloseShift={() => setIsClosingShiftModalOpen(true)}
+        />
+      )}
 
-      {posMode === "FNB" && (
+      {needsReconciliationShift ? (
+        <Alert variant="destructive">
+          <AlertTriangle className="size-4" />
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+            <span>
+              Shift sebelumnya melewati batas waktu dan berstatus Perlu Rekonsiliasi. Selesaikan tutup shift di halaman Karyawan & Shift sebelum membuka transaksi baru.
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href="/employees" />}
+              nativeButton={false}
+            >
+              Buka Karyawan & Shift
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {(isTenantScoped || posMode === "FNB") && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
           <div className="lg:col-span-7 xl:col-span-8">
             <ProductCatalog
               products={filteredProducts}
               tenants={activeTenants}
-              selectedTenantId={selectedTenantId}
-              onTenantChange={setSelectedTenantId}
+              selectedTenantId={lockedTenantId || selectedTenantId}
+              onTenantChange={(tenantId) => setSelectedTenantId(lockedTenantId || tenantId)}
               categories={categoryTabs}
               selectedCategory={selectedCategory}
               onCategoryChange={setSelectedCategory}
@@ -1199,7 +1482,7 @@ export default function POSPage() {
                 areas={filteredAreas}
                 availableTableCount={availableTables.length}
                 selectedTable={selectedTable}
-                onTableChange={setSelectedTable}
+                onTableChange={handleSelectTable}
                 members={membersList}
                 selectedMember={selectedMember}
                 onMemberChange={handleSelectMember}
@@ -1224,12 +1507,27 @@ export default function POSPage() {
                 onPromoChange={handlePromoChange}
                 onClear={handleClearPromo}
                 minimumNotice={promoMinimumNotice}
+                manualDiscount={
+                  manualDiscount
+                    ? {
+                        type: manualDiscount.type,
+                        value: manualDiscount.value,
+                        reason: manualDiscount.reason,
+                        amount: manualDiscountAmount,
+                      }
+                    : null
+                }
+                requiresSupervisorPin={!isSupervisorRole}
+                onApplyManualDiscount={handleApplyManualDiscount}
+                onClearManualDiscount={() => setManualDiscount(null)}
               />
               <CartSummary
                 subtotal={subtotal}
                 voucherDiscount={voucherDiscountAmount}
-                promoDiscount={promoDiscountAmount}
-                promoName={activePromo?.name}
+                promoDiscount={promoDiscountAmount + manualDiscountAmount}
+                promoName={
+                  activePromo?.name || (manualDiscount ? `manual (${manualDiscount.reason})` : undefined)
+                }
                 isTaxEnabled={isTaxEnabled}
                 taxRatePercent={taxRatePercent}
                 tax={taxPB1}
@@ -1247,7 +1545,7 @@ export default function POSPage() {
       {/* ==================================================== */}
       {/* 2. CO-WORKING TRANSACTION MODE */}
       {/* ==================================================== */}
-      {posMode === "COWORKING" && (
+      {!isTenantScoped && posMode === "COWORKING" && (
         <div className="space-y-4">
           <CoworkingToolbar
             searchQuery={cwSearchQuery}
@@ -1264,6 +1562,15 @@ export default function POSPage() {
             }}
           />
 
+          {!isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).isOpen && (
+            <Alert variant="destructive">
+              <AlertTriangle className="size-4" />
+              <AlertDescription className="text-xs">
+                {isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).reason}. Kantor Dago Creative Hub dan co-working beroperasi Senin sampai Jumat, pukul 09.00 sampai 18.00 WITA.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
             <div className={selectedSpace ? "lg:col-span-7 xl:col-span-8 space-y-3" : "col-span-12 space-y-3"}>
               {!selectedSpace ? (
@@ -1272,12 +1579,12 @@ export default function POSPage() {
                     <div>
                       <h3 className="font-medium text-foreground text-xs">Pilih ruangan untuk memulai booking</h3>
                       <p className="text-xs text-muted-foreground">
-                        Pilih kartu ruangan atau meja di bawah untuk mengatur durasi dan pembayaran.
+                        Operasional Senin sampai Jumat, pukul 09.00 sampai 18.00 WITA. Pilih kartu ruangan atau meja di bawah.
                       </p>
                     </div>
                   </div>
                   <span className="text-xs font-mono tabular-nums text-foreground bg-card px-2.5 py-1 rounded-md border border-border shrink-0 self-start sm:self-auto">
-                    {filteredCwSpaces.length} ruang tersedia
+                    {availableCwSpacesCount} ruang tersedia
                   </span>
                 </div>
               ) : (
@@ -1386,6 +1693,8 @@ export default function POSPage() {
                   cwPaymentMethod={cwPaymentMethod}
                   onPaymentMethodChange={setCwPaymentMethod}
                   onCompletePayment={handleCompleteCoworkingPayment}
+                  isDateClosed={!isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).isOpen}
+                  closedDateReason={isCoworkingDateOpen(cwDate, settings?.coworkingHolidays).reason}
                 />
               </div>
             )}
@@ -1426,10 +1735,10 @@ export default function POSPage() {
         subtotal={subtotal}
         tax={taxPB1}
         serviceCharge={serviceCharge}
-        discount={voucherDiscountAmount + promoDiscountAmount}
+        discount={totalDiscount}
         grandTotal={grandTotal}
         tableNumber={selectedTable}
-        customerName={selectedMember?.name || "Walk-in Guest"}
+        customerName={selectedMember?.name || customerName.trim() || "Walk-in Guest"}
         orderType={orderType}
         onPaymentSuccess={handlePaymentSuccess}
       />
@@ -1520,6 +1829,7 @@ export default function POSPage() {
         onClose={() => setIsVoucherModalOpen(false)}
         memberName={selectedMember?.name}
         memberPoints={selectedMember?.points || 0}
+        memberTier={selectedMember?.tier}
         vouchers={LOYALTY_VOUCHERS}
         appliedVoucherId={appliedVoucher?.id}
         onApplyVoucher={handleApplyVoucher}
@@ -1538,28 +1848,27 @@ export default function POSPage() {
       )}
 
       {/* 6. Instant Closing & WhatsApp Report Modal */}
-      {isClosingShiftModalOpen && (
+      {isClosingShiftModalOpen && activeShift && (
         <CashDrawerShiftModal
           isOpen={isClosingShiftModalOpen}
           onClose={() => setIsClosingShiftModalOpen(false)}
-          cashierName={user?.name || "Kasir Bertugas"}
+          shiftId={activeShift.id}
+          cashierName={activeShift.assignedCashierName || user?.name || "Kasir Bertugas"}
           outletName={activeOutlet?.name || "Singaraja"}
-          initialCash={activeShift ? activeShift.openingCash : 500000}
-          totalCashSales={liveCashSales}
-          totalNonCashSales={liveNonCashSales}
-          totalTransactionsCount={liveTransactionsCount}
-          qrisSales={liveQrisSales}
-          edcSales={liveEdcSales}
-          totalDiscounts={liveDiscounts}
+          initialCash={activeShift.openingCash}
+          totalCashSales={activeShift.cashSales || 0}
+          totalNonCashSales={activeShift.nonCashSales || 0}
+          totalTransactionsCount={closingShiftSummary.transactionsCount}
+          qrisSales={closingShiftSummary.qrisSales}
+          edcSales={closingShiftSummary.edcSales}
+          totalDiscounts={closingShiftSummary.discounts}
+          refundAmount={closingShiftSummary.refundAmount}
+          storedTax={closingShiftSummary.storedTax}
+          storedServiceCharge={closingShiftSummary.storedServiceCharge}
           isTaxEnabled={isTaxEnabled}
           taxRatePercent={taxRatePercent}
           onConfirmClose={(actualCash, notes) => {
-            if (activeShift) {
-              closeShift(activeShift.id, actualCash, notes, {
-                cashSales: liveCashSales,
-                nonCashSales: liveNonCashSales,
-              });
-            }
+            closeShift(activeShift.id, actualCash, notes);
           }}
         />
       )}

@@ -39,6 +39,7 @@ export interface CommercialTableProps {
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "Semua status" },
+  { value: "DRAFT", label: "Draf" },
   { value: "ACTIVE", label: "Aktif" },
   { value: "EXPIRING_SOON", label: "Segera berakhir" },
   { value: "EXPIRED", label: "Berakhir" },

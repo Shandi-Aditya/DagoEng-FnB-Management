@@ -1,14 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  CheckCircle2,
   Download,
   RotateCcw,
   Search,
-  Ticket,
   UserCheck,
-  Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +29,7 @@ import {
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV } from "@/lib/export-utils";
+import { isEventTodayWita } from "@/features/events-checkin/events-checkin-domain";
 
 export interface EventAttendeesModalProps {
   open: boolean;
@@ -52,9 +50,16 @@ export function EventAttendeesModal({
 }: EventAttendeesModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
+  useEffect(() => {
+    setSearchQuery("");
+  }, [open, event?.id]);
+
   if (!event) return null;
 
   const eventBookings = bookings.filter((b) => b.eventId === event.id);
+  const activeEventBookings = eventBookings.filter(
+    (b) => b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
+  );
 
   const needle = searchQuery.trim().toLowerCase();
   const filteredBookings = eventBookings.filter((b) => {
@@ -63,21 +68,23 @@ export function EventAttendeesModal({
       b.ticketCode.toLowerCase().includes(needle) ||
       b.guestName.toLowerCase().includes(needle) ||
       b.guestEmail.toLowerCase().includes(needle) ||
-      (b.guestPhone && b.guestPhone.toLowerCase().includes(needle))
+      Boolean(b.guestPhone && b.guestPhone.toLowerCase().includes(needle))
     );
   });
 
-  // Metrics
   const totalPaidRevenue = eventBookings
     .filter((b) => b.paymentStatus === "PAID")
     .reduce((sum, b) => sum + b.totalPrice, 0);
 
-  const totalTickets = eventBookings.reduce(
+  const totalTickets = activeEventBookings.reduce(
     (sum, b) => sum + (b.ticketCount || 1),
     0
   );
 
-  const checkedInCount = eventBookings.reduce((sum, b) => {
+  const checkedInCount = activeEventBookings.reduce((sum, b) => {
+    if (typeof b.checkedInQty === "number") {
+      return sum + b.checkedInQty;
+    }
     if (b.checkInStatus === "CHECKED_IN") {
       return sum + (b.ticketCount || 1);
     }
@@ -96,17 +103,34 @@ export function EventAttendeesModal({
       "Status Kehadiran",
       "Waktu Check-in",
     ];
-    const rows = eventBookings.map((b) => [
-      b.ticketCode,
-      b.guestName,
-      b.guestEmail,
-      b.guestPhone || "—",
-      b.ticketCount || 1,
-      b.totalPrice,
-      b.paymentStatus,
-      b.checkInStatus === "CHECKED_IN" ? "Hadir" : "Belum Hadir",
-      b.checkInTime ? new Date(b.checkInTime).toLocaleString("id-ID") : "—",
-    ]);
+    const rows = filteredBookings.map((b) => {
+      const qty = b.ticketCount || 1;
+      const checkedQty =
+        typeof b.checkedInQty === "number"
+          ? b.checkedInQty
+          : b.checkInStatus === "CHECKED_IN"
+          ? qty
+          : 0;
+      const attendanceLabel =
+        b.checkInStatus === "CHECKED_IN" || checkedQty >= qty
+          ? "Hadir"
+          : checkedQty > 0
+          ? `Hadir ${checkedQty}/${qty}`
+          : "Belum Hadir";
+      return [
+        b.ticketCode,
+        b.guestName,
+        b.guestEmail,
+        b.guestPhone || "—",
+        qty,
+        b.totalPrice,
+        b.paymentStatus,
+        attendanceLabel,
+        b.checkInTime
+          ? new Date(b.checkInTime).toLocaleString("id-ID", { timeZone: "Asia/Makassar" })
+          : "—",
+      ];
+    });
     downloadCSV(`Peserta_${event.title.replace(/[^a-zA-Z0-9]/g, "_")}.csv`, headers, rows);
   };
 
@@ -151,7 +175,7 @@ export function EventAttendeesModal({
           <div className="rounded-xl border bg-card p-3.5 shadow-2xs">
             <span className="text-xs text-muted-foreground block">Belum check-in</span>
             <p className="mt-1 font-mono text-base font-semibold tabular-nums text-muted-foreground">
-              {totalTickets - checkedInCount}
+              {Math.max(0, totalTickets - checkedInCount)}
             </p>
           </div>
         </div>
@@ -195,9 +219,18 @@ export function EventAttendeesModal({
                 </TableHeader>
                 <TableBody>
                   {filteredBookings.map((b) => {
-                    const isCheckedIn = b.checkInStatus === "CHECKED_IN";
-                    const isUpdating = isUpdatingCheckInId === b.id;
                     const ticketCount = b.ticketCount || 1;
+                    const checkedQty =
+                      typeof b.checkedInQty === "number"
+                        ? b.checkedInQty
+                        : b.checkInStatus === "CHECKED_IN"
+                        ? ticketCount
+                        : 0;
+                    const isCheckedIn = b.checkInStatus === "CHECKED_IN" || checkedQty >= ticketCount;
+                    const isPartial = !isCheckedIn && checkedQty > 0;
+                    const isUpdating = isUpdatingCheckInId === b.id;
+                    const isInvalidPayment =
+                      b.paymentStatus === "CANCELLED" || b.paymentStatus === "EXPIRED";
 
                     return (
                       <TableRow key={b.id}>
@@ -216,6 +249,7 @@ export function EventAttendeesModal({
                                 {new Date(b.checkInTime).toLocaleTimeString("id-ID", {
                                   hour: "2-digit",
                                   minute: "2-digit",
+                                  timeZone: "Asia/Makassar",
                                 })}
                               </span>
                             ) : null}
@@ -238,7 +272,9 @@ export function EventAttendeesModal({
                         <TableCell className="hidden md:table-cell">
                           <Badge
                             variant={
-                              b.paymentStatus === "REFUNDED"
+                              b.paymentStatus === "REFUNDED" ||
+                              b.paymentStatus === "CANCELLED" ||
+                              b.paymentStatus === "EXPIRED"
                                 ? "destructive"
                                 : b.refundStatus === "REQUESTED"
                                 ? "secondary"
@@ -250,20 +286,28 @@ export function EventAttendeesModal({
                             }
                           >
                             {b.paymentStatus === "REFUNDED"
-                              ? "Refunded"
+                              ? "Dikembalikan"
                               : b.refundStatus === "REQUESTED"
-                              ? "Refund Req"
+                              ? "Pengajuan refund"
                               : b.isInvitation || b.paymentMethod === "INVITATION"
                               ? "Undangan"
                               : b.paymentStatus === "PAID"
                               ? "Lunas"
+                              : b.paymentStatus === "CANCELLED"
+                              ? "Dibatalkan"
+                              : b.paymentStatus === "EXPIRED"
+                              ? "Kedaluwarsa"
                               : "Menunggu"}
                           </Badge>
                         </TableCell>
 
                         <TableCell>
-                          <Badge variant={isCheckedIn ? "default" : "outline"}>
-                            {isCheckedIn ? "Hadir" : "Belum hadir"}
+                          <Badge variant={isCheckedIn ? "default" : isPartial ? "secondary" : "outline"}>
+                            {isCheckedIn
+                              ? "Hadir"
+                              : isPartial
+                              ? `Hadir ${checkedQty}/${ticketCount}`
+                              : "Belum hadir"}
                           </Badge>
                         </TableCell>
 
@@ -274,8 +318,8 @@ export function EventAttendeesModal({
                             onClick={() => onToggleCheckIn(b)}
                             disabled={
                               isUpdating ||
-                              b.paymentStatus === "CANCELLED" ||
-                              b.paymentStatus === "REFUNDED" ||
+                              !isEventTodayWita(event) ||
+                              b.paymentStatus !== "PAID" ||
                               b.refundStatus === "REQUESTED"
                             }
                           >

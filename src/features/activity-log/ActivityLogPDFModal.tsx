@@ -467,6 +467,7 @@ export default function ActivityLogPDFModal({
                           <tr key={log.id || idx} className="align-top hover:bg-muted/20">
                             <td className="px-2.5 py-2 font-mono text-xs text-muted-foreground break-words">
                               {new Date(log.timestamp).toLocaleString("id-ID", {
+                                timeZone: "Asia/Makassar",
                                 dateStyle: "short",
                                 timeStyle: "short",
                               })}

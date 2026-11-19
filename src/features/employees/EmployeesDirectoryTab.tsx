@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Eye, MoreHorizontal, Pencil, Trash2, Users } from "lucide-react";
 
 import { DataPagination } from "@/components/app/data-pagination";
@@ -78,6 +78,10 @@ export function EmployeesDirectoryTab({
 }: EmployeesDirectoryTabProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, deptFilter, statusFilter, pageSize]);
 
   const isFiltered =
     searchQuery.trim() !== "" || deptFilter !== "ALL" || statusFilter !== "ALL";

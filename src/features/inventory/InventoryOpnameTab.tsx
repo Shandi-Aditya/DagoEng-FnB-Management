@@ -132,6 +132,19 @@ export function InventoryOpnameTab({
             </NativeSelectOption>
           ))}
         </NativeSelect>
+        {isFiltered ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              onReasonFilterChange("ALL");
+              onSearchChange("");
+            }}
+          >
+            Reset filter
+          </Button>
+        ) : null}
         <div className="flex items-center gap-2 sm:ml-auto">
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="outline" size="lg" />}>

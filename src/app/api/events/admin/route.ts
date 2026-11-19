@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminEvents } from "@/lib/events";
+import { getAdminEvents, getEventBookings } from "@/lib/events";
 import { assertEventAdmin } from "@/lib/server-auth";
 import { EventStatus } from "@/types/event";
 export const dynamic = "force-dynamic";
 
-/**
- * GET /api/events/admin
- * Admin-only endpoint to list all event submissions across all statuses.
- * Includes private organizer email, phone, and moderation audit notes.
- * Enforces role verification on server side.
- */
 export async function GET(req: NextRequest) {
   try {
     const auth = await assertEventAdmin(req);
@@ -21,9 +15,32 @@ export async function GET(req: NextRequest) {
     }
 
     const { searchParams } = new URL(req.url);
-    const statusParam = searchParams.get("status") as EventStatus | null;
+    const rawStatus = searchParams.get("status")?.trim();
+    const isAllOrSplit = !rawStatus || rawStatus === "ALL" || rawStatus === "REVENUE_SPLIT";
 
-    const events = await getAdminEvents(statusParam || undefined);
+    const [baseEvents, allBookings] = await Promise.all([
+      getAdminEvents(isAllOrSplit ? undefined : (rawStatus as EventStatus)),
+      getEventBookings(),
+    ]);
+
+    const bookedByEvent = new Map<string, number>();
+    for (const b of allBookings) {
+      if (b.paymentStatus === "PAID") {
+        bookedByEvent.set(b.eventId, (bookedByEvent.get(b.eventId) ?? 0) + (b.ticketCount || 1));
+      }
+    }
+
+    const filteredEvents =
+      rawStatus === "REVENUE_SPLIT"
+        ? baseEvents.filter((e) =>
+            Boolean(e.proposedRevenueSplit && e.proposedRevenueSplit.status === "PENDING")
+          )
+        : baseEvents;
+
+    const events = filteredEvents.map((e) => ({
+      ...e,
+      bookedCount: bookedByEvent.get(e.id) ?? 0,
+    }));
 
     return NextResponse.json({
       success: true,

@@ -32,11 +32,12 @@ export function computeActivityLogPdfMetrics(
   let highSeverityCount = 0;
 
   for (const log of logs) {
-    if (log.status === "SUCCESS") {
+    const resolvedStatus = log.status ?? "SUCCESS";
+    if (resolvedStatus === "SUCCESS") {
       successCount++;
-    } else if (log.status === "WARNING") {
+    } else if (resolvedStatus === "WARNING") {
       warningCount++;
-    } else if (log.status === "FAILED") {
+    } else if (resolvedStatus === "FAILED") {
       failedCount++;
     }
 

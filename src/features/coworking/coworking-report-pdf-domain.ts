@@ -123,7 +123,7 @@ export function formatCoworkingDurationLabel(duration: number, bookingType: stri
     case "DAILY":
       return `${duration} hari`;
     case "MONTHLY":
-      return `${duration} bulan`;
+      return duration === 30 ? "1 bulan" : `${duration} bulan`;
     default:
       return `${duration} sesi`;
   }

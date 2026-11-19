@@ -1,58 +1,67 @@
-# Deploy Demo (branch `develop`) ke Coolify
+# Cara deploy aplikasi ke Coolify
 
-Panduan singkat men-deploy branch `develop` ke VPS yang menjalankan Coolify.
-Database tetap memakai Neon (PostgreSQL). Tidak ada nilai rahasia di dokumen ini.
+Panduan ini menjelaskan langkah men-deploy branch `develop` ke VPS dengan Coolify dan database Neon PostgreSQL. Dokumen ini tidak memuat nilai rahasia.
 
-## 1. Deploy key
+## 1. Pasang deploy key GitLab
 
-1. Coolify → **Keys & Tokens → Private Keys → + Add → Generate new ED25519 SSH key**.
-2. Salin **Public Key**-nya.
-3. GitLab repo → **Settings → Repository → Deploy keys** → tambahkan key tersebut (read-only).
+1. Buka Coolify, lalu pilih **Keys & Tokens**, **Private Keys**, **+ Add**, dan **Generate new ED25519 SSH key**.
+2. Salin nilai **Public Key** yang dibuat Coolify.
+3. Buka repositori GitLab, pilih **Settings**, **Repository**, lalu **Deploy keys**, dan tambahkan kunci tersebut dalam mode baca saja (`read-only`).
 
-## 2. Aplikasi
+## 2. Buat aplikasi di Coolify
 
-- Resource: **Private Repository (with Deploy Key)**
-- Repository: `git@gitlab.com:devdagoeng/dagoeng-management.git`
-- Branch: `develop`
-- Build pack: Nixpacks
-- Port: `3000`
+Atur konfigurasi sumber aplikasi sebagai berikut:
 
-## 3. Environment variables
+- **Resource.** Pilih **Private Repository (with Deploy Key)**.
+- **Repository.** Isi `git@gitlab.com:devdagoeng/dagoeng-management.git`.
+- **Branch.** Isi `develop`.
+- **Build pack.** Pilih `Nixpacks`.
+- **Port.** Isi `3000`.
 
-| Variable | Catatan |
-|---|---|
-| `DATABASE_URL` | URL Neon (direct) |
-| `SESSION_SECRET` | wajib, minimal 32 karakter (`openssl rand -hex 32`) |
-| `QRIS_WEBHOOK_SECRET` | string acak |
-| `SUPERVISOR_OVERRIDE_PIN` | PIN demo |
-| `ENABLE_ROLE_SIMULATOR` | `true` |
-| `DOKU_SIMULATION_MODE` | `true` (tanpa kredensial DOKU) |
-| `DOKU_API_URL` | `https://api-sandbox.doku.com` |
-| `DOKU_NOTIFICATION_URL` | `/api/webhooks/doku` |
-| `DOKU_CALLBACK_URL` | `https://<domain-demo>` |
-| `NIXPACKS_NODE_VERSION` | `22` |
+Berkas `nixpacks.toml` di akar repositori mengunci snapshot `nixpkgs` ke Node `22.20.0`. Snapshot bawaan Nixpacks hanya menyediakan Node `22.11.0`, sedangkan Tailwind CSS v4 memerlukan Node `22.12` ke atas agar kompilasi `next/font` tidak gagal dengan galat `ERR_REQUIRE_ESM`. Pertahankan berkas `nixpacks.toml` tersebut.
 
-`nixpacks.toml` di root mengunci snapshot nixpkgs ke Node 22.20. Snapshot bawaan Nixpacks hanya punya Node 22.11, sedangkan Tailwind v4 butuh Node 22.12 ke atas (tanpa itu build gagal dengan `ERR_REQUIRE_ESM` di `next/font`). Jangan hapus file itu kecuali Nixpacks sudah memakai Node 22.12+ secara default.
+## 3. Isi environment variables
 
-Jangan set `NODE_ENV` dan `PORT` manual. Tabel sudah ada di Neon, jadi
-`prisma db push` hanya perlu dijalankan kalau `prisma/schema.prisma` berubah.
+Masukkan variabel lingkungan berikut pada menu **Environment Variables** di Coolify:
 
-## 4. Volume bukti pembayaran
+| Variabel | Status | Keterangan |
+|---|---|---|
+| `DATABASE_URL` | Wajib | String koneksi PostgreSQL Neon langsung (`direct`). |
+| `SESSION_SECRET` | Wajib | Kunci HMAC sesi minimal 32 karakter, misalnya hasil `openssl rand -hex 32`. |
+| `QRIS_WEBHOOK_SECRET` | Wajib | Kunci rahasia verifikasi HMAC-SHA256 untuk `/api/pos/qris/verify`. |
+| `SUPERVISOR_OVERRIDE_PIN` | Wajib | PIN supervisor untuk verifikasi manual QRIS statis, void, dan refund kasir. |
+| `NIXPACKS_NODE_VERSION` | Wajib | Isi `22`. |
+| `ENABLE_ROLE_SIMULATOR` | Opsional (UAT) | Isi `true` pada server demo UAT, atau kosongkan di produksi publik. |
+| `DISABLE_DEMO_LOGIN` | Wajib saat rilis publik | `next.config.js` mengaktifkan `ALLOW_DEMO_UAT='true'` untuk UAT. Isi `DISABLE_DEMO_LOGIN=true` saat rilis publik agar seluruh login akun demo dimatikan. |
+| `FONNTE_API_TOKEN` | Opsional (Chatbot V-17) | Token API Fonnte untuk pengiriman ringkasan tutup shift via WhatsApp. |
+| `KA_ARI_WHATSAPP_PHONE` | Opsional (Chatbot V-17) | Nomor WhatsApp tujuan laporan tutup shift Front Office untuk Ka Ari. |
+| `FONNTE_TARGET_PHONE` | Opsional (Chatbot V-17) | Nomor WhatsApp cadangan apabila `KA_ARI_WHATSAPP_PHONE` tidak diisi. |
+| `TELEGRAM_BOT_TOKEN` | Opsional (Chatbot V-17) | Token Bot Telegram untuk pengiriman ringkasan tutup shift otomatis. |
+| `TELEGRAM_KA_ARI_CHAT_ID` | Opsional (Chatbot V-17) | Chat ID Telegram Ka Ari untuk ringkasan tutup shift gabungan. |
+| `TELEGRAM_PARTNER_<TENANT_ID>_CHAT_ID` | Opsional (Chatbot V-17) | Chat ID Telegram per mitra, misalnya `TELEGRAM_PARTNER_TENANT_KS_CHAT_ID`. |
+| `DOKU_CLIENT_ID` | Opsional (Web Event) | Client ID live DOKU untuk pembayaran otomatis tiket event. |
+| `DOKU_SECRET_KEY` | Opsional (Web Event) | Secret Key live DOKU. |
+| `DOKU_API_URL` | Opsional (Web Event) | Gunakan `https://api.doku.com` saat kredensial live tersedia. |
+| `DOKU_NOTIFICATION_URL` | Opsional (Web Event) | Isi `/api/webhooks/doku`. |
+| `DOKU_CALLBACK_URL` | Opsional (Web Event) | Isi `https://<domain-aplikasi>`. |
+| `NEXT_PUBLIC_APP_URL` | Opsional | URL publik aplikasi untuk tautan tiket event, misalnya `https://<domain-aplikasi>`. |
+| `NEXT_PUBLIC_CS_WHATSAPP` | Opsional | Nomor WhatsApp layanan pelanggan resmi pada halaman pemulihan tiket. |
 
-Persistent Storage → volume dengan destination `/app/data/proofs`.
-Jangan mount seluruh `/app/data`, karena menimpa file JSON seed dari repo.
+Jangan menyetel `NODE_ENV` atau `PORT` secara manual di Coolify. Karena `next start` berjalan dengan `NODE_ENV=production`, modul `src/lib/doku.ts` secara otomatis menolak `DOKU_SIMULATION_MODE=true` dan URL sandbox DOKU demi keamanan produksi. Selama kredensial live `https://api.doku.com` belum dipasang, pemesanan tiket event berbayar di Coolify menggunakan metode transfer bank manual dengan unggah bukti bayar.
 
-## 5. Domain
+Skema tabel sudah tersedia di Neon. Jalankan `npx prisma db push` hanya ketika `prisma/schema.prisma` berubah.
 
-DNS **A record** `<subdomain>` → IP VPS. Di Coolify isi Domains dengan
-`https://<subdomain>.<domain>`. Port 80 dan 443 harus terbuka.
+## 4. Pasang volume bukti pembayaran
 
-## 6. Auto-deploy saat merge ke `develop`
+Buka menu **Persistent Storage**, lalu tambahkan volume dengan tujuan `/app/data/proofs`. Jangan me-mount seluruh direktori `/app/data`, sebab mount tersebut akan menutupi berkas JSON data awal dari repositori.
 
-1. Coolify → aplikasi → **Webhooks → Manual Git Webhooks**: isi **GitLab Webhook Secret**, lalu **Save**.
-2. GitLab → **Settings → Webhooks**: URL GitLab dari Coolify, Secret token yang sama,
-   trigger **Push events**, branch filter (wildcard) `develop`.
+## 5. Hubungkan domain dan HTTPS
 
-Tombol **Test → Push events** di GitLab mengirim contoh dari branch `main`, jadi
-Coolify membalas `Nothing to do`. Itu normal. Pembuktian yang valid adalah push
-atau merge sungguhan ke `develop`.
+Arahkan **A record** DNS `<subdomain>` ke alamat IP VPS. Pada pengaturan aplikasi Coolify, isi kolom **Domains** dengan `https://<subdomain>.<domain>`, dan pastikan port `80` serta `443` terbuka pada firewall server.
+
+## 6. Aktifkan auto-deploy saat merge ke `develop`
+
+1. Di Coolify, buka aplikasi, pilih **Webhooks**, lalu **Manual Git Webhooks**, isi **GitLab Webhook Secret**, dan klik **Save**.
+2. Di GitLab, buka **Settings**, lalu **Webhooks**, masukkan URL GitLab dari Coolify beserta token rahasia yang sama, centang **Push events**, dan isi filter branch dengan `develop`.
+
+Tombol **Test** untuk **Push events** di GitLab mengirim contoh payload dari branch `main`, sehingga Coolify membalas `Nothing to do`. Untuk menguji auto-deploy secara nyata, lakukan push atau merge langsung ke branch `develop`.

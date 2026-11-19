@@ -1,23 +1,33 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import {
+import React, { createContext, useContext, useEffect, useRef } from "react";
+import type {
   IngredientItem,
-  RecipeBOM,
   PurchaseOrder,
+  RecipeBOM,
   StockAdjustmentLog,
-  StockStatus,
   StockOpnameRecord,
-  StockOpnameReason,
+  StockStatus,
 } from "@/types/inventory";
 import {
-  INITIAL_INGREDIENTS,
-  INITIAL_RECIPES,
-  INITIAL_PURCHASE_ORDERS,
-  deductRecipeIngredients,
   deductOrderItemsBOM,
-  OrderItemBOMInput,
+  recordOrderWasteItemsBOM,
+  restoreOrderItemsBOM,
+  type OrderItemBOMInput,
 } from "@/features/inventory/inventory-data";
+import type { InventoryCommand } from "@/lib/domain-sync-types";
+import { useSyncedDomain } from "@/lib/use-synced-domain";
+import {
+  applyInventoryCommand,
+  computeStockStatus,
+  inventoryDomainSpec,
+  inventorySyncClient,
+  STORAGE_KEY_INGREDIENTS,
+  STORAGE_KEY_LOGS,
+  STORAGE_KEY_OPNAMES,
+  STORAGE_KEY_POS,
+  STORAGE_KEY_RECIPES,
+} from "@/lib/sync-domains/inventory-spec";
 import { useOutlet } from "./OutletContext";
 import { useActivityLog } from "./ActivityLogContext";
 import { useNotifications } from "./NotificationContext";
@@ -29,7 +39,9 @@ interface InventoryContextType {
   purchaseOrders: PurchaseOrder[];
   filteredPurchaseOrders: PurchaseOrder[];
   logs: StockAdjustmentLog[];
+  filteredLogs: StockAdjustmentLog[];
   stockOpnames: StockOpnameRecord[];
+  filteredStockOpnames: StockOpnameRecord[];
   adjustStock: (
     ingredientId: string,
     delta: number,
@@ -37,11 +49,31 @@ interface InventoryContextType {
     user?: string
   ) => void;
   recordStockOpname: (
-    record: Omit<StockOpnameRecord, "id" | "opnameNumber" | "variance" | "varianceType" | "createdAt" | "status">
+    record: Omit<
+      StockOpnameRecord,
+      "id" | "opnameNumber" | "variance" | "varianceType" | "createdAt" | "status"
+    >
   ) => StockOpnameRecord;
-  checkProductStockStatus: (productNameOrId: string) => { status: "SAFE" | "CRITICAL" | "OUT_OF_STOCK"; label?: string };
-  simulateBOMDeduction: (menuId: string, quantity: number, modifiers?: string[]) => { success: boolean; message: string };
-  deductOrderBOM: (items: OrderItemBOMInput[]) => { success: boolean; deductedCount: number };
+  checkProductStockStatus: (
+    productNameOrId: string
+  ) => { status: "SAFE" | "CRITICAL" | "OUT_OF_STOCK"; label?: string };
+  simulateBOMDeduction: (
+    menuId: string,
+    quantity: number,
+    modifiers?: string[]
+  ) => { success: boolean; message: string };
+  deductOrderBOM: (
+    items: OrderItemBOMInput[]
+  ) => { success: boolean; deductedCount: number };
+  restoreOrderBOM: (
+    items: OrderItemBOMInput[],
+    orderNumber?: string
+  ) => { success: boolean; restoredCount: number };
+  recordOrderWasteBOM: (
+    items: OrderItemBOMInput[],
+    needsDeduction: boolean,
+    orderNumber?: string
+  ) => { success: boolean; wasteCount: number };
   upsertRecipe: (recipe: RecipeBOM) => void;
   deleteRecipe: (menuId: string) => void;
   createPurchaseOrder: (po: Omit<PurchaseOrder, "id" | "poNumber">) => void;
@@ -51,95 +83,59 @@ interface InventoryContextType {
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
-const STORAGE_KEY_INGREDIENTS = "dagoeng_inventory_ingredients_v3";
-const STORAGE_KEY_RECIPES = "dagoeng_inventory_recipes_v3";
-const STORAGE_KEY_POS = "dagoeng_inventory_pos_v3";
-const STORAGE_KEY_LOGS = "dagoeng_inventory_logs_v3";
-const STORAGE_KEY_OPNAMES = "dagoeng_inventory_opnames_v1";
+let inventoryOpSeq = 0;
+function nextInventoryOpId(prefix: string): string {
+  inventoryOpSeq += 1;
+  return `${prefix}-${Date.now()}-${inventoryOpSeq}-${Math.random().toString(36).slice(2, 6)}`;
+}
 
 export function InventoryProvider({ children }: { children: React.ReactNode }) {
   const { activeOutletId, activeOutlet, isAllOutlets } = useOutlet();
   const { logActivity } = useActivityLog();
   const { addNotification } = useNotifications();
 
-  const [ingredients, setIngredients] = useState<IngredientItem[]>(INITIAL_INGREDIENTS);
-  const [recipes, setRecipes] = useState<RecipeBOM[]>(INITIAL_RECIPES);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(INITIAL_PURCHASE_ORDERS);
-  const [logs, setLogs] = useState<StockAdjustmentLog[]>([]);
-  const [stockOpnames, setStockOpnames] = useState<StockOpnameRecord[]>([]);
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [invState, mutateInventory] = useSyncedDomain(inventorySyncClient, {
+    pollMs: 5000,
+  });
+
+  const { ingredients, recipes, purchaseOrders, logs, stockOpnames } = invState;
+
+  const ingredientsRef = useRef<IngredientItem[]>(ingredients);
+  const recipesRef = useRef<RecipeBOM[]>(recipes);
+  ingredientsRef.current = ingredients;
+  recipesRef.current = recipes;
 
   useEffect(() => {
-    try {
-      const savedIng = localStorage.getItem(STORAGE_KEY_INGREDIENTS);
-      const savedRec = localStorage.getItem(STORAGE_KEY_RECIPES);
-      const savedPOs = localStorage.getItem(STORAGE_KEY_POS);
-      const savedLogs = localStorage.getItem(STORAGE_KEY_LOGS);
-      const savedOpnames = localStorage.getItem(STORAGE_KEY_OPNAMES);
-
-      if (savedIng) {
-        const parsed = JSON.parse(savedIng);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const savedMap = new Map(parsed.map((i: IngredientItem) => [i.id, i]));
-          const merged = INITIAL_INGREDIENTS.map((initIng) => {
-            const savedItem = savedMap.get(initIng.id);
-            return savedItem ? { ...initIng, ...savedItem } : initIng;
-          });
-          const customIngs = parsed.filter(
-            (p: IngredientItem) => !INITIAL_INGREDIENTS.some((i) => i.id === p.id)
-          );
-          setIngredients([...merged, ...customIngs]);
-        }
-      }
-      if (savedRec) {
-        const parsed = JSON.parse(savedRec);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const savedMap = new Map(parsed.map((r: RecipeBOM) => [r.menuId, r]));
-          const merged = INITIAL_RECIPES.map((initRec) => {
-            const savedItem = savedMap.get(initRec.menuId);
-            return savedItem ? { ...initRec, ...savedItem } : initRec;
-          });
-          const customRecs = parsed.filter(
-            (p: RecipeBOM) => !INITIAL_RECIPES.some((r) => r.menuId === p.menuId)
-          );
-          setRecipes([...merged, ...customRecs]);
-        }
-      }
-      if (savedPOs) setPurchaseOrders(JSON.parse(savedPOs));
-      if (savedLogs) setLogs(JSON.parse(savedLogs));
-      if (savedOpnames) setStockOpnames(JSON.parse(savedOpnames));
-    } catch (e) {
-      console.error("Failed to load inventory state", e);
-    } finally {
-      setIsInitialized(true);
+    if (process.env.NODE_ENV === "test") {
+      inventorySyncClient.reloadFromStorage();
     }
   }, []);
 
-  useEffect(() => {
-    if (!isInitialized) return;
-    try {
-      localStorage.setItem(STORAGE_KEY_INGREDIENTS, JSON.stringify(ingredients));
-      localStorage.setItem(STORAGE_KEY_RECIPES, JSON.stringify(recipes));
-      localStorage.setItem(STORAGE_KEY_POS, JSON.stringify(purchaseOrders));
-      localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(logs));
-      localStorage.setItem(STORAGE_KEY_OPNAMES, JSON.stringify(stockOpnames));
-    } catch (e) {
-      console.error("Failed to save inventory state", e);
-    }
-  }, [ingredients, recipes, purchaseOrders, logs, stockOpnames, isInitialized]);
-
-  // Scoped ingredients
   const filteredIngredients = ingredients.filter((ing) => {
     if (isAllOutlets) return true;
-    return (ing as any).outletId === activeOutletId || !(ing as any).outletId;
+    const ingOutletId = (ing as { outletId?: string }).outletId;
+    return ingOutletId === activeOutletId || !ingOutletId;
   });
 
   const filteredPurchaseOrders = purchaseOrders.filter((po) => {
     if (isAllOutlets) return true;
-    return (po as any).outletId === activeOutletId || !(po as any).outletId;
+    const poOutletId = (po as { outletId?: string }).outletId;
+    return poOutletId === activeOutletId || !poOutletId;
   });
 
-  // Check product stock status based on recipe ingredients
+  const filteredStockOpnames = stockOpnames.filter((opn) => {
+    if (isAllOutlets) return true;
+    return opn.outletId === activeOutletId || !opn.outletId;
+  });
+
+  const filteredIngIds = new Set(filteredIngredients.map((i) => i.id));
+  const filteredLogs = logs.filter((log) => {
+    if (isAllOutlets) return true;
+    const logOutletId = (log as { outletId?: string }).outletId;
+    if (logOutletId) return logOutletId === activeOutletId;
+    return filteredIngIds.has(log.ingredientId);
+  });
+
   const checkProductStockStatus = (
     productNameOrId: string
   ): { status: "SAFE" | "CRITICAL" | "OUT_OF_STOCK"; label?: string } => {
@@ -163,7 +159,10 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       "m-16": ["es teh manis melati", "es teh manis", "teh melati", "prod-116"],
     };
 
-    let recipe = recipes.find(
+    const currentRecipes = recipesRef.current;
+    const currentIngredients = ingredientsRef.current;
+
+    let recipe = currentRecipes.find(
       (r) =>
         r.menuId.toLowerCase() === term ||
         r.menuName.toLowerCase() === term
@@ -172,14 +171,14 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     if (!recipe) {
       for (const [recipeId, aliases] of Object.entries(aliasMap)) {
         if (aliases.some((al) => al === term || term.includes(al) || al.includes(term))) {
-          recipe = recipes.find((r) => r.menuId === recipeId);
+          recipe = currentRecipes.find((r) => r.menuId === recipeId);
           if (recipe) break;
         }
       }
     }
 
     if (!recipe) {
-      recipe = recipes.find(
+      recipe = currentRecipes.find(
         (r) =>
           r.menuName.toLowerCase().includes(term) ||
           term.includes(r.menuName.toLowerCase())
@@ -190,7 +189,11 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
 
     let hasCritical = false;
     for (const rIng of recipe.ingredients) {
-      const actual = ingredients.find((i) => i.id === rIng.ingredientId || i.name.toLowerCase() === rIng.ingredientName.toLowerCase());
+      const actual = currentIngredients.find(
+        (i) =>
+          i.id === rIng.ingredientId ||
+          i.name.toLowerCase() === rIng.ingredientName.toLowerCase()
+      );
       if (actual) {
         if (actual.stockNumber <= 0) {
           return { status: "OUT_OF_STOCK", label: "Habis" };
@@ -214,41 +217,55 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
     reason: StockAdjustmentLog["reason"],
     userName: string = "Staff Inventory"
   ) => {
-    const target = ingredients.find((i) => i.id === ingredientId);
+    const target = ingredientsRef.current.find((i) => i.id === ingredientId);
     if (!target) return;
 
+    const numericDelta = Number(delta);
     const prevStock = target.stockNumber;
-    const newStock = Math.max(0, Number((target.stockNumber + Number(delta)).toFixed(3)));
-    const nextStatus: StockStatus =
-      newStock <= 0 ? "CRITICAL" : newStock <= target.min * 0.4 ? "CRITICAL" : newStock <= target.min ? "LOW" : "SAFE";
-
-    setIngredients((prev) =>
-      prev.map((i) =>
-        i.id === ingredientId
-          ? {
-              ...i,
-              stockNumber: newStock,
-              status: nextStatus,
-              lastUpdated: "Baru saja",
-            }
-          : i
-      )
-    );
+    const newStock = Math.max(0, +(prevStock + numericDelta).toFixed(3));
+    const nextStatus: StockStatus = computeStockStatus(newStock, target.min);
+    const opId = nextInventoryOpId("inv-adj");
 
     const newLog: StockAdjustmentLog = {
-      id: `log-${Date.now()}-${ingredientId}`,
+      id: `log-${Date.now()}-${inventoryOpSeq}-${ingredientId}`,
       ingredientId: target.id,
       ingredientName: target.name,
-      delta: Number(delta),
+      delta: numericDelta,
       previousStock: prevStock,
       currentStock: newStock,
       reason,
-      timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+      timestamp: new Date().toLocaleTimeString("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       user: userName,
     };
-    setLogs((prev) => [newLog, ...prev]);
 
-    // Send Alert Notification if stock becomes critical
+    const command: InventoryCommand = {
+      op: "ADJUST_STOCK",
+      opId,
+      ingredientId,
+      delta: numericDelta,
+      log: newLog,
+    };
+
+    ingredientsRef.current = ingredientsRef.current.map((i) =>
+      i.id === ingredientId
+        ? {
+            ...i,
+            stockNumber: newStock,
+            status: nextStatus,
+            lastUpdated: "Baru saja",
+          }
+        : i
+    );
+
+    mutateInventory((prev) => applyInventoryCommand(prev, command), {
+      id: opId,
+      isCreate: true,
+      command,
+    });
+
     if (nextStatus === "CRITICAL") {
       addNotification({
         type: "CRITICAL_STOCK",
@@ -261,65 +278,185 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    // Comprehensive Activity Log
     logActivity({
       module: "INVENTORY",
       action: "STOCK_ADJUSTMENT",
       recordId: target.id,
       previousValue: `Stok: ${prevStock} ${target.unit}`,
-      newValue: `Stok: ${newStock} ${target.unit} (${delta >= 0 ? "+" : ""}${delta} ${target.unit})`,
+      newValue: `Stok: ${newStock} ${target.unit} (${numericDelta >= 0 ? "+" : ""}${numericDelta} ${target.unit})`,
       description: `Penyesuaian stok bahan "${target.name}" (${prevStock} ➔ ${newStock})`,
       reason: reason || "Penyesuaian stok opname / masuk",
       status: nextStatus === "CRITICAL" ? "WARNING" : "SUCCESS",
     });
   };
 
-  // POS-36 / B4: Atomic deduction for entire orders preventing state clobbering
   const deductOrderBOM = (items: OrderItemBOMInput[]) => {
-    let count = 0;
-    setIngredients((prevStock) => {
-      const { updatedStock, logs: deductionLogs, deductedCount } = deductOrderItemsBOM(
-        prevStock,
-        recipes,
-        items
-      );
-      count = deductedCount;
-      if (deductionLogs.length > 0) {
-        setLogs((prevLogs) => [...deductionLogs, ...prevLogs]);
-      }
-      return updatedStock;
-    });
-    return { success: count > 0, deductedCount: count };
+    const { updatedStock, logs: deductionLogs, deductedCount } = deductOrderItemsBOM(
+      ingredientsRef.current,
+      recipesRef.current,
+      items
+    );
+    if (deductedCount > 0) {
+      ingredientsRef.current = updatedStock;
+      const deltas = deductionLogs
+        .filter((l) => l.delta !== 0)
+        .map((l) => ({ ingredientId: l.ingredientId, delta: l.delta }));
+      const opId = nextInventoryOpId("inv-bom-deduct");
+      const command: InventoryCommand = {
+        op: "APPLY_BOM_DELTAS",
+        opId,
+        deltas,
+        logs: deductionLogs,
+      };
+      mutateInventory((prev) => applyInventoryCommand(prev, command), {
+        id: opId,
+        isCreate: true,
+        command,
+      });
+    }
+    return { success: deductedCount > 0, deductedCount };
   };
 
-  const simulateBOMDeduction = (menuIdOrName: string, quantity: number, modifiers?: string[]) => {
-    let result = { success: false, message: "Menu tidak ditemukan dalam database resep BOM" };
-    setIngredients((prevStock) => {
-      const { updatedStock, logs: deductionLogs, deductedCount } = deductOrderItemsBOM(
-        prevStock,
-        recipes,
-        [{ productName: menuIdOrName, quantity, modifiers }]
-      );
-      if (deductedCount > 0) {
-        setLogs((prevLogs) => [...deductionLogs, ...prevLogs]);
-        result = {
-          success: true,
-          message: `Berhasil: ${quantity}x "${menuIdOrName}" otomatis memotong ${deductionLogs.length} bahan baku!`,
-        };
-        return updatedStock;
+  const restoreOrderBOM = (items: OrderItemBOMInput[], orderNumber?: string) => {
+    const { updatedStock, logs: restoreLogs, restoredCount } = restoreOrderItemsBOM(
+      ingredientsRef.current,
+      recipesRef.current,
+      items,
+      orderNumber
+    );
+    if (restoredCount > 0) {
+      ingredientsRef.current = updatedStock;
+      const deltas = restoreLogs
+        .filter((l) => l.delta !== 0)
+        .map((l) => ({ ingredientId: l.ingredientId, delta: l.delta }));
+      const opId = nextInventoryOpId("inv-bom-restore");
+      const command: InventoryCommand = {
+        op: "APPLY_BOM_DELTAS",
+        opId,
+        deltas,
+        logs: restoreLogs,
+      };
+      mutateInventory((prev) => applyInventoryCommand(prev, command), {
+        id: opId,
+        isCreate: true,
+        command,
+      });
+      if (restoreLogs.length > 0) {
+        logActivity({
+          module: "INVENTORY",
+          action: "STOCK_ADJUSTMENT",
+          recordId: orderNumber || "POS-RESTORE",
+          previousValue: `${restoreLogs.length} bahan terpakai`,
+          newValue: restoreLogs
+            .map((l) => `${l.ingredientName} (+${l.delta})`)
+            .join(", "),
+          description: `Pengembalian stok bahan pesanan ${orderNumber || ""} yang dibatalkan sebelum dimasak`,
+          reason: "RETURN_TO_SUPPLIER",
+          status: "SUCCESS",
+        });
       }
-      return prevStock;
-    });
-    return result;
+    }
+    return { success: restoredCount > 0, restoredCount };
+  };
+
+  const recordOrderWasteBOM = (
+    items: OrderItemBOMInput[],
+    needsDeduction: boolean,
+    orderNumber?: string
+  ) => {
+    const { updatedStock, logs: wasteLogs, wasteCount } = recordOrderWasteItemsBOM(
+      ingredientsRef.current,
+      recipesRef.current,
+      items,
+      needsDeduction,
+      orderNumber
+    );
+    if (wasteCount > 0) {
+      if (needsDeduction) {
+        ingredientsRef.current = updatedStock;
+      }
+      const deltas = needsDeduction
+        ? wasteLogs
+            .filter((l) => l.delta !== 0)
+            .map((l) => ({ ingredientId: l.ingredientId, delta: l.delta }))
+        : [];
+      if (deltas.length > 0 || wasteLogs.length > 0) {
+        const opId = nextInventoryOpId("inv-bom-waste");
+        const command: InventoryCommand = {
+          op: "APPLY_BOM_DELTAS",
+          opId,
+          deltas,
+          logs: wasteLogs,
+        };
+        mutateInventory((prev) => applyInventoryCommand(prev, command), {
+          id: opId,
+          isCreate: true,
+          command,
+        });
+      }
+      if (wasteLogs.length > 0) {
+        logActivity({
+          module: "INVENTORY",
+          action: "STOCK_WASTE_RECORDED",
+          recordId: orderNumber || "POS-WASTE",
+          newValue: wasteLogs.map((l) => `${l.ingredientName}: ${l.user}`).join(", "),
+          description: `Pencatatan limbah dapur pesanan ${orderNumber || ""} yang dibatalkan setelah dimasak`,
+          reason: "WASTE",
+          status: "WARNING",
+        });
+      }
+    }
+    return { success: wasteCount > 0, wasteCount };
+  };
+
+  const simulateBOMDeduction = (
+    menuIdOrName: string,
+    quantity: number,
+    modifiers?: string[]
+  ) => {
+    const { updatedStock, logs: deductionLogs, deductedCount } = deductOrderItemsBOM(
+      ingredientsRef.current,
+      recipesRef.current,
+      [{ productName: menuIdOrName, quantity, modifiers }]
+    );
+    if (deductedCount > 0) {
+      ingredientsRef.current = updatedStock;
+      const deltas = deductionLogs
+        .filter((l) => l.delta !== 0)
+        .map((l) => ({ ingredientId: l.ingredientId, delta: l.delta }));
+      const opId = nextInventoryOpId("inv-bom-sim");
+      const command: InventoryCommand = {
+        op: "APPLY_BOM_DELTAS",
+        opId,
+        deltas,
+        logs: deductionLogs,
+      };
+      mutateInventory((prev) => applyInventoryCommand(prev, command), {
+        id: opId,
+        isCreate: true,
+        command,
+      });
+      return {
+        success: true,
+        message: `${quantity}x "${menuIdOrName}" memotong ${deductionLogs.length} bahan`,
+      };
+    }
+    return { success: false, message: "Menu tidak ditemukan dalam database resep BOM" };
   };
 
   const createPurchaseOrder = (poData: Omit<PurchaseOrder, "id" | "poNumber">) => {
+    inventoryOpSeq += 1;
     const newPO: PurchaseOrder = {
       ...poData,
-      id: `po-${Date.now()}`,
+      id: `po-${Date.now()}-${inventoryOpSeq}`,
       poNumber: `PO-DAGO-2026-${String(purchaseOrders.length + 1).padStart(3, "0")}`,
     };
-    setPurchaseOrders((prev) => [newPO, ...prev]);
+    const command: InventoryCommand = { op: "CREATE_PO", po: newPO };
+    mutateInventory((prev) => applyInventoryCommand(prev, command), {
+      id: `inv-po-create-${newPO.id}`,
+      isCreate: true,
+      command,
+    });
 
     logActivity({
       module: "INVENTORY",
@@ -334,25 +471,23 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
 
   const receivePurchaseOrder = (poId: string) => {
     const po = purchaseOrders.find((p) => p.id === poId);
-    if (!po) return;
+    if (!po || po.status === "RECEIVED") return;
 
-    setIngredients((prev) =>
-      prev.map((ing) => {
-        const poItem = po.items.find((i) => i.ingredientId === ing.id);
-        if (!poItem) return ing;
-        const newStock = ing.stockNumber + poItem.quantity;
-        return {
-          ...ing,
-          stockNumber: newStock,
-          status: newStock <= ing.min * 0.4 ? "CRITICAL" : newStock <= ing.min ? "LOW" : "SAFE",
-          lastUpdated: "Baru saja",
-        };
-      })
+    const command: InventoryCommand = { op: "RECEIVE_PO", poId };
+    const nextLocal = applyInventoryCommand(
+      {
+        ...invState,
+        ingredients: ingredientsRef.current,
+        recipes: recipesRef.current,
+      },
+      command
     );
+    ingredientsRef.current = nextLocal.ingredients;
 
-    setPurchaseOrders((prev) =>
-      prev.map((p) => (p.id === poId ? { ...p, status: "RECEIVED" } : p))
-    );
+    mutateInventory((prev) => applyInventoryCommand(prev, command), {
+      id: `inv-po-receive-${poId}`,
+      command,
+    });
 
     logActivity({
       module: "INVENTORY",
@@ -367,14 +502,16 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   };
 
   const upsertRecipe = (newRecipe: RecipeBOM) => {
-    setRecipes((prev) => {
-      const idx = prev.findIndex((r) => r.menuId === newRecipe.menuId);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = newRecipe;
-        return next;
-      }
-      return [newRecipe, ...prev];
+    const idx = recipesRef.current.findIndex((r) => r.menuId === newRecipe.menuId);
+    recipesRef.current =
+      idx >= 0
+        ? recipesRef.current.map((r, i) => (i === idx ? newRecipe : r))
+        : [newRecipe, ...recipesRef.current];
+
+    const command: InventoryCommand = { op: "UPSERT_RECIPE", recipe: newRecipe };
+    mutateInventory((prev) => applyInventoryCommand(prev, command), {
+      id: `inv-recipe-upsert-${newRecipe.menuId}`,
+      command,
     });
 
     logActivity({
@@ -388,15 +525,26 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteRecipe = (menuId: string) => {
-    setRecipes((prev) => prev.filter((r) => r.menuId !== menuId));
+    recipesRef.current = recipesRef.current.filter((r) => r.menuId !== menuId);
+    const command: InventoryCommand = { op: "DELETE_RECIPE", menuId };
+    mutateInventory((prev) => applyInventoryCommand(prev, command), {
+      id: `inv-recipe-delete-${menuId}`,
+      command,
+    });
   };
 
   const recordStockOpname = (
-    record: Omit<StockOpnameRecord, "id" | "opnameNumber" | "variance" | "varianceType" | "createdAt" | "status">
+    record: Omit<
+      StockOpnameRecord,
+      "id" | "opnameNumber" | "variance" | "varianceType" | "createdAt" | "status"
+    >
   ): StockOpnameRecord => {
+    inventoryOpSeq += 1;
     const sysStock = Number(record.systemStock);
-    const physStock = Number(record.physicalStock);
-    const variance = physStock - sysStock;
+    const physStock = Math.max(0, Number(record.physicalStock));
+    const targetIng = ingredientsRef.current.find((ing) => ing.id === record.ingredientId);
+    const variance = +(physStock - sysStock).toFixed(3);
+    const varianceValue = Math.round(variance * (targetIng?.costPerUnit ?? 0));
     const varianceType: "SURPLUS" | "DEFICIT" | "MATCH" =
       variance > 0 ? "SURPLUS" : variance < 0 ? "DEFICIT" : "MATCH";
 
@@ -404,46 +552,51 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
       ...record,
       systemStock: sysStock,
       physicalStock: physStock,
-      id: `opn-${Date.now()}`,
+      id: `opn-${Date.now()}-${inventoryOpSeq}`,
       opnameNumber: `SOP-${new Date().toISOString().slice(0, 7).replace("-", "")}-${Date.now().toString().slice(-4)}`,
       variance,
+      varianceValue,
       varianceType,
       status: "APPLIED",
       createdAt: new Date().toISOString(),
     };
 
-    setStockOpnames((prev) => [newRecord, ...prev]);
-
-    // Update ingredient actual physical stock
-    setIngredients((prev) =>
-      prev.map((ing) => {
-        if (ing.id === record.ingredientId) {
-          const newStatus: "CRITICAL" | "LOW" | "SAFE" =
-            physStock <= ing.min ? "CRITICAL" : physStock <= ing.min * 1.5 ? "LOW" : "SAFE";
-          return {
-            ...ing,
-            stockNumber: physStock,
-            status: newStatus,
-            lastUpdated: "Hari ini (Stock Opname)",
-          };
-        }
-        return ing;
-      })
-    );
-
-    // Record adjustment audit log
     const auditLog: StockAdjustmentLog = {
-      id: `log-opn-${Date.now()}`,
+      id: `log-opn-${Date.now()}-${inventoryOpSeq}`,
       ingredientId: record.ingredientId,
       ingredientName: record.ingredientName,
       delta: variance,
       previousStock: sysStock,
       currentStock: physStock,
       reason: "OPNAME_HILANG_RUSAK",
-      timestamp: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+      timestamp: new Date().toLocaleTimeString("id-ID", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       user: record.performedBy || "Staff Inventory",
     };
-    setLogs((prev) => [auditLog, ...prev]);
+
+    ingredientsRef.current = ingredientsRef.current.map((ing) => {
+      if (ing.id !== record.ingredientId) return ing;
+      return {
+        ...ing,
+        stockNumber: physStock,
+        status: computeStockStatus(physStock, ing.min),
+        lastUpdated: "Hari ini (Stock Opname)",
+      };
+    });
+
+    const command: InventoryCommand = {
+      op: "RECORD_OPNAME",
+      opname: newRecord,
+      log: auditLog,
+    };
+
+    mutateInventory((prev) => applyInventoryCommand(prev, command), {
+      id: `inv-opname-${newRecord.id}`,
+      isCreate: true,
+      command,
+    });
 
     logActivity({
       module: "INVENTORY",
@@ -470,11 +623,13 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
   };
 
   const resetInventoryData = () => {
-    setIngredients(INITIAL_INGREDIENTS);
-    setRecipes(INITIAL_RECIPES);
-    setPurchaseOrders(INITIAL_PURCHASE_ORDERS);
-    setLogs([]);
-    setStockOpnames([]);
+    const freshState = inventoryDomainSpec.defaultState();
+    ingredientsRef.current = freshState.ingredients;
+    recipesRef.current = freshState.recipes;
+    mutateInventory(() => inventoryDomainSpec.defaultState(), {
+      id: "inventory-reset",
+      command: { op: "RESET_INVENTORY" },
+    });
     try {
       localStorage.removeItem(STORAGE_KEY_INGREDIENTS);
       localStorage.removeItem(STORAGE_KEY_RECIPES);
@@ -495,12 +650,16 @@ export function InventoryProvider({ children }: { children: React.ReactNode }) {
         purchaseOrders,
         filteredPurchaseOrders,
         logs,
+        filteredLogs,
         stockOpnames,
+        filteredStockOpnames,
         adjustStock,
         recordStockOpname,
         checkProductStockStatus,
         simulateBOMDeduction,
         deductOrderBOM,
+        restoreOrderBOM,
+        recordOrderWasteBOM,
         upsertRecipe,
         deleteRecipe,
         createPurchaseOrder,

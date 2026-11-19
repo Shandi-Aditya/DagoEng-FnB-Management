@@ -191,15 +191,16 @@ describe("customer-domain", () => {
   });
 
   describe("Time slot helpers for coworking", () => {
-    it("provides standard time slots list", () => {
+    it("provides standard start slots from 09:00 through 17:00 so 1-hour bookings finish by 18:00 WITA", () => {
       const slots = getAvailableTimeSlots();
-      expect(slots.length).toBeGreaterThan(5);
-      expect(slots).toContain("09:00");
-      expect(slots).toContain("17:00");
+      expect(slots[0]).toBe("09:00");
+      expect(slots[slots.length - 1]).toBe("17:00");
+      expect(slots).not.toContain("18:00");
     });
 
     it("calculates booking end time accurately", () => {
       expect(calculateEndTime("09:00", 2)).toBe("11:00");
+      expect(calculateEndTime("09:00", 9)).toBe("18:00");
       expect(calculateEndTime("14:30", 3)).toBe("17:30");
     });
   });

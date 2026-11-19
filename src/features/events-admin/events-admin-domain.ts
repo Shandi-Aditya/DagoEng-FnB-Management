@@ -5,7 +5,11 @@ import type {
   EventTicketOrder,
 } from "@/types/event";
 import type { DateRange } from "@/components/events/EventDateRangeFilter";
-import { isEventInWitaPeriod } from "@/components/events/EventDateRangeFilter";
+import {
+  isEventInWitaPeriod,
+  isTimestampInWitaPeriod,
+} from "@/components/events/EventDateRangeFilter";
+import { normalizeIndonesianPhone } from "@/lib/utils";
 
 export type EventStatusTone = "warning" | "info" | "success" | "destructive" | "neutral";
 export type PaymentStatusTone = "warning" | "success" | "destructive" | "neutral";
@@ -160,6 +164,7 @@ export function formatDateSafe(isoString?: string | null, includeTime: boolean =
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "Asia/Makassar",
     ...(includeTime ? { hour: "2-digit", minute: "2-digit" } : {}),
   });
 }
@@ -226,13 +231,17 @@ export function filterEvents(
         return false;
       }
 
-      // 3. Filter Pencarian Teks
       if (needle) {
-        const matchTitle = e.title.toLowerCase().includes(needle);
-        const matchOrganizer = e.organizerName.toLowerCase().includes(needle);
-        const matchLocation = e.location.toLowerCase().includes(needle);
-        const matchNotes = e.adminNotes?.toLowerCase().includes(needle) || e.rejectionReason?.toLowerCase().includes(needle);
-        if (!matchTitle && !matchOrganizer && !matchLocation && !matchNotes) {
+        const matchTitle = (e.title || "").toLowerCase().includes(needle);
+        const matchOrganizer = (e.organizerName || "").toLowerCase().includes(needle);
+        const matchEmail = (e.organizerEmail || "").toLowerCase().includes(needle);
+        const matchPhone = (e.organizerPhone || "").toLowerCase().includes(needle);
+        const matchLocation = (e.location || "").toLowerCase().includes(needle);
+        const matchNotes =
+          e.adminNotes?.toLowerCase().includes(needle) ||
+          e.rejectionReason?.toLowerCase().includes(needle) ||
+          e.revisionNotes?.toLowerCase().includes(needle);
+        if (!matchTitle && !matchOrganizer && !matchEmail && !matchPhone && !matchLocation && !matchNotes) {
           return false;
         }
       }
@@ -242,35 +251,46 @@ export function filterEvents(
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-/**
- * Filter antrean verifikasi pembayaran tiket manual murni tanpa mutasi array asal.
- */
 export function filterBookings(
   bookings: readonly EventTicketOrder[],
   filterStatus: string,
   query: string,
+  dateRange?: DateRange | null,
 ): EventTicketOrder[] {
   const needle = query.trim().toLowerCase();
+  const normPhone = normalizeIndonesianPhone(needle);
 
   return bookings.filter((b) => {
-    // 1. Filter Status Pembayaran
     if (filterStatus === "PENDING_PROOF") {
       const isPendingWithProof =
         b.totalPrice > 0 &&
         b.paymentStatus === "PENDING" &&
-        Boolean(b.paymentProofUrl);
+        Boolean(b.paymentProofUrl) &&
+        !b.paymentRejectionReason;
       if (!isPendingWithProof) return false;
+    } else if (filterStatus === "REJECTED") {
+      const isRejected =
+        String(b.paymentStatus) === "REJECTED" ||
+        b.paymentStatus === "CANCELLED" ||
+        Boolean(b.paymentRejectionReason);
+      if (!isRejected) return false;
     } else if (filterStatus !== "ALL") {
       if (b.paymentStatus !== filterStatus) return false;
     }
 
-    // 2. Filter Pencarian Teks
+    if (dateRange && !isTimestampInWitaPeriod(b.createdAt, dateRange)) {
+      return false;
+    }
+
     if (needle) {
-      const matchCode = b.ticketCode.toLowerCase().includes(needle);
-      const matchName = b.guestName.toLowerCase().includes(needle);
-      const matchEmail = b.guestEmail.toLowerCase().includes(needle);
-      const matchPhone = b.guestPhone.toLowerCase().includes(needle);
-      if (!matchCode && !matchName && !matchEmail && !matchPhone) {
+      const matchCode = (b.ticketCode || "").toLowerCase().includes(needle);
+      const matchName = (b.guestName || "").toLowerCase().includes(needle);
+      const matchEmail = (b.guestEmail || "").toLowerCase().includes(needle);
+      const matchEvent = (b.eventTitle || "").toLowerCase().includes(needle);
+      const matchPhone =
+        (b.guestPhone || "").toLowerCase().includes(needle) ||
+        (normPhone.length >= 4 && normalizeIndonesianPhone(b.guestPhone || "").includes(normPhone));
+      if (!matchCode && !matchName && !matchEmail && !matchEvent && !matchPhone) {
         return false;
       }
     }
@@ -279,9 +299,6 @@ export function filterBookings(
   });
 }
 
-/**
- * Menghitung metrik operasional event dan pembayaran tiket secara faktual.
- */
 export function calculateEventsKPI(
   events: readonly CommunityEvent[],
   bookings: readonly EventTicketOrder[],
@@ -302,12 +319,17 @@ export function calculateEventsKPI(
   let totalTicketsSold = 0;
 
   for (const b of bookings) {
-    if (b.totalPrice > 0 && b.paymentStatus === "PENDING" && Boolean(b.paymentProofUrl)) {
+    if (
+      b.totalPrice > 0 &&
+      b.paymentStatus === "PENDING" &&
+      Boolean(b.paymentProofUrl) &&
+      !b.paymentRejectionReason
+    ) {
       pendingPaymentsCount += 1;
     }
     if (b.paymentStatus === "PAID") {
       totalRevenuePaid += b.totalPrice;
-      totalTicketsSold += 1;
+      totalTicketsSold += b.ticketCount || 1;
     }
   }
 

@@ -29,22 +29,30 @@ export function computeOrdersReportPdfMetrics(orders: readonly OrderRecord[]): O
   let totalItemsSold = 0;
 
   for (const order of orders) {
-    totalRevenue += order.total || 0;
+    const isCancelledOrRefunded =
+      order.status === "CANCELLED" || order.paymentStatus === "REFUNDED";
+
+    if (!isCancelledOrRefunded) {
+      totalRevenue += order.total || 0;
+
+      if (order.items && Array.isArray(order.items)) {
+        for (const item of order.items) {
+          totalItemsSold += item.quantity || 0;
+        }
+      }
+    }
 
     if (order.status === "COMPLETED") {
       completedCount++;
     } else if (
+      order.status === "NEW" ||
       order.status === "CONFIRMED" ||
+      order.status === "KITCHEN_RECEIVED" ||
       order.status === "COOKING" ||
+      order.status === "READY" ||
       order.status === "SERVED"
     ) {
       inProgressCount++;
-    }
-
-    if (order.items && Array.isArray(order.items)) {
-      for (const item of order.items) {
-        totalItemsSold += item.quantity || 0;
-      }
     }
   }
 
