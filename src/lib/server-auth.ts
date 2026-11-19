@@ -17,6 +17,7 @@ import {
 } from "./edge-session";
 import { getLatestRevocation, isSessionRevoked } from "./session-revocation";
 import { findUnifiedUserByEmail, findUnifiedUserById } from "./unified-account";
+import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE } from "./event-validation";
 
 export interface ServerAuthResult {
   isAuthenticated: boolean;
@@ -579,6 +580,28 @@ export async function getRequestAuthUser(req: NextRequest): Promise<ServerAuthRe
   };
 }
 
+/**
+ * Checks whether an email belongs to a CHECKIN_STAFF role in TRUSTED_PERSONAS or unified accounts.
+ */
+export function isCheckInStaffEmail(email: string): boolean {
+  if (!email || typeof email !== "string") return false;
+  const normalized = email.toLowerCase().trim();
+  if (!normalized) return false;
+
+  for (const persona of Object.values(TRUSTED_PERSONAS)) {
+    if (persona.email?.toLowerCase().trim() === normalized) {
+      if (isCheckInStaffRole(persona.role)) return true;
+    }
+  }
+
+  const unifiedUser = findUnifiedUserByEmail(normalized);
+  if (unifiedUser && isCheckInStaffRole(unifiedUser.role)) {
+    return true;
+  }
+
+  return false;
+}
+
 export interface OrganizerAuthResult {
   authorized: boolean;
   error?: string;
@@ -610,6 +633,20 @@ export async function assertOrganizerAuth(
       email: null,
       isAdmin: false,
       userId: null,
+    };
+  }
+
+  if (
+    isCheckInStaffRole(auth.role) ||
+    isCheckInStaffEmail(auth.email || "") ||
+    (targetEmailOrId && isCheckInStaffEmail(targetEmailOrId))
+  ) {
+    return {
+      authorized: false,
+      error: CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
+      email: auth.email || null,
+      isAdmin: false,
+      userId: auth.userId,
     };
   }
 

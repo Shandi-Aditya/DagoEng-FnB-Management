@@ -6,7 +6,7 @@ import {
   validateEventSubmission,
 } from "@/lib/events";
 import { EventSubmissionPayload } from "@/types/event";
-import { getRequestAuthUser } from "@/lib/server-auth";
+import { getRequestAuthUser, isCheckInStaffEmail } from "@/lib/server-auth";
 import {
   findUnifiedUserByEmail,
   registerUnifiedUser,
@@ -103,19 +103,12 @@ export async function POST(req: NextRequest) {
 
     // 3b. Role Restriction Check: CHECKIN_STAFF is strictly forbidden from creating/submitting events
     const normalizedEmail = (body.organizerEmail || "").trim().toLowerCase();
-    const existingAuth = await getRequestAuthUser(req);
-    if (existingAuth.isAuthenticated && isCheckInStaffRole(existingAuth.role)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
-        },
-        { status: 403 }
-      );
-    }
-
     const existingUser = findUnifiedUserByEmail(normalizedEmail);
-    if (existingUser && isCheckInStaffRole(existingUser.role)) {
+    const existingAuth = await getRequestAuthUser(req);
+    if (
+      (existingAuth.isAuthenticated && (isCheckInStaffRole(existingAuth.role) || isCheckInStaffEmail(existingAuth.email || ""))) ||
+      isCheckInStaffEmail(normalizedEmail)
+    ) {
       return NextResponse.json(
         {
           success: false,

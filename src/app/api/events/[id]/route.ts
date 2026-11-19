@@ -99,6 +99,8 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       organizerName: body.organizerName,
       guidelines: body.guidelines,
       customPlatformFeePercent: body.customPlatformFeePercent,
+      ticketTiers: body.ticketTiers,
+      refundPolicy: body.refundPolicy,
     };
 
     const updated = await updateEventDetails(id, allowedUpdates);
@@ -140,7 +142,13 @@ export async function PUT(req: NextRequest, props: { params: Promise<{ id: strin
       error?.message?.includes("harus") ||
       error?.message?.includes("Kuota") ||
       error?.message?.includes("Harga") ||
-      error?.message?.includes("Kapasitas");
+      error?.message?.includes("Kapasitas") ||
+      error?.message?.includes("tier") ||
+      error?.message?.includes("Tier") ||
+      error?.message?.includes("refund") ||
+      error?.message?.includes("Refund") ||
+      error?.message?.includes("kebijakan") ||
+      error?.message?.includes("jenis tiket");
     return NextResponse.json(
       { success: false, error: error.message || "Gagal memperbarui detail event." },
       { status: isValidationError ? 400 : 500 }

@@ -1,4 +1,5 @@
 import type { EventCategory, EventSubmissionPayload } from "@/types/event";
+import { validateEventPrice, validateEventCapacity } from "@/lib/event-validation";
 
 export const EVENT_CATEGORIES: readonly { value: EventCategory; label: string }[] = [
   { value: "WORKSHOP", label: "Workshop" },
@@ -144,21 +145,19 @@ export function validateSubmissionForm(form: SubmissionForm, options: { needsPas
     errors.endDate = "Waktu selesai tidak boleh sebelum waktu mulai.";
   }
   if (form.location.trim().length < 3) errors.location = "Isi lokasi event.";
-  const capacityNum = Number(form.maxCapacity);
-  if (!Number.isSafeInteger(capacityNum) || capacityNum < 1 || capacityNum > 1000) {
-    errors.maxCapacity = "Kapasitas harus berupa bilangan bulat antara 1 dan 1.000 peserta.";
+  const capVal = validateEventCapacity(form.maxCapacity, false);
+  if (!capVal.valid) {
+    errors.maxCapacity = capVal.error;
+  }
+  const priceVal = validateEventPrice(form.isPaid, form.price);
+  if (!priceVal.valid) {
+    errors.price = priceVal.error;
   }
   if (form.isPaid) {
-    const priceNum = Number(form.price);
-    if (!Number.isSafeInteger(priceNum) || priceNum <= 0) {
-      errors.price = "Harga tiket harus berupa bilangan bulat rupiah lebih dari Rp 0.";
-    }
     const orgShareNum = Number(form.proposedOrganizerPercent);
     if (!Number.isSafeInteger(orgShareNum) || orgShareNum < 50 || orgShareNum > 100) {
       errors.proposedOrganizerPercent = "Hak komunitas harus berupa bilangan bulat antara 50% dan 100% (komisi platform maksimal 50%).";
     }
-  } else if (Number(form.price) !== 0) {
-    errors.price = "Harga tiket harus Rp 0 untuk event gratis.";
   }
   return errors;
 }

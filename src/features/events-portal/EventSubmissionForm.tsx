@@ -261,6 +261,9 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
                 label="Kuota peserta"
                 type="number"
                 inputMode="numeric"
+                min={1}
+                max={1000}
+                step={1}
                 value={String(form.maxCapacity || "")}
                 onChange={(v) => set("maxCapacity", Number(v))}
                 error={err("maxCapacity")}
@@ -301,7 +304,17 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
               </div>
               {form.isPaid && (
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <TextField id="event-price" label="Harga tiket (Rp)" type="number" inputMode="numeric" value={String(form.price || "")} onChange={(v) => set("price", Number(v))} error={err("price")} />
+                  <TextField
+                    id="event-price"
+                    label="Harga tiket (Rp)"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    value={String(form.price || "")}
+                    onChange={(v) => set("price", Number(v))}
+                    error={err("price")}
+                  />
                   <TextField
                     id="event-share"
                     label="Usulan bagian Anda (%)"

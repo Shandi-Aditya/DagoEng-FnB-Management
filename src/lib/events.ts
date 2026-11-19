@@ -96,7 +96,11 @@ import {
   MIN_EVENT_CAPACITY,
   MAX_EVENT_CAPACITY,
   resolveEffectivePlatformFeePercent,
+  validateEventTicketTiers,
+  validateEventRefundPolicy,
+  CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
 } from "@/lib/event-validation";
+import { isCheckInStaffEmail } from "@/lib/server-auth";
 import {
   getMissingPayoutFields,
   maskAccountNumber,
@@ -2182,6 +2186,8 @@ export function validateEventSubmission(payload: EventSubmissionPayload): { vali
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!payload.organizerEmail || !emailRegex.test(payload.organizerEmail.trim())) {
     errors.push("Format email penyelenggara tidak valid.");
+  } else if (isCheckInStaffEmail(payload.organizerEmail)) {
+    errors.push(CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE);
   }
 
   const phoneRegex = /^(\+62|62|0)[0-9\s-]{8,15}$/;
@@ -2251,6 +2257,22 @@ export function validateEventSubmission(payload: EventSubmissionPayload): { vali
     const capacityValidation = validateEventCapacity(payload.maxCapacity, false);
     if (!capacityValidation.valid) {
       errors.push(capacityValidation.error!);
+    }
+  }
+
+  // 7c. Tiket Bertingkat (ticketTiers)
+  if (payload.ticketTiers !== undefined && payload.ticketTiers !== null) {
+    const tierValidation = validateEventTicketTiers(payload.ticketTiers, { maxCapacity: payload.maxCapacity });
+    if (!tierValidation.valid) {
+      errors.push(tierValidation.error!);
+    }
+  }
+
+  // 7d. Kebijakan Refund (refundPolicy)
+  if (payload.refundPolicy !== undefined && payload.refundPolicy !== null) {
+    const refundValidation = validateEventRefundPolicy(payload.refundPolicy);
+    if (!refundValidation.valid) {
+      errors.push(refundValidation.error!);
     }
   }
 
@@ -2367,6 +2389,31 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
           : 100 - defaultPlatformFee;
       const pltPct = 100 - orgPct;
 
+      let effectiveTiers = payload.ticketTiers;
+      let effectiveIsPaid = Boolean(payload.isPaid);
+      let effectivePrice = validateEventPrice(Boolean(payload.isPaid), payload.price).value ?? 0;
+
+      if (effectiveTiers && effectiveTiers.length > 0) {
+        const tierVal = validateEventTicketTiers(effectiveTiers, { maxCapacity: payload.maxCapacity });
+        if (!tierVal.valid || !tierVal.value) {
+          throw new Error(tierVal.error || "Validasi jenis tiket gagal.");
+        }
+        effectiveTiers = tierVal.value;
+        effectiveIsPaid = effectiveTiers.some((t) => t.price > 0);
+        effectivePrice = effectiveIsPaid
+          ? Math.min(...effectiveTiers.filter((t) => t.price > 0).map((t) => t.price))
+          : 0;
+      }
+
+      let effectiveRefundPolicy = payload.refundPolicy || { policyType: "NO_REFUND" };
+      if (payload.refundPolicy) {
+        const refVal = validateEventRefundPolicy(payload.refundPolicy);
+        if (!refVal.valid || !refVal.value) {
+          throw new Error(refVal.error || "Validasi kebijakan refund gagal.");
+        }
+        effectiveRefundPolicy = refVal.value;
+      }
+
       const newEvent: CommunityEvent = {
         id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         title: sanitizeHtmlText(payload.title),
@@ -2386,8 +2433,8 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
             ? Math.floor(payload.maxTicketsPerBooking)
             : undefined,
         destinationBankId: payload.destinationBankId || null,
-        isPaid: Boolean(payload.isPaid),
-        price: validateEventPrice(Boolean(payload.isPaid), payload.price).value ?? 0,
+        isPaid: effectiveIsPaid,
+        price: effectivePrice,
         posterUrl: payload.posterUrl.trim(),
         externalRegistrationUrl: payload.externalRegistrationUrl ? payload.externalRegistrationUrl.trim() : null,
         organizerName: sanitizeHtmlText(payload.organizerName),
@@ -2427,9 +2474,9 @@ export async function createEventSubmission(payload: EventSubmissionPayload): Pr
         revenueSplitHistory: [],
         payoutStatus: "UNQUALIFIED",
         payoutHistory: [],
-        ticketTiers: Array.isArray(payload.ticketTiers) ? payload.ticketTiers : undefined,
+        ticketTiers: effectiveTiers,
         promoCodes: Array.isArray((payload as any).promoCodes) ? (payload as any).promoCodes : [],
-        refundPolicy: payload.refundPolicy || { policyType: "NO_REFUND" },
+        refundPolicy: effectiveRefundPolicy,
 
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -2548,9 +2595,10 @@ export async function updateEventDetails(
   updates: Partial<Omit<CommunityEvent, "id" | "createdAt" | "status">>
 ): Promise<CommunityEvent> {
   const hasCapacityChange =
-    updates.maxCapacity !== undefined &&
-    updates.maxCapacity !== null &&
-    (updates.maxCapacity as unknown) !== "";
+    (updates.maxCapacity !== undefined &&
+      updates.maxCapacity !== null &&
+      (updates.maxCapacity as unknown) !== "") ||
+    updates.ticketTiers !== undefined;
 
   let updatedAllEvents: CommunityEvent[] | null = null;
 
@@ -2625,13 +2673,64 @@ export async function updateEventDetails(
       if (updates.organizerName !== undefined) sanitizedUpdates.organizerName = sanitizeHtmlText(updates.organizerName);
       if (updates.guidelines !== undefined) sanitizedUpdates.guidelines = parseGuidelinesInput(updates.guidelines);
       if (updates.ticketTiers !== undefined) {
-        sanitizedUpdates.ticketTiers = Array.isArray(updates.ticketTiers) ? updates.ticketTiers : undefined;
+        const tierVal = validateEventTicketTiers(updates.ticketTiers, {
+          maxCapacity: sanitizedUpdates.maxCapacity ?? existing.maxCapacity,
+        });
+        if (!tierVal.valid || !tierVal.value) {
+          throw new Error(tierVal.error || "Format jenis tiket tidak valid.");
+        }
+        const validTiers = tierVal.value;
+
+        // Fail-closed storage sync guard when checking tiers against bookings
+        if (!tx) {
+          await syncBookingsStorageFailClosed();
+        }
+
+        // Tolak penghapusan tier yang sudah memiliki booking aktif
+        if (existing.ticketTiers && existing.ticketTiers.length > 0) {
+          for (const oldTier of existing.ticketTiers) {
+            const stillExists = validTiers.some((t) => t.id === oldTier.id);
+            if (!stillExists) {
+              const activeBooked = getEventActiveBookedTicketCountForTier(id, oldTier.id, allBookings);
+              if (activeBooked > 0) {
+                throw new Error(
+                  `Tidak dapat menghapus jenis tiket '${oldTier.name}' karena sudah memiliki ${activeBooked} tiket aktif/terpesan.`
+                );
+              }
+            }
+          }
+        }
+
+        // Tolak penurunan tier.quota di bawah jumlah booking aktif tier tersebut
+        for (const newTier of validTiers) {
+          const oldTier = existing.ticketTiers?.find((t) => t.id === newTier.id);
+          if (oldTier) {
+            const activeBooked = getEventActiveBookedTicketCountForTier(id, newTier.id, allBookings);
+            if (newTier.quota < activeBooked) {
+              throw new Error(
+                `Kuota jenis tiket '${newTier.name}' (${newTier.quota}) tidak boleh lebih kecil dari jumlah tiket aktif yang sudah dipesan (${activeBooked} tiket).`
+              );
+            }
+          }
+        }
+
+        if (validTiers.length > 0) {
+          sanitizedUpdates.isPaid = validTiers.some((t) => t.price > 0);
+          sanitizedUpdates.price = sanitizedUpdates.isPaid
+            ? Math.min(...validTiers.filter((t) => t.price > 0).map((t) => t.price))
+            : 0;
+        }
+        sanitizedUpdates.ticketTiers = validTiers;
       }
       if (updates.promoCodes !== undefined) {
         sanitizedUpdates.promoCodes = Array.isArray(updates.promoCodes) ? updates.promoCodes : undefined;
       }
       if (updates.refundPolicy !== undefined) {
-        sanitizedUpdates.refundPolicy = updates.refundPolicy;
+        const refVal = validateEventRefundPolicy(updates.refundPolicy);
+        if (!refVal.valid || !refVal.value) {
+          throw new Error(refVal.error || "Kebijakan refund tidak valid.");
+        }
+        sanitizedUpdates.refundPolicy = refVal.value;
       }
       if (updates.customPlatformFeePercent !== undefined) {
         if (isEventRevenueSplitLocked(id)) {
@@ -5262,9 +5361,10 @@ export async function organizerResubmitEvent(
   isAdmin: boolean = false
 ): Promise<CommunityEvent> {
   const hasCapacityChange =
-    updates.maxCapacity !== undefined &&
-    updates.maxCapacity !== null &&
-    (updates.maxCapacity as unknown) !== "";
+    (updates.maxCapacity !== undefined &&
+      updates.maxCapacity !== null &&
+      (updates.maxCapacity as unknown) !== "") ||
+    updates.ticketTiers !== undefined;
 
   let updatedAllEvents: CommunityEvent[] | null = null;
 
@@ -5285,6 +5385,27 @@ export async function organizerResubmitEvent(
       const existing = all[index];
       if (!isAdmin && (existing.organizerEmail || "").toLowerCase() !== normalizedEmail) {
         throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk mengubah event milik komunitas lain.");
+      }
+
+      // Validasi urutan tanggal
+      const effectiveStartDate = updates.startDate || existing.startDate;
+      const effectiveEndDate = updates.endDate || existing.endDate;
+      if (
+        effectiveStartDate &&
+        effectiveEndDate &&
+        new Date(effectiveEndDate).getTime() < new Date(effectiveStartDate).getTime()
+      ) {
+        throw new Error("Tanggal dan waktu selesai tidak boleh mendahului tanggal mulai.");
+      }
+
+      // Validasi URL publik aman
+      if (updates.posterUrl) {
+        const check = isSafePublicUrl(updates.posterUrl);
+        if (!check.safe) throw new Error(`URL poster tidak valid: ${check.reason || "Format tidak diizinkan."}`);
+      }
+      if (updates.externalRegistrationUrl && updates.externalRegistrationUrl.trim() !== "") {
+        const check = isSafePublicUrl(updates.externalRegistrationUrl);
+        if (!check.safe) throw new Error(`URL pendaftaran eksternal tidak valid: ${check.reason || "Format tidak diizinkan."}`);
       }
 
       let updatedProposedRevenueSplit = existing.proposedRevenueSplit;
@@ -5338,6 +5459,65 @@ export async function organizerResubmitEvent(
         newPrice = priceVal.value!;
       }
 
+      let newTicketTiers = existing.ticketTiers;
+      if (updates.ticketTiers !== undefined) {
+        const tierVal = validateEventTicketTiers(updates.ticketTiers, { maxCapacity: newMaxCapacity });
+        if (!tierVal.valid || !tierVal.value) {
+          throw new Error(tierVal.error || "Format jenis tiket tidak valid.");
+        }
+        const validTiers = tierVal.value;
+
+        // Fail-closed storage sync guard when checking tiers against bookings
+        if (!tx) {
+          await syncBookingsStorageFailClosed();
+        }
+
+        // Tolak penghapusan tier yang sudah memiliki booking aktif
+        if (existing.ticketTiers && existing.ticketTiers.length > 0) {
+          for (const oldTier of existing.ticketTiers) {
+            const stillExists = validTiers.some((t) => t.id === oldTier.id);
+            if (!stillExists) {
+              const activeBooked = getEventActiveBookedTicketCountForTier(eventId, oldTier.id, allBookings);
+              if (activeBooked > 0) {
+                throw new Error(
+                  `Tidak dapat menghapus jenis tiket '${oldTier.name}' karena sudah memiliki ${activeBooked} tiket aktif/terpesan.`
+                );
+              }
+            }
+          }
+        }
+
+        // Tolak penurunan tier.quota di bawah jumlah booking aktif tier tersebut
+        for (const newTier of validTiers) {
+          const oldTier = existing.ticketTiers?.find((t) => t.id === newTier.id);
+          if (oldTier) {
+            const activeBooked = getEventActiveBookedTicketCountForTier(eventId, newTier.id, allBookings);
+            if (newTier.quota < activeBooked) {
+              throw new Error(
+                `Kuota jenis tiket '${newTier.name}' (${newTier.quota}) tidak boleh lebih kecil dari jumlah tiket aktif yang sudah dipesan (${activeBooked} tiket).`
+              );
+            }
+          }
+        }
+
+        if (validTiers.length > 0) {
+          newIsPaid = validTiers.some((t) => t.price > 0);
+          newPrice = newIsPaid
+            ? Math.min(...validTiers.filter((t) => t.price > 0).map((t) => t.price))
+            : 0;
+        }
+        newTicketTiers = validTiers;
+      }
+
+      let newRefundPolicy = existing.refundPolicy;
+      if (updates.refundPolicy !== undefined) {
+        const refVal = validateEventRefundPolicy(updates.refundPolicy);
+        if (!refVal.valid || !refVal.value) {
+          throw new Error(refVal.error || "Kebijakan refund tidak valid.");
+        }
+        newRefundPolicy = refVal.value;
+      }
+
       const updated: CommunityEvent = {
         ...existing,
         title: updates.title ? sanitizeHtmlText(updates.title) : existing.title,
@@ -5349,6 +5529,8 @@ export async function organizerResubmitEvent(
         maxCapacity: newMaxCapacity,
         isPaid: newIsPaid,
         price: newPrice,
+        ticketTiers: newTicketTiers,
+        refundPolicy: newRefundPolicy,
         posterUrl: updates.posterUrl ? updates.posterUrl.trim() : existing.posterUrl,
         externalRegistrationUrl: updates.externalRegistrationUrl !== undefined ? updates.externalRegistrationUrl : existing.externalRegistrationUrl,
         guidelines: updates.guidelines ? parseGuidelinesInput(updates.guidelines) : existing.guidelines,

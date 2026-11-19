@@ -8,7 +8,7 @@ import {
   AlertCircle,
   X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { notify } from "@/components/app/notify";
 import { useAuth } from "@/contexts/AuthContext";
 import { downloadCSV } from "@/lib/export-utils";
@@ -42,6 +42,7 @@ import { OrganizerSignedOut } from "@/features/events-portal/OrganizerSignedOut"
 import { EventSubmissionForm } from "@/features/events-portal/EventSubmissionForm";
 import type { SectionId } from "@/features/events-portal/OrganizerEventsTab";
 import { eventBalances, groupOrganizerEvents } from "@/features/events-portal/events-portal-groups";
+import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE } from "@/lib/event-validation";
 
 const ALL_COMMUNITIES_VALUE = "all_admin";
 
@@ -609,6 +610,25 @@ export default function CommunityOrganizerPortalPage() {
 
   const currentTargetAvailable =
     balances.rows.find((row) => row.eventId === payoutTargetEventId)?.available ?? 0;
+
+  if (isCheckInStaffRole(user?.role)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background p-4">
+        <div className="max-w-md w-full text-center space-y-4 p-6 border rounded-xl bg-card shadow-sm">
+          <div className="mx-auto size-12 rounded-full bg-destructive/10 flex items-center justify-center text-destructive">
+            <AlertCircle className="size-6" />
+          </div>
+          <h2 className="text-lg font-semibold text-foreground">Akses ditolak</h2>
+          <p className="text-sm text-muted-foreground">{CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE}</p>
+          <div className="pt-2">
+            <Link href="/events/checkin" className={buttonVariants({ variant: "outline" })}>
+              Kembali ke meja check-in
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!portalData && !isLoading) {
     return <OrganizerSignedOut signedInEmail={user?.email} />;

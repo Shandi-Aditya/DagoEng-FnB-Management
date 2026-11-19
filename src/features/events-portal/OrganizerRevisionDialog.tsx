@@ -199,9 +199,11 @@ export function OrganizerRevisionDialog({
               <input
                 type="number"
                 min={1}
+                max={1000}
+                step={1}
                 required
-                value={capacity}
-                onChange={(e) => setCapacity(Number(e.target.value))}
+                value={capacity === 0 ? "" : capacity}
+                onChange={(e) => setCapacity(e.target.value === "" ? 0 : Number(e.target.value))}
                 className="w-full h-9 rounded-md border bg-background px-3 text-xs font-mono font-medium text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
               />
             </div>
