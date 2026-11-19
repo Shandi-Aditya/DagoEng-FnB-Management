@@ -36,6 +36,7 @@ import { EventsModerationToolbar } from "@/features/events-admin/EventsModeratio
 import { EventsModerationTable } from "@/features/events-admin/EventsModerationTable";
 import { EventsPaymentsTable } from "@/features/events-admin/EventsPaymentsTable";
 import { EventsPayoutsTable } from "@/features/events-admin/EventsPayoutsTable";
+import { EventsRefundsTable } from "@/features/events-admin/EventsRefundsTable";
 import { EventsSettingsView } from "@/features/events-admin/EventsSettingsView";
 import { EventDetailSheet } from "@/features/events-admin/EventDetailSheet";
 import { EventAttendeesModal } from "@/features/events-admin/EventAttendeesModal";
@@ -66,6 +67,7 @@ export default function AdminEventsPage() {
   // Core Data
   const [events, setEvents] = useState<CommunityEvent[]>([]);
   const [allBookings, setAllBookings] = useState<EventTicketOrder[]>([]);
+  const [allRefunds, setAllRefunds] = useState<EventTicketOrder[]>([]);
   const [operationalStats, setOperationalStats] = useState<EventOperationalStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -146,7 +148,7 @@ export default function AdminEventsPage() {
       const params = new URLSearchParams(window.location.search);
       const sec = params.get("section");
       const tab = params.get("tab");
-      if (sec === "MODERATION" || sec === "PAYMENTS" || sec === "PAYOUTS" || sec === "SETTINGS") {
+      if (sec === "MODERATION" || sec === "PAYMENTS" || sec === "PAYOUTS" || sec === "REFUNDS" || sec === "SETTINGS") {
         setAdminSection(sec);
       }
       if (tab) {
@@ -171,14 +173,27 @@ export default function AdminEventsPage() {
     }
   }, [actionSuccessMessage]);
 
+  const loadAdminRefunds = async () => {
+    try {
+      const res = await fetch("/api/events/admin/refunds");
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setAllRefunds(json.refunds || []);
+      }
+    } catch (e) {
+      console.error("Error loading event refunds:", e);
+    }
+  };
+
   const loadAdminEvents = async () => {
     try {
       setIsLoading(true);
       setActionErrorMessage(null);
 
-      const [eventsRes, bookingsRes] = await Promise.all([
+      const [eventsRes, bookingsRes, refundsRes] = await Promise.all([
         fetch("/api/events/admin"),
         fetch("/api/events/bookings?includeStats=true&unmasked=true"),
+        fetch("/api/events/admin/refunds"),
       ]);
 
       const eventsJson = await eventsRes.json();
@@ -194,6 +209,11 @@ export default function AdminEventsPage() {
         if (bookingsJson.stats) {
           setOperationalStats(bookingsJson.stats);
         }
+      }
+
+      const refundsJson = await refundsRes.json();
+      if (refundsRes.ok && refundsJson.success) {
+        setAllRefunds(refundsJson.refunds || []);
       }
     } catch (err: any) {
       setActionErrorMessage(err.message || "Kesalahan jaringan.");
@@ -280,6 +300,11 @@ export default function AdminEventsPage() {
   const pendingPayoutsCount = useMemo(
     () => allPayouts.filter((p) => p.status === "REQUESTED" || p.status === "PROCESSING").length,
     [allPayouts]
+  );
+
+  const pendingRefundsCount = useMemo(
+    () => allRefunds.filter((r) => r.refundStatus === "REQUESTED").length,
+    [allRefunds]
   );
 
   const filteredPayoutsForExport = useMemo(() => {
@@ -813,6 +838,41 @@ export default function AdminEventsPage() {
       return;
     }
 
+    if (adminSection === "REFUNDS") {
+      const headers = [
+        "Kode Tiket",
+        "Event",
+        "Nama Peserta",
+        "Email",
+        "Status Refund",
+        "Total Harga",
+        "Biaya Potongan",
+        "Nominal Refund",
+        "Bank",
+        "No Rekening",
+        "Atas Nama",
+        "Alasan",
+        "Waktu Pengajuan",
+      ];
+      const rows = allRefunds.map((r) => [
+        r.ticketCode,
+        r.eventTitle || "—",
+        r.guestName,
+        r.guestEmail,
+        r.refundStatus || "—",
+        r.totalPrice,
+        r.refundRequest?.feeDeducted || 0,
+        r.refundRequest?.refundAmount || 0,
+        r.refundRequest?.bankName || "—",
+        r.refundRequest?.accountNumber || "—",
+        r.refundRequest?.accountHolder || "—",
+        r.refundRequest?.reason || "—",
+        r.refundRequest?.requestedAt || r.createdAt,
+      ]);
+      downloadCSV(`Events_Refunds_${todayIso}.csv`, headers, rows);
+      return;
+    }
+
     const headers = [
       "ID",
       "Judul",
@@ -893,6 +953,7 @@ export default function AdminEventsPage() {
         pendingReviewsCount={kpi.pendingReviewsCount}
         pendingPaymentsCount={kpi.pendingPaymentsCount}
         pendingPayoutsCount={pendingPayoutsCount}
+        pendingRefundsCount={pendingRefundsCount}
       />
 
       {adminSection === "MODERATION" && (
@@ -1018,6 +1079,16 @@ export default function AdminEventsPage() {
         />
       )}
 
+      {adminSection === "REFUNDS" && (
+        <EventsRefundsTable
+          refunds={allRefunds}
+          onRefresh={() => {
+            loadAdminRefunds();
+            loadAdminEvents();
+          }}
+        />
+      )}
+
       {adminSection === "SETTINGS" && (
         <EventsSettingsView
           businessPolicy={businessPolicy}
@@ -1137,6 +1208,7 @@ export default function AdminEventsPage() {
         onGuidelinesTextChange={setEditGuidelinesText}
         onSave={handleSaveEdit}
         isSaving={isSavingEdit}
+        hasPaidTickets={allBookings.some((b) => b.eventId === selectedEvent?.id && b.paymentStatus === "PAID")}
       />
     </div>
   );

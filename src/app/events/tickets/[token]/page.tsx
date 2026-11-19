@@ -21,6 +21,7 @@ import {
   TicketPaymentTransferSection,
   TicketPaymentProofDialog,
   TicketActionsBar,
+  TicketRefundSection,
   calculatePaymentDeadline,
   getSubTicketDetails,
   type TicketPassData,
@@ -294,6 +295,7 @@ export default function PrivateTicketViewPage() {
 
               <TicketQRSection
                 paymentStatus={ticket.paymentStatus}
+                refundStatus={ticket.refundStatus}
                 isMultiTicket={isMultiTicket}
                 ticketCount={ticket.ticketCount || 1}
                 selectedTicketIndex={selectedTicketIndex}
@@ -319,6 +321,18 @@ export default function PrivateTicketViewPage() {
                 promoCode={ticket.promoCode}
                 discountAmount={ticket.discountAmount}
                 subtotalPrice={ticket.subtotalPrice}
+              />
+
+              <TicketRefundSection
+                bookingId={ticket.id}
+                guestToken={token}
+                totalPrice={ticket.totalPrice}
+                paymentStatus={ticket.paymentStatus}
+                refundStatus={ticket.refundStatus}
+                refundRequest={ticket.refundRequest}
+                refundPolicy={ticket.refundPolicy}
+                refundEligibility={ticket.refundEligibility}
+                onRefundSubmitted={fetchTicket}
               />
 
               {isMultiTicket && (

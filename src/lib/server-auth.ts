@@ -768,6 +768,7 @@ export async function assertEventAdmin(req: NextRequest): Promise<{
   scopeLevel?: ScopeLevel;
   userId?: string;
   name?: string;
+  email?: string;
 }> {
   const auth = await getRequestAuthUser(req);
 
@@ -804,6 +805,7 @@ export async function assertEventAdmin(req: NextRequest): Promise<{
     scopeLevel: userScope,
     userId: auth.userId || undefined,
     name: auth.name,
+    email: auth.email || undefined,
   };
 }
 

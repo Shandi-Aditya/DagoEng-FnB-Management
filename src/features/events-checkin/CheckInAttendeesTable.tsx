@@ -108,7 +108,9 @@ export function CheckInAttendeesTable({
 
                 const isFullyCheckedIn = ticket.checkInStatus === "CHECKED_IN" || checkedQty >= ticketCount;
                 const isPartiallyCheckedIn = !isFullyCheckedIn && checkedQty > 0;
-                const isPaid = ticket.paymentStatus === "PAID";
+                const isPaid =
+                  ticket.paymentStatus === "PAID" &&
+                  ticket.refundStatus !== "REQUESTED";
                 const isProcessing = isProcessingId === ticket.id;
 
                 const checkInStatus = getCheckInStatusTone(ticket);

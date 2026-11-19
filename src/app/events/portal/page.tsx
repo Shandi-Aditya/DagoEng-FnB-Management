@@ -41,7 +41,7 @@ import { OrganizerQRScannerDialog } from "@/features/events-portal/OrganizerQRSc
 import { OrganizerSignedOut } from "@/features/events-portal/OrganizerSignedOut";
 import { EventSubmissionForm } from "@/features/events-portal/EventSubmissionForm";
 import { EventPromosDialog } from "@/components/events/EventPromosDialog";
-import type { EventTicketTier } from "@/types/event";
+import type { EventTicketTier, EventRefundPolicy } from "@/types/event";
 import type { SectionId } from "@/features/events-portal/OrganizerEventsTab";
 import { eventBalances, groupOrganizerEvents } from "@/features/events-portal/events-portal-groups";
 import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE } from "@/lib/event-validation";
@@ -101,6 +101,7 @@ export default function CommunityOrganizerPortalPage() {
   const [revisionUploadError, setRevisionUploadError] = useState<string | null>(null);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
   const [revisionTiers, setRevisionTiers] = useState<EventTicketTier[]>([]);
+  const [revisionRefundPolicy, setRevisionRefundPolicy] = useState<EventRefundPolicy>({ policyType: "NO_REFUND" });
   const [promoEvent, setPromoEvent] = useState<CommunityEvent | null>(null);
 
   // Revenue Split Negotiation Form State
@@ -255,6 +256,7 @@ export default function CommunityOrganizerPortalPage() {
     setRevisionStartDate(toDateTimeLocal(evt.startDate));
     setRevisionEndDate(toDateTimeLocal(evt.endDate));
     setRevisionTiers(evt.ticketTiers || []);
+    setRevisionRefundPolicy(evt.refundPolicy || { policyType: "NO_REFUND" });
     setRevisionUploadError(null);
   };
 
@@ -332,6 +334,7 @@ export default function CommunityOrganizerPortalPage() {
               : revisionEvent.endDate,
             guidelines: revisionGuidelines,
             ticketTiers: revisionTiers,
+            refundPolicy: revisionRefundPolicy,
           },
         }),
       });
@@ -883,6 +886,14 @@ export default function CommunityOrganizerPortalPage() {
         isSubmitting={isSubmittingRevision}
         ticketTiers={revisionTiers}
         setTicketTiers={setRevisionTiers}
+        refundPolicy={revisionRefundPolicy}
+        setRefundPolicy={setRevisionRefundPolicy}
+        hasPaidTickets={Boolean(
+          revisionEvent &&
+            (portalData?.bookings || []).some(
+              (b) => b.eventId === revisionEvent.id && b.paymentStatus === "PAID"
+            )
+        )}
       />
 
       <EventPromosDialog

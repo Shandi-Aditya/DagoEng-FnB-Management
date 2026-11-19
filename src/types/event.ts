@@ -59,6 +59,7 @@ export interface TicketRefundRequest {
   accountNumber: string;
   accountHolder: string;
   refundAmount: number;
+  feeDeducted?: number;
   status: TicketRefundStatus;
   processedAt?: string | null;
   processedBy?: string | null;
@@ -77,6 +78,7 @@ export interface ProcessRefundPayload {
   decision: "APPROVE" | "REJECT";
   adminNotes?: string;
   rejectionReason?: string;
+  forceApproveDeficit?: boolean;
 }
 
 export interface EventPromoCode {

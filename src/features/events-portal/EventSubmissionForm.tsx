@@ -17,6 +17,7 @@ import { cn, formatCurrencyIDR } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE } from "@/lib/event-validation";
 import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
+import { EventRefundPolicyEditor } from "@/components/events/EventRefundPolicyEditor";
 
 import {
   EVENT_CATEGORIES,
@@ -349,6 +350,16 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
                   maxVenueCapacity={capacityHint.capacity}
                 />
               </div>
+
+              {/* Kebijakan Refund (Hanya untuk event berbayar) */}
+              {(form.isPaid || (form.ticketTiers && form.ticketTiers.some((t) => Number(t.price) > 0))) && (
+                <div className="border-t pt-3">
+                  <EventRefundPolicyEditor
+                    value={form.refundPolicy || { policyType: "NO_REFUND" }}
+                    onChange={(p) => set("refundPolicy", p)}
+                  />
+                </div>
+              )}
             </FieldGroup>
           </CardContent>
         </Card>

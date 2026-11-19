@@ -1,4 +1,4 @@
-import type { EventCategory, EventSubmissionPayload, EventTicketTier } from "@/types/event";
+import type { EventCategory, EventSubmissionPayload, EventTicketTier, EventRefundPolicy } from "@/types/event";
 import { validateEventPrice, validateEventCapacity } from "@/lib/event-validation";
 
 export const EVENT_CATEGORIES: readonly { value: EventCategory; label: string }[] = [
@@ -69,6 +69,7 @@ export interface SubmissionForm {
   guidelines: string;
   honeypot: string;
   ticketTiers?: EventTicketTier[];
+  refundPolicy?: EventRefundPolicy;
 }
 
 export type SubmissionField = keyof SubmissionForm;
@@ -99,6 +100,7 @@ export function emptySubmissionForm(organizer: { name?: string; email?: string; 
     guidelines: "",
     honeypot: "",
     ticketTiers: [],
+    refundPolicy: { policyType: "NO_REFUND" },
   };
 }
 
@@ -199,6 +201,7 @@ export function buildSubmissionPayload(form: SubmissionForm): EventSubmissionPay
     price: effectivePrice,
     maxCapacity: (tierCap > 0 ? tierCap : Number(form.maxCapacity)) || DEFAULT_CAPACITY,
     ticketTiers: hasTiers ? form.ticketTiers : undefined,
+    refundPolicy: isPaid ? (form.refundPolicy || { policyType: "NO_REFUND" }) : { policyType: "NO_REFUND" },
     proposedOrganizerPercent: organizerPercent,
     proposedPlatformPercent: 100 - organizerPercent,
     collaborationFacilities: isHubVenue(form.location) ? form.collaborationFacilities : [],

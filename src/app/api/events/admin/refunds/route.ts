@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { bookingId, decision, adminNotes, rejectionReason } = body;
+    const { bookingId, decision, adminNotes, rejectionReason, forceApproveDeficit } = body;
 
     if (!bookingId) {
       return NextResponse.json(
@@ -66,9 +66,10 @@ export async function POST(req: NextRequest) {
       decision,
       adminNotes,
       rejectionReason,
+      forceApproveDeficit: Boolean(forceApproveDeficit),
     };
 
-    const adminEmail = (auth as any).email || (auth as any).user?.email || "admin@dagoeng.com";
+    const adminEmail = auth.email || auth.name || "admin";
     const updated = await adminProcessTicketRefund(bookingId, payload, adminEmail);
 
     return NextResponse.json({

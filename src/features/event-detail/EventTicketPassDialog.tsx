@@ -218,6 +218,13 @@ export function EventTicketPassDialog({
                 )}
               </div>
             </div>
+          ) : ticket.paymentStatus === "REFUNDED" ? (
+            <div className="rounded-lg border bg-muted/40 p-4 text-center space-y-1 text-xs">
+              <span className="font-semibold text-foreground block">Dana tiket telah dikembalikan</span>
+              <p className="text-muted-foreground leading-relaxed">
+                Pemesanan tiket ini telah di-refund dan tidak berlaku untuk check-in di lokasi acara.
+              </p>
+            </div>
           ) : (
             <div className="rounded-lg border border-warning/40 bg-warning/10 p-3.5 flex items-start gap-3 text-warning">
               <div className="size-10 rounded-lg bg-warning/20 flex items-center justify-center shrink-0">

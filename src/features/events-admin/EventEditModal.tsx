@@ -17,6 +17,7 @@ import type { CommunityEvent, EventCategory } from "@/types/event";
 import { eventCategoryLabel } from "./events-admin-domain";
 import { validateEventPrice, validateEventCapacity } from "@/lib/event-validation";
 import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
+import { EventRefundPolicyEditor } from "@/components/events/EventRefundPolicyEditor";
 
 function toWitaDateTimeLocal(value?: string): string {
   if (!value) return "";
@@ -67,6 +68,7 @@ export interface EventEditModalProps {
   onGuidelinesTextChange: (text: string) => void;
   onSave: () => void;
   isSaving?: boolean;
+  hasPaidTickets?: boolean;
 }
 
 export function EventEditModal({
@@ -79,6 +81,7 @@ export function EventEditModal({
   onGuidelinesTextChange,
   onSave,
   isSaving,
+  hasPaidTickets = false,
 }: EventEditModalProps) {
   const [rawPrice, setRawPrice] = useState<string>(
     formData.price !== undefined ? String(formData.price) : "0"
@@ -294,6 +297,22 @@ export function EventEditModal({
               }}
             />
           </div>
+
+          {/* Editor Kebijakan Refund */}
+          {(formData.isPaid || (formData.ticketTiers && formData.ticketTiers.some((t) => Number(t.price) > 0))) && (
+            <div className="border-t pt-3">
+              <EventRefundPolicyEditor
+                value={formData.refundPolicy || { policyType: "NO_REFUND" }}
+                onChange={(newPolicy) => {
+                  onFormDataChange({
+                    ...formData,
+                    refundPolicy: newPolicy,
+                  });
+                }}
+                hasPaidTickets={Boolean(hasPaidTickets || (event as any)?.bookedCount > 0)}
+              />
+            </div>
+          )}
         </div>
 
         <DialogFooter className="border-t pt-3">

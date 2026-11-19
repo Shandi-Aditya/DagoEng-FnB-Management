@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Check, Clock, Lock, AlertCircle, Ticket } from "lucide-react";
+import { Check, Clock, Lock, AlertCircle, Ticket, RotateCcw } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/app/status-badge";
@@ -9,6 +9,7 @@ import type { SubTicketInfo } from "./ticket-pass-domain";
 
 interface TicketQRSectionProps {
   paymentStatus: "PENDING" | "PAID" | "CANCELLED" | "EXPIRED" | "REFUNDED" | string;
+  refundStatus?: string | null;
   isMultiTicket: boolean;
   ticketCount: number;
   selectedTicketIndex: number;
@@ -22,6 +23,7 @@ interface TicketQRSectionProps {
 
 export function TicketQRSection({
   paymentStatus,
+  refundStatus,
   isMultiTicket,
   ticketCount,
   selectedTicketIndex,
@@ -32,8 +34,8 @@ export function TicketQRSection({
   createdAtIso,
   checkedInQty = 0,
 }: TicketQRSectionProps) {
-  const isPaid = paymentStatus === "PAID";
-  const isPending = paymentStatus === "PENDING";
+  const isPaid = paymentStatus === "PAID" && refundStatus !== "REQUESTED";
+  const isPending = paymentStatus === "PENDING" && refundStatus !== "REQUESTED";
 
   return (
     <div className="space-y-4">
@@ -182,6 +184,22 @@ export function TicketQRSection({
               )}
             </div>
           )}
+        </div>
+      ) : refundStatus === "REQUESTED" ? (
+        <div className="p-6 bg-muted/40 rounded-2xl border border-border text-center space-y-1.5">
+          <Clock className="size-8 text-warning mx-auto" />
+          <h4 className="font-semibold text-sm text-foreground">Pengajuan refund sedang diproses</h4>
+          <p className="text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">
+            Permohonan pengembalian dana tiket Anda sedang diverifikasi oleh admin. QR check-in ditangguhkan sementara.
+          </p>
+        </div>
+      ) : paymentStatus === "REFUNDED" || refundStatus === "APPROVED" ? (
+        <div className="p-6 bg-muted/40 rounded-2xl border border-border text-center space-y-1.5">
+          <RotateCcw className="size-8 text-muted-foreground mx-auto" />
+          <h4 className="font-semibold text-sm text-foreground">Dana tiket telah dikembalikan</h4>
+          <p className="text-xs text-muted-foreground max-w-xs mx-auto leading-relaxed">
+            Pengajuan refund tiket ini telah disetujui dan diproses oleh admin. Hak hadir dan QR code check-in telah dinonaktifkan.
+          </p>
         </div>
       ) : (
         <div className="p-6 bg-destructive/10 rounded-2xl border border-destructive/20 text-center space-y-1.5">

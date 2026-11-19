@@ -3937,6 +3937,26 @@ export async function requestTicketRefund(
       allBookings[bIndex] = currentBooking;
       await saveBookingsToDisk(allBookings, { tx });
 
+      try {
+        await appendAuditLog({
+          id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: new Date().toISOString(),
+          module: "SETTINGS",
+          action: "EVENT_TICKET_REFUND_REQUESTED",
+          category: "CONFIGURATION",
+          severity: "MEDIUM",
+          status: "SUCCESS",
+          actorName: currentBooking.guestName || "Guest",
+          actorRole: "USER",
+          recordId: currentBooking.ticketCode,
+          referenceId: currentBooking.eventId,
+          description: `Mengajukan pengembalian dana (refund) untuk tiket [${currentBooking.ticketCode}] sebesar Rp ${(eligibility.calculatedRefundAmount || 0).toLocaleString("id-ID")}. Alasan: ${refundReq.reason}.`,
+          newValue: JSON.stringify(refundReq),
+        });
+      } catch (auditErr) {
+        console.error("[events] Gagal mencatat audit log refund requested:", auditErr);
+      }
+
       committedOrder = currentBooking;
       committedBookingsList = allBookings;
     });
@@ -4011,6 +4031,30 @@ export async function adminProcessTicketRefund(
 
       const nowIso = new Date().toISOString();
       if (payload.decision === "APPROVE") {
+        const allEvents = await loadEventsFromTxOrDisk(tx);
+        const event = allEvents.find((e) => e.id === booking.eventId);
+        if (event && event.payoutHistory && Array.isArray(event.payoutHistory)) {
+          const totalPaidAndProcessingPayouts = event.payoutHistory
+            .filter((p) => p.status === "PAID" || p.status === "PROCESSING")
+            .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+          const remainingPaidBookings = allBookings.filter(
+            (b) => b.eventId === event.id && b.id !== booking.id && b.paymentStatus === "PAID"
+          );
+          const projectedOrganizerRevenue = remainingPaidBookings.reduce(
+            (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round(b.totalPrice * 0.8)),
+            0
+          );
+          const projectedBalance = projectedOrganizerRevenue - totalPaidAndProcessingPayouts;
+
+          if (projectedBalance < 0 && !payload.forceApproveDeficit) {
+            const deficitAmount = Math.abs(projectedBalance);
+            throw new Error(
+              `DEFICIT_ORGANIZER_PAYOUT: Persetujuan refund tidak dapat diproses karena dana bagi hasil tiket ini sudah dicairkan ke penyelenggara. Proyeksi saldo penyelenggara akan mengalami defisit sebesar Rp ${deficitAmount.toLocaleString("id-ID")}. Hubungi Super Admin atau gunakan konfirmasi persetujuan defisit.`
+            );
+          }
+        }
+
         booking.refundStatus = "APPROVED";
         booking.paymentStatus = "REFUNDED";
         booking.refundRequest.status = "APPROVED";
@@ -4031,6 +4075,34 @@ export async function adminProcessTicketRefund(
       booking.updatedAt = nowIso;
       allBookings[bIndex] = booking;
       await saveBookingsToDisk(allBookings, { tx });
+
+      try {
+        await appendAuditLog({
+          id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: nowIso,
+          module: "SETTINGS",
+          action: payload.decision === "APPROVE" ? "EVENT_TICKET_REFUND_APPROVED" : "EVENT_TICKET_REFUND_REJECTED",
+          category: "CONFIGURATION",
+          severity: "HIGH",
+          status: "SUCCESS",
+          actorName: adminEmail,
+          actorRole: "SUPER_ADMIN",
+          recordId: booking.ticketCode,
+          referenceId: booking.eventId,
+          description: payload.decision === "APPROVE"
+            ? `Menyetujui refund tiket [${booking.ticketCode}] (${booking.guestName}) sebesar Rp ${(booking.refundRequest.refundAmount || 0).toLocaleString("id-ID")}.`
+            : `Menolak pengajuan refund tiket [${booking.ticketCode}] (${booking.guestName}). Alasan: ${payload.rejectionReason}.`,
+          newValue: JSON.stringify({
+            decision: payload.decision,
+            refundStatus: booking.refundStatus,
+            paymentStatus: booking.paymentStatus,
+            adminNote: booking.refundRequest.adminNote,
+            rejectionReason: booking.refundRequest.rejectionReason,
+          }),
+        });
+      } catch (auditErr) {
+        console.error("[events] Gagal mencatat audit log refund processed:", auditErr);
+      }
 
       committedOrder = booking;
       committedBookingsList = allBookings;
@@ -5064,9 +5136,12 @@ export async function deleteEventBooking(
     const booking = allBookings[index];
 
     // Safety checks:
-    if (booking.paymentStatus === "PAID") {
+    if (booking.paymentStatus === "PAID" || booking.paymentStatus === "REFUNDED" || booking.refundStatus === "REQUESTED") {
+      const statusLabel = booking.refundStatus === "REQUESTED"
+        ? "REFUND_REQUESTED"
+        : booking.paymentStatus;
       throw new Error(
-        `FORBIDDEN_DELETE: Pemesanan tiket [${booking.ticketCode || booking.id}] berstatus PAID dan tidak dapat dihapus permanen. Gunakan mekanisme pembatalan (CANCELLED) demi menjaga rekam jejak keuangan dan audit.`
+        `FORBIDDEN_DELETE: Pemesanan tiket [${booking.ticketCode || booking.id}] berstatus ${statusLabel} dan tidak dapat dihapus permanen. Gunakan mekanisme pembatalan (CANCELLED) demi menjaga rekam jejak keuangan dan audit.`
       );
     }
 
@@ -5226,8 +5301,15 @@ export async function adminApproveBookingPayment(
   if (booking.paymentStatus === "PAID") {
     return booking; // Idempotent
   }
-  if (booking.paymentStatus === "CANCELLED" || booking.paymentStatus === "EXPIRED") {
-    throw new Error(`Pemesanan tiket dengan status ${booking.paymentStatus} tidak dapat disetujui pembayarannya.`);
+  if (
+    booking.paymentStatus === "CANCELLED" ||
+    booking.paymentStatus === "EXPIRED" ||
+    booking.paymentStatus === "REFUNDED" ||
+    booking.refundStatus === "REQUESTED"
+  ) {
+    throw new Error(
+      `Pemesanan tiket dengan status ${booking.paymentStatus} (refund: ${booking.refundStatus || "NONE"}) tidak dapat disetujui pembayarannya.`
+    );
   }
 
   return updateBookingPaymentStatus(bookingId, "PAID", {
@@ -6195,6 +6277,26 @@ export async function processOrganizerPayout(
           err.missingFields = validation.missingFields;
           err.errors = validation.errors;
           throw err;
+        }
+
+        // Re-read all bookings inside transaction and check payout amount vs net revenue from PAID bookings
+        const allBookings = await loadBookingsFromTxOrDisk(tx);
+        const paidBookings = allBookings.filter(
+          (b) => b.eventId === event.id && b.paymentStatus === "PAID"
+        );
+        const totalNetPaidRevenue = paidBookings.reduce(
+          (sum, b) => sum + (b.organizerRevenueAmount ?? Math.round(b.totalPrice * 0.8)),
+          0
+        );
+        const otherPaidPayouts = (event.payoutHistory || [])
+          .filter((p) => p.id !== payout.id && (p.status === "PAID" || p.status === "PROCESSING"))
+          .reduce((sum, p) => sum + (p.amount || 0), 0);
+        const availablePayoutBalance = Math.max(0, totalNetPaidRevenue - otherPaidPayouts);
+
+        if (payout.amount > availablePayoutBalance) {
+          throw new Error(
+            `Nominal pencairan (Rp ${payout.amount.toLocaleString("id-ID")}) melebihi pendapatan bersih dari booking yang masih berstatus PAID (saldo tersedia: Rp ${availablePayoutBalance.toLocaleString("id-ID")}).`
+          );
         }
       }
 

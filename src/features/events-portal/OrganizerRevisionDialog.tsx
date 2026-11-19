@@ -18,8 +18,9 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import type { CommunityEvent, EventCategory, EventTicketTier } from "@/types/event";
+import type { CommunityEvent, EventCategory, EventTicketTier, EventRefundPolicy } from "@/types/event";
 import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
+import { EventRefundPolicyEditor } from "@/components/events/EventRefundPolicyEditor";
 
 interface OrganizerRevisionDialogProps {
   event: CommunityEvent | null;
@@ -50,6 +51,9 @@ interface OrganizerRevisionDialogProps {
   isSubmitting: boolean;
   ticketTiers?: EventTicketTier[];
   setTicketTiers?: (v: EventTicketTier[]) => void;
+  refundPolicy?: EventRefundPolicy;
+  setRefundPolicy?: (v: EventRefundPolicy) => void;
+  hasPaidTickets?: boolean;
 }
 
 export function OrganizerRevisionDialog({
@@ -81,6 +85,9 @@ export function OrganizerRevisionDialog({
   isSubmitting,
   ticketTiers,
   setTicketTiers,
+  refundPolicy,
+  setRefundPolicy,
+  hasPaidTickets,
 }: OrganizerRevisionDialogProps) {
   if (!event) return null;
 
@@ -271,6 +278,17 @@ export function OrganizerRevisionDialog({
                   const sumQuota = newTiers.reduce((acc, t) => acc + (t.quota || 0), 0);
                   if (sumQuota > 0) setCapacity(sumQuota);
                 }}
+              />
+            </div>
+          )}
+
+          {/* Refund Policy Editor */}
+          {setRefundPolicy && (event.isPaid || (ticketTiers && ticketTiers.some((t) => Number(t.price) > 0))) && (
+            <div className="border-t pt-3">
+              <EventRefundPolicyEditor
+                value={refundPolicy || { policyType: "NO_REFUND" }}
+                onChange={setRefundPolicy}
+                hasPaidTickets={hasPaidTickets}
               />
             </div>
           )}

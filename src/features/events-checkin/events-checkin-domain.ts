@@ -15,7 +15,8 @@ export type TicketValidationCode =
   | "UNPAID"
   | "ALREADY_USED"
   | "SEAT_ALREADY_USED"
-  | "INVALID_SEAT";
+  | "INVALID_SEAT"
+  | "REFUNDED";
 
 export interface TicketValidationResult {
   valid: boolean;
@@ -106,6 +107,17 @@ export function validateTicketCheckIn(
       valid: false,
       code: "WRONG_EVENT",
       message: `Tiket terdaftar pada "${ticket.eventTitle || "event lain"}", bukan event ini.`,
+    };
+  }
+
+  if (ticket.paymentStatus === "REFUNDED" || ticket.refundStatus === "REQUESTED") {
+    return {
+      valid: false,
+      code: "REFUNDED",
+      message:
+        ticket.paymentStatus === "REFUNDED"
+          ? "Tiket ini telah dikembalikan (REFUNDED) dan tidak dapat digunakan untuk check-in."
+          : "Tiket ini sedang dalam proses pengajuan refund (REQUESTED) dan tidak dapat digunakan untuk check-in.",
     };
   }
 
