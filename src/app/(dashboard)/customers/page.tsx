@@ -43,8 +43,8 @@ export default function CustomersPage() {
   const kpis = useMemo(() => calculateCustomerKPIs(filteredMembers), [filteredMembers]);
 
   const displayedMembers = useMemo(
-    () => filterMembers(filteredMembers, searchQuery, tierFilter),
-    [filteredMembers, searchQuery, tierFilter]
+    () => filterMembers(filteredMembers, searchQuery, tierFilter, { canViewFullContact }),
+    [filteredMembers, searchQuery, tierFilter, canViewFullContact]
   );
 
   const handleExportCSV = () => {
@@ -88,11 +88,13 @@ export default function CustomersPage() {
   };
 
   const handleAddPointsQuick = (id: string, name: string) => {
+    if (!isOwnerOrAdmin) return;
     addPoints(id, 20, `Penambahan 20 Poin Manual untuk ${name}`);
     notify.success(`${name} +20 poin`);
   };
 
   const handleManualOverride = (memberId: string, newTier: LoyaltyTier, reason: string) => {
+    if (!isOwnerOrAdmin) return;
     manualOverrideTier(memberId, newTier, reason);
     notify.success(`Tier diubah ke ${newTier}`);
   };
@@ -154,6 +156,7 @@ export default function CustomersPage() {
       <AddCustomerModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
+        canSetInitialPoints={isOwnerOrAdmin}
         onSubmit={handleAddMember}
       />
 

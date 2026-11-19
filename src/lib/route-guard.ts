@@ -82,7 +82,7 @@ export const ROUTE_PERMISSIONS: { prefix: string; allowedRoles: RoleSlug[] }[] =
   },
   {
     prefix: "/customers",
-    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"],
   },
   {
     prefix: "/activity-log",

@@ -18,6 +18,7 @@ import { getTierHint } from "./customers-domain";
 export interface AddCustomerModalProps {
   isOpen: boolean;
   onClose: () => void;
+  canSetInitialPoints?: boolean;
   onSubmit: (data: {
     name: string;
     phone: string;
@@ -30,6 +31,7 @@ export interface AddCustomerModalProps {
 export function AddCustomerModal({
   isOpen,
   onClose,
+  canSetInitialPoints = true,
   onSubmit,
 }: AddCustomerModalProps) {
   const [name, setName] = useState("");
@@ -60,7 +62,7 @@ export function AddCustomerModal({
       phone: phone.trim(),
       email: email.trim() || undefined,
       identityNo: identityNo.trim() || undefined,
-      initialPoints: Math.max(0, initialPoints),
+      initialPoints: canSetInitialPoints ? Math.max(0, initialPoints) : 0,
     });
 
     handleClose();
@@ -143,23 +145,25 @@ export function AddCustomerModal({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="customer-points" className="text-xs font-medium text-foreground">
-              Poin awal
-            </Label>
-            <Input
-              id="customer-points"
-              type="number"
-              min={0}
-              step={50}
-              value={initialPoints}
-              onChange={(e) => setInitialPoints(Number(e.target.value))}
-              className="text-xs font-mono font-medium"
-            />
-            <p className="text-xs text-muted-foreground">
-              {getTierHint(initialPoints)}
-            </p>
-          </div>
+          {canSetInitialPoints ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="customer-points" className="text-xs font-medium text-foreground">
+                Poin awal
+              </Label>
+              <Input
+                id="customer-points"
+                type="number"
+                min={0}
+                step={50}
+                value={initialPoints}
+                onChange={(e) => setInitialPoints(Number(e.target.value))}
+                className="text-xs font-mono font-medium"
+              />
+              <p className="text-xs text-muted-foreground">
+                {getTierHint(initialPoints)}
+              </p>
+            </div>
+          ) : null}
 
           <DialogFooter className="border-t pt-3">
             <Button

@@ -26,9 +26,12 @@ export function parseHour(timeStr: string): number {
 
 export function getCurrentTimeFormatted(): string {
   const now = new Date();
-  const hours = now.getHours().toString().padStart(2, "0");
-  const minutes = now.getMinutes().toString().padStart(2, "0");
-  return `${hours}:${minutes}`;
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Makassar",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(now);
 }
 
 export function getValidOperationalTime(targetDateStr?: string): string {

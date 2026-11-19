@@ -261,11 +261,13 @@ export default function CoworkingPage() {
     expiry.setDate(today.getDate() + 30);
 
     const startStr = today.toLocaleDateString("id-ID", {
+      timeZone: "Asia/Makassar",
       day: "2-digit",
       month: "short",
       year: "numeric",
     });
     const expStr = expiry.toLocaleDateString("id-ID", {
+      timeZone: "Asia/Makassar",
       day: "2-digit",
       month: "short",
       year: "numeric",

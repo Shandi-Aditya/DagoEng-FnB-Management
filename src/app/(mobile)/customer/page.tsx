@@ -24,6 +24,7 @@ import { CustomerTicketPassModal } from "@/features/customer/CustomerTicketPassM
 import { calculateCartTotals, calculateEndTime, filterCustomerProducts, type CustomerCartItem } from "@/features/customer/customer-domain";
 import { filterGuestBookings, filterGuestOrders, parseTableParam } from "@/features/customer/guest-session";
 import { CoworkingReceiptModal } from "@/features/coworking/CoworkingReceiptModal";
+import { resolveCoworkingReceiptPublisher } from "@/lib/receipt-publisher";
 import { buildOrderReceiptData } from "@/features/orders/orders-domain";
 import { PaymentWaitingModal } from "@/features/payment/PaymentWaitingModal";
 import { ReceiptModal } from "@/features/pos/ReceiptModal";
@@ -488,16 +489,19 @@ function CustomerApp() {
             company: receiptBooking.company,
             spaceName: receiptBooking.spaceName,
             spaceType: receiptBooking.spaceType,
-            outletName: outlet.name,
-            outletAddress: outlet.address,
-            outletPhone: outlet.phone ?? "",
+            outletName: resolveCoworkingReceiptPublisher(activeOutlet).outletName,
+            outletAddress: resolveCoworkingReceiptPublisher(activeOutlet).outletAddress,
+            outletPhone: resolveCoworkingReceiptPublisher(activeOutlet).outletPhone,
             bookingDate: receiptBooking.date,
-            startTime: receiptBooking.startTime,
-            endTime: receiptBooking.endTime ?? "",
+            startTime: receiptBooking.startTime.replace(/\s*WITA$/i, ""),
+            endTime: (receiptBooking.endTime ?? "").replace(/\s*WITA$/i, ""),
             duration: receiptBooking.duration,
             bookingType: receiptBooking.bookingType,
-            basePrice: receiptBooking.totalAmount,
-            discount: 0,
+            basePrice: (receiptBooking as any).basePrice ?? receiptBooking.price ?? receiptBooking.totalAmount,
+            discount: receiptBooking.discount ?? 0,
+            tax: receiptBooking.tax ?? 0,
+            taxType: receiptBooking.taxType ?? "NON_TAX",
+            taxRatePercent: receiptBooking.taxRatePercent ?? 0,
             totalAmount: receiptBooking.totalAmount,
             paymentMethod: receiptBooking.paymentMethod ?? "QRIS",
             paymentStatus: receiptBooking.paymentStatus,

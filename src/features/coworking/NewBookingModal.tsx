@@ -28,6 +28,7 @@ import {
   calculateHourlyEndTime,
   spaceTypeLabel,
   getTodayWitaDateString,
+  formatCoworkingTaxLabel,
   type DailyPreset,
 } from "./coworking-domain";
 
@@ -578,22 +579,28 @@ export function NewBookingModal({
             </div>
 
             {/* Bill Preview Card */}
-            <div className="flex items-center justify-between rounded-lg border bg-card p-3">
-              <div>
-                <span className="block text-xs font-medium text-muted-foreground">
-                  Total tagihan
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {bookType === "HOURLY"
-                    ? `${pricing.computedDuration} jam (${bookStartTime} – ${pricing.computedEndTime})`
-                    : bookType === "DAILY"
-                    ? `${pricing.computedDuration} hari (${bookStartDate})`
-                    : "Paket bulanan 30 hari"}
+            <div className="rounded-lg border bg-card p-3 space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground border-b border-border/60 pb-2">
+                <span>{formatCoworkingTaxLabel(0)}</span>
+                <span className="font-mono tabular-nums">Rp 0</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="block text-xs font-medium text-muted-foreground">
+                    Total tagihan
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {bookType === "HOURLY"
+                      ? `${pricing.computedDuration} jam (${bookStartTime} – ${pricing.computedEndTime})`
+                      : bookType === "DAILY"
+                      ? `${pricing.computedDuration} hari (${bookStartDate})`
+                      : "Paket bulanan 30 hari"}
+                  </span>
+                </div>
+                <span className="font-mono text-base font-semibold tabular-nums text-foreground">
+                  {formatCurrencyIDR(pricing.computedTotal)}
                 </span>
               </div>
-              <span className="font-mono text-base font-semibold tabular-nums text-foreground">
-                {formatCurrencyIDR(pricing.computedTotal)}
-              </span>
             </div>
           </div>
 

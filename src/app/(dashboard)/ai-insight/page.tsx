@@ -20,6 +20,7 @@ import {
 import { AIInsightHeader } from "@/features/ai-insight/AIInsightHeader";
 import { AIInsightQuickPrompts } from "@/features/ai-insight/AIInsightQuickPrompts";
 import { AIInsightChatContainer } from "@/features/ai-insight/AIInsightChatContainer";
+import { findTopProduct, isSettledPaidOrder } from "@/features/reports/reports-domain";
 
 export default function AIInsightPage() {
   const { activeOutlet, activeOutletId } = useOutlet();
@@ -52,9 +53,8 @@ export default function AIInsightPage() {
     (b: any) => activeOutletId === "ALL" || !b.outletId || b.outletId === activeOutletId
   );
 
-  const totalRev = scopedOrders
-    .filter((o) => o.status !== "CANCELLED")
-    .reduce((s, o) => s + o.total, 0);
+  const paidScopedOrders = scopedOrders.filter(isSettledPaidOrder);
+  const totalRev = paidScopedOrders.reduce((s, o) => s + o.total, 0);
 
   const criticalStockItems = scopedMaterials.filter((m) => m.stockNumber <= m.min);
   const outletName = activeOutlet?.name || "Semua outlet";
@@ -64,7 +64,7 @@ export default function AIInsightPage() {
       userName: user?.name || "Owner",
       outletName,
       totalRevenue: totalRev,
-      ordersCount: scopedOrders.length,
+      ordersCount: paidScopedOrders.length,
       criticalItemsCount: criticalStockItems.length,
     }),
   ]);
@@ -97,12 +97,12 @@ export default function AIInsightPage() {
     });
 
     setTimeout(() => {
-      const topMenu = scopedProducts[0]?.name || "Menu terlaris";
+      const topMenu = findTopProduct(paidScopedOrders, scopedProducts);
       const aiResponse = generateAIInsightResponse({
         query: q,
         outletName,
         totalRevenue: totalRev,
-        ordersCount: scopedOrders.length,
+        ordersCount: paidScopedOrders.length,
         materialsCount: scopedMaterials.length,
         criticalItems: criticalStockItems,
         topProductName: topMenu,

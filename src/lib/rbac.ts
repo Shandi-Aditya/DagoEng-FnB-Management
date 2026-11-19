@@ -177,7 +177,7 @@ export const ALL_NAV_ITEMS: NavigationItem[] = [
     href: "/customers",
     icon: "Users",
     module: "FNB",
-    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER"],
+    allowedRoles: ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"],
   },
 
   // 4. Modul Prioritas 3: Event Marketplace Module

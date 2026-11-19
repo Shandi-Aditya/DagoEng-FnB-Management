@@ -385,13 +385,45 @@ export function getReportCategories(params: {
 }
 
 /**
+ * Memeriksa apakah pesanan berstatus lunas dan tidak dibatalkan / refund / ditolak sync.
+ */
+export function isSettledPaidOrder(order: OrderRecord): boolean {
+  return (
+    order.paymentStatus === "PAID" &&
+    order.status !== "CANCELLED" &&
+    !order.refundedAt &&
+    order.syncStatus !== "REJECTED"
+  );
+}
+
+/**
  * Mencari produk terlaris berdasarkan kuantitas pesanan yang berstatus lunas (PAID).
  */
-export function findTopProduct(orders: OrderRecord[]): string {
+export function findTopProduct(
+  orders: OrderRecord[],
+  allowedProducts?: MasterProduct[]
+): string {
+  if (allowedProducts !== undefined && allowedProducts.length === 0) {
+    return "-";
+  }
+
+  const allowedProductNames = allowedProducts
+    ? new Set(allowedProducts.map((p) => p.name.trim().toLowerCase()))
+    : null;
+  const allowedProductIds = allowedProducts
+    ? new Set(allowedProducts.map((p) => p.id.trim().toLowerCase()))
+    : null;
+
   const quantities: Record<string, number> = {};
   for (const order of orders) {
-    if (order.status === "CANCELLED" || order.paymentStatus !== "PAID") continue;
+    if (!isSettledPaidOrder(order)) continue;
     for (const item of order.items) {
+      if (allowedProductNames || allowedProductIds) {
+        const matchesName = allowedProductNames?.has(item.productName.trim().toLowerCase());
+        const matchesId =
+          item.productId && allowedProductIds?.has(item.productId.trim().toLowerCase());
+        if (!matchesName && !matchesId) continue;
+      }
       quantities[item.productName] = (quantities[item.productName] || 0) + item.quantity;
     }
   }
@@ -435,9 +467,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
   switch (type) {
     case "SALES": {
-      const paidOrders = orders.filter(
-        (o) => o.paymentStatus === "PAID" && o.status !== "CANCELLED"
-      );
+      const paidOrders = orders.filter(isSettledPaidOrder);
       const paidCoworking = effectiveCoworking.filter(
         (b) => b.paymentStatus === "PAID" && b.checkInStatus !== "CANCELLED"
       );
@@ -644,11 +674,44 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
 
     case "PRODUCTS": {
       let totalMarginPctSum = 0;
+      let totalSoldAll = 0;
+
+      // Pre-aggregate product sales from settled paid orders
+      const salesMap = new Map<string, { qty: number; revenue: number }>();
+      for (const order of orders) {
+        if (!isSettledPaidOrder(order)) continue;
+        for (const item of order.items) {
+          const itemRev = (item.unitPrice || 0) * (item.quantity || 0);
+          totalSoldAll += item.quantity;
+          if (item.productId) {
+            const current = salesMap.get(item.productId) || { qty: 0, revenue: 0 };
+            salesMap.set(item.productId, {
+              qty: current.qty + item.quantity,
+              revenue: current.revenue + itemRev,
+            });
+          }
+          const nameKey = item.productName.trim().toLowerCase();
+          const currentByName = salesMap.get(nameKey) || { qty: 0, revenue: 0 };
+          salesMap.set(nameKey, {
+            qty: currentByName.qty + item.quantity,
+            revenue: currentByName.revenue + itemRev,
+          });
+        }
+      }
+
       const tableRows = products.map((p) => {
-        const hpp = p.cogsEstimate !== undefined && p.cogsEstimate > 0 ? p.cogsEstimate : Math.round(p.basePrice * 0.28);
+        const hpp =
+          p.cogsEstimate !== undefined && p.cogsEstimate > 0
+            ? p.cogsEstimate
+            : Math.round(p.basePrice * 0.28);
         const marginRp = p.basePrice - hpp;
         const marginPct = p.basePrice > 0 ? (marginRp / p.basePrice) * 100 : 0;
         totalMarginPctSum += marginPct;
+
+        const pSales = salesMap.get(p.id) || salesMap.get(p.name.trim().toLowerCase()) || {
+          qty: 0,
+          revenue: 0,
+        };
 
         return [
           p.id,
@@ -658,11 +721,14 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           `Rp ${hpp.toLocaleString("id-ID")}`,
           `Rp ${marginRp.toLocaleString("id-ID")}`,
           `${marginPct.toFixed(1)}%`,
+          `${pSales.qty} pcs`,
+          `Rp ${pSales.revenue.toLocaleString("id-ID")}`,
         ];
       });
 
-      const avgMarginPct = products.length > 0 ? (totalMarginPctSum / products.length).toFixed(1) : "0.0";
-      const topProduct = findTopProduct(orders);
+      const avgMarginPct =
+        products.length > 0 ? (totalMarginPctSum / products.length).toFixed(1) : "0.0";
+      const topProduct = findTopProduct(orders, products);
 
       return {
         title: "Laporan produk dan margin",
@@ -671,6 +737,7 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           { label: "Menu terdaftar", value: `${products.length} menu` },
           { label: "Rata-rata margin kotor", value: `${avgMarginPct}%` },
           { label: "Paling laris", value: topProduct },
+          { label: "Total terjual", value: `${totalSoldAll} pcs` },
         ],
         tableHeaders: [
           "SKU",
@@ -680,6 +747,8 @@ export function buildReportData(params: BuildReportParams): ReportDataset {
           "Estimasi HPP",
           "Margin kotor (Rp)",
           "Margin (%)",
+          "Terjual",
+          "Omzet lunas",
         ],
         tableRows,
       };

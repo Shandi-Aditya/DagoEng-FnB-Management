@@ -20,6 +20,10 @@ import {
   syncWithOutbox,
 } from "@/lib/sync-outbox";
 import { INITIAL_MEMBERS, normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
+import {
+  maskCustomerPhone,
+  maskCustomerEmail,
+} from "@/features/customers/customers-domain";
 export { INITIAL_MEMBERS, normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
 
 interface LoyaltyContextType {
@@ -108,17 +112,26 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     return "Bronze";
   };
 
-  const normalizeLoadedMembers = (list: LoyaltyMember[]): LoyaltyMember[] =>
-    list.map((m) => {
-      const hasManualOverride = m.tierHistory?.some((th) => th.isManualOverride);
-      if (!hasManualOverride) {
-        const expectedTier = calculateTierForPoints(m.points);
-        if (m.tier !== expectedTier) {
-          return { ...m, tier: expectedTier };
-        }
+  const normalizeLoadedMembers = (list: LoyaltyMember[]): LoyaltyMember[] => {
+    const isCashier = user?.role?.slug === "CASHIER";
+    return list.map((m) => {
+      const isManualOverride = m.tierHistory?.[0]?.isManualOverride === true;
+      let tier = m.tier;
+      if (!isManualOverride) {
+        tier = calculateTierForPoints(m.points);
       }
-      return m;
+      if (isCashier) {
+        return {
+          ...m,
+          tier,
+          phone: maskCustomerPhone(m.phone),
+          email: maskCustomerEmail(m.email),
+          identityNo: "",
+        };
+      }
+      return { ...m, tier };
     });
+  };
 
   useEffect(() => {
     try {
@@ -198,16 +211,20 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("storage", handleStorage);
       window.removeEventListener(OUTBOX_FLUSHED_EVENT, handleOutboxFlushed);
     };
-  }, [user?.id]);
+  }, [user?.id, user?.role?.slug, settings.loyaltyTiers]);
 
   useEffect(() => {
     if (!isInitialized) return;
+    if (user?.role?.slug === "CASHIER") {
+      // Jangan menyimpan kontak utuh ke localStorage saat login sebagai CASHIER
+      return;
+    }
     try {
       localStorage.setItem(STORAGE_KEY_LOYALTY, JSON.stringify(members));
     } catch (e) {
       console.error("Failed to save loyalty members", e);
     }
-  }, [members, isInitialized]);
+  }, [members, isInitialized, user?.role?.slug]);
 
   const filteredMembers = members.filter((m) => {
     if (isAllOutlets) return true;

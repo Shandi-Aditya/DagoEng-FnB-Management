@@ -8,11 +8,45 @@ export interface CustomerKPIs {
   bronzeCount: number;
 }
 
-export function calculateTierFromPoints(points: number): LoyaltyTier {
-  if (points >= 3000) return "Platinum";
-  if (points >= 1500) return "Gold";
-  if (points >= 500) return "Silver";
+export function calculateTierFromPoints(
+  points: number,
+  tierConfig?: {
+    platinumMin?: number;
+    goldMin?: number;
+    silverMin?: number;
+    bronzeMin?: number;
+  }
+): LoyaltyTier {
+  const platinum = tierConfig?.platinumMin ?? 3000;
+  const gold = tierConfig?.goldMin ?? 1500;
+  const silver = tierConfig?.silverMin ?? 500;
+  if (points >= platinum) return "Platinum";
+  if (points >= gold) return "Gold";
+  if (points >= silver) return "Silver";
   return "Bronze";
+}
+
+export function resolveAuthoritativeMemberTier(
+  member: {
+    tier?: string;
+    points?: number;
+    tierHistory?: Array<{ isManualOverride?: boolean; [key: string]: any }>;
+  },
+  tierConfig?: {
+    platinumMin?: number;
+    goldMin?: number;
+    silverMin?: number;
+    bronzeMin?: number;
+  }
+): LoyaltyTier {
+  const isLatestOverride = member.tierHistory?.[0]?.isManualOverride === true;
+  if (isLatestOverride && member.tier) {
+    const validTiers: LoyaltyTier[] = ["Bronze", "Silver", "Gold", "Platinum"];
+    if (validTiers.includes(member.tier as LoyaltyTier)) {
+      return member.tier as LoyaltyTier;
+    }
+  }
+  return calculateTierFromPoints(Number(member.points) || 0, tierConfig);
 }
 
 export function getTierHint(points: number): string {
@@ -68,14 +102,17 @@ export function calculateCustomerKPIs(members: LoyaltyMember[]): CustomerKPIs {
 export function filterMembers(
   members: LoyaltyMember[],
   rawQuery: string,
-  tierFilter = "ALL"
+  tierFilter = "ALL",
+  options?: { canViewFullContact?: boolean }
 ): LoyaltyMember[] {
   const query = rawQuery.trim().toLowerCase();
   const qDigits = query.replace(/\D+/g, "");
+  const canView = options?.canViewFullContact ?? true;
 
   return members.filter((c) => {
     const pDigits = (c.phone || "").replace(/\D+/g, "");
     const matchPhoneDigits =
+      canView &&
       qDigits.length >= 3 &&
       (pDigits.includes(qDigits) ||
         (qDigits.startsWith("0") && pDigits.includes(`62${qDigits.slice(1)}`)));
@@ -83,10 +120,10 @@ export function filterMembers(
     const matchQuery =
       !query ||
       c.name.toLowerCase().includes(query) ||
-      c.phone.toLowerCase().includes(query) ||
+      (canView ? c.phone.toLowerCase().includes(query) : c.phone.toLowerCase().includes(query) && !c.phone.includes("*")) ||
       matchPhoneDigits ||
       c.tier.toLowerCase().includes(query) ||
-      Boolean(c.email && c.email.toLowerCase().includes(query));
+      Boolean(c.email && c.email.toLowerCase().includes(query) && (canView || !c.email.includes("*")));
 
     const matchTier = tierFilter === "ALL" || c.tier === tierFilter;
 

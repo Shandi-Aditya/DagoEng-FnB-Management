@@ -667,6 +667,7 @@ export default function POSPage() {
     const res = validateVoucherCode(code, settings.promos || [], subtotal, {
       scope: "FNB",
       tenantId: selectedTenantId !== "ALL" ? selectedTenantId : undefined,
+      customerId: selectedMember?.id,
     });
     if (res.isValid && res.promo) {
       setSelectedPromoId(res.promo.id);
@@ -857,7 +858,7 @@ export default function POSPage() {
       }
 
       if (selectedPromoId) {
-        redeemPromo(selectedPromoId, selectedMember?.phone || user?.id || "walk-in-customer");
+        redeemPromo(selectedPromoId, selectedMember?.id || selectedMember?.phone || user?.id || "walk-in-customer");
       }
 
       const cashPortion =
@@ -1241,6 +1242,7 @@ export default function POSPage() {
         bookingCode: createdBooking.bookingCode,
         transactionDate:
           new Date().toLocaleString("id-ID", {
+            timeZone: "Asia/Makassar",
             day: "numeric",
             month: "short",
             year: "numeric",
@@ -1257,8 +1259,8 @@ export default function POSPage() {
         outletAddress: cwPublisher.outletAddress,
         outletPhone: cwPublisher.outletPhone,
         bookingDate: cwDate,
-        startTime: cwStartTime,
-        endTime: endTimeFormatted,
+        startTime: cwStartTime.replace(/\s*WITA$/i, ""),
+        endTime: endTimeFormatted.replace(/\s*WITA$/i, ""),
         duration: cwDuration,
         bookingType: "HOURLY",
         basePrice: cwPricing.originalSubtotal,
@@ -1309,6 +1311,7 @@ export default function POSPage() {
       bookingCode: verifiedBooking.bookingCode,
       transactionDate:
         new Date().toLocaleString("id-ID", {
+          timeZone: "Asia/Makassar",
           day: "numeric",
           month: "short",
           year: "numeric",
@@ -1325,8 +1328,8 @@ export default function POSPage() {
       outletAddress: cwPublisher.outletAddress,
       outletPhone: cwPublisher.outletPhone,
       bookingDate: verifiedBooking.date,
-      startTime: verifiedBooking.startTime,
-      endTime: endTimeFormatted,
+      startTime: verifiedBooking.startTime.replace(/\s*WITA$/i, ""),
+      endTime: endTimeFormatted.replace(/\s*WITA$/i, ""),
       duration: verifiedBooking.duration,
       bookingType: "HOURLY",
       basePrice: verifiedBooking.price ?? verifiedBooking.totalAmount,

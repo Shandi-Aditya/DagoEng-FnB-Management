@@ -13,6 +13,7 @@ import { calculateEndTime, getAvailableTimeSlots, spaceTypeLabel } from "@/featu
 import { isRangeFree, slotAvailability } from "@/features/customer/space-slots";
 import { COWORKING_MAX_HOURS, isWithinCoworkingHours } from "@/lib/operating-hours";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
+import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
 import type { CoworkingBooking, CoworkingSpaceItem } from "@/types/coworking";
 
 const DAYS_AHEAD = 10;
@@ -236,6 +237,10 @@ export function SpaceView(props: SpaceViewProps) {
                     </div>
                   </Field>
                 </FieldGroup>
+                <div className="flex justify-between text-xs text-muted-foreground px-1">
+                  <span>{formatCoworkingTaxLabel(0)}</span>
+                  <span className="font-mono tabular-nums">Rp 0</span>
+                </div>
                 <div className="flex justify-between rounded-xl bg-muted/50 p-4 text-base font-medium">
                   <span>Total</span>
                   <span className="font-mono tabular-nums">{formatCurrencyIDR(total)}</span>

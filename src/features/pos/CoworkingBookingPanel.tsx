@@ -14,6 +14,9 @@ import {
   formatCoworkingDuration,
   spaceTypeLabel,
 } from "@/features/pos/pos-coworking";
+import { formatCoworkingTaxLabel } from "@/features/coworking/coworking-domain";
+import { useAuth } from "@/contexts/AuthContext";
+import { canUserViewFullCustomerContacts, maskCustomerPhone } from "@/features/customers/customers-domain";
 import type { POSPaymentMethod } from "@/features/pos/types";
 import { getCoworkingStartSlots, isWithinCoworkingHours } from "@/lib/operating-hours";
 import type { PromoConfig } from "@/lib/promo";
@@ -121,6 +124,8 @@ export function CoworkingBookingPanel({
   isDateClosed = false,
   closedDateReason,
 }: CoworkingBookingPanelProps) {
+  const { user } = useAuth();
+  const canViewContact = canUserViewFullCustomerContacts(user?.role?.slug);
   const endTime = calculateEndTime(cwStartTime, cwDuration);
   const isPastOperatingHours = !isWithinCoworkingHours(cwStartTime, cwDuration);
   const startSlots = getCoworkingStartSlots(1);
@@ -353,7 +358,7 @@ export function CoworkingBookingPanel({
             </NativeSelectOption>
             {membersList.map((m) => (
               <NativeSelectOption key={m.id} value={m.id}>
-                {m.name} ({m.tier} • {m.points} poin) - {m.phone}
+                {m.name} ({m.tier} • {m.points} poin) - {canViewContact ? m.phone : maskCustomerPhone(m.phone)}
               </NativeSelectOption>
             ))}
           </NativeSelect>
@@ -458,9 +463,7 @@ export function CoworkingBookingPanel({
         )}
         <div className="flex justify-between text-muted-foreground">
           <span>
-            {cwPricing.tax > 0
-              ? `Pajak (${cwPricing.taxType || "PPN"} ${cwPricing.taxRatePercent}%)`
-              : "Pajak (bebas PB1)"}
+            {formatCoworkingTaxLabel(cwPricing.tax, cwPricing.taxType, cwPricing.taxRatePercent)}
           </span>
           <span className="font-mono tabular-nums">
             {formatCurrencyIDR(cwPricing.tax)}

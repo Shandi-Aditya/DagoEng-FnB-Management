@@ -20,6 +20,7 @@ import {
   buildReportData,
   filterReportRows,
   getReportCategories,
+  isSettledPaidOrder,
   projectOrdersForTenant,
   type ReportType,
 } from "@/features/reports/reports-domain";
@@ -168,9 +169,7 @@ export default function ReportsPage() {
     [reconciliationOrders, filteredShifts]
   );
 
-  const paidOrdersCount = filteredOrders.filter(
-    (o) => o.paymentStatus === "PAID" && o.status !== "CANCELLED"
-  ).length;
+  const paidOrdersCount = filteredOrders.filter(isSettledPaidOrder).length;
   const paidCoworkingCount = filteredCoworkingBookings.filter(
     (b) => b.paymentStatus === "PAID" && b.checkInStatus !== "CANCELLED"
   ).length;

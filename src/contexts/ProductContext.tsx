@@ -222,7 +222,7 @@ export function ProductProvider({ children }: { children: React.ReactNode }) {
 
   const filteredProducts = products.filter((p) => {
     if (isAllOutlets) return true;
-    return p.outletId === "ALL" || p.outletId === activeOutletId;
+    return p.outletId === "ALL" || p.outletId === activeOutletId || !p.outletId;
   });
 
   const addProduct = (
