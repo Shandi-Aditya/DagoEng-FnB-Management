@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   validateEventPrice,
   validateEventCapacity,
+  validateEventRefundPolicy,
+  normalizeDateToWitaIso,
+  validateEventTicketTiers,
   isCheckInStaffRole,
   CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE,
   MIN_EVENT_CAPACITY,
@@ -19,10 +22,15 @@ import {
   saveBookingsToDisk,
   getEventActiveBookedTicketCount,
   createEventBooking,
+  getEventTicketAvailability,
   withEventLock,
   withBookingLock,
   syncBookingsStorageFailClosed,
 } from "@/lib/events";
+import {
+  isEventPaidEffective,
+  formatEventPriceSummary,
+} from "@/features/events-catalog/events-catalog-domain";
 import { POST as postEventRoute } from "@/app/api/events/route";
 import { PUT as putEventRoute } from "@/app/api/events/[id]/route";
 import { PUT as putPortalRoute } from "@/app/api/events/portal/route";
@@ -1484,6 +1492,194 @@ describe("TASK S-03 — Event Validation Hardening & Role Restriction Suite", ()
       expect(updated.maxCapacity).toBe(45);
 
       process.env.NODE_ENV = originalNodeEnv;
+    });
+  });
+
+  // =========================================================================
+  // 9. TAHAP C — MULTI-TIER, RESUBMIT & VALIDATION HARDENING (S-03, S-12)
+  // =========================================================================
+  describe("9. Tahap C — Multi-Tier, Resubmit & Validation Hardening (S-03, S-12)", () => {
+    const tahapCEventId = "evt-tahap-c-test-01";
+
+    beforeEach(() => {
+      const allEvents = loadEventsFromDisk();
+      const testEvt: CommunityEvent = {
+        id: tahapCEventId,
+        title: "Tahap C Verification Event",
+        category: "TECH",
+        description: "Test event for Tahap C multi-tier and validation checks.",
+        startDate: "2026-12-10T10:00:00+08:00",
+        endDate: "2026-12-10T16:00:00+08:00",
+        location: "Dago Creative Hub",
+        isPaid: false,
+        price: 0,
+        maxCapacity: 45,
+        status: "APPROVED",
+        organizerEmail: "dagotech@example.com",
+        posterUrl: "https://images.unsplash.com/photo-1540575467063-178a50c2df87",
+        createdAt: new Date().toISOString(),
+      };
+      saveEventsToDisk([...allEvents.filter((e) => e.id !== tahapCEventId), testEvt]);
+    });
+
+    it("9.1 normalizeDateToWitaIso melempar error validasi tanggal cacat dan bukan RangeError", () => {
+      expect(() => normalizeDateToWitaIso("not-a-valid-date")).toThrow(
+        /Format tanggal tidak valid/
+      );
+    });
+
+    it("9.2 updateEventDetails dan organizerResubmitEvent menolak startDate > endDate", async () => {
+      await expect(
+        updateEventDetails(tahapCEventId, {
+          startDate: "2026-12-10T16:00:00+08:00",
+          endDate: "2026-12-10T10:00:00+08:00",
+        })
+      ).rejects.toThrow(/Tanggal dan waktu selesai tidak boleh mendahului tanggal mulai/);
+
+      await expect(
+        organizerResubmitEvent("dagotech@example.com", tahapCEventId, {
+          startDate: "2026-12-10T16:00:00+08:00",
+          endDate: "2026-12-10T10:00:00+08:00",
+        })
+      ).rejects.toThrow(/Tanggal dan waktu selesai tidak boleh mendahului tanggal mulai/);
+    });
+
+    it("9.3 updateEventDetails berhasil ketika hanya mengirim ticketTiers tanpa maxCapacity", async () => {
+      const updated = await updateEventDetails(tahapCEventId, {
+        ticketTiers: [
+          {
+            id: "tier-c-1",
+            name: "Reguler",
+            price: 50000,
+            quota: 20,
+            isActive: true,
+          },
+        ],
+      });
+      expect(updated.ticketTiers).toHaveLength(1);
+      expect(updated.ticketTiers?.[0].name).toBe("Reguler");
+      expect(updated.maxCapacity).toBe(45);
+    });
+
+    it("9.4 validateEventRefundPolicy menolak tipe selain number atau numeric string", () => {
+      const resBool = validateEventRefundPolicy({
+        policyType: "REFUNDABLE_UNTIL_H_MINUS",
+        hMinusDays: true as any,
+      });
+      expect(resBool.valid).toBe(false);
+
+      const resArray = validateEventRefundPolicy({
+        policyType: "REFUNDABLE_UNTIL_H_MINUS",
+        hMinusDays: 3,
+        refundFeePercent: [10] as any,
+      });
+      expect(resArray.valid).toBe(false);
+
+      const resValid = validateEventRefundPolicy({
+        policyType: "REFUNDABLE_UNTIL_H_MINUS",
+        hMinusDays: 3,
+        refundFeePercent: 10,
+      });
+      expect(resValid.valid).toBe(true);
+    });
+
+    it("9.5 validateEventSubmission menghilangkan deadlock multi-tier berbayar saat price=0", () => {
+      const payload: EventSubmissionPayload = {
+        title: "Bali Multi-Tier Conference",
+        category: "TECH",
+        description: "Konferensi dengan berbagai tier tiket.",
+        startDate: "2026-12-15T09:00:00+08:00",
+        endDate: "2026-12-15T17:00:00+08:00",
+        location: "Dago Hall",
+        isPaid: false, // Organizer forms may leave isPaid false or price 0 when configuring tiers
+        price: 0,
+        maxCapacity: 100,
+        posterUrl: "https://images.unsplash.com/photo-1540575467063-178a50c2df87",
+        organizerName: "Tech Org",
+        organizerEmail: "organizer@tech.org",
+        organizerPhone: "081234567890",
+        ticketTiers: [
+          {
+            id: "tier-free",
+            name: "Community",
+            price: 0,
+            quota: 50,
+            isActive: true,
+          },
+          {
+            id: "tier-vip",
+            name: "VIP",
+            price: 150000,
+            quota: 50,
+            isActive: true,
+          },
+        ],
+      };
+
+      const result = validateEventSubmission(payload);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it("9.6 formatEventPriceSummary menampilkan 'Gratis & Berbayar' tanpa 'Mulai dari Rp 0'", () => {
+      const summary = formatEventPriceSummary({
+        isPaid: false,
+        price: 0,
+        ticketTiers: [
+          { price: 0, isActive: true },
+          { price: 50000, isActive: true },
+          { price: 100000, isActive: true },
+        ],
+      });
+      expect(summary).toBe("Gratis & Berbayar (Mulai Rp 50.000)");
+      expect(summary).not.toContain("Rp 0");
+    });
+
+    it("9.7 isEventPaidEffective menghasilkan true saat tier berbayar aktif ada", () => {
+      const eventWithPaidTiers = {
+        isPaid: false,
+        price: 0,
+        ticketTiers: [
+          { price: 0, isActive: true },
+          { price: 75000, isActive: true },
+        ],
+      };
+      expect(isEventPaidEffective(eventWithPaidTiers)).toBe(true);
+    });
+
+    it("9.8 getEventTicketAvailability tidak menandai event isSoldOut saat semua tier UPCOMING atau ENDED dengan kuota tersisa", () => {
+      const allEvents = loadEventsFromDisk();
+      const testEvt: CommunityEvent = {
+        id: "evt-tier-upcoming-ended-test",
+        title: "Upcoming Tiers Showcase",
+        category: "TECH",
+        description: "Testing availability status.",
+        startDate: "2026-12-20T09:00:00+08:00",
+        endDate: "2026-12-20T17:00:00+08:00",
+        location: "Dago Hall",
+        isPaid: true,
+        price: 100000,
+        maxCapacity: 50,
+        status: "APPROVED",
+        ticketTiers: [
+          {
+            id: "tier-up-1",
+            name: "Tier Mendatang",
+            price: 100000,
+            quota: 50,
+            isActive: true,
+            salesStartDate: "2026-12-01T00:00:00+08:00",
+            salesEndDate: "2026-12-10T00:00:00+08:00",
+          },
+        ],
+        createdAt: new Date().toISOString(),
+      };
+      saveEventsToDisk([...allEvents.filter((e) => e.id !== testEvt.id), testEvt]);
+
+      const avail = getEventTicketAvailability(testEvt.id);
+      expect(avail.ticketsRemaining).toBe(50);
+      expect(avail.isSoldOut).toBe(false);
+      expect(avail.tiers?.[0].salesStatus).toBe("UPCOMING");
     });
   });
 });

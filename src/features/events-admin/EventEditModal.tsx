@@ -286,14 +286,16 @@ export function EventEditModal({
               onChange={(newTiers) => {
                 const isPaid = newTiers.some((t) => Number(t.price) > 0);
                 const sumQuota = newTiers.reduce((acc, t) => acc + (Number(t.quota) || 0), 0);
+                const nextPrice = isPaid ? Math.min(...newTiers.filter((t) => t.price > 0).map((t) => t.price)) : 0;
                 onFormDataChange({
                   ...formData,
                   ticketTiers: newTiers,
                   isPaid,
-                  price: isPaid ? Math.min(...newTiers.filter((t) => t.price > 0).map((t) => t.price)) : 0,
+                  price: nextPrice,
                   maxCapacity: sumQuota > 0 ? sumQuota : formData.maxCapacity,
                 });
                 if (sumQuota > 0) setRawQuota(String(sumQuota));
+                setRawPrice(String(nextPrice));
               }}
             />
           </div>

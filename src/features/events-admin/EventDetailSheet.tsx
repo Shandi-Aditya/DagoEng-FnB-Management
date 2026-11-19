@@ -227,7 +227,7 @@ export function EventDetailSheet({
           ) : null}
 
           {/* Informasi Bagi Hasil */}
-          {event.price > 0 ? (
+          {isEventPaidEffective(event) ? (
             <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-xs">
               <div className="flex items-center justify-between">
                 <span className="font-medium text-foreground">Kesepakatan bagi hasil</span>

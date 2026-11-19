@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import type { EventTicketTier } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { validateEventPrice, validateEventCapacity } from "@/lib/event-validation";
 
 interface TicketTiersEditorProps {
   tiers: EventTicketTier[];
@@ -56,6 +57,16 @@ export function TicketTiersEditor({
   maxVenueCapacity,
   disabled = false,
 }: TicketTiersEditorProps) {
+  const [rawPrices, setRawPrices] = React.useState<Record<string, string>>({});
+  const [rawQuotas, setRawQuotas] = React.useState<Record<string, string>>({});
+
+  const getRawPrice = (key: string, num: number) => {
+    return rawPrices[key] !== undefined ? rawPrices[key] : String(num ?? 0);
+  };
+  const getRawQuota = (key: string, num: number) => {
+    return rawQuotas[key] !== undefined ? rawQuotas[key] : String(num ?? 50);
+  };
+
   const handleAddTier = () => {
     const newTier: EventTicketTier = {
       id: `tier-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -72,6 +83,18 @@ export function TicketTiersEditor({
     const updated = [...tiers];
     updated[index] = { ...updated[index], ...updates };
     onChange(updated);
+  };
+
+  const onPriceInput = (index: number, key: string, val: string) => {
+    setRawPrices((prev) => ({ ...prev, [key]: val }));
+    const parsed = val.trim() === "" ? 0 : Number(val);
+    handleUpdateTier(index, { price: isNaN(parsed) ? 0 : parsed });
+  };
+
+  const onQuotaInput = (index: number, key: string, val: string) => {
+    setRawQuotas((prev) => ({ ...prev, [key]: val }));
+    const parsed = val.trim() === "" ? 0 : Number(val);
+    handleUpdateTier(index, { quota: isNaN(parsed) ? 0 : parsed });
   };
 
   const handleRemoveTier = (index: number) => {
@@ -156,6 +179,16 @@ export function TicketTiersEditor({
               tier.salesEndDate &&
               new Date(tier.salesEndDate).getTime() < new Date(tier.salesStartDate).getTime();
 
+            const tierKey = tier.id || String(index);
+            const rawPrice = getRawPrice(tierKey, tier.price);
+            const rawQuota = getRawQuota(tierKey, tier.quota);
+
+            const isPriceZero = rawPrice === "0" || rawPrice === "" || Number(rawPrice) === 0;
+            const priceValResult = isPriceZero
+              ? validateEventPrice(false, rawPrice === "" ? "0" : rawPrice)
+              : validateEventPrice(true, rawPrice);
+            const quotaValResult = validateEventCapacity(rawQuota, false);
+
             return (
               <div
                 key={tier.id || index}
@@ -171,7 +204,7 @@ export function TicketTiersEditor({
                     </Badge>
                   </div>
 
-                  {!disabled && tiers.length > 1 && (
+                  {!disabled && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -213,18 +246,17 @@ export function TicketTiersEditor({
                       id={`tier-price-${index}`}
                       type="number"
                       min={0}
-                      step={1000}
+                      step={1}
                       disabled={disabled}
-                      value={tier.price}
-                      onChange={(e) =>
-                        handleUpdateTier(index, {
-                          price: Math.max(0, Math.floor(Number(e.target.value) || 0)),
-                        })
-                      }
+                      value={rawPrice}
+                      onChange={(e) => onPriceInput(index, tierKey, e.target.value)}
                       placeholder="0 untuk gratis"
                       required
                       className="h-8 text-xs font-mono"
                     />
+                    {!priceValResult.valid && priceValResult.error && (
+                      <p className="text-xs text-destructive leading-tight">{priceValResult.error}</p>
+                    )}
                   </div>
 
                   {/* Kuota */}
@@ -236,17 +268,18 @@ export function TicketTiersEditor({
                       id={`tier-quota-${index}`}
                       type="number"
                       min={1}
+                      max={1000}
+                      step={1}
                       disabled={disabled}
-                      value={tier.quota}
-                      onChange={(e) =>
-                        handleUpdateTier(index, {
-                          quota: Math.max(1, Math.floor(Number(e.target.value) || 1)),
-                        })
-                      }
+                      value={rawQuota}
+                      onChange={(e) => onQuotaInput(index, tierKey, e.target.value)}
                       placeholder="50"
                       required
                       className="h-8 text-xs font-mono"
                     />
+                    {!quotaValResult.valid && quotaValResult.error && (
+                      <p className="text-xs text-destructive leading-tight">{quotaValResult.error}</p>
+                    )}
                   </div>
                 </div>
 

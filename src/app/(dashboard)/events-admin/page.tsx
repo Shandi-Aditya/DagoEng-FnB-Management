@@ -575,8 +575,11 @@ export default function AdminEventsPage() {
       startDate: event.startDate,
       endDate: event.endDate,
       description: event.description,
+      isPaid: event.isPaid,
       price: event.price,
       maxCapacity: event.maxCapacity,
+      ticketTiers: event.ticketTiers,
+      refundPolicy: event.refundPolicy,
     });
     setEditGuidelinesText((event.guidelines || []).join("\n"));
     setIsEditModalOpen(true);

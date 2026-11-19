@@ -153,7 +153,20 @@ export function validateSubmissionForm(form: SubmissionForm, options: { needsPas
   if (!capVal.valid) {
     errors.maxCapacity = capVal.error;
   }
-  const priceVal = validateEventPrice(form.isPaid, form.price);
+  let effectiveIsPaid = form.isPaid;
+  let effectivePrice = form.price;
+  if (Array.isArray(form.ticketTiers) && form.ticketTiers.length > 0) {
+    const paidTiers = form.ticketTiers.filter((t) => Number(t.price) > 0);
+    effectiveIsPaid = paidTiers.length > 0;
+    if (effectiveIsPaid) {
+      const minPaidPrice = Math.min(...paidTiers.map((t) => Number(t.price)));
+      effectivePrice =
+        form.price && Number(form.price) > 0 ? form.price : minPaidPrice;
+    } else {
+      effectivePrice = 0;
+    }
+  }
+  const priceVal = validateEventPrice(effectiveIsPaid, effectivePrice);
   if (!priceVal.valid) {
     errors.price = priceVal.error;
   }

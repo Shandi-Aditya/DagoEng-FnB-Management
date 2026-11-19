@@ -21,6 +21,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import type { CommunityEvent, EventCategory, EventTicketTier, EventRefundPolicy } from "@/types/event";
 import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
 import { EventRefundPolicyEditor } from "@/components/events/EventRefundPolicyEditor";
+import { validateEventCapacity, validateEventTicketTiers } from "@/lib/event-validation";
 
 interface OrganizerRevisionDialogProps {
   event: CommunityEvent | null;
@@ -89,7 +90,54 @@ export function OrganizerRevisionDialog({
   setRefundPolicy,
   hasPaidTickets,
 }: OrganizerRevisionDialogProps) {
+  const [rawCapacity, setRawCapacity] = React.useState<string>(capacity > 0 ? String(capacity) : "");
+  const [capacityError, setCapacityError] = React.useState<string | null>(null);
+  const [tiersError, setTiersError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setRawCapacity(capacity > 0 ? String(capacity) : "");
+  }, [capacity]);
+
+  const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setRawCapacity(val);
+    if (val === "") {
+      setCapacity(0);
+      setCapacityError("Kuota kapasitas wajib diisi.");
+      return;
+    }
+    const num = Number(val);
+    const capCheck = validateEventCapacity(num, false);
+    if (!capCheck.valid) {
+      setCapacityError(capCheck.error || "Kapasitas tidak valid.");
+    } else {
+      setCapacityError(null);
+    }
+    setCapacity(num);
+  };
+
   if (!event) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    const num = Number(rawCapacity);
+    const capCheck = validateEventCapacity(num, false);
+    if (!capCheck.valid) {
+      e.preventDefault();
+      setCapacityError(capCheck.error || "Kapasitas tidak valid.");
+      return;
+    }
+    if (ticketTiers && ticketTiers.length > 0) {
+      const tierCheck = validateEventTicketTiers(ticketTiers, { maxCapacity: num });
+      if (!tierCheck.valid) {
+        e.preventDefault();
+        setTiersError(tierCheck.error || "Format tiket bertingkat tidak valid.");
+        return;
+      }
+    }
+    setCapacityError(null);
+    setTiersError(null);
+    onSubmitRevision(e);
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -118,7 +166,7 @@ export function OrganizerRevisionDialog({
           </div>
         )}
 
-        <form onSubmit={onSubmitRevision} className="space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           {/* Poster Section */}
           <div className="rounded-lg border p-3.5 space-y-2 bg-muted/20">
             <label className="font-medium text-foreground block">Poster event</label>
@@ -214,10 +262,11 @@ export function OrganizerRevisionDialog({
                 max={1000}
                 step={1}
                 required
-                value={capacity === 0 ? "" : capacity}
-                onChange={(e) => setCapacity(e.target.value === "" ? 0 : Number(e.target.value))}
+                value={rawCapacity}
+                onChange={handleCapacityChange}
                 className="w-full h-9 rounded-md border bg-background px-3 text-xs font-mono font-medium text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
               />
+              {capacityError && <p className="text-xs text-destructive">{capacityError}</p>}
             </div>
           </div>
 
@@ -279,6 +328,7 @@ export function OrganizerRevisionDialog({
                   if (sumQuota > 0) setCapacity(sumQuota);
                 }}
               />
+              {tiersError && <p className="text-xs text-destructive mt-1.5">{tiersError}</p>}
             </div>
           )}
 

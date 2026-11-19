@@ -12,6 +12,7 @@ import {
   eventCategoryLabel,
   formatEventPriceSummary,
   formatEventSchedule,
+  isEventPaidEffective,
   parseEventDateBadge,
 } from "./events-catalog-domain";
 
@@ -113,7 +114,7 @@ export function EventCard({ event, isPast }: EventCardProps) {
           render={<Link href={`/events/${event.id}`} />}
           nativeButton={false}
         >
-          <span>{isPast ? "Lihat detail" : (event.isPaid ? "Pesan tiket" : "Daftar")}</span>
+          <span>{isPast ? "Lihat detail" : (isEventPaidEffective(event) ? "Pesan tiket" : "Daftar")}</span>
           <ArrowRight className="size-3.5" />
         </Button>
       </CardFooter>

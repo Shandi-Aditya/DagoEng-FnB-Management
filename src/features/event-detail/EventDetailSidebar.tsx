@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { PublicCommunityEvent } from "@/types/event";
 import { getQuotaBadgeTone } from "./event-detail-domain";
+import { isEventPaidEffective, formatEventPriceSummary } from "@/features/events-catalog/events-catalog-domain";
 
 interface EventDetailSidebarProps {
   event: PublicCommunityEvent;
@@ -23,8 +24,8 @@ export function EventDetailSidebar({
   onOpenBooking,
 }: EventDetailSidebarProps) {
   const isSoldOut = Boolean(event.availability?.isSoldOut);
+  const ticketsRemaining = event.availability?.ticketsRemaining ?? 0;
   const occupancyRate = event.availability?.occupancyRate ?? 0;
-  const quotaStatus = getQuotaBadgeTone(occupancyRate, isSoldOut);
 
   const hasTiers = Boolean(event.ticketTiers && event.ticketTiers.length > 0);
   const tiers = event.ticketTiers || [];
@@ -36,22 +37,30 @@ export function EventDetailSidebar({
       })
     : !isSoldOut;
 
-  const minTierPrice = hasTiers
-    ? Math.min(...tiers.map((t) => Number(t.price || 0)))
-    : event.price;
-  const maxTierPrice = hasTiers
-    ? Math.max(...tiers.map((t) => Number(t.price || 0)))
-    : event.price;
+  const allTiersUpcoming =
+    hasTiers &&
+    tierAvailabilities.length > 0 &&
+    tierAvailabilities.every((a) => a.salesStatus === "UPCOMING");
 
-  const displayPrice = hasTiers
-    ? minTierPrice === 0 && maxTierPrice === 0
-      ? "Gratis"
-      : minTierPrice === maxTierPrice
-      ? formatCurrencyIDR(minTierPrice)
-      : `Mulai dari ${formatCurrencyIDR(minTierPrice)}`
-    : event.isPaid
-    ? formatCurrencyIDR(event.price)
-    : "Gratis";
+  const allTiersEnded =
+    hasTiers &&
+    tierAvailabilities.length > 0 &&
+    tierAvailabilities.every((a) => a.salesStatus === "ENDED");
+
+  let quotaStatus: { label: string; tone: "success" | "warning" | "destructive" | "info" | "neutral" } =
+    getQuotaBadgeTone(occupancyRate, isSoldOut);
+  if (!isSoldOut && ticketsRemaining > 0) {
+    if (allTiersUpcoming) {
+      quotaStatus = { label: "Penjualan belum dibuka", tone: "info" };
+    } else if (allTiersEnded) {
+      quotaStatus = { label: "Penjualan telah berakhir", tone: "destructive" };
+    }
+  } else if (isSoldOut) {
+    quotaStatus = { label: "Habis terjual", tone: "destructive" };
+  }
+
+  const isPaidEffective = isEventPaidEffective(event);
+  const displayPrice = formatEventPriceSummary(event);
 
   return (
     <div className="space-y-4">
@@ -65,7 +74,7 @@ export function EventDetailSidebar({
             <span className="font-mono text-2xl sm:text-3xl font-medium text-foreground">
               {displayPrice}
             </span>
-            {(event.isPaid || (hasTiers && maxTierPrice > 0)) && (
+            {isPaidEffective && (
               <span className="text-xs text-muted-foreground">/ orang</span>
             )}
           </div>
@@ -106,6 +115,8 @@ export function EventDetailSidebar({
                 className={`h-full rounded-full transition-[width] ${
                   isSoldOut
                     ? "bg-destructive"
+                    : allTiersEnded
+                    ? "bg-destructive"
                     : occupancyRate >= 80
                     ? "bg-warning"
                     : "bg-primary"
@@ -116,7 +127,11 @@ export function EventDetailSidebar({
 
             <span className="text-xs text-muted-foreground block pt-0.5">
               {isSoldOut ? (
-                <span className="text-destructive font-medium">Semua tiket telah dipesan</span>
+                <span className="text-destructive font-medium">Habis terjual</span>
+              ) : allTiersUpcoming ? (
+                <span className="text-muted-foreground font-medium">Penjualan belum dibuka</span>
+              ) : allTiersEnded ? (
+                <span className="text-destructive font-medium">Penjualan telah berakhir</span>
               ) : (
                 <span>
                   <strong className="font-mono text-foreground font-medium">{event.availability.ticketsRemaining}</strong> tiket tersisa
@@ -186,9 +201,17 @@ export function EventDetailSidebar({
             <Button disabled variant="outline" size="lg" className="w-full">
               Event telah selesai
             </Button>
-          ) : isSoldOut || (hasTiers && !hasOnSaleTier) ? (
+          ) : isSoldOut ? (
             <Button disabled variant="outline" size="lg" className="w-full text-destructive">
-              Tiket tidak tersedia
+              Habis terjual
+            </Button>
+          ) : allTiersUpcoming ? (
+            <Button disabled variant="outline" size="lg" className="w-full">
+              Penjualan belum dibuka
+            </Button>
+          ) : allTiersEnded || (hasTiers && !hasOnSaleTier) ? (
+            <Button disabled variant="outline" size="lg" className="w-full text-destructive">
+              Penjualan telah berakhir
             </Button>
           ) : (
             <Button
@@ -198,7 +221,7 @@ export function EventDetailSidebar({
               className="w-full"
             >
               <Ticket />
-              <span>{event.isPaid || (hasTiers && maxTierPrice > 0) ? "Pesan tiket sekarang" : "Daftar gratis"}</span>
+              <span>{isPaidEffective ? "Pesan tiket sekarang" : "Daftar gratis"}</span>
             </Button>
           )}
         </div>
@@ -208,7 +231,7 @@ export function EventDetailSidebar({
           <div className="flex items-start gap-2">
             <CheckCircle2 className="size-3.5 text-success shrink-0 mt-0.5" />
             <span>
-              {event.isPaid
+              {isPaidEffective
                 ? "Pembayaran transfer diverifikasi manual oleh tim Dago sebelum QR check-in aktif"
                 : "Konfirmasi instan & penerbitan e-tiket otomatis"}
             </span>

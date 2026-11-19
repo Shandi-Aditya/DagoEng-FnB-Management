@@ -38,6 +38,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OrganizerPayoutDialog } from "@/features/events-portal/OrganizerPayoutDialog";
 import { OrganizerBankGuardDialog } from "@/features/events-portal/OrganizerBankGuardDialog";
 import { OrganizerQRScannerDialog } from "@/features/events-portal/OrganizerQRScannerDialog";
+import { validateEventCapacity, validateEventTicketTiers } from "@/lib/event-validation";
 import { OrganizerSignedOut } from "@/features/events-portal/OrganizerSignedOut";
 import { EventSubmissionForm } from "@/features/events-portal/EventSubmissionForm";
 import { EventPromosDialog } from "@/components/events/EventPromosDialog";
@@ -305,6 +306,22 @@ export default function CommunityOrganizerPortalPage() {
     e.preventDefault();
     const targetEmail = activeEmail || organizerEmail || user?.email || "";
     if (!revisionEvent || !targetEmail) return;
+
+    const capNum = Number(revisionCapacity);
+    const capCheck = validateEventCapacity(capNum, false);
+    if (!capCheck.valid) {
+      setErrorMessage(capCheck.error || "Kapasitas kuota event tidak valid.");
+      notify.error("Validasi gagal", capCheck.error);
+      return;
+    }
+    if (revisionTiers && revisionTiers.length > 0) {
+      const tierCheck = validateEventTicketTiers(revisionTiers, { maxCapacity: capNum });
+      if (!tierCheck.valid) {
+        setErrorMessage(tierCheck.error || "Format jenis tiket tidak valid.");
+        notify.error("Validasi gagal", tierCheck.error);
+        return;
+      }
+    }
 
     try {
       setIsSubmittingRevision(true);

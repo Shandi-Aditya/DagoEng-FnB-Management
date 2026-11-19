@@ -18,6 +18,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE } from "@/lib/event-validation";
 import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
 import { EventRefundPolicyEditor } from "@/components/events/EventRefundPolicyEditor";
+import { formatEventPriceSummary } from "@/features/events-catalog/events-catalog-domain";
 
 import {
   EVENT_CATEGORIES,
@@ -344,8 +345,16 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
                     set("ticketTiers", tiers);
                     const sumQ = tiers.reduce((acc, t) => acc + (Number(t.quota) || 0), 0);
                     if (sumQ > 0) set("maxCapacity", sumQ);
-                    const hasPaid = tiers.some((t) => Number(t.price) > 0);
-                    if (hasPaid) set("isPaid", true);
+                    const paidTiers = tiers.filter((t) => Number(t.price) > 0);
+                    const hasPaid = paidTiers.length > 0;
+                    if (hasPaid) {
+                      set("isPaid", true);
+                      const minPaidPrice = Math.min(...paidTiers.map((t) => Number(t.price)));
+                      set("price", minPaidPrice);
+                    } else if (tiers.length > 0) {
+                      set("isPaid", false);
+                      set("price", 0);
+                    }
                   }}
                   maxVenueCapacity={capacityHint.capacity}
                 />
@@ -419,7 +428,9 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
             </span>
             <span className="flex items-center gap-2">
               <Ticket className="size-4 shrink-0" />
-              {form.isPaid ? `${formatCurrencyIDR(form.price || 0)} · bagian Anda ${form.proposedOrganizerPercent}%` : "Gratis"}
+              {form.isPaid
+                ? `${formatEventPriceSummary(form)} · bagian Anda ${form.proposedOrganizerPercent}%`
+                : formatEventPriceSummary(form)}
             </span>
           </CardContent>
         </Card>

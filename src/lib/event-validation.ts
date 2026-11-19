@@ -300,14 +300,19 @@ export function resolveOrganizerSharePercent(
 export function normalizeDateToWitaIso(dateInput: string): string {
   if (!dateInput) return "";
   const trimmed = dateInput.trim();
+  let parsed: Date;
   if (trimmed.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(trimmed)) {
-    return new Date(trimmed).toISOString();
-  }
-  if (trimmed.includes("T")) {
+    parsed = new Date(trimmed);
+  } else if (trimmed.includes("T")) {
     const withSec = trimmed.length === 16 ? `${trimmed}:00` : trimmed;
-    return new Date(`${withSec}+08:00`).toISOString();
+    parsed = new Date(`${withSec}+08:00`);
+  } else {
+    parsed = new Date(`${trimmed}T00:00:00+08:00`);
   }
-  return new Date(`${trimmed}T00:00:00+08:00`).toISOString();
+  if (isNaN(parsed.getTime())) {
+    throw new Error(`Format tanggal tidak valid: '${dateInput}'.`);
+  }
+  return parsed.toISOString();
 }
 
 /**
@@ -523,6 +528,13 @@ export function validateEventRefundPolicy(rawPolicy: unknown): EventValidationRe
     };
   }
 
+  if (typeof p.hMinusDays !== "number" && typeof p.hMinusDays !== "string") {
+    return {
+      valid: false,
+      error: "Batas hari pengajuan refund (H-) harus berupa angka atau teks numerik.",
+    };
+  }
+
   if (typeof p.hMinusDays === "string") {
     const trimmedDays = p.hMinusDays.trim();
     if (!/^\d+$/.test(trimmedDays)) {
@@ -545,6 +557,13 @@ export function validateEventRefundPolicy(rawPolicy: unknown): EventValidationRe
     return {
       valid: false,
       error: "Potongan biaya admin refund wajib diisi.",
+    };
+  }
+
+  if (typeof p.refundFeePercent !== "number" && typeof p.refundFeePercent !== "string") {
+    return {
+      valid: false,
+      error: "Potongan biaya admin refund harus berupa angka atau teks numerik.",
     };
   }
 

@@ -1893,10 +1893,10 @@ export function getEventTicketAvailability(
       };
     });
 
-    const hasAvailableTier = tierAvailabilities.some(
-      (t) => !t.isSoldOut && t.salesStatus === "ON_SALE"
-    );
-    if (!hasAvailableTier) {
+    const allTiersSoldOut =
+      tierAvailabilities.length > 0 &&
+      tierAvailabilities.every((t) => t.isSoldOut || t.remaining <= 0);
+    if (allTiersSoldOut || ticketsRemaining <= 0) {
       isSoldOut = true;
     }
   }
@@ -2232,7 +2232,21 @@ export function validateEventSubmission(payload: EventSubmissionPayload): { vali
   }
 
   // 7. Pricing
-  const priceValidation = validateEventPrice(Boolean(payload.isPaid), payload.price);
+  let effectiveIsPaid = Boolean(payload.isPaid);
+  let effectivePrice = payload.price;
+  if (Array.isArray(payload.ticketTiers) && payload.ticketTiers.length > 0) {
+    const paidTiers = payload.ticketTiers.filter((t: any) => Number(t.price) > 0);
+    effectiveIsPaid = paidTiers.length > 0;
+    if (effectiveIsPaid) {
+      const minPaidPrice = Math.min(...paidTiers.map((t: any) => Number(t.price)));
+      effectivePrice =
+        payload.price && Number(payload.price) > 0 ? payload.price : minPaidPrice;
+    } else {
+      effectivePrice = 0;
+    }
+  }
+
+  const priceValidation = validateEventPrice(effectiveIsPaid, effectivePrice);
   if (!priceValidation.valid) {
     errors.push(priceValidation.error!);
   }
@@ -2611,8 +2625,29 @@ export async function updateEventDetails(
       if (updates.title !== undefined) sanitizedUpdates.title = sanitizeHtmlText(updates.title);
       if (updates.category !== undefined) sanitizedUpdates.category = updates.category;
       if (updates.description !== undefined) sanitizedUpdates.description = sanitizeHtmlText(updates.description);
-      if (updates.startDate !== undefined) sanitizedUpdates.startDate = new Date(updates.startDate).toISOString();
-      if (updates.endDate !== undefined) sanitizedUpdates.endDate = new Date(updates.endDate).toISOString();
+      if (updates.startDate !== undefined) {
+        const d = new Date(updates.startDate);
+        if (isNaN(d.getTime())) {
+          throw new Error("Format tanggal mulai event tidak valid.");
+        }
+        sanitizedUpdates.startDate = d.toISOString();
+      }
+      if (updates.endDate !== undefined) {
+        const d = new Date(updates.endDate);
+        if (isNaN(d.getTime())) {
+          throw new Error("Format tanggal selesai event tidak valid.");
+        }
+        sanitizedUpdates.endDate = d.toISOString();
+      }
+      const effectiveStartDate = sanitizedUpdates.startDate || existing.startDate;
+      const effectiveEndDate = sanitizedUpdates.endDate || existing.endDate;
+      if (
+        effectiveStartDate &&
+        effectiveEndDate &&
+        new Date(effectiveEndDate).getTime() < new Date(effectiveStartDate).getTime()
+      ) {
+        throw new Error("Tanggal dan waktu selesai tidak boleh mendahului tanggal mulai.");
+      }
       if (updates.location !== undefined) sanitizedUpdates.location = sanitizeHtmlText(updates.location);
       if (updates.isPaid !== undefined || updates.price !== undefined) {
         const targetIsPaid = updates.isPaid !== undefined ? Boolean(updates.isPaid) : existing.isPaid;
@@ -2625,7 +2660,12 @@ export async function updateEventDetails(
         sanitizedUpdates.price = priceVal.value!;
       }
 
-      if (hasCapacityChange) {
+      const isExplicitCapacitySent =
+        updates.maxCapacity !== undefined &&
+        updates.maxCapacity !== null &&
+        (updates.maxCapacity as unknown) !== "";
+
+      if (isExplicitCapacitySent) {
         const capVal = validateEventCapacity(updates.maxCapacity, false);
         if (!capVal.valid) {
           throw new Error(capVal.error || "Kapasitas kuota event tidak valid.");
@@ -5646,6 +5686,18 @@ export async function organizerResubmitEvent(
       }
 
       // Validasi urutan tanggal
+      if (updates.startDate !== undefined) {
+        const d = new Date(updates.startDate);
+        if (isNaN(d.getTime())) {
+          throw new Error("Format tanggal mulai event tidak valid.");
+        }
+      }
+      if (updates.endDate !== undefined) {
+        const d = new Date(updates.endDate);
+        if (isNaN(d.getTime())) {
+          throw new Error("Format tanggal selesai event tidak valid.");
+        }
+      }
       const effectiveStartDate = updates.startDate || existing.startDate;
       const effectiveEndDate = updates.endDate || existing.endDate;
       if (
@@ -5684,7 +5736,12 @@ export async function organizerResubmitEvent(
       }
 
       let newMaxCapacity = existing.maxCapacity;
-      if (hasCapacityChange) {
+      const isExplicitCapacitySent =
+        updates.maxCapacity !== undefined &&
+        updates.maxCapacity !== null &&
+        (updates.maxCapacity as unknown) !== "";
+
+      if (isExplicitCapacitySent) {
         const capVal = validateEventCapacity(updates.maxCapacity, false);
         if (!capVal.valid) {
           throw new Error(capVal.error || "Kapasitas kuota event tidak valid.");

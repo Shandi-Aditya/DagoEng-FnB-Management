@@ -45,11 +45,9 @@ export function EventBookingDialog({
   isSubmitting,
   error,
 }: EventBookingDialogProps) {
-  if (!event) return null;
-
-  const tiers = event.ticketTiers || [];
+  const tiers = event?.ticketTiers || [];
   const hasTiers = tiers.length > 0;
-  const tierAvailabilities = event.availability?.tiers || event.tierAvailability || [];
+  const tierAvailabilities = event?.availability?.tiers || event?.tierAvailability || [];
 
   const selectedTier = hasTiers
     ? tiers.find((t) => t.id === form.ticketTierId) || null
@@ -65,7 +63,7 @@ export function EventBookingDialog({
       const firstAvailable =
         tiers.find((t) => {
           const a = tierAvailabilities.find((ta) => ta.tierId === t.id);
-          return a ? !a.isSoldOut && a.salesStatus === "ON_SALE" : t.isActive !== false;
+          return a ? !a.isSoldOut && a.salesStatus === "ON_SALE" && t.isActive !== false : t.isActive !== false;
         });
       if (firstAvailable) {
         setForm((prev) => ({ ...prev, ticketTierId: firstAvailable.id }));
@@ -75,8 +73,8 @@ export function EventBookingDialog({
     }
   }, [open, hasTiers, tiers, tierAvailabilities, form.ticketTierId, setForm]);
 
-  const maxAllowedPerTx = event.maxTicketsPerBooking || 5;
-  const overallRemainingTickets = event.availability?.ticketsRemaining ?? maxAllowedPerTx;
+  const maxAllowedPerTx = event?.maxTicketsPerBooking || 5;
+  const overallRemainingTickets = event?.availability?.ticketsRemaining ?? maxAllowedPerTx;
   const tierRemaining = selectedTierAvail
     ? selectedTierAvail.remaining
     : selectedTier
@@ -90,8 +88,8 @@ export function EventBookingDialog({
 
   const unitPrice = selectedTier
     ? Number(selectedTier.price || 0)
-    : event.isPaid
-      ? Number(event.price || 0)
+    : event?.isPaid
+      ? Number(event?.price || 0)
       : 0;
 
   const subtotalPrice = unitPrice * form.ticketCount;
@@ -106,7 +104,7 @@ export function EventBookingDialog({
   const [isValidatingPromo, setIsValidatingPromo] = React.useState(false);
 
   React.useEffect(() => {
-    if (!cleanPromoInput || subtotalPrice <= 0) {
+    if (!event?.id || !cleanPromoInput || subtotalPrice <= 0) {
       setPromoValidation(null);
       return;
     }
@@ -141,10 +139,12 @@ export function EventBookingDialog({
     }, 400);
 
     return () => clearTimeout(timer);
-  }, [event.id, cleanPromoInput, subtotalPrice, form.ticketTierId]);
+  }, [event?.id, cleanPromoInput, subtotalPrice, form.ticketTierId]);
 
   const appliedDiscount = promoValidation?.valid ? promoValidation.discountAmount : 0;
   const totalPrice = Math.max(0, subtotalPrice - appliedDiscount);
+
+  if (!event) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -181,7 +181,7 @@ export function EventBookingDialog({
                   const isSoldOut = avail ? avail.isSoldOut : false;
                   const isUpcoming = avail?.salesStatus === "UPCOMING";
                   const isEnded = avail?.salesStatus === "ENDED";
-                  const isUnavailable = isSoldOut || isUpcoming || isEnded;
+                  const isUnavailable = isSoldOut || isUpcoming || isEnded || tier.isActive === false;
                   const isSelected = form.ticketTierId === tier.id;
 
                   return (
@@ -411,6 +411,7 @@ export function EventBookingDialog({
                   (hasTiers &&
                     (!form.ticketTierId ||
                       !selectedTier ||
+                      selectedTier.isActive === false ||
                       Boolean(selectedTierAvail?.isSoldOut) ||
                       selectedTierAvail?.salesStatus === "UPCOMING" ||
                       selectedTierAvail?.salesStatus === "ENDED"))
