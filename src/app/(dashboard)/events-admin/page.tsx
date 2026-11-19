@@ -397,6 +397,28 @@ export default function AdminEventsPage() {
     }
   };
 
+  const handleDeleteBooking = async (booking: EventTicketOrder) => {
+    if (!window.confirm(`Hapus permanen pesanan tiket ${booking.ticketCode} (${booking.guestName})? Tindakan ini tidak dapat dibatalkan.`)) {
+      return;
+    }
+    try {
+      setIsProcessingPaymentAction(true);
+      const res = await fetch(`/api/events/bookings/${booking.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menghapus pesanan tiket.");
+      }
+      setActionSuccessMessage(`Pesanan tiket "${booking.ticketCode}" berhasil dihapus permanen.`);
+      await loadAdminEvents();
+    } catch (err: any) {
+      setActionErrorMessage(err.message || "Gagal menghapus pesanan tiket.");
+    } finally {
+      setIsProcessingPaymentAction(false);
+    }
+  };
+
   const handleConfirmRejectPayment = async () => {
     if (!rejectPaymentTarget || !rejectPaymentReason.trim()) {
       setActionErrorMessage("Alasan penolakan pembayaran wajib diisi.");
@@ -918,6 +940,7 @@ export default function AdminEventsPage() {
             onRequestRevision={(e) => openModerationDialog(e, "REVISION")}
             onReject={(e) => openModerationDialog(e, "REJECT")}
             onArchive={(e) => openModerationDialog(e, "ARCHIVE")}
+            onDelete={handleDeleteEvent}
             searchQuery={searchQuery}
           />
         </div>
@@ -955,6 +978,7 @@ export default function AdminEventsPage() {
             setRejectPaymentCancelBooking(false);
           }}
           onPreviewProof={(b) => setSelectedProofBooking(b)}
+          onDeleteBooking={handleDeleteBooking}
           isProcessing={isProcessingPaymentAction}
         />
       )}
@@ -1032,6 +1056,7 @@ export default function AdminEventsPage() {
         event={selectedEventForAttendees}
         bookings={allBookings}
         onToggleCheckIn={handleCheckInToggle}
+        onDeleteBooking={handleDeleteBooking}
         isUpdatingCheckInId={isUpdatingCheckInId}
       />
 

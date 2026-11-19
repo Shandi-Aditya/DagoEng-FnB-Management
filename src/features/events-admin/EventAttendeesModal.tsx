@@ -5,6 +5,7 @@ import {
   Download,
   RotateCcw,
   Search,
+  Trash2,
   UserCheck,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,7 @@ export interface EventAttendeesModalProps {
   event: CommunityEvent | null;
   bookings: EventTicketOrder[];
   onToggleCheckIn: (booking: EventTicketOrder) => void;
+  onDeleteBooking?: (booking: EventTicketOrder) => void;
   isUpdatingCheckInId: string | null;
 }
 
@@ -46,6 +48,7 @@ export function EventAttendeesModal({
   event,
   bookings,
   onToggleCheckIn,
+  onDeleteBooking,
   isUpdatingCheckInId,
 }: EventAttendeesModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -312,29 +315,44 @@ export function EventAttendeesModal({
                         </TableCell>
 
                         <TableCell className="text-right">
-                          <Button
-                            variant={isCheckedIn ? "outline" : "default"}
-                            size="sm"
-                            onClick={() => onToggleCheckIn(b)}
-                            disabled={
-                              isUpdating ||
-                              !isEventTodayWita(event) ||
-                              b.paymentStatus !== "PAID" ||
-                              b.refundStatus === "REQUESTED"
-                            }
-                          >
-                            {isCheckedIn ? (
-                              <>
-                                <RotateCcw />
-                                <span className="hidden sm:inline">Batal hadir</span>
-                              </>
-                            ) : (
-                              <>
-                                <UserCheck />
-                                <span className="hidden sm:inline">Tandai hadir</span>
-                              </>
-                            )}
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant={isCheckedIn ? "outline" : "default"}
+                              size="sm"
+                              onClick={() => onToggleCheckIn(b)}
+                              disabled={
+                                isUpdating ||
+                                !isEventTodayWita(event) ||
+                                b.paymentStatus !== "PAID" ||
+                                b.refundStatus === "REQUESTED"
+                              }
+                            >
+                              {isCheckedIn ? (
+                                <>
+                                  <RotateCcw />
+                                  <span className="hidden sm:inline">Batal hadir</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UserCheck />
+                                  <span className="hidden sm:inline">Tandai hadir</span>
+                                </>
+                              )}
+                            </Button>
+                            {onDeleteBooking && b.paymentStatus !== "PAID" && (b.checkedInQty || 0) === 0 ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onDeleteBooking(b)}
+                                disabled={isUpdating}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                title="Hapus pesanan"
+                              >
+                                <Trash2 />
+                                <span className="sr-only">Hapus</span>
+                              </Button>
+                            ) : null}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

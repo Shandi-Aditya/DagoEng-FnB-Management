@@ -8,6 +8,7 @@ import {
   Eye,
   MessageSquare,
   MoreHorizontal,
+  Trash2,
   UserCheck,
   XCircle,
 } from "lucide-react";
@@ -55,6 +56,7 @@ export interface EventsModerationTableProps {
   onRequestRevision: (event: CommunityEvent) => void;
   onReject: (event: CommunityEvent) => void;
   onArchive: (event: CommunityEvent) => void;
+  onDelete?: (event: CommunityEvent) => void;
   searchQuery?: string;
 }
 
@@ -72,6 +74,7 @@ export function EventsModerationTable({
   onRequestRevision,
   onReject,
   onArchive,
+  onDelete,
   searchQuery,
 }: EventsModerationTableProps) {
   const startIndex = (currentPage - 1) * pageSize;
@@ -288,6 +291,19 @@ export function EventsModerationTable({
                               <DropdownMenuItem onClick={() => onArchive(event)}>
                                 <Archive />
                                 <span>Arsipkan event</span>
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
+
+                          {onDelete && (effStatus === "PENDING" || effStatus === "REVISION_REQUESTED" || effStatus === "REJECTED" || effStatus === "ARCHIVED") ? (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => onDelete(event)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 />
+                                <span>Hapus permanen</span>
                               </DropdownMenuItem>
                             </>
                           ) : null}

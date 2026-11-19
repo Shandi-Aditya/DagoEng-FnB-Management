@@ -209,44 +209,61 @@ export function EventDetailSheet({
         {/* Action Buttons Footer */}
         <SheetFooter className="mt-auto pt-4 border-t gap-2 flex-col sm:flex-row">
           {(effStatus === "PENDING" || effStatus === "REVISION_REQUESTED") ? (
-            <div className="flex flex-col sm:flex-row gap-2 w-full">
-              <Button
-                variant="default"
-                size="lg"
-                className="flex-1"
-                onClick={() => {
-                  onOpenChange(false);
-                  onApprove(event);
-                }}
-                disabled={isProcessing}
-              >
-                <CheckCircle2 />
-                <span>Setujui</span>
-              </Button>
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => {
-                  onOpenChange(false);
-                  onRequestRevision(event);
-                }}
-                disabled={isProcessing}
-              >
-                <MessageSquare />
-                <span>Revisi</span>
-              </Button>
-              <Button
-                variant="destructive"
-                size="lg"
-                onClick={() => {
-                  onOpenChange(false);
-                  onReject(event);
-                }}
-                disabled={isProcessing}
-              >
-                <XCircle />
-                <span>Tolak</span>
-              </Button>
+            <div className="flex flex-col gap-2 w-full">
+              <div className="flex flex-col sm:flex-row gap-2 w-full">
+                <Button
+                  variant="default"
+                  size="lg"
+                  className="flex-1"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onApprove(event);
+                  }}
+                  disabled={isProcessing}
+                >
+                  <CheckCircle2 />
+                  <span>Setujui</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onRequestRevision(event);
+                  }}
+                  disabled={isProcessing}
+                >
+                  <MessageSquare />
+                  <span>Revisi</span>
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="lg"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onReject(event);
+                  }}
+                  disabled={isProcessing}
+                >
+                  <XCircle />
+                  <span>Tolak</span>
+                </Button>
+              </div>
+              {onDelete ? (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/30"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onDelete(event);
+                  }}
+                  disabled={isProcessing}
+                >
+                  <Trash2 />
+                  <span>Hapus permanen</span>
+                </Button>
+              ) : null}
             </div>
           ) : (
             <div className="flex flex-col sm:flex-row gap-2 w-full justify-between">

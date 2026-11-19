@@ -15,6 +15,7 @@ import {
   saveBookingsToDisk,
   appendAuditLog,
 } from "../src/lib/events";
+import { syncStorageFromDb } from "../src/lib/data-storage";
 import type { CommunityEvent, EventTicketOrder } from "../src/types/event";
 
 const isApply = process.argv.includes("--apply");
@@ -26,17 +27,26 @@ function isIdentifiedTestData(event: CommunityEvent): boolean {
   const o = (event.organizerName || "").toLowerCase();
   const id = (event.id || "").toLowerCase();
 
+  const testPatterns = [
+    "yjryuxrt",
+    "kfhjgdhsgfaf",
+    "fixing bug",
+    "[test qa 2]",
+    "sdfghjkl",
+    "cek sans",
+    "cek 1234567890",
+    "test",
+    "testing",
+    "uji coba",
+    "dummy",
+    "disposable",
+  ];
+
   return (
     id.startsWith("evt-test") ||
     id.startsWith("evt-dist-lock") ||
     id.startsWith("evt-zero-booking") ||
-    id.includes("disposable") ||
-    t.includes("test") ||
-    t.includes("testing") ||
-    t.includes("uji coba") ||
-    t.includes("dummy") ||
-    o.includes("test") ||
-    o.includes("fixing bug")
+    testPatterns.some((p) => t.includes(p) || o.includes(p) || d.includes(p) || id.includes(p))
   );
 }
 
@@ -44,8 +54,11 @@ function isIdentifiedTestBooking(booking: EventTicketOrder): boolean {
   const n = (booking.guestName || "").toLowerCase();
   const e = (booking.guestEmail || "").toLowerCase();
   const id = (booking.id || "").toLowerCase();
+  const code = (booking.ticketCode || "").toUpperCase();
 
   return (
+    code.includes("DAGO-EVT-88221") ||
+    code.includes("DAGO-EVT-14704") ||
     id.startsWith("bk-test") ||
     id.startsWith("bk-init") ||
     id.startsWith("tkt-test") ||
@@ -57,6 +70,15 @@ function isIdentifiedTestBooking(booking: EventTicketOrder): boolean {
 }
 
 async function main() {
+  if (process.env.DATABASE_URL) {
+    try {
+      await syncStorageFromDb("events.json");
+      await syncStorageFromDb("event_bookings.json");
+    } catch (e) {
+      console.warn("Peringatan pra-sinkronisasi database gagal:", e);
+    }
+  }
+
   console.log("================================================================================");
   console.log(`DAGOENG TEST DATA CLEANUP UTILITY (Mode: ${isApply ? "EXECUTION (--apply)" : "DRY RUN (Preview Only)"})`);
   console.log("================================================================================");
@@ -111,9 +133,14 @@ async function main() {
       if (remainingBookings.length > 0) {
         report.rejectedEvents.push({
           id: ev.id,
-          reason: `Event [${ev.title}] masih memiliki ${remainingBookings.length} tiket aktif yang tidak dihapus.`,
+          reason: `Event [${ev.title}] masih memiliki ${remainingBookings.length} tiket aktif yang tidak dihapus (diarsipkan secara aman).`,
         });
-        survivingEvents.push(ev);
+        survivingEvents.push({
+          ...ev,
+          status: "ARCHIVED",
+          isTestData: true,
+          updatedAt: new Date().toISOString(),
+        });
       } else {
         report.deletedEvents.push(`[${ev.id}] ${ev.title}`);
       }

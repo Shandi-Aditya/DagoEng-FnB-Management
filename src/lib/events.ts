@@ -1753,7 +1753,7 @@ export async function getApprovedEvents(): Promise<PublicCommunityEvent[]> {
     all = loadEventsFromDisk();
   }
   return all
-    .filter((e) => e.status === "APPROVED")
+    .filter((e) => e.status === "APPROVED" && !e.isTestData)
     .map(toPublicEvent)
     .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
 }
@@ -2089,7 +2089,8 @@ export async function getPublicEventById(id: string): Promise<PublicCommunityEve
   const event = allEvents.find(
     (e) =>
       ((e.id || "").trim().toLowerCase() === normalizedId || e.id === id) &&
-      e.status === "APPROVED"
+      e.status === "APPROVED" &&
+      !e.isTestData
   );
   if (!event) return null;
 
