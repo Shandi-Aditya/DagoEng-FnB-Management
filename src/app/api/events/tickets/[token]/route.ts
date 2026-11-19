@@ -8,6 +8,7 @@ import {
   getEventBankAccounts,
   isPlaceholderBankAccount,
   expirePendingBookings,
+  validateTicketRefundEligibility,
 } from "@/lib/events";
 import { CommunityEvent } from "@/types/event";
 import fs from "fs";
@@ -102,6 +103,23 @@ export async function GET(req: NextRequest, props: { params: Promise<{ token: st
       checkInStatus: booking.checkInStatus,
       checkedInQty: booking.checkedInQty,
       checkInTime: booking.checkInTime,
+      checkedInSeats: booking.checkedInSeats || null,
+      seatCheckInTimes: booking.seatCheckInTimes || null,
+      paymentRejectionReason: booking.paymentRejectionReason || null,
+      paymentVerificationNote: booking.paymentVerificationNote || null,
+      ticketTierId: booking.ticketTierId || null,
+      ticketTierName: booking.ticketTierName || null,
+      isInvitation: Boolean(booking.isInvitation),
+      invitationNote: booking.invitationNote || null,
+      promoCode: booking.promoCode || null,
+      discountAmount: booking.discountAmount || 0,
+      subtotalPrice: booking.subtotalPrice ?? booking.totalPrice,
+      refundStatus: booking.refundStatus || null,
+      refundRequest: booking.refundRequest || null,
+      refundPolicy: matchingEvent?.refundPolicy || null,
+      refundEligibility: matchingEvent
+        ? validateTicketRefundEligibility(matchingEvent, booking, new Date())
+        : null,
       dokuInvoiceNumber: booking.dokuInvoiceNumber,
       dokuPaymentUrl: booking.dokuPaymentUrl,
       destinationBankSnapshot:

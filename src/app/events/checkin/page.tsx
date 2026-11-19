@@ -234,6 +234,7 @@ export default function EventCheckInDashboardPage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Gagal memproses check-in.";
       notify.error("Gagal memproses check-in", msg);
+      throw err;
     } finally {
       setIsProcessingId(null);
     }

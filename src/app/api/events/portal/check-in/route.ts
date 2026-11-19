@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { organizerCheckInAttendee } from "@/lib/events";
+import { organizerCheckInAttendee, getBookingById, getApprovedEvents } from "@/lib/events";
+import { getEventDateStatusWita } from "@/features/events-checkin/events-checkin-domain";
 import { assertOrganizerAuth, maskEmail, maskPhoneNumber } from "@/lib/server-auth";
 import { AttendeeCheckInStatus } from "@/types/event";
 
@@ -63,6 +64,23 @@ export async function PATCH(req: NextRequest) {
 
     // Server-enforced check-in time window: never allow client manipulation via body params
     const enforceDateWindow = !reset;
+
+    if (reset || checkInStatus === "REGISTERED") {
+      const allEvents = await getApprovedEvents();
+      const booking = await getBookingById(identifier);
+      if (booking) {
+        const event = allEvents.find((e) => e.id === booking.eventId);
+        if (event && getEventDateStatusWita(event) !== "TODAY") {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Status kehadiran hanya dapat dibatalkan pada hari pelaksanaan event (WITA).",
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
 
     const updated = await organizerCheckInAttendee(
       auth.email,

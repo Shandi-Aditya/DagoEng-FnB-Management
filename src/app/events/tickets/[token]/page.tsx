@@ -233,6 +233,7 @@ export default function PrivateTicketViewPage() {
       checkedInSeats: ticket.checkedInSeats,
       checkedInQty: ticket.checkedInQty,
       checkInStatus: ticket.checkInStatus,
+      eventId: ticket.eventId,
     },
     selectedTicketIndex
   );

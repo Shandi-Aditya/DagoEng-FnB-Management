@@ -20,6 +20,7 @@ import {
   paymentStatusLabel,
   paymentStatusTone,
 } from "./events-portal-domain";
+import { isEventTodayWita } from "@/features/events-checkin/events-checkin-domain";
 import {
   checkedInGuests,
   pendingAction,
@@ -290,7 +291,12 @@ function NextEventCard({ event, bookings, onOpenCheckIn, onSelectEvent }: NextEv
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row">
-          <Button size="lg" onClick={onOpenCheckIn}>
+          <Button
+            size="lg"
+            onClick={onOpenCheckIn}
+            disabled={!isEventTodayWita(event)}
+            title={!isEventTodayWita(event) ? "Meja check-in hanya aktif pada hari acara (WITA)" : undefined}
+          >
             <ScanLine />
             Mulai check-in
           </Button>

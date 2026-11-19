@@ -78,7 +78,7 @@ Menguji dan memvalidasi keutuhan alur transaksi event berbayar dari awal hingga 
 2. **Pemesanan & Unggah Bukti**:
    - Lakukan pemesanan tiket (misal 2 tiket).
    - Di halaman detail pembayaran, pastikan tombol unggah bukti pembayaran aktif dan menampilkan status **Menunggu Verifikasi Pembayaran**.
-3. **Portal Admin Keuangan** (`/events/admin`):
+3. **Portal Admin Keuangan** (`/events-admin`):
    - Masuk sebagai Admin.
    - Buka tab verifikasi pembayaran tiket.
    - Periksa bukti transfer yang diunggah peserta, lalu tekan tombol **Verifikasi Pembayaran (Setujui)**.
@@ -93,3 +93,33 @@ Menguji dan memvalidasi keutuhan alur transaksi event berbayar dari awal hingga 
    - Gunakan fitur scanner kamera atau masukkan kode tiket `-01`.
    - Pastikan muncul notifikasi sukses hadir (1/2 hadir).
    - Masukkan kembali kode `-01`. Pastikan muncul peringatan merah bahwa tiket sudah digunakan dan jumlah kehadiran tidak bertambah.
+
+---
+
+## 5. Dokumentasi Alur Visual (Screenshots S-07)
+
+Rangkaian tangkapan layar alur event berbayar (*end-to-end*) pada pengujian lokal terisolasi:
+
+1. **Detail Event Berbayar & Rekening Resmi Platform**
+   ![Detail Event Berbayar](./screenshots/s07/s07-01-event-detail-paid.png)
+   *Menampilkan detail acara, harga tiket, dan snapshot rekening resmi BCA platform.*
+
+2. **Pemesanan Tiket & Unggah Bukti Transfer**
+   ![Unggah Bukti Transfer](./screenshots/s07/s07-02-booking-pending-payment.png)
+   *Status pemesanan PENDING dengan instruksi transfer manual dan formulir unggah bukti pembayaran.*
+
+3. **Verifikasi & Persetujuan Admin (/events-admin)**
+   ![Persetujuan Pembayaran Admin](./screenshots/s07/s07-03-admin-payment-approval.png)
+   *Panel moderasi admin keuangan menyetujui bukti transfer dan mengubah status menjadi PAID.*
+
+4. **Aktivasi E-Tiket & Struktur Sub-Tiket Rombongan**
+   ![E-Tiket dan Sub-Tiket](./screenshots/s07/s07-04-eticket-active-subtickets.png)
+   *E-tiket privat aktif dengan kartu sub-tiket independen (-01 dan -02) beserta QR code masing-masing.*
+
+5. **Meja Check-in Lapangan WITA Hari Ini (/events/checkin)**
+   ![Meja Check-in WITA Hari Ini](./screenshots/s07/s07-05-checkin-table-today.png)
+   *Meja check-in hanya aktif untuk event hari ini (WITA) dengan pemindai QR aktif.*
+
+6. **Pencegahan Pemindaian Duplikat (Anti-Duplicate Guard)**
+   ![Penolakan Scan Duplikat](./screenshots/s07/s07-06-checkin-duplicate-guard.png)
+   *Peringatan merah saat sub-tiket yang sama dipindai ulang kedua kalinya.*

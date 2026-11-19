@@ -238,7 +238,7 @@ export function EventCheckInScannerDialog({
 
       const qrCodeSuccessCallback = (decodedText: string) => {
         const now = Date.now();
-        const clean = decodedText.trim().toUpperCase();
+        const clean = decodedText.trim();
 
         if (
           lastScannedRef.current &&

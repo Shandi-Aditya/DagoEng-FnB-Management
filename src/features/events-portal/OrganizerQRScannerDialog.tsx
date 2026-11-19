@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/app/status-badge";
 import { Html5Qrcode } from "html5-qrcode";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
+import { filterTodayEventsWita } from "@/features/events-checkin/events-checkin-domain";
 
 interface OrganizerQRScannerDialogProps {
   open: boolean;
@@ -55,6 +56,23 @@ export function OrganizerQRScannerDialog({
   bookings,
   onCheckInSuccess,
 }: OrganizerQRScannerDialogProps) {
+  const todayEvents = filterTodayEventsWita(events.filter((e) => e.status === "APPROVED"));
+  const hasTodayEvents = todayEvents.length > 0;
+  const [activeEventId, setActiveEventId] = useState<string>(() => {
+    if (selectedEventId && todayEvents.some((e) => e.id === selectedEventId)) {
+      return selectedEventId;
+    }
+    return todayEvents[0]?.id || "";
+  });
+
+  useEffect(() => {
+    if (selectedEventId && todayEvents.some((e) => e.id === selectedEventId)) {
+      setActiveEventId(selectedEventId);
+    } else if (todayEvents.length > 0 && !todayEvents.some((e) => e.id === activeEventId)) {
+      setActiveEventId(todayEvents[0].id);
+    }
+  }, [selectedEventId, todayEvents, activeEventId]);
+
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -159,7 +177,7 @@ export function OrganizerQRScannerDialog({
           body: JSON.stringify({
             email: organizerEmail,
             ticketCode,
-            eventId,
+            eventId: eventId || activeEventId,
             checkInStatus: "CHECKED_IN",
             incrementQty: 1,
             seatNumber,
@@ -216,7 +234,7 @@ export function OrganizerQRScannerDialog({
         }
 
         playBeep(true);
-        const updatedBooking = json.booking as EventTicketOrder;
+        const updatedBooking = (json.data || json.booking) as EventTicketOrder;
         setFeedback({
           type: "SUCCESS",
           title: "Check-in berhasil",
@@ -224,7 +242,7 @@ export function OrganizerQRScannerDialog({
           ticketCode: updatedBooking.ticketCode,
           guestName: updatedBooking.guestName,
           eventTitle: updatedBooking.eventTitle,
-          checkedInQty: updatedBooking.ticketCount,
+          checkedInQty: updatedBooking.checkedInQty ?? updatedBooking.ticketCount,
           ticketCount: updatedBooking.ticketCount,
           timestamp: new Date().toLocaleTimeString("id-ID"),
         });
@@ -242,7 +260,7 @@ export function OrganizerQRScannerDialog({
         setIsProcessing(false);
       }
     },
-    [events, bookings, organizerEmail, onCheckInSuccess, playBeep]
+    [events, bookings, organizerEmail, activeEventId, onCheckInSuccess, playBeep]
   );
 
   const startCameraStream = useCallback(async () => {
@@ -294,7 +312,7 @@ export function OrganizerQRScannerDialog({
   }, [processCheckIn]);
 
   useEffect(() => {
-    if (open) {
+    if (open && hasTodayEvents) {
       const timer = setTimeout(() => {
         startCameraStream();
       }, 300);
@@ -305,7 +323,7 @@ export function OrganizerQRScannerDialog({
       setCameraError(null);
       setManualCode("");
     }
-  }, [open, startCameraStream, stopCameraStream]);
+  }, [open, hasTodayEvents, startCameraStream, stopCameraStream]);
 
   useEffect(() => {
     return () => {
@@ -315,7 +333,7 @@ export function OrganizerQRScannerDialog({
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = manualCode.trim().toUpperCase();
+    const clean = manualCode.trim();
     setManualCode("");
     if (!clean) return;
     processCheckIn(clean);
@@ -337,7 +355,38 @@ export function OrganizerQRScannerDialog({
         </DialogHeader>
 
         <div className="space-y-4 text-xs">
-          {/* Camera Viewport */}
+          {!hasTodayEvents ? (
+            <div className="rounded-lg border border-warning/40 bg-warning/10 p-4 text-xs text-warning space-y-1">
+              <div className="font-semibold flex items-center gap-1.5">
+                <AlertTriangle className="size-4 shrink-0" />
+                <span>Meja check-in belum dibuka</span>
+              </div>
+              <p className="text-foreground">
+                Meja check-in hanya aktif pada hari pelaksanaan event (WITA). Saat ini tidak ada event Anda yang berlangsung hari ini.
+              </p>
+            </div>
+          ) : (
+            <>
+              {todayEvents.length > 1 && (
+                <div className="space-y-1.5 pb-2 border-b">
+                  <label className="text-xs font-medium text-foreground block">
+                    Pilih event hari ini (WITA):
+                  </label>
+                  <select
+                    value={activeEventId}
+                    onChange={(e) => setActiveEventId(e.target.value)}
+                    className="w-full h-9 rounded-md border border-input bg-background px-3 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                  >
+                    {todayEvents.map((ev) => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Camera Viewport */}
           <div className="relative rounded-lg border bg-black/90 aspect-square max-h-[260px] mx-auto w-full flex items-center justify-center overflow-hidden">
             <div id="portal-qr-scanner-viewport" className="w-full h-full" />
 
@@ -401,27 +450,29 @@ export function OrganizerQRScannerDialog({
             </div>
           )}
 
-          {/* Manual Input Form */}
-          <form onSubmit={handleManualSubmit} className="space-y-2 pt-2 border-t">
-            <label className="font-medium text-foreground block">
-              Input kode tiket manual
-            </label>
-            <div className="flex gap-2">
-              <input
-                ref={manualInputRef}
-                type="text"
-                value={manualCode}
-                onChange={(e) => setManualCode(e.target.value.toUpperCase())}
-                placeholder="Contoh: DAGO-EVT-XXXXX"
-                disabled={isProcessing}
-                className="flex-1 h-9 rounded-md border bg-background px-3 text-xs font-mono text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
-              />
-              <Button type="submit" size="sm" disabled={isProcessing || !manualCode.trim()}>
-                {isProcessing ? <RefreshCw className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
-                <span>Verifikasi</span>
-              </Button>
-            </div>
-          </form>
+              {/* Manual Input Form */}
+              <form onSubmit={handleManualSubmit} className="space-y-2 pt-2 border-t">
+                <label className="font-medium text-foreground block">
+                  Input kode tiket manual
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    ref={manualInputRef}
+                    type="text"
+                    value={manualCode}
+                    onChange={(e) => setManualCode(e.target.value)}
+                    placeholder="Contoh: DAGO-EVT-XXXXX"
+                    disabled={isProcessing}
+                    className="flex-1 h-9 rounded-md border bg-background px-3 text-xs font-mono text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring"
+                  />
+                  <Button type="submit" size="sm" disabled={isProcessing || !manualCode.trim()}>
+                    {isProcessing ? <RefreshCw className="size-3.5 animate-spin" /> : <Search className="size-3.5" />}
+                    <span>Verifikasi</span>
+                  </Button>
+                </div>
+              </form>
+            </>
+          )}
 
           <DialogFooter className="pt-2">
             <Button

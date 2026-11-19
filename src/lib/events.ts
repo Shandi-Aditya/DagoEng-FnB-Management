@@ -107,6 +107,7 @@ import {
   BankAccountHolderCandidate,
 } from "@/lib/payout";
 import { dispatchPaidTicketEmail } from "@/lib/email";
+import { getEventDateStatusWita } from "@/features/events-checkin/events-checkin-domain";
 
 const getEventsFile = () => getDataFilePath("events.json");
 const getBookingsFile = () => getDataFilePath("event_bookings.json");
@@ -4550,14 +4551,46 @@ export async function updateBookingCheckIn(
             if (shouldCheckDateWindow) {
               const eventStartDate = event?.startDate || existing.eventDate;
               if (eventStartDate) {
-                const now = options?.currentTimestamp
-                  ? new Date(options.currentTimestamp).getTime()
-                  : Date.now();
+                const refDate = options?.currentTimestamp
+                  ? new Date(options.currentTimestamp)
+                  : new Date();
+                const dateStatus = getEventDateStatusWita(
+                  { startDate: eventStartDate, endDate: event?.endDate },
+                  refDate
+                );
+
+                if (dateStatus === "UPCOMING") {
+                  const startMs = new Date(eventStartDate).getTime();
+                  const twoHoursBefore = startMs - 2 * 60 * 60 * 1000;
+                  const openDateWITA = new Intl.DateTimeFormat("id-ID", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    timeZone: "Asia/Makassar",
+                  }).format(new Date(twoHoursBefore)) + " WITA";
+                  throw new Error(
+                    `Meja check-in belum dibuka untuk event "${eventTitle}". Check-in baru dibuka 2 jam sebelum acara dimulai (${openDateWITA}).`
+                  );
+                }
+
+                if (dateStatus === "PAST") {
+                  throw new Error(
+                    `Pintu check-in telah ditutup karena tanggal pelaksanaan event "${eventTitle}" telah lewat (WITA).`
+                  );
+                }
+
+                // Jika dateStatus === "TODAY", periksa batas jam operasional:
+                const now = refDate.getTime();
                 const startMs = new Date(eventStartDate).getTime();
                 const twoHoursBefore = startMs - 2 * 60 * 60 * 1000;
-                const endMs = event?.endDate
+                let endMs = event?.endDate
                   ? new Date(event.endDate).getTime()
                   : startMs + 24 * 60 * 60 * 1000;
+                if (endMs - startMs > 7 * 24 * 60 * 60 * 1000) {
+                  endMs = startMs + 24 * 60 * 60 * 1000;
+                }
                 const twelveHoursAfter = endMs + 12 * 60 * 60 * 1000;
 
                 if (now < twoHoursBefore) {
@@ -5348,14 +5381,34 @@ export async function organizerCheckInAttendee(
 
   // Event operational date window verification (if enforced)
   if (options?.enforceDateWindow && event.startDate) {
-    const now = Date.now();
+    const refDate = new Date();
+    const dateStatus = getEventDateStatusWita(
+      { startDate: event.startDate, endDate: event.endDate },
+      refDate
+    );
+
+    if (dateStatus === "UPCOMING") {
+      throw new Error(
+        `Meja check-in belum dibuka untuk event "${event.title}". Check-in hanya aktif pada hari pelaksanaan event (WITA).`
+      );
+    }
+
+    if (dateStatus === "PAST") {
+      throw new Error(
+        `Pintu check-in telah ditutup karena tanggal pelaksanaan event "${event.title}" telah lewat (WITA).`
+      );
+    }
+
+    const now = refDate.getTime();
     const startMs = new Date(event.startDate).getTime();
-    const endMs = event.endDate ? new Date(event.endDate).getTime() : startMs + 24 * 60 * 60 * 1000;
-    // Allow check-in starting 2 hours before start until 12 hours after end
+    let endMs = event.endDate ? new Date(event.endDate).getTime() : startMs + 24 * 60 * 60 * 1000;
+    if (endMs - startMs > 7 * 24 * 60 * 60 * 1000) {
+      endMs = startMs + 24 * 60 * 60 * 1000;
+    }
     const bufferBeforeMs = 2 * 60 * 60 * 1000;
     const bufferAfterMs = 12 * 60 * 60 * 1000;
     if (now < startMs - bufferBeforeMs) {
-      throw new Error(`Pintu check-in belum dibuka untuk event "${event.title}". Check-in baru dibuka 2 jam sebelum acara dimulai.`);
+      throw new Error(`Meja check-in belum dibuka untuk event "${event.title}". Check-in baru dibuka 2 jam sebelum acara dimulai.`);
     }
     if (now > endMs + bufferAfterMs) {
       throw new Error(`Pintu check-in telah ditutup karena waktu operasional event "${event.title}" telah selesai.`);
