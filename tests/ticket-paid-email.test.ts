@@ -6,6 +6,7 @@ import {
   dispatchPaidTicketEmail,
   sendTicketConfirmationEmail,
   isEmailServiceConfigured,
+  escapeHtml,
 } from "@/lib/email";
 import {
   createEventSubmission,
@@ -19,6 +20,18 @@ import {
 } from "@/lib/events";
 import type { CommunityEvent, EventRevenueSharingPolicy } from "@/types/event";
 
+const mockSendMail = vi.fn().mockResolvedValue({ messageId: "smtp_test_123" });
+vi.mock("nodemailer", () => ({
+  default: {
+    createTransport: vi.fn(() => ({
+      sendMail: mockSendMail,
+    })),
+  },
+  createTransport: vi.fn(() => ({
+    sendMail: mockSendMail,
+  })),
+}));
+
 describe("TASK S-08 — Kirim E-Tiket Lewat Email Setelah Lunas", () => {
   const originalEnv = process.env;
 
@@ -29,6 +42,18 @@ describe("TASK S-08 — Kirim E-Tiket Lewat Email Setelah Lunas", () => {
     dataStorage.setStorageSyncStatus("events.json", "SYNCED");
     dataStorage.setStorageSyncStatus("event_bookings.json", "SYNCED");
     dataStorage.setStorageSyncStatus("event_settings.json", "SYNCED");
+
+    // Setup global fetch mock for Resend / SendGrid HTTP API
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: any) => {
+      const url = typeof input === "string" ? input : input?.url || "";
+      if (url.includes("resend.com")) {
+        return new Response(JSON.stringify({ id: "resend_msg_test_123" }), { status: 200 });
+      }
+      if (url.includes("sendgrid.com")) {
+        return new Response(JSON.stringify({}), { status: 202 });
+      }
+      return new Response("Not found", { status: 404 });
+    });
   });
 
   afterEach(() => {
@@ -54,8 +79,8 @@ describe("TASK S-08 — Kirim E-Tiket Lewat Email Setelah Lunas", () => {
       expect(payload.eventId).toBe("ev-single");
       expect(payload.seat).toBe(1);
 
-      expect(items[0].qrImageUrl).toContain("api.qrserver.com");
-      expect(items[0].qrImageUrl).toContain(encodeURIComponent(items[0].qrPayload));
+      expect(items[0].qrImageUrl).toBe("cid:qr-seat-1@dagoeng.com");
+      expect(items[0].cid).toBe("qr-seat-1@dagoeng.com");
     });
 
     it("1.2 menghasilkan N sub-tiket independen (-01, -02, -03) untuk pesanan rombongan", () => {
@@ -119,8 +144,37 @@ describe("TASK S-08 — Kirim E-Tiket Lewat Email Setelah Lunas", () => {
       expect(html).toContain("Made Suardana (Pemesan Utama)");
       expect(html).toContain("Tamu Pax #2");
       expect(html).toContain("https://dagoeng.com/events/tickets/tok-xyz");
-      expect(html).toContain("api.qrserver.com");
+      expect(html).toContain("cid:qr-seat-1@dagoeng.com");
+      expect(html).toContain("cid:qr-seat-2@dagoeng.com");
       expect(html).toContain("LUNAS");
+    });
+
+    it("2.2 melakukan escaping HTML secara aman terhadap teks input pengguna", () => {
+      const tickets = buildPaidTicketItems({
+        ticketCode: "DAGO-EVT-XSS",
+        eventId: "ev-xss",
+        ticketCount: 1,
+        guestName: '<script>alert("hacked")</script>',
+      });
+
+      const html = generatePaidTicketEmailHtml({
+        recipientEmail: "xss@example.com",
+        recipientName: '<script>alert("name")</script>',
+        eventTitle: 'Event & "Rock" <Live>',
+        eventDate: "2026-12-05",
+        eventLocation: "Dago & Hub",
+        ticketCode: "DAGO-EVT-XSS",
+        ticketCount: 1,
+        totalPrice: 0,
+        paymentStatus: "PAID",
+        privateAccessUrl: "https://dagoeng.com/events/tickets/tok-xss",
+        tickets,
+      });
+
+      expect(html).not.toContain('<script>alert("hacked")</script>');
+      expect(html).not.toContain('<script>alert("name")</script>');
+      expect(html).toContain("&lt;script&gt;alert(&quot;name&quot;)&lt;/script&gt;");
+      expect(html).toContain("Event &amp; &quot;Rock&quot; &lt;Live&gt;");
     });
   });
 
@@ -169,6 +223,32 @@ describe("TASK S-08 — Kirim E-Tiket Lewat Email Setelah Lunas", () => {
 
       expect(result.sent).toBe(false);
       expect(result.reason).toBe("INVALID_RECIPIENT");
+    });
+
+    it("3.4 berhasil mengirimkan email via SMTP nodemailer dengan lampiran QR per peserta", async () => {
+      delete process.env.RESEND_API_KEY;
+      delete process.env.SENDGRID_API_KEY;
+      process.env.SMTP_HOST = "smtp.mailtrap.io";
+      process.env.SMTP_PORT = "2525";
+      process.env.SMTP_USER = "user_test";
+      process.env.SMTP_PASS = "pass_test";
+
+      mockSendMail.mockClear();
+
+      const result = await dispatchPaidTicketEmail(sampleBooking);
+      expect(result.sent).toBe(true);
+      expect(result.message).toContain("via SMTP");
+
+      expect(mockSendMail).toHaveBeenCalledTimes(1);
+      const callArg = mockSendMail.mock.calls[0][0];
+      expect(callArg.to).toBe("pembeli@dagoeng.com");
+      expect(callArg.subject).toContain("Singaraja Jazz Night 2026");
+      expect(callArg.html).toContain("DAGO-EVT-12345");
+      expect(callArg.attachments).toHaveLength(2);
+      expect(callArg.attachments[0].filename).toBe("qr-DAGO-EVT-12345-01.png");
+      expect(callArg.attachments[0].cid).toBe("qr-seat-1@dagoeng.com");
+      expect(callArg.attachments[1].filename).toBe("qr-DAGO-EVT-12345-02.png");
+      expect(callArg.attachments[1].cid).toBe("qr-seat-2@dagoeng.com");
     });
   });
 

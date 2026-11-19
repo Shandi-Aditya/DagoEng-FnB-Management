@@ -51,12 +51,10 @@ export async function POST(req: NextRequest) {
       body.mode === "code" || Boolean(body.ticketCode) ? "code" : "forgot_code";
 
     // Resolve base origin for generating private ticket access links
-    const origin =
-      req.headers.get("origin") ||
-      req.headers.get("x-forwarded-host") ||
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.APP_URL ||
       "https://dagoeng.com";
-    const protocol = req.headers.get("x-forwarded-proto") || "https";
-    const baseUrl = origin.startsWith("http") ? origin : `${protocol}://${origin}`;
 
     const allBookings = await getEventBookings();
 
@@ -107,44 +105,59 @@ export async function POST(req: NextRequest) {
         const isEmailConfigured = isEmailServiceConfigured();
         const masked = maskEmail(email);
 
-        if (isEmailConfigured) {
-          await sendTicketRecoveryEmail({
-            recipientEmail: email,
-            recipientName: match.guestName,
-            bookings: [
-              {
-                ticketCode: match.ticketCode,
-                eventTitle: match.eventTitle,
-                eventDate: match.eventDate,
-                eventLocation: match.eventLocation,
-                ticketCount: match.ticketCount || 1,
-                privateAccessUrl: `${baseUrl}/events/tickets/${match.guestToken}`,
-              },
-            ],
-          });
-
+        if (!isEmailConfigured) {
           return NextResponse.json({
             success: true,
             channel: "email",
-            emailConfigured: true,
-            emailDispatched: true,
-            configured: true,
-            dispatched: true,
+            emailConfigured: false,
+            emailDispatched: false,
+            configured: false,
+            dispatched: false,
             target: masked,
-            message: `Tautan akses privat e-tiket telah dikirimkan ke email ${masked}. Harap periksa folder Inbox atau Spam Anda.`,
+            message:
+              "Layanan pengiriman email otomatis belum diaktifkan pada server ini. Silakan hubungi admin acara via WhatsApp melalui tombol bantuan di bawah atau masuk menggunakan akun DagoEng.",
           });
+        }
+
+        const emailRes = await sendTicketRecoveryEmail({
+          recipientEmail: email,
+          recipientName: match.guestName,
+          bookings: [
+            {
+              ticketCode: match.ticketCode,
+              eventTitle: match.eventTitle,
+              eventDate: match.eventDate,
+              eventLocation: match.eventLocation,
+              ticketCount: match.ticketCount || 1,
+              privateAccessUrl: `${baseUrl}/events/tickets/${match.guestToken}`,
+            },
+          ],
+        });
+
+        if (!emailRes.sent) {
+          return NextResponse.json(
+            {
+              success: false,
+              configured: false,
+              dispatched: false,
+              emailConfigured: false,
+              emailDispatched: false,
+              error:
+                "Gagal mengirimkan email pemulihan tiket. Silakan coba beberapa saat lagi atau hubungi CS kami.",
+            },
+            { status: 503 }
+          );
         }
 
         return NextResponse.json({
           success: true,
           channel: "email",
-          emailConfigured: false,
-          emailDispatched: false,
-          configured: false,
-          dispatched: false,
+          emailConfigured: true,
+          emailDispatched: true,
+          configured: true,
+          dispatched: true,
           target: masked,
-          message:
-            "Layanan pengiriman email otomatis belum diaktifkan pada server ini. Silakan hubungi admin acara via WhatsApp melalui tombol bantuan di bawah atau masuk menggunakan akun DagoEng.",
+          message: `Tautan akses privat e-tiket telah dikirimkan ke email ${masked}. Harap periksa folder Inbox atau Spam Anda.`,
         });
       }
 
@@ -295,6 +308,16 @@ export async function POST(req: NextRequest) {
     }
 
     const rawPhone = body.phone ? normalizePhoneNumber(body.phone) : "";
+    if (body.phone && (!rawPhone || rawPhone.length < 9)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Nomor WhatsApp/telepon tidak valid (minimal 9 digit).",
+        },
+        { status: 400 }
+      );
+    }
+
     const userBookings = allBookings.filter((b) => {
       const emailMatches = b.guestEmail.toLowerCase().trim() === email;
       if (!rawPhone) return emailMatches;
@@ -303,21 +326,6 @@ export async function POST(req: NextRequest) {
 
     const isEmailConfigured = isEmailServiceConfigured();
     const maskedEmail = maskEmail(email);
-
-    if (userBookings.length > 0 && isEmailConfigured) {
-      await sendTicketRecoveryEmail({
-        recipientEmail: email,
-        recipientName: userBookings[0].guestName,
-        bookings: userBookings.map((b) => ({
-          ticketCode: b.ticketCode,
-          eventTitle: b.eventTitle,
-          eventDate: b.eventDate,
-          eventLocation: b.eventLocation,
-          ticketCount: b.ticketCount || 1,
-          privateAccessUrl: `${baseUrl}/events/tickets/${b.guestToken}`,
-        })),
-      });
-    }
 
     if (!isEmailConfigured) {
       return NextResponse.json({
@@ -333,13 +341,43 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (userBookings.length > 0) {
+      const emailRes = await sendTicketRecoveryEmail({
+        recipientEmail: email,
+        recipientName: userBookings[0].guestName,
+        bookings: userBookings.map((b) => ({
+          ticketCode: b.ticketCode,
+          eventTitle: b.eventTitle,
+          eventDate: b.eventDate,
+          eventLocation: b.eventLocation,
+          ticketCount: b.ticketCount || 1,
+          privateAccessUrl: `${baseUrl}/events/tickets/${b.guestToken}`,
+        })),
+      });
+
+      if (!emailRes.sent) {
+        return NextResponse.json(
+          {
+            success: false,
+            configured: false,
+            dispatched: false,
+            emailConfigured: false,
+            emailDispatched: false,
+            error:
+              "Gagal mengirimkan email pemulihan tiket. Silakan coba beberapa saat lagi atau hubungi CS kami.",
+          },
+          { status: 503 }
+        );
+      }
+    }
+
     return NextResponse.json({
       success: true,
       channel: "email",
       emailConfigured: true,
-      emailDispatched: userBookings.length > 0,
+      emailDispatched: true,
       configured: true,
-      dispatched: userBookings.length > 0,
+      dispatched: true,
       target: maskedEmail,
       message:
         "Jika alamat email Anda terdaftar pada sistem pemesanan kami, instruksi dan tautan akses e-tiket telah dikirimkan ke kotak masuk email Anda. Harap periksa folder Inbox atau Spam Anda.",

@@ -631,39 +631,43 @@ describe("Check-in Validation Engine (updateBookingCheckIn)", () => {
   });
 });
 
-describe("Specific Ticket Code + Email Lookup Rate Limiting (/api/events/bookings/my)", () => {
+describe("Denial of Unauthenticated Search via Ticket Code + Email (/api/events/bookings/my)", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("should rate limit unauthenticated brute force attempts on ticketCode + email lookup", async () => {
-    const ip = "10.0.0.88";
-    const createReq = () =>
-      new NextRequest("http://localhost:3000/api/events/bookings/my?ticketCode=DAGO-EVT-99999&email=target@example.com", {
-        method: "GET",
-        headers: { "x-forwarded-for": ip },
-      });
+  it("should reject unauthenticated search by ticketCode and email with HTTP 401", async () => {
+    const req = new NextRequest("http://localhost:3000/api/events/bookings/my?ticketCode=DAGO-EVT-99999&email=target@example.com", {
+      method: "GET",
+    });
 
-    // 10 requests allowed
-    for (let i = 0; i < 10; i++) {
-      const res = await getMyBookingsGet(createReq());
-      expect(res.status).toBe(200);
-    }
-
-    // 11th request must be rejected with 429
-    const blockedRes = await getMyBookingsGet(createReq());
-    expect(blockedRes.status).toBe(429);
-    const blockedJson = await blockedRes.json();
-    expect(blockedJson.success).toBe(false);
-    expect(blockedJson.error).toContain("Terlalu banyak percobaan pencarian");
+    const res = await getMyBookingsGet(req);
+    expect(res.status).toBe(401);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.error).toContain("Akses ditolak: Pencarian riwayat tiket tanpa login telah dinonaktifkan");
   });
 });
 
-describe("Self-Service Recovery via Registered Email + Phone Number (/api/events/bookings/my)", () => {
+describe("Denial of Unauthenticated Search via Email + Phone Number (/api/events/bookings/my)", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
+  it("should reject unauthenticated search by email and phone with HTTP 401 and never leak guestToken", async () => {
+    const req = new NextRequest(
+      "http://localhost:3000/api/events/bookings/my?email=dewi.lestari@example.com&phone=081234567890"
+    );
+    const res = await getMyBookingsGet(req);
+    expect(res.status).toBe(401);
+    const json = await res.json();
+    expect(json.success).toBe(false);
+    expect(json.data).toBeUndefined();
+    expect(json.error).toContain("Akses ditolak: Pencarian riwayat tiket tanpa login telah dinonaktifkan");
+  });
+});
+
+describe("Staff Search via Phone Number in Check-in API (/api/events/bookings)", () => {
   const mockBookings: any[] = [
     {
       id: "tkt-phone-rec-1",
@@ -684,94 +688,6 @@ describe("Self-Service Recovery via Registered Email + Phone Number (/api/events
       createdAt: "2026-11-01T08:00:00Z",
     },
   ];
-
-  it("should recover ticket using matching email and phone number, with phone normalization", async () => {
-    vi.spyOn(eventsLib, "getEventBookings").mockResolvedValue(mockBookings);
-
-    // Test with +62 formatted input matching registered 081234567890
-    const req1 = new NextRequest(
-      "http://localhost:3000/api/events/bookings/my?email=dewi.lestari@example.com&phone=+6281234567890"
-    );
-    const res1 = await getMyBookingsGet(req1);
-    expect(res1.status).toBe(200);
-    const json1 = await res1.json();
-    expect(json1.success).toBe(true);
-    expect(json1.count).toBe(1);
-    expect(json1.data[0].ticketCode).toBe("DAGO-EVT-77112");
-
-    // Test with 628... (without +)
-    const req2 = new NextRequest(
-      "http://localhost:3000/api/events/bookings/my?email=dewi.lestari@example.com&phone=6281234567890"
-    );
-    const res2 = await getMyBookingsGet(req2);
-    const json2 = await res2.json();
-    expect(json2.count).toBe(1);
-
-    // Test with formatted dashes & spaces: +62 812-3456-7890
-    const req3 = new NextRequest(
-      "http://localhost:3000/api/events/bookings/my?email=dewi.lestari@example.com&phone=+62%20812-3456-7890"
-    );
-    const res3 = await getMyBookingsGet(req3);
-    const json3 = await res3.json();
-    expect(json3.count).toBe(1);
-
-    // Test with 812... (without leading 0)
-    const req4 = new NextRequest(
-      "http://localhost:3000/api/events/bookings/my?email=dewi.lestari@example.com&phone=81234567890"
-    );
-    const res4 = await getMyBookingsGet(req4);
-    const json4 = await res4.json();
-    expect(json4.count).toBe(1);
-  });
-
-  it("should return empty results when phone number does not match registered email", async () => {
-    vi.spyOn(eventsLib, "getEventBookings").mockResolvedValue(mockBookings);
-
-    const req = new NextRequest(
-      "http://localhost:3000/api/events/bookings/my?email=dewi.lestari@example.com&phone=089999999999"
-    );
-    const res = await getMyBookingsGet(req);
-    expect(res.status).toBe(200);
-
-    const json = await res.json();
-    expect(json.success).toBe(true);
-    expect(json.count).toBe(0);
-    expect(json.data).toEqual([]);
-  });
-
-  it("should reject phone number shorter than 8 digits (HTTP 400)", async () => {
-    const req = new NextRequest(
-      "http://localhost:3000/api/events/bookings/my?email=dewi.lestari@example.com&phone=123"
-    );
-    const res = await getMyBookingsGet(req);
-    expect(res.status).toBe(400);
-
-    const json = await res.json();
-    expect(json.success).toBe(false);
-    expect(json.error).toContain("Nomor WhatsApp/telepon harus minimal 8 digit");
-  });
-
-  it("should enforce rate limiting on repeated phone lookup attempts", async () => {
-    vi.spyOn(eventsLib, "getEventBookings").mockResolvedValue(mockBookings);
-    const ip = "172.16.0.44";
-    const createReq = () =>
-      new NextRequest(
-        "http://localhost:3000/api/events/bookings/my?email=dewi.lestari@example.com&phone=081234567890",
-        { headers: { "x-forwarded-for": ip } }
-      );
-
-    // 10 requests allowed
-    for (let i = 0; i < 10; i++) {
-      const res = await getMyBookingsGet(createReq());
-      expect(res.status).toBe(200);
-    }
-
-    // 11th request rejected
-    const blockedRes = await getMyBookingsGet(createReq());
-    expect(blockedRes.status).toBe(429);
-    const blockedJson = await blockedRes.json();
-    expect(blockedJson.error).toContain("Terlalu banyak percobaan");
-  });
 
   it("should support phone search in admin/checkin API and mask phone number for staff", async () => {
     vi.spyOn(eventsLib, "getEventBookings").mockResolvedValue(mockBookings);

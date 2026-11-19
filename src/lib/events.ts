@@ -3600,9 +3600,14 @@ export async function createInvitationTicket(
       markStorageSyncSynced("event_bookings.json");
 
       if (committedBooking) {
-        dispatchPaidTicketEmail(committedBooking).catch((err) => {
+        try {
+          await Promise.race([
+            dispatchPaidTicketEmail(committedBooking),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending invitation ticket email")), 10000)),
+          ]);
+        } catch (err) {
           console.warn("[Events] Gagal mengirim email tiket undangan:", err);
-        });
+        }
       }
     }
 
@@ -4311,9 +4316,14 @@ export async function createEventBooking(
 
       // Task S-08: Kirim email e-tiket dan QR per peserta setelah tiket gratis terbit (PAID)
       if (committedBooking && (committedBooking as EventTicketOrder).paymentStatus === "PAID") {
-        dispatchPaidTicketEmail(committedBooking as EventTicketOrder).catch((err) => {
+        try {
+          await Promise.race([
+            dispatchPaidTicketEmail(committedBooking as EventTicketOrder),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending free ticket email")), 10000)),
+          ]);
+        } catch (err) {
           console.warn("[Events] Gagal mengirim email tiket gratis:", err);
-        });
+        }
       }
     }
 
@@ -4788,6 +4798,7 @@ export async function updateBookingPaymentStatus(
 
     let committedBooking: EventTicketOrder | null = null;
     let committedBookingsList: EventTicketOrder[] | null = null;
+    let previousStatus: TicketPaymentStatus | null = null;
 
     // 2. Acquire distributed event lock using candidate eventId
     await runWithDistributedEventLock(candidateEventId, async (tx) => {
@@ -4801,6 +4812,7 @@ export async function updateBookingPaymentStatus(
         throw new Error(`Pemesanan tiket dengan ID ${bookingId} tidak ditemukan.`);
       }
       const currentBooking = bookingsInTx[txIndex];
+      previousStatus = currentBooking.paymentStatus;
 
       // 5. Validate eventId matches the held lock
       if (currentBooking.eventId !== candidateEventId) {
@@ -4873,10 +4885,15 @@ export async function updateBookingPaymentStatus(
       markStorageSyncSynced("event_bookings.json");
 
       // Task S-08: Kirim email e-tiket dan QR per peserta setelah tiket berbayar diverifikasi (PAID)
-      if (status === "PAID") {
-        dispatchPaidTicketEmail(committedBooking).catch((err) => {
+      if (previousStatus !== "PAID" && status === "PAID") {
+        try {
+          await Promise.race([
+            dispatchPaidTicketEmail(committedBooking),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending paid ticket email")), 10000)),
+          ]);
+        } catch (err) {
           console.warn("[Events] Gagal mengirim email tiket lunas:", err);
-        });
+        }
       }
 
       return committedBooking;

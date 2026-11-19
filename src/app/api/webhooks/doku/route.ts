@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDokuConfig, verifyDokuNotificationSignature } from "@/lib/doku";
 import { loadBookingsFromDisk, saveBookingsToDisk } from "@/lib/events";
+import { dispatchPaidTicketEmail } from "@/lib/email";
 import { EventTicketOrder } from "@/types/event";
 
 export const dynamic = "force-dynamic";
@@ -115,6 +116,15 @@ export async function POST(req: NextRequest) {
 
       allBookings[bookingIndex] = updatedBooking;
       await saveBookingsToDisk(allBookings);
+
+      try {
+        await Promise.race([
+          dispatchPaidTicketEmail(updatedBooking),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout sending paid ticket email")), 10000)),
+        ]);
+      } catch (emailErr) {
+        console.error(`[DOKU Webhook] Failed to dispatch paid ticket email for ${updatedBooking.ticketCode}:`, emailErr);
+      }
 
       if (wasCancelled) {
         console.warn(
