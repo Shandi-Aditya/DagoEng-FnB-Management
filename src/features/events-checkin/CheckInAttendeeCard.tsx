@@ -40,7 +40,8 @@ export function CheckInAttendeeCard({
   const isPartiallyCheckedIn = !isFullyCheckedIn && checkedQty > 0;
   const isPaid =
     ticket.paymentStatus === "PAID" &&
-    ticket.refundStatus !== "REQUESTED";
+    ticket.refundStatus !== "REQUESTED" &&
+    ticket.refundStatus !== "APPROVED";
 
   const checkInStatus = getCheckInStatusTone(ticket);
   const paymentTone = getPaymentStatusTone(ticket.paymentStatus);
