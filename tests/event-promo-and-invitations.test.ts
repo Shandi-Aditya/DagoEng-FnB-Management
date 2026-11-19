@@ -42,6 +42,7 @@ describe("Event Promo Code & Invitation Tickets - Task S-13", () => {
       location: "Amphitheater Dago",
       isPaid: true,
       price: 100000,
+      posterUrl: "https://example.com/poster.jpg",
       organizerName: "Dago Jazz Collective",
       organizerEmail: "jazz@dagohub.id",
       organizerPhone: "081199887766",

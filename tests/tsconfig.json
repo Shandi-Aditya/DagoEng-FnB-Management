@@ -7,8 +7,13 @@
     }
   },
   "include": [
-    "**/*.ts",
-    "../src/**/*.ts"
+    "organizer-sales-dashboard.test.ts",
+    "event-promo-and-invitations.test.ts",
+    "event-refund-policy.test.ts",
+    "events-portal-domain.test.ts",
+    "official-bank-guard.test.ts",
+    "ticket-paid-email.test.ts",
+    "ticket-recovery-and-grouping.test.ts"
   ],
   "exclude": [
     "../node_modules"

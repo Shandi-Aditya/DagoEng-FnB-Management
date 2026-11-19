@@ -89,14 +89,14 @@ describe("TASK S-01 — Official Bank Account Guard & Fail-Closed Booking Verifi
       id: "evt-paid-bank-guard-01",
       title: "Workshop Desain UI Berbayar",
       description: "Workshop berbayar untuk validasi rekening resmi",
-      category: "Workshop",
+      category: "WORKSHOP",
       location: "Coworking Hall",
       startDate: new Date(Date.now() + 86400000).toISOString(),
       endDate: new Date(Date.now() + 172800000).toISOString(),
-      capacity: 50,
+      maxCapacity: 50,
       price: 100000,
       isPaid: true,
-      isFree: false,
+      posterUrl: "/images/events/default-poster.jpg",
       status: "APPROVED",
       organizerName: "Dago Community",
       organizerEmail: "org@dago.com",
@@ -110,7 +110,7 @@ describe("TASK S-01 — Official Bank Account Guard & Fail-Closed Booking Verifi
       id: "evt-free-bank-guard-02",
       title: "Meetup Komunitas Gratis",
       price: 0,
-      isFree: true,
+      isPaid: false,
     };
 
     it("2.1 should reject paid booking when default platform bank is placeholder/demo", async () => {

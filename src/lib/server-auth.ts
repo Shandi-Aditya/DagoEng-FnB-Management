@@ -605,10 +605,12 @@ export function isCheckInStaffEmail(email: string): boolean {
 export interface OrganizerAuthResult {
   authorized: boolean;
   error?: string;
-  email: string | null;
-  isAdmin: boolean;
-  userId: string | null;
+  email?: string | null;
+  isAdmin?: boolean;
+  userId?: string | null;
   name?: string;
+  role?: string;
+  scopeLevel?: string;
 }
 
 /**
@@ -769,6 +771,7 @@ export async function assertEventAdmin(req: NextRequest): Promise<{
   userId?: string;
   name?: string;
   email?: string;
+  user?: any;
 }> {
   const auth = await getRequestAuthUser(req);
 

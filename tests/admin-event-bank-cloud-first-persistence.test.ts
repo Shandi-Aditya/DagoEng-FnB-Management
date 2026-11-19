@@ -438,7 +438,7 @@ describe("TASK S-01 — Cloud-First Storage Reliability & CAS Concurrency Suite"
 
     const policy = eventsLib.getEventRevenuePolicy();
     expect(policy._revision).toBe(10);
-    expect(policy.bankAccounts[0].bankName).toBe("BCA Cloud");
+    expect(policy.bankAccounts?.[0].bankName).toBe("BCA Cloud");
   });
 
   // 12. Organizer tidak berubah sebelum commit Neon berhasil (organizers.json bersih saat DB error)
@@ -703,12 +703,12 @@ describe("TASK S-01 — Cloud-First Storage Reliability & CAS Concurrency Suite"
       );
 
       // Verify A's candidate contains ONLY A
-      expect(contextA.candidatePolicy.bankAccounts.some((b) => b.bankName === "Bank A")).toBe(true);
-      expect(contextA.candidatePolicy.bankAccounts.some((b) => b.bankName === "Bank B")).toBe(false);
+      expect(contextA.candidatePolicy.bankAccounts?.some((b) => b.bankName === "Bank A")).toBe(true);
+      expect(contextA.candidatePolicy.bankAccounts?.some((b) => b.bankName === "Bank B")).toBe(false);
 
       // Verify B's candidate contains ONLY B
-      expect(contextB.candidatePolicy.bankAccounts.some((b) => b.bankName === "Bank B")).toBe(true);
-      expect(contextB.candidatePolicy.bankAccounts.some((b) => b.bankName === "Bank A")).toBe(false);
+      expect(contextB.candidatePolicy.bankAccounts?.some((b) => b.bankName === "Bank B")).toBe(true);
+      expect(contextB.candidatePolicy.bankAccounts?.some((b) => b.bankName === "Bank A")).toBe(false);
     });
 
     it("16.3 Organizer side-effects are isolated per request and never cross-contaminate", () => {

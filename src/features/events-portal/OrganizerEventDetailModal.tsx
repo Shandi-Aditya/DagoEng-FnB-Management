@@ -22,6 +22,14 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { StatusBadge } from "@/components/app/status-badge";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
@@ -67,9 +75,6 @@ export function OrganizerEventDetailModal({
 
   const eventBookings = bookings.filter((b) => b.eventId === event.id);
   const paidBookings = eventBookings.filter((b) => b.paymentStatus === "PAID");
-  const grossSales = paidBookings.reduce((sum, b) => sum + (b.totalPrice || 0), 0);
-  const sharePercent = organizerSharePercent(event);
-  const organizerShare = Math.round(grossSales * (sharePercent / 100));
   const salesSummary = calculateEventSalesSummary(event, bookings);
 
   return (
@@ -155,7 +160,7 @@ export function OrganizerEventDetailModal({
             <div className="rounded-md border p-2.5 bg-muted/20">
               <span className="text-muted-foreground block text-xs">Hak bagi hasil</span>
               <span className="font-mono font-medium block mt-0.5 text-foreground">
-                {formatCurrencyIDR(organizerShare)}
+                {formatCurrencyIDR(salesSummary.organizerEarnings)}
               </span>
             </div>
           </div>
@@ -164,26 +169,26 @@ export function OrganizerEventDetailModal({
           {salesSummary.tierBreakdown.length > 0 && (
             <div className="space-y-2 border-t pt-3">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-foreground block">Penjualan per Jenis Tiket</span>
+                <span className="font-medium text-foreground block">Penjualan per jenis tiket</span>
                 <span className="text-xs text-muted-foreground">
                   Sisa total: {salesSummary.remainingCapacity} dari {salesSummary.totalCapacity} tiket
                 </span>
               </div>
               <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/40 text-muted-foreground">
-                    <tr className="border-b text-left">
-                      <th className="p-2 font-medium">Jenis Tiket</th>
-                      <th className="p-2 font-medium">Harga</th>
-                      <th className="p-2 font-medium text-center">Terjual</th>
-                      <th className="p-2 font-medium text-center">Sisa Kuota</th>
-                      <th className="p-2 font-medium text-right">Omzet</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
+                <Table className="w-full text-xs">
+                  <TableHeader className="bg-muted/40">
+                    <TableRow className="border-b">
+                      <TableHead className="p-2 font-medium">Jenis tiket</TableHead>
+                      <TableHead className="p-2 font-medium">Harga</TableHead>
+                      <TableHead className="p-2 font-medium text-center">Terjual</TableHead>
+                      <TableHead className="p-2 font-medium text-center">Sisa kuota</TableHead>
+                      <TableHead className="p-2 font-medium text-right">Omzet</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {salesSummary.tierBreakdown.map((t) => (
-                      <tr key={t.tierId} className="hover:bg-muted/20">
-                        <td className="p-2 font-medium text-foreground">
+                      <TableRow key={t.tierId} className="hover:bg-muted/20">
+                        <TableCell className="p-2 font-medium text-foreground">
                           <div className="flex items-center gap-1.5">
                             <span>{t.tierName}</span>
                             {t.isSoldOut && (
@@ -192,23 +197,23 @@ export function OrganizerEventDetailModal({
                               </Badge>
                             )}
                           </div>
-                        </td>
-                        <td className="p-2 font-mono text-muted-foreground">
+                        </TableCell>
+                        <TableCell className="p-2 font-mono text-muted-foreground">
                           {t.price > 0 ? formatCurrencyIDR(t.price) : "Gratis"}
-                        </td>
-                        <td className="p-2 text-center font-mono tabular-nums text-foreground">
+                        </TableCell>
+                        <TableCell className="p-2 text-center font-mono tabular-nums text-foreground">
                           {t.soldCount}
-                        </td>
-                        <td className="p-2 text-center font-mono tabular-nums text-muted-foreground">
+                        </TableCell>
+                        <TableCell className="p-2 text-center font-mono tabular-nums text-muted-foreground">
                           {t.remainingQuota}
-                        </td>
-                        <td className="p-2 text-right font-mono tabular-nums font-medium text-foreground">
-                          {t.revenue > 0 ? formatCurrencyIDR(t.revenue) : "—"}
-                        </td>
-                      </tr>
+                        </TableCell>
+                        <TableCell className="p-2 text-right font-mono tabular-nums font-medium text-foreground">
+                          {formatCurrencyIDR(t.revenue)}
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </div>
           )}

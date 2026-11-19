@@ -70,6 +70,8 @@ export function paymentStatusLabel(status: string): string {
       return "Kedaluwarsa";
     case "CANCELLED":
       return "Dibatalkan";
+    case "REFUNDED":
+      return "Dikembalikan";
     default:
       return status || "—";
   }
@@ -87,9 +89,31 @@ export function paymentStatusTone(status: string): PaymentStatusTone {
     case "REJECTED":
     case "EXPIRED":
     case "CANCELLED":
+    case "REFUNDED":
       return "destructive";
     default:
       return "neutral";
+  }
+}
+
+/**
+ * Pemetaan metode pembayaran tiket ke label bahasa Indonesia.
+ */
+export function paymentMethodLabel(method: string): string {
+  switch (method) {
+    case "BANK_TRANSFER":
+    case "MANUAL_TRANSFER":
+      return "Transfer bank manual";
+    case "QRIS":
+      return "QRIS";
+    case "DOKU":
+      return "DOKU payment gateway";
+    case "CASH":
+      return "Tunai di lokasi";
+    case "INVITATION":
+      return "Tiket undangan";
+    default:
+      return method || "Transfer bank";
   }
 }
 

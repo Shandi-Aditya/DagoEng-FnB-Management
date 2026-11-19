@@ -162,6 +162,8 @@ export interface ProposedRevenueSplit {
   id?: string;
   organizerPercent: number; // e.g. 85
   platformPercent: number;  // e.g. 15
+  organizerFeePercent?: number;
+  customPlatformFeePercent?: number;
   proposedBy: RevenueSplitParty;
   reason?: string;
   status: RevenueSplitNegotiationStatus;
@@ -337,6 +339,8 @@ export interface EventTicketAvailability {
   tiers?: EventTicketTierAvailability[];
 }
 
+export type EventBooking = EventTicketOrder;
+
 export interface EventTicketOrder {
   id: string; // e.g. "tkt-1729000-abc12"
   ticketCode: string; // e.g. "DAGO-EVT-93821"
@@ -436,12 +440,12 @@ export interface EventBankAccountHistoryEntry {
 export interface EventRevenueSharingPolicy {
   _revision?: number; // Monotonic integer revision counter for cloud & disk consistency
   defaultPlatformFeePercent: number; // default 20 (20% DAGO Platform)
-  defaultOrganizerSharePercent: number; // default 80 (80% Penyelenggara)
-  minPlatformFeePercent: number; // default 0
-  maxPlatformFeePercent: number; // default 100
+  defaultOrganizerSharePercent?: number; // default 80 (80% Penyelenggara)
+  minPlatformFeePercent?: number; // default 0
+  maxPlatformFeePercent?: number; // default 100
   bookingPaymentExpiryMinutes?: number; // default 60 menit
   maxTicketsPerBooking?: number; // default 5 tiket
-  activePaymentMethod?: "MANUAL_TRANSFER" | "DOKU_CHECKOUT";
+  activePaymentMethod?: "MANUAL_TRANSFER" | "MANUAL_BANK_TRANSFER" | "DOKU_CHECKOUT";
   allowOrganizerBankAccounts?: boolean;
   allowEventBankOverride?: boolean;
   paymentInstructions?: string;
@@ -449,7 +453,7 @@ export interface EventRevenueSharingPolicy {
   maxProofFileSizeMb?: number;
   bankAccounts?: EventBankAccount[];
   bankHistory?: EventBankAccountHistoryEntry[];
-  effectiveDate: string; // ISO date
+  effectiveDate?: string; // ISO date
   policyNotes?: string;
   updatedAt?: string;
   updatedBy?: string;

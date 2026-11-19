@@ -5,6 +5,14 @@ import { ArrowRight, CalendarDays, MapPin, ScanLine } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { StatCard } from "@/components/app/stat-card";
@@ -169,20 +177,20 @@ export function OrganizerHomeTab({
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 font-medium">Jenis Tiket</th>
-                    <th className="pb-2 font-medium">Harga</th>
-                    <th className="pb-2 text-center font-medium">Terjual</th>
-                    <th className="pb-2 text-center font-medium">Sisa Kuota</th>
-                    <th className="pb-2 text-right font-medium">Omzet</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
+              <Table className="w-full text-xs">
+                <TableHeader>
+                  <TableRow className="border-b text-left text-muted-foreground">
+                    <TableHead className="pb-2 font-medium">Jenis tiket</TableHead>
+                    <TableHead className="pb-2 font-medium">Harga</TableHead>
+                    <TableHead className="pb-2 text-center font-medium">Terjual</TableHead>
+                    <TableHead className="pb-2 text-center font-medium">Sisa kuota</TableHead>
+                    <TableHead className="pb-2 text-right font-medium">Omzet</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {nextEventSales.tierBreakdown.map((t) => (
-                    <tr key={t.tierId} className="py-2.5">
-                      <td className="py-2.5 font-medium text-foreground">
+                    <TableRow key={t.tierId} className="py-2.5">
+                      <TableCell className="py-2.5 font-medium text-foreground">
                         <div className="flex items-center gap-1.5">
                           <span>{t.tierName}</span>
                           {t.isSoldOut ? (
@@ -191,23 +199,23 @@ export function OrganizerHomeTab({
                             </Badge>
                           ) : null}
                         </div>
-                      </td>
-                      <td className="py-2.5 font-mono text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="py-2.5 font-mono text-muted-foreground">
                         {t.price > 0 ? formatCurrencyIDR(t.price) : "Gratis"}
-                      </td>
-                      <td className="py-2.5 text-center font-mono tabular-nums text-foreground">
+                      </TableCell>
+                      <TableCell className="py-2.5 text-center font-mono tabular-nums text-foreground">
                         {t.soldCount} tiket
-                      </td>
-                      <td className="py-2.5 text-center font-mono tabular-nums text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="py-2.5 text-center font-mono tabular-nums text-muted-foreground">
                         {t.remainingQuota} tiket
-                      </td>
-                      <td className="py-2.5 text-right font-mono font-medium tabular-nums text-foreground">
-                        {t.revenue > 0 ? formatCurrencyIDR(t.revenue) : "0"}
-                      </td>
-                    </tr>
+                      </TableCell>
+                      <TableCell className="py-2.5 text-right font-mono font-medium tabular-nums text-foreground">
+                        {formatCurrencyIDR(t.revenue)}
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>

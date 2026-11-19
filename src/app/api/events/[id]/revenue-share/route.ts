@@ -57,7 +57,7 @@ export async function POST(req: NextRequest, props: { params: Promise<{ id: stri
         );
       }
       actorEmail = orgAuth.email;
-      isAdmin = orgAuth.isAdmin;
+      isAdmin = Boolean(orgAuth.isAdmin);
     }
 
     const updatedEvent = await proposeEventRevenueSplit(
@@ -158,7 +158,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
       }
       actorName = orgAuth.name || orgAuth.email;
       actorEmail = orgAuth.email;
-      isAdmin = orgAuth.isAdmin;
+      isAdmin = Boolean(orgAuth.isAdmin);
     }
 
     const updatedEvent = await respondToEventRevenueSplit(

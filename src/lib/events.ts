@@ -1728,7 +1728,7 @@ export function toPublicEvent(event: CommunityEvent): PublicCommunityEvent {
     maxTicketsPerBooking: maxLimit,
     destinationBank: destBank,
     paymentInstructions: policy.paymentInstructions,
-    activePaymentMethod: policy.activePaymentMethod,
+    activePaymentMethod: policy.activePaymentMethod === "MANUAL_BANK_TRANSFER" ? "MANUAL_TRANSFER" : policy.activePaymentMethod,
   };
 }
 

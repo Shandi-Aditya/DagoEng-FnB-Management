@@ -229,6 +229,8 @@ export function getTicketPaymentStatusTone(status: string): {
       return { tone: "success", label: "Terkonfirmasi (Lunas)" };
     case "PENDING":
       return { tone: "warning", label: "Menunggu pembayaran" };
+    case "REFUNDED":
+      return { tone: "destructive", label: "Dikembalikan" };
     case "CANCELLED":
     case "EXPIRED":
       return { tone: "destructive", label: "Dibatalkan" };
@@ -271,6 +273,8 @@ export function formatPaymentMethodLabel(method: string): string {
       return "DOKU Payment Gateway";
     case "CASH":
       return "Tunai di Lokasi";
+    case "INVITATION":
+      return "Tiket undangan";
     default:
       return method || "Transfer Bank";
   }

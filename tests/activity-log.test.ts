@@ -124,7 +124,7 @@ describe("Activity Log & Audit Trail Engine", () => {
     const matched = sampleLogs.filter((l) => {
       const term = query.toLowerCase();
       return (
-        l.actorName.toLowerCase().includes(term) ||
+        (l.actorName && l.actorName.toLowerCase().includes(term)) ||
         l.action.toLowerCase().includes(term) ||
         l.description.toLowerCase().includes(term) ||
         (l.reason && l.reason.toLowerCase().includes(term)) ||
