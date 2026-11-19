@@ -7,7 +7,6 @@ import {
   AlertCircle,
   RefreshCw,
   MessageCircle,
-  Mail,
   Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,7 +25,6 @@ import {
   formatTicketCodeInput,
   normalizePhoneNumber,
   buildSupportWhatsAppUrl,
-  DEFAULT_CS_WHATSAPP_NUMBER,
   type RecoveryChannel,
 } from "@/features/events-tickets-recovery";
 import { OFFICIAL_CS_WHATSAPP_NUMBER } from "@/lib/contact-config";
@@ -197,11 +195,11 @@ export default function TicketRecoveryPage() {
               <TabsList className="w-full grid grid-cols-2">
                 <TabsTrigger value="code" className="gap-1.5">
                   <Ticket className="size-4" />
-                  <span>Kode Booking</span>
+                  <span>Kode booking</span>
                 </TabsTrigger>
                 <TabsTrigger value="phone" className="gap-1.5">
                   <Phone className="size-4" />
-                  <span>Lupa Kode Booking</span>
+                  <span>Lupa kode booking</span>
                 </TabsTrigger>
               </TabsList>
 

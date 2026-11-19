@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getEventBookings, checkRateLimit } from "@/lib/events";
+import { getEventBookings } from "@/lib/events";
 import { getRequestAuthUser } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
@@ -7,16 +7,10 @@ export const dynamic = "force-dynamic";
 /**
  * GET /api/events/bookings/my
  * Returns community event tickets booked by the currently authenticated user or identified by high-entropy guestTokens.
- * Strictly forbids unauthenticated email/phone enumeration.
- * Allows safe single-ticket lookup via ticketCode + email with strict rate limiting.
+ * Strictly forbids unauthenticated email/phone enumeration or unauthenticated ticketCode lookups.
  */
 export async function GET(req: NextRequest) {
   try {
-    const clientIp =
-      req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
-      req.headers.get("x-real-ip") ||
-      "127.0.0.1";
-
     const auth = await getRequestAuthUser(req);
     const { searchParams } = new URL(req.url);
     const queryEmail = searchParams.get("email")?.toLowerCase().trim();
@@ -76,53 +70,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 2b. Specific Guest Ticket Lookup: require BOTH ticketCode AND matching email with rate limiting
-    if (ticketCode && queryEmail) {
-      const allowed = checkRateLimit(`my-lookup-${clientIp}`, 10, 60000);
-      if (!allowed) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Terlalu banyak percobaan pencarian tiket. Harap tunggu 1 menit sebelum mencoba kembali.",
-          },
-          { status: 429 }
-        );
-      }
-
-      const match = allBookings.find(
-        (b) =>
-          b.ticketCode.toUpperCase() === ticketCode.toUpperCase() &&
-          b.guestEmail.toLowerCase().trim() === queryEmail
-      );
-
-      const safeMatch = match
-        ? {
-            id: match.id,
-            ticketCode: match.ticketCode,
-            eventId: match.eventId,
-            eventTitle: match.eventTitle,
-            eventDate: match.eventDate,
-            eventLocation: match.eventLocation,
-            guestName: match.guestName,
-            guestEmail: match.guestEmail,
-            ticketCount: match.ticketCount,
-            unitPrice: match.unitPrice,
-            totalPrice: match.totalPrice,
-            paymentStatus: match.paymentStatus,
-            checkInStatus: match.checkInStatus,
-            guestToken: match.guestToken,
-            createdAt: match.createdAt,
-          }
-        : null;
-
-      return NextResponse.json({
-        success: true,
-        count: safeMatch ? 1 : 0,
-        data: safeMatch ? [safeMatch] : [],
-      });
-    }
-
-    // 3. Deny unauthenticated searches via email, phone, or generic enumeration
+    // 3. Deny unauthenticated searches via email, phone, ticketCode, or generic enumeration
     if (queryEmail || queryPhone || ticketCode) {
       return NextResponse.json(
         {

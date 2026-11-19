@@ -876,7 +876,7 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
       expect(result.message).toContain("Layanan pengiriman email belum dikonfigurasi");
     });
 
-    it("6.5. Pemulihan tiket: lookup dengan kode tiket + email yang cocok berhasil mengembalikan tiket", async () => {
+    it("6.5. Pemulihan tiket: menolak lookup tanpa autentikasi/token dan mengizinkan lookup valid via guestToken", async () => {
       const booking = await createEventBooking({
         eventId: testEventId,
         guestName: "Rani Recovery Test",
@@ -886,24 +886,26 @@ describe("End-to-End Flow Hardening & Audit Fixes (BUG-01 to BUG-04)", () => {
         paymentMethod: "FREE",
       });
 
-      // 1. Lookup berhasil jika ticketCode dan email cocok
-      const successReq = new NextRequest(
+      // 1. Unauthenticated lookup dengan ticketCode + email ditolak HTTP 401 dan tidak mengembalikan guestToken
+      const unauthReq = new NextRequest(
         `http://localhost:3000/api/events/bookings/my?ticketCode=${booking.ticketCode}&email=rani.recovery@example.com`
       );
-      const successRes = await handleGetMyBookings(successReq);
-      expect(successRes.status).toBe(200);
-      const successJson = await successRes.json();
-      expect(successJson.count).toBe(1);
-      expect(successJson.data[0].guestToken).toBe(booking.guestToken);
+      const unauthRes = await handleGetMyBookings(unauthReq);
+      expect(unauthRes.status).toBe(401);
+      const unauthJson = await unauthRes.json();
+      expect(unauthJson.success).toBe(false);
+      expect(unauthJson.data).toBeUndefined();
 
-      // 2. Lookup gagal jika email tidak cocok
-      const wrongEmailReq = new NextRequest(
-        `http://localhost:3000/api/events/bookings/my?ticketCode=${booking.ticketCode}&email=imposter@example.com`
+      // 2. Lookup via jalur bertoken (guestToken) berhasil mengembalikan tiket yang sah
+      const tokenReq = new NextRequest(
+        `http://localhost:3000/api/events/bookings/my?guestToken=${booking.guestToken}`
       );
-      const wrongEmailRes = await handleGetMyBookings(wrongEmailReq);
-      expect(wrongEmailRes.status).toBe(200);
-      const wrongEmailJson = await wrongEmailRes.json();
-      expect(wrongEmailJson.count).toBe(0);
+      const tokenRes = await handleGetMyBookings(tokenReq);
+      expect(tokenRes.status).toBe(200);
+      const tokenJson = await tokenRes.json();
+      expect(tokenJson.success).toBe(true);
+      expect(tokenJson.count).toBe(1);
+      expect(tokenJson.data[0].guestToken).toBe(booking.guestToken);
 
       // 3. Menolak pemanenan riwayat tanpa token atau login
       const harvestReq = new NextRequest(
