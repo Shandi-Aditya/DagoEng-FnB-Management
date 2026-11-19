@@ -23,6 +23,9 @@ import { INITIAL_MEMBERS, normalizeLoyaltyPhone } from "@/lib/master-data-defaul
 import {
   maskCustomerPhone,
   maskCustomerEmail,
+  canUserViewFullCustomerContacts,
+  resolveAuthoritativeMemberTier,
+  calculateTierFromPoints,
 } from "@/features/customers/customers-domain";
 export { INITIAL_MEMBERS, normalizeLoyaltyPhone } from "@/lib/master-data-defaults";
 
@@ -113,14 +116,10 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
   };
 
   const normalizeLoadedMembers = (list: LoyaltyMember[]): LoyaltyMember[] => {
-    const isCashier = user?.role?.slug === "CASHIER";
+    const canView = canUserViewFullCustomerContacts(user?.role?.slug);
     return list.map((m) => {
-      const isManualOverride = m.tierHistory?.[0]?.isManualOverride === true;
-      let tier = m.tier;
-      if (!isManualOverride) {
-        tier = calculateTierForPoints(m.points);
-      }
-      if (isCashier) {
+      const tier = resolveAuthoritativeMemberTier(m, settings.loyaltyTiers);
+      if (!canView) {
         return {
           ...m,
           tier,
@@ -156,6 +155,8 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === "undefined") return;
     let cancelled = false;
 
+    setMembers((prev) => normalizeLoadedMembers(prev));
+
     const hydrateMembers = async () => {
       await flushOutbox().catch(() => {});
       if (cancelled) return;
@@ -175,7 +176,11 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
             )
           );
         }
-      } catch {}
+      } catch {
+        if (!cancelled) {
+          setMembers((prev) => normalizeLoadedMembers(prev));
+        }
+      }
     };
 
     void hydrateMembers();
@@ -215,8 +220,10 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isInitialized) return;
-    if (user?.role?.slug === "CASHIER") {
-      // Jangan menyimpan kontak utuh ke localStorage saat login sebagai CASHIER
+    if (!canUserViewFullCustomerContacts(user?.role?.slug)) {
+      try {
+        localStorage.removeItem(STORAGE_KEY_LOYALTY);
+      } catch {}
       return;
     }
     try {
@@ -354,13 +361,12 @@ export function LoyaltyProvider({ children }: { children: React.ReactNode }) {
     if (!target) return;
 
     const nextPoints = updates.points !== undefined ? updates.points : target.points;
-    const hasManualOverride = (updates.tierHistory ?? target.tierHistory)?.some(
-      (th) => th.isManualOverride
-    );
+    const historyToCheck = updates.tierHistory ?? target.tierHistory;
+    const isManualOverride = historyToCheck?.[0]?.isManualOverride === true;
     const nextTier =
       updates.tier !== undefined
         ? updates.tier
-        : hasManualOverride
+        : isManualOverride
         ? target.tier
         : calculateTierForPoints(nextPoints);
 

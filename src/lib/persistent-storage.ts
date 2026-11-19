@@ -11,6 +11,8 @@ import { ShiftRecord, EmployeeProfile } from "@/types/shift";
 import { OrderRecord } from "@/types/order";
 import { MasterProduct } from "@/types/product";
 import { LoyaltyMember } from "@/types/loyalty";
+import { resolveAuthoritativeMemberTier } from "@/lib/loyalty-policy";
+import { DEFAULT_PLATFORM_SETTINGS } from "@/types/settings";
 import {
   INITIAL_EMPLOYEES,
   INITIAL_PRODUCTS,
@@ -618,31 +620,39 @@ export async function savePersistentCustomCategory(category: string): Promise<st
 }
 
 export async function getPersistentLoyaltyMembers(): Promise<LoyaltyMember[]> {
-  return readSeededPersistentData<LoyaltyMember[]>(
+  const members = await readSeededPersistentData<LoyaltyMember[]>(
     FILE_LOYALTY_MEMBERS,
     () => [...INITIAL_MEMBERS]
   );
+  return (Array.isArray(members) ? members : []).map((m) => ({
+    ...m,
+    tier: resolveAuthoritativeMemberTier(m, DEFAULT_PLATFORM_SETTINGS.loyaltyTiers),
+  }));
 }
 
 export async function savePersistentLoyaltyMember(member: LoyaltyMember): Promise<LoyaltyMember> {
-  let saved: LoyaltyMember = member;
+  const normalizedMember: LoyaltyMember = {
+    ...member,
+    tier: resolveAuthoritativeMemberTier(member, DEFAULT_PLATFORM_SETTINGS.loyaltyTiers),
+  };
+  let saved: LoyaltyMember = normalizedMember;
   await mutateSeededPersistentData<LoyaltyMember[]>(
     FILE_LOYALTY_MEMBERS,
     () => [...INITIAL_MEMBERS],
     (existing) => {
       const list = Array.isArray(existing) ? existing : [...INITIAL_MEMBERS];
-      const normPhone = normalizeLoyaltyPhone(member.phone);
+      const normPhone = normalizeLoyaltyPhone(normalizedMember.phone);
       const index = list.findIndex(
-        (m) => m.id === member.id || (normPhone && normalizeLoyaltyPhone(m.phone) === normPhone)
+        (m) => m.id === normalizedMember.id || (normPhone && normalizeLoyaltyPhone(m.phone) === normPhone)
       );
       if (index >= 0) {
         const updated = [...list];
-        updated[index] = member;
-        saved = member;
+        updated[index] = normalizedMember;
+        saved = normalizedMember;
         return updated;
       }
-      saved = member;
-      return [member, ...list];
+      saved = normalizedMember;
+      return [normalizedMember, ...list];
     }
   );
   return saved;

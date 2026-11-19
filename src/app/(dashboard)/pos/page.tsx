@@ -1209,7 +1209,7 @@ export default function POSPage() {
       }
 
       if (cwAppliedPromo?.id) {
-        redeemPromo(cwAppliedPromo.id, effectiveGuestPhone || "cw-guest");
+        redeemPromo(cwAppliedPromo.id, cwSelectedMember?.id || effectiveGuestPhone || "cw-guest");
       }
 
       if (cwCustomerType === "MEMBER" && cwSelectedMember) {
@@ -1288,7 +1288,10 @@ export default function POSPage() {
 
   const handleCwQrisSuccess = (verifiedBooking: CoworkingBooking) => {
     if (cwAppliedPromo?.id) {
-      redeemPromo(cwAppliedPromo.id, verifiedBooking.guestPhone || "cw-guest");
+      redeemPromo(
+        cwAppliedPromo.id,
+        cwSelectedMember?.id || verifiedBooking.guestPhone || "cw-guest"
+      );
     }
 
     if (cwCustomerType === "MEMBER" && cwSelectedMember) {

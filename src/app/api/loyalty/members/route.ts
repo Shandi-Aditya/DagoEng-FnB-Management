@@ -13,10 +13,12 @@ import { DEFAULT_PLATFORM_SETTINGS, PlatformSettings } from "@/types/settings";
 import { getRequestAuthUser } from "@/lib/server-auth";
 import {
   canUserViewFullCustomerContacts,
+  calculateTierFromPoints,
   maskCustomerEmail,
   maskCustomerPhone,
   resolveAuthoritativeMemberTier,
-} from "@/features/customers/customers-domain";
+  sanitizeMemberForRole,
+} from "@/lib/loyalty-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +34,8 @@ async function reconcileMembersWithServerLoyaltyPoints(
     ),
   ]);
 
-  if (pointsRecords.length === 0 || members.length === 0) {
-    return members;
+  if (members.length === 0) {
+    return [];
   }
 
   const ordersById = new Map(orders.map((o) => [o.id, o]));
@@ -53,7 +55,17 @@ async function reconcileMembersWithServerLoyaltyPoints(
     });
 
     if (matchedRecords.length === 0) {
-      result.push(member);
+      const normalizedTier = resolveAuthoritativeMemberTier(
+        member,
+        platformSettings.loyaltyTiers
+      );
+      if (member.tier !== normalizedTier) {
+        const normalizedMember: LoyaltyMember = { ...member, tier: normalizedTier };
+        await savePersistentLoyaltyMember(normalizedMember);
+        result.push(normalizedMember);
+      } else {
+        result.push(member);
+      }
       continue;
     }
 
@@ -150,11 +162,6 @@ async function reconcileMembersWithServerLoyaltyPoints(
       }
     }
 
-    if (!mutated) {
-      result.push(member);
-      continue;
-    }
-
     const nextTier = resolveAuthoritativeMemberTier(
       {
         tier: member.tier,
@@ -163,6 +170,13 @@ async function reconcileMembersWithServerLoyaltyPoints(
       },
       platformSettings.loyaltyTiers
     );
+
+    const hasTierChange = member.tier !== nextTier;
+
+    if (!mutated && !hasTierChange) {
+      result.push(member);
+      continue;
+    }
 
     const reconciled: LoyaltyMember = {
       ...member,
@@ -200,6 +214,17 @@ export async function GET(req: NextRequest) {
     let members = await reconcileMembersWithServerLoyaltyPoints(storedMembers);
 
     if (phone) {
+      // Query raw phone number is strictly restricted to managerial roles
+      if (!canUserViewFullCustomerContacts(auth.role)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "Akses ditolak: Pencarian langsung berdasarkan nomor telepon hanya diizinkan untuk Manager, Owner, atau Super Admin.",
+          },
+          { status: 403 }
+        );
+      }
       const norm = normalizeLoyaltyPhone(phone);
       members = members.filter((m) => normalizeLoyaltyPhone(m.phone) === norm);
     }
@@ -226,19 +251,13 @@ export async function GET(req: NextRequest) {
         }
         return false;
       });
-    } else if (!canUserViewFullCustomerContacts(auth.role)) {
-      // Peran kasir / staf non-manager: samarkan kontak dan kosongkan nomor identitas
-      members = members.map((m) => ({
-        ...m,
-        phone: maskCustomerPhone(m.phone),
-        email: maskCustomerEmail(m.email),
-        identityNo: "",
-      }));
     }
+
+    const sanitizedMembers = members.map((m) => sanitizeMemberForRole(m, auth.role));
 
     return NextResponse.json({
       success: true,
-      members,
+      members: sanitizedMembers,
     });
   } catch (error: unknown) {
     const message =
@@ -254,6 +273,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Akses ditolak. Sesi login diperlukan." },
         { status: 401 }
+      );
+    }
+
+    const allowedPostRoles = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
+    if (!allowedPostRoles.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Akses ditolak: Pendaftaran member loyalty hanya dapat dilakukan oleh Staf Kasir atau Manajemen.",
+        },
+        { status: 403 }
       );
     }
 
@@ -273,10 +304,14 @@ export async function POST(req: NextRequest) {
       (m) => normalizeLoyaltyPhone(m.phone) === normPhone
     );
 
-    if (existing && !memberData.allowUpdate) {
+    const isManagerial = canUserViewFullCustomerContacts(auth.role);
+
+    // If existing member found:
+    // CASHIER is strictly forbidden from overwriting points, tier, or using allowUpdate
+    if (existing && (auth.role === "CASHIER" || !memberData.allowUpdate)) {
       return NextResponse.json({
         success: true,
-        member: existing,
+        member: sanitizeMemberForRole(existing, auth.role),
         isExisting: true,
       });
     }
@@ -287,15 +322,15 @@ export async function POST(req: NextRequest) {
     );
 
     const nowIso = new Date().toISOString();
-    let points =
-      typeof memberData.points === "number"
-        ? memberData.points
-        : memberData.initialPoints || 0;
 
-    // Larang CASHIER menetapkan initialPoints > 0
-    if (auth.role === "CASHIER") {
-      points = 0;
-    }
+    // Set points = 0 and tierHistory = [] for non-managerial callers
+    const points = isManagerial
+      ? (typeof memberData.points === "number" ? memberData.points : memberData.initialPoints || 0)
+      : 0;
+
+    const tierHistory = isManagerial
+      ? (memberData.tierHistory || existing?.tierHistory || [])
+      : [];
 
     // Jangan pernah menimpa kontak asli dengan data yang disamarkan (*)
     const effectivePhone =
@@ -311,9 +346,9 @@ export async function POST(req: NextRequest) {
 
     const calculatedTier = resolveAuthoritativeMemberTier(
       {
-        tier: memberData.tier,
+        tier: isManagerial ? memberData.tier : undefined,
         points,
-        tierHistory: memberData.tierHistory || existing?.tierHistory || [],
+        tierHistory,
       },
       platformSettings.loyaltyTiers
     );
@@ -342,15 +377,15 @@ export async function POST(req: NextRequest) {
       status: memberData.status || existing?.status || "ACTIVE",
       joinedDate: memberData.joinedDate || existing?.joinedDate || nowIso,
       lastVisit: memberData.lastVisit || existing?.lastVisit || nowIso,
-      pointHistory: memberData.pointHistory || existing?.pointHistory || [],
-      tierHistory: memberData.tierHistory || existing?.tierHistory || [],
+      pointHistory: isManagerial ? (memberData.pointHistory || existing?.pointHistory || []) : [],
+      tierHistory,
     };
 
     const saved = await savePersistentLoyaltyMember(member);
 
     return NextResponse.json({
       success: true,
-      member: saved,
+      member: sanitizeMemberForRole(saved, auth.role),
       isExisting: Boolean(existing),
     });
   } catch (error: unknown) {
@@ -367,6 +402,18 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json(
         { success: false, error: "Akses ditolak. Sesi login diperlukan." },
         { status: 401 }
+      );
+    }
+
+    const allowedPutRoles = ["SUPER_ADMIN", "OWNER", "MANAGER", "CASHIER"];
+    if (!allowedPutRoles.includes(auth.role)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Akses ditolak: Pembaruan data member loyalty hanya dapat dilakukan oleh Staf Kasir atau Manajemen.",
+        },
+        { status: 403 }
       );
     }
 
@@ -391,17 +438,40 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Larang override tier manual oleh selain SUPER_ADMIN | OWNER | MANAGER
-    const isManualOverrideAttempt =
-      (updates.tier && updates.tier !== target.tier) ||
-      (Array.isArray(updates.tierHistory) &&
-        updates.tierHistory.some(
-          (th: any) =>
-            th.isManualOverride &&
-            !target.tierHistory?.some((tth) => tth.id === th.id)
-        ));
+    const platformSettings = await readSeededPersistentData<PlatformSettings>(
+      "platform_settings.json",
+      () => DEFAULT_PLATFORM_SETTINGS
+    );
 
-    if (isManualOverrideAttempt && !canUserViewFullCustomerContacts(auth.role)) {
+    const isManagerial = canUserViewFullCustomerContacts(auth.role);
+    const nextPoints =
+      typeof updates.points === "number" ? updates.points : target.points;
+
+    // Expected natural tier from point calculation
+    const calculatedNaturalTier = calculateTierFromPoints(
+      nextPoints,
+      platformSettings.loyaltyTiers
+    );
+
+    // Bedakan auto-tier dari poin vs manual override
+    // Periksa manual override hanya jika:
+    // 1. updates.tierHistory menambah entri baru dengan isManualOverride === true
+    // 2. updates.tier yang dikirim eksplisit berbeda dari tier hasil perhitungan poin (calculatedNaturalTier)
+    const hasNewManualOverrideEntry =
+      Array.isArray(updates.tierHistory) &&
+      updates.tierHistory.some(
+        (th: any) =>
+          th.isManualOverride === true &&
+          !target.tierHistory?.some((tth) => tth.id === th.id)
+      );
+
+    const isExplicitTierDrift =
+      Boolean(updates.tier) && updates.tier !== calculatedNaturalTier;
+
+    const isManualOverrideAttempt =
+      hasNewManualOverrideEntry || isExplicitTierDrift;
+
+    if (isManualOverrideAttempt && !isManagerial) {
       return NextResponse.json(
         {
           success: false,
@@ -423,18 +493,16 @@ export async function PUT(req: NextRequest) {
       delete updates.identityNo;
     }
 
-    const platformSettings = await readSeededPersistentData<PlatformSettings>(
-      "platform_settings.json",
-      () => DEFAULT_PLATFORM_SETTINGS
-    );
+    // Jangan pernah menimpa identityNo tersimpan dengan string kosong "" apabila bukan SUPER_ADMIN | OWNER | MANAGER
+    if (!isManagerial && (updates.identityNo === "" || updates.identityNo === undefined)) {
+      updates.identityNo = target.identityNo;
+    }
 
-    const nextPoints =
-      typeof updates.points === "number" ? updates.points : target.points;
     const mergedTierHistory = updates.tierHistory || target.tierHistory || [];
 
     const calculatedTier = resolveAuthoritativeMemberTier(
       {
-        tier: updates.tier || target.tier,
+        tier: isManagerial ? (updates.tier || target.tier) : calculatedNaturalTier,
         points: nextPoints,
         tierHistory: mergedTierHistory,
       },
@@ -452,7 +520,7 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      member: saved,
+      member: sanitizeMemberForRole(saved, auth.role),
     });
   } catch (error: unknown) {
     const message =

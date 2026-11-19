@@ -1,52 +1,27 @@
 import type { LoyaltyMember, LoyaltyTier } from "@/types/loyalty";
 import type { StatusTone } from "@/components/app/status-badge";
 
+export {
+  calculateTierFromPoints,
+  resolveAuthoritativeMemberTier,
+  canUserViewFullCustomerContacts,
+  maskCustomerPhone,
+  maskCustomerEmail,
+  sanitizeMemberForRole,
+} from "@/lib/loyalty-policy";
+export type { LoyaltyTierThresholds } from "@/lib/loyalty-policy";
+
+import {
+  maskCustomerEmail,
+  maskCustomerPhone,
+  calculateTierFromPoints,
+} from "@/lib/loyalty-policy";
+
 export interface CustomerKPIs {
   totalMembers: number;
   platinumGoldCount: number;
   silverCount: number;
   bronzeCount: number;
-}
-
-export function calculateTierFromPoints(
-  points: number,
-  tierConfig?: {
-    platinumMin?: number;
-    goldMin?: number;
-    silverMin?: number;
-    bronzeMin?: number;
-  }
-): LoyaltyTier {
-  const platinum = tierConfig?.platinumMin ?? 3000;
-  const gold = tierConfig?.goldMin ?? 1500;
-  const silver = tierConfig?.silverMin ?? 500;
-  if (points >= platinum) return "Platinum";
-  if (points >= gold) return "Gold";
-  if (points >= silver) return "Silver";
-  return "Bronze";
-}
-
-export function resolveAuthoritativeMemberTier(
-  member: {
-    tier?: string;
-    points?: number;
-    tierHistory?: Array<{ isManualOverride?: boolean; [key: string]: any }>;
-  },
-  tierConfig?: {
-    platinumMin?: number;
-    goldMin?: number;
-    silverMin?: number;
-    bronzeMin?: number;
-  }
-): LoyaltyTier {
-  const isLatestOverride = member.tierHistory?.[0]?.isManualOverride === true;
-  if (isLatestOverride && member.tier) {
-    const validTiers: LoyaltyTier[] = ["Bronze", "Silver", "Gold", "Platinum"];
-    if (validTiers.includes(member.tier as LoyaltyTier)) {
-      return member.tier as LoyaltyTier;
-    }
-  }
-  return calculateTierFromPoints(Number(member.points) || 0, tierConfig);
 }
 
 export function getTierHint(points: number): string {
@@ -103,11 +78,14 @@ export function filterMembers(
   members: LoyaltyMember[],
   rawQuery: string,
   tierFilter = "ALL",
-  options?: { canViewFullContact?: boolean }
+  options?: boolean | { canViewFullContact?: boolean }
 ): LoyaltyMember[] {
   const query = rawQuery.trim().toLowerCase();
   const qDigits = query.replace(/\D+/g, "");
-  const canView = options?.canViewFullContact ?? true;
+  const canView =
+    typeof options === "boolean"
+      ? options
+      : options?.canViewFullContact ?? true;
 
   return members.filter((c) => {
     const pDigits = (c.phone || "").replace(/\D+/g, "");
@@ -117,13 +95,16 @@ export function filterMembers(
       (pDigits.includes(qDigits) ||
         (qDigits.startsWith("0") && pDigits.includes(`62${qDigits.slice(1)}`)));
 
+    const effectivePhone = canView ? c.phone : maskCustomerPhone(c.phone);
+    const effectiveEmail = canView ? (c.email || "") : maskCustomerEmail(c.email);
+
     const matchQuery =
       !query ||
       c.name.toLowerCase().includes(query) ||
-      (canView ? c.phone.toLowerCase().includes(query) : c.phone.toLowerCase().includes(query) && !c.phone.includes("*")) ||
+      effectivePhone.toLowerCase().includes(query) ||
       matchPhoneDigits ||
       c.tier.toLowerCase().includes(query) ||
-      Boolean(c.email && c.email.toLowerCase().includes(query) && (canView || !c.email.includes("*")));
+      Boolean(c.email && effectiveEmail.toLowerCase().includes(query));
 
     const matchTier = tierFilter === "ALL" || c.tier === tierFilter;
 
@@ -213,38 +194,6 @@ export function isEligibleForTierPromotion(
 export function canUserExportCustomers(roleSlug?: string): boolean {
   if (!roleSlug) return false;
   return roleSlug === "SUPER_ADMIN" || roleSlug === "OWNER" || roleSlug === "MANAGER";
-}
-
-export function canUserViewFullCustomerContacts(roleSlug?: string): boolean {
-  if (!roleSlug) return false;
-  return roleSlug === "SUPER_ADMIN" || roleSlug === "OWNER" || roleSlug === "MANAGER";
-}
-
-export function maskCustomerPhone(phone: string): string {
-  if (!phone) return "";
-  const trimmed = phone.trim();
-  if (trimmed.startsWith("+62 ")) {
-    const rest = trimmed.slice(4);
-    const parts = rest.split("-");
-    if (parts.length === 3) {
-      return `+62 ${parts[0]}-****-${parts[2]}`;
-    }
-  }
-  const digits = trimmed.replace(/\D/g, "");
-  if (digits.length < 8) return trimmed;
-  return `${digits.slice(0, 4)}****${digits.slice(-4)}`;
-}
-
-export function maskCustomerEmail(email?: string | null): string {
-  if (!email || !email.trim()) return "";
-  const trimmed = email.trim();
-  const parts = trimmed.split("@");
-  if (parts.length !== 2) return trimmed;
-  const [local, domain] = parts;
-  if (local.length <= 2) {
-    return `${local[0]}***@${domain}`;
-  }
-  return `${local.slice(0, 2)}***${local.slice(-1)}@${domain}`;
 }
 
 
