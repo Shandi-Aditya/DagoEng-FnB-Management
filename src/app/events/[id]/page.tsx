@@ -50,6 +50,10 @@ import {
   validateBookingInput,
 } from "@/features/event-detail/event-detail-domain";
 import { eventCategoryLabel } from "@/features/landing/landing-logic";
+import {
+  formatEventPriceSummary,
+  isEventPaidEffective,
+} from "@/features/events-catalog/events-catalog-domain";
 
 function MyTicketsNavAction({ user }: { user: AuthenticatedUser | null }) {
   if (user) {
@@ -218,8 +222,9 @@ export default function EventDetailPage() {
       }
 
       setIsBookingModalOpen(false);
+      void fetchEventDetail(event.id);
 
-      if (event.isPaid && orderData.totalPrice > 0) {
+      if (isEventPaidEffective(event) && orderData.totalPrice > 0) {
         setPendingTicket(orderData);
         setIsPaymentModalOpen(true);
       } else {
@@ -410,10 +415,10 @@ export default function EventDetailPage() {
               <div className="space-y-0.5">
                 <span className="text-muted-foreground block text-xs">Tiket masuk</span>
                 <span className="font-mono tabular-nums font-medium text-foreground block truncate">
-                  {event.isPaid ? formatCurrencyIDR(event.price) : "Gratis"}
+                  {formatEventPriceSummary(event)}
                 </span>
                 <span className="text-muted-foreground block text-xs truncate">
-                  {event.isPaid ? "Per tiket peserta" : "Registrasi terbuka"}
+                  {isEventPaidEffective(event) ? "Per tiket peserta" : "Registrasi terbuka"}
                 </span>
               </div>
             </div>

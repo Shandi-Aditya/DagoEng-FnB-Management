@@ -1,4 +1,4 @@
-import type { EventCategory, EventSubmissionPayload } from "@/types/event";
+import type { EventCategory, EventSubmissionPayload, EventTicketTier } from "@/types/event";
 import { validateEventPrice, validateEventCapacity } from "@/lib/event-validation";
 
 export const EVENT_CATEGORIES: readonly { value: EventCategory; label: string }[] = [
@@ -68,6 +68,7 @@ export interface SubmissionForm {
   barterNote: string;
   guidelines: string;
   honeypot: string;
+  ticketTiers?: EventTicketTier[];
 }
 
 export type SubmissionField = keyof SubmissionForm;
@@ -97,6 +98,7 @@ export function emptySubmissionForm(organizer: { name?: string; email?: string; 
     barterNote: "",
     guidelines: "",
     honeypot: "",
+    ticketTiers: [],
   };
 }
 
@@ -172,13 +174,31 @@ function notesWithBarter(form: SubmissionForm): string {
 /** The body `POST /api/events` expects. */
 export function buildSubmissionPayload(form: SubmissionForm): EventSubmissionPayload {
   const { barterNote: _barterNote, password, ...rest } = form;
-  const organizerPercent = form.isPaid ? form.proposedOrganizerPercent : DEFAULT_ORGANIZER_PERCENT;
+  const hasTiers = Array.isArray(form.ticketTiers) && form.ticketTiers.length > 0;
+  const tierCap = hasTiers
+    ? form.ticketTiers!.reduce((acc, t) => acc + (Number(t.quota) || 0), 0)
+    : 0;
+  const isPaid = hasTiers
+    ? form.ticketTiers!.some((t) => Number(t.price) > 0)
+    : form.isPaid;
+  const paidTierPrices = hasTiers
+    ? form.ticketTiers!.filter((t) => Number(t.price) > 0).map((t) => Number(t.price))
+    : [];
+  const effectivePrice = isPaid
+    ? hasTiers
+      ? paidTierPrices.length > 0 ? Math.min(...paidTierPrices) : 0
+      : Number(form.price) || 0
+    : 0;
+
+  const organizerPercent = isPaid ? form.proposedOrganizerPercent : DEFAULT_ORGANIZER_PERCENT;
   return {
     ...rest,
     startDate: toWitaIso(form.startDate),
     endDate: toWitaIso(form.endDate),
-    price: form.isPaid ? Number(form.price) : 0,
-    maxCapacity: Number(form.maxCapacity) || DEFAULT_CAPACITY,
+    isPaid,
+    price: effectivePrice,
+    maxCapacity: (tierCap > 0 ? tierCap : Number(form.maxCapacity)) || DEFAULT_CAPACITY,
+    ticketTiers: hasTiers ? form.ticketTiers : undefined,
     proposedOrganizerPercent: organizerPercent,
     proposedPlatformPercent: 100 - organizerPercent,
     collaborationFacilities: isHubVenue(form.location) ? form.collaborationFacilities : [],

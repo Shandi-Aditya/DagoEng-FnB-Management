@@ -18,7 +18,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import type { CommunityEvent, EventCategory } from "@/types/event";
+import type { CommunityEvent, EventCategory, EventTicketTier } from "@/types/event";
+import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
 
 interface OrganizerRevisionDialogProps {
   event: CommunityEvent | null;
@@ -47,6 +48,8 @@ interface OrganizerRevisionDialogProps {
   onUploadPoster: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSubmitRevision: (e: React.FormEvent) => void;
   isSubmitting: boolean;
+  ticketTiers?: EventTicketTier[];
+  setTicketTiers?: (v: EventTicketTier[]) => void;
 }
 
 export function OrganizerRevisionDialog({
@@ -76,6 +79,8 @@ export function OrganizerRevisionDialog({
   onUploadPoster,
   onSubmitRevision,
   isSubmitting,
+  ticketTiers,
+  setTicketTiers,
 }: OrganizerRevisionDialogProps) {
   if (!event) return null;
 
@@ -255,6 +260,20 @@ export function OrganizerRevisionDialog({
               className="w-full rounded-md border bg-background p-2.5 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-ring resize-y"
             />
           </div>
+
+          {/* Ticket Tiers Editor */}
+          {setTicketTiers && (
+            <div className="border-t pt-3">
+              <TicketTiersEditor
+                tiers={ticketTiers || []}
+                onChange={(newTiers) => {
+                  setTicketTiers(newTiers);
+                  const sumQuota = newTiers.reduce((acc, t) => acc + (t.quota || 0), 0);
+                  if (sumQuota > 0) setCapacity(sumQuota);
+                }}
+              />
+            </div>
+          )}
 
           <DialogFooter className="pt-2">
             <Button

@@ -1,4 +1,5 @@
 import type { EventCategory, PublicCommunityEvent } from "@/types/event";
+import { formatEventPriceSummary } from "@/features/events-catalog/events-catalog-domain";
 
 const DEFAULT_EVENT_LIMIT = 3;
 const DASHBOARD_ROLES = new Set(["OWNER", "SUPER_ADMIN", "MANAGER"]);
@@ -78,7 +79,7 @@ export function eventNoticeRow(event: PublicCommunityEvent): EventNoticeRow {
     day: datePart(start, { day: "numeric" }),
     month: datePart(start, { month: "short" }),
     time: `${weekday}, ${hour}`,
-    price: event.isPaid && event.price > 0 ? `Rp ${event.price.toLocaleString("id-ID")}` : "Gratis",
+    price: formatEventPriceSummary(event),
     ticket: availability ? (availability.isSoldOut ? "habis" : "tersedia") : null,
   };
 }

@@ -21,7 +21,7 @@ export interface VenueCapacityResolution {
  *   They are explicitly flagged as UNCONFIRMED_ESTIMATE so assumed numbers are never treated as facts.
  */
 export function resolveVenueCapacity(
-  eventOrLocation: string | Pick<CommunityEvent, "location" | "maxCapacity">,
+  eventOrLocation: string | Pick<CommunityEvent, "location" | "maxCapacity"> | Partial<CommunityEvent>,
   explicitMaxCapacity?: number
 ): VenueCapacityResolution {
   const location =
@@ -40,6 +40,23 @@ export function resolveVenueCapacity(
       sourceType: "ORGANIZER_SPECIFIED",
       sourceDescription: "Kuota tiket ditentukan secara definitif oleh penyelenggara/admin pada formulir event.",
     };
+  }
+
+  // 1b. Sum of ticket tiers quota if event has ticket tiers and no maxCapacity specified
+  if (typeof eventOrLocation === "object" && eventOrLocation !== null && "ticketTiers" in eventOrLocation) {
+    const tiers = (eventOrLocation as any).ticketTiers;
+    if (Array.isArray(tiers) && tiers.length > 0) {
+      const sumTiers = tiers.reduce((acc: number, t: any) => acc + (Number(t.quota) || 0), 0);
+      if (sumTiers > 0) {
+        return {
+          capacity: sumTiers,
+          isConfirmed: true,
+          source: "ORGANIZER_SPECIFIED",
+          sourceType: "ORGANIZER_SPECIFIED",
+          sourceDescription: "Kapasitas dihitung dari total kuota seluruh jenis tiket.",
+        };
+      }
+    }
   }
 
   const loc = (location || "").toLowerCase();
@@ -84,6 +101,8 @@ export function resolveVenueCapacity(
  * Returns the maximum seating/ticket capacity for an event.
  * Uses event.maxCapacity if specified, otherwise matches venue name or defaults to 50.
  */
-export function getEventCapacity(event: Pick<CommunityEvent, "location" | "maxCapacity">): number {
+export function getEventCapacity(
+  event: Pick<CommunityEvent, "location" | "maxCapacity"> | Partial<CommunityEvent>
+): number {
   return resolveVenueCapacity(event).capacity;
 }

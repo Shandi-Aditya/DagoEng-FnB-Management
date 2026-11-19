@@ -15,7 +15,7 @@ export interface TicketPassData {
   unitPrice: number;
   totalPrice: number;
   paymentMethod: string;
-  paymentStatus: "PENDING" | "PAID" | "CANCELLED";
+  paymentStatus: "PENDING" | "PAID" | "CANCELLED" | "EXPIRED" | "REFUNDED";
   paymentProofUrl?: string | null;
   paymentProofUploadedAt?: string | null;
   paymentProofNote?: string | null;
@@ -23,6 +23,17 @@ export interface TicketPassData {
   checkedInQty?: number;
   checkedInSeats?: number[];
   checkInTime?: string | null;
+  ticketTierId?: string | null;
+  ticketTierName?: string | null;
+  isInvitation?: boolean;
+  invitationNote?: string | null;
+  promoCode?: string | null;
+  discountAmount?: number;
+  subtotalPrice?: number;
+  refundStatus?: string | null;
+  refundRequest?: any;
+  refundPolicy?: any;
+  refundEligibility?: any;
   destinationBankSnapshot?: {
     bankId: string;
     label?: string;

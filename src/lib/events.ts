@@ -1717,19 +1717,7 @@ export function toPublicEvent(event: CommunityEvent): PublicCommunityEvent {
     isPaid: event.isPaid,
     price: event.price,
     ticketTiers: event.ticketTiers || [],
-    promoCodes: (event.promoCodes || [])
-      .filter((p) => p.isActive)
-      .map((p) => ({
-        code: p.code,
-        discountType: p.discountType,
-        discountValue: p.discountValue,
-        maxDiscountAmount: p.maxDiscountAmount,
-        minOrderAmount: p.minOrderAmount,
-        validFrom: p.validFrom,
-        validUntil: p.validUntil,
-        isActive: p.isActive,
-        applicableTierIds: p.applicableTierIds,
-      })),
+    hasActivePromos: (event.promoCodes || []).some((p) => p.isActive !== false),
     posterUrl: event.posterUrl,
     externalRegistrationUrl: event.externalRegistrationUrl || null,
     organizerName: event.organizerName,
@@ -3215,6 +3203,12 @@ export async function expirePendingBookings(
 
   if (modified) {
     await saveBookingsToDisk(allBookings);
+    syncBookingsToLocalDiskAndCache(allBookings, Date.now());
+    const allEvents = loadEventsFromDisk();
+    if (recalculateAllPromoUsageCounts(allEvents, allBookings)) {
+      await saveEventsToDisk(allEvents);
+      syncEventsToLocalDiskAndCache(allEvents, Date.now());
+    }
   }
 
   return count;
@@ -3371,6 +3365,41 @@ export function validateAndCalculatePromoDiscount(
 }
 
 /**
+ * Idempotently recalculates promo.usedCount for all promos across events
+ * based on active bookings that are NOT CANCELLED, EXPIRED, or REFUNDED.
+ * Returns true if any promo usedCount changed.
+ */
+export function recalculateAllPromoUsageCounts(
+  events: CommunityEvent[],
+  allBookings: EventTicketOrder[]
+): boolean {
+  let changed = false;
+  for (const event of events) {
+    if (!event.promoCodes || event.promoCodes.length === 0) continue;
+    const activeEventBookings = allBookings.filter(
+      (b) =>
+        b.eventId === event.id &&
+        b.paymentStatus !== "CANCELLED" &&
+        b.paymentStatus !== "EXPIRED" &&
+        b.paymentStatus !== "REFUNDED"
+    );
+
+    for (const promo of event.promoCodes) {
+      const cleanCode = (promo.code || "").trim().toUpperCase();
+      const count = activeEventBookings.filter(
+        (b) => (b.promoCode || "").trim().toUpperCase() === cleanCode
+      ).length;
+      if (promo.usedCount !== count) {
+        promo.usedCount = count;
+        promo.updatedAt = new Date().toISOString();
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+/**
  * Creates or updates a promo code on an event.
  */
 export async function createEventPromoCode(
@@ -3410,6 +3439,20 @@ export async function createEventPromoCode(
         (p) => p.code.trim().toUpperCase() === cleanCode
       );
 
+      const normalizeWita = (val?: string) => {
+        if (!val || !val.trim()) return undefined;
+        const t = val.trim();
+        if (t.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(t)) return t;
+        if (t.includes("T")) return `${t.length === 16 ? `${t}:00` : t}+08:00`;
+        return `${t}T00:00:00+08:00`;
+      };
+      const normValidFrom = normalizeWita(payload.validFrom);
+      const normValidUntil = normalizeWita(payload.validUntil);
+      const effectiveQuota =
+        payload.quota !== undefined && payload.quota !== null
+          ? Math.max(0, Math.floor(Number(payload.quota)))
+          : 100;
+
       const now = new Date().toISOString();
       let promoRecord: EventPromoCode;
 
@@ -3422,9 +3465,9 @@ export async function createEventPromoCode(
           discountValue: Number(payload.discountValue),
           maxDiscountAmount: payload.maxDiscountAmount ? Number(payload.maxDiscountAmount) : undefined,
           minOrderAmount: payload.minOrderAmount ? Number(payload.minOrderAmount) : undefined,
-          quota: Math.max(existing.usedCount, Number(payload.quota || 100)),
-          validFrom: payload.validFrom,
-          validUntil: payload.validUntil,
+          quota: Math.max(existing.usedCount, effectiveQuota),
+          validFrom: normValidFrom,
+          validUntil: normValidUntil,
           isActive: payload.isActive !== false,
           applicableTierIds: payload.applicableTierIds,
           updatedAt: now,
@@ -3439,10 +3482,10 @@ export async function createEventPromoCode(
           discountValue: Number(payload.discountValue),
           maxDiscountAmount: payload.maxDiscountAmount ? Number(payload.maxDiscountAmount) : undefined,
           minOrderAmount: payload.minOrderAmount ? Number(payload.minOrderAmount) : undefined,
-          quota: Number(payload.quota || 100),
+          quota: effectiveQuota,
           usedCount: 0,
-          validFrom: payload.validFrom,
-          validUntil: payload.validUntil,
+          validFrom: normValidFrom,
+          validUntil: normValidUntil,
           isActive: payload.isActive !== false,
           applicableTierIds: payload.applicableTierIds,
           createdAt: now,
@@ -3457,6 +3500,25 @@ export async function createEventPromoCode(
 
       await saveEventsToDisk(allEvents, { tx });
       committedPromo = promoRecord;
+
+      try {
+        await appendAuditLog({
+          id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: now,
+          module: "SETTINGS",
+          action: "EVENT_PROMO_CREATED",
+          category: "CONFIGURATION",
+          severity: "MEDIUM",
+          status: "SUCCESS",
+          actorName: event.organizerName || "Organizer",
+          actorRole: "ORGANIZER",
+          recordId: promoRecord.id,
+          description: `Membuat atau memperbarui kode promo [${promoRecord.code}] untuk event [${event.title}] (${event.id}).`,
+          newValue: JSON.stringify(promoRecord),
+        });
+      } catch (auditErr) {
+        console.error("[events] Gagal mencatat audit log promo:", auditErr);
+      }
     });
 
     return committedPromo!;
@@ -3498,23 +3560,22 @@ export async function createInvitationTicket(
         throw new Error(`Event dengan ID ${payload.eventId} tidak ditemukan.`);
       }
 
-      if (issuerEmail && (event.organizerEmail || "").toLowerCase() !== issuerEmail.trim().toLowerCase()) {
-        // Reserved for authorization
+      if (
+        issuerEmail &&
+        issuerEmail !== "admin" &&
+        (event.organizerEmail || "").toLowerCase() !== issuerEmail.trim().toLowerCase()
+      ) {
+        throw new Error("FORBIDDEN: Anda tidak memiliki izin untuk menerbitkan tiket undangan pada event ini.");
       }
 
       await expirePendingBookings();
-      const activeBookings = allBookings.filter(
-        (b) => b.eventId === event.id && b.paymentStatus !== "CANCELLED" && b.paymentStatus !== "EXPIRED"
-      );
 
       // Resolve tier if specified
       let selectedTier: EventTicketTier | undefined;
       if (payload.ticketTierId && event.ticketTiers && event.ticketTiers.length > 0) {
         selectedTier = event.ticketTiers.find((t) => t.id === payload.ticketTierId);
         if (selectedTier) {
-          const tierBooked = activeBookings
-            .filter((b) => b.ticketTierId === selectedTier!.id)
-            .reduce((sum, b) => sum + b.ticketCount, 0);
+          const tierBooked = getEventActiveBookedTicketCountForTier(event.id, selectedTier.id, allBookings);
           const tierRemaining = selectedTier.quota - tierBooked;
           if (ticketCount > tierRemaining) {
             throw new Error(
@@ -3525,7 +3586,7 @@ export async function createInvitationTicket(
       }
 
       const maxCapacity = getEventCapacity(event);
-      const currentlyBooked = activeBookings.reduce((sum, b) => sum + b.ticketCount, 0);
+      const currentlyBooked = getEventActiveBookedTicketCount(event.id, allBookings);
       const remainingQuota = maxCapacity - currentlyBooked;
 
       if (ticketCount > remainingQuota) {
@@ -3589,6 +3650,34 @@ export async function createInvitationTicket(
 
       allBookings.unshift(newBooking);
       await saveBookingsToDisk(allBookings, { tx });
+
+      try {
+        await appendAuditLog({
+          id: `audit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: new Date().toISOString(),
+          module: "SETTINGS",
+          action: "EVENT_INVITATION_ISSUED",
+          category: "CONFIGURATION",
+          severity: "MEDIUM",
+          status: "SUCCESS",
+          actorName: issuerEmail || "admin",
+          actorRole: issuerEmail === "admin" ? "SUPER_ADMIN" : "ORGANIZER",
+          recordId: newBooking.ticketCode,
+          referenceId: event.id,
+          description: `Menerbitkan tiket undangan [${newBooking.ticketCode}] untuk [${newBooking.guestName}] (${newBooking.guestEmail}) pada event [${event.title}].`,
+          newValue: JSON.stringify({
+            ticketCode: newBooking.ticketCode,
+            guestName: newBooking.guestName,
+            guestEmail: newBooking.guestEmail,
+            ticketCount: newBooking.ticketCount,
+            ticketTierId: newBooking.ticketTierId,
+            ticketTierName: newBooking.ticketTierName,
+            invitationNote: newBooking.invitationNote,
+          }),
+        });
+      } catch (auditErr) {
+        console.error("[events] Gagal mencatat audit log tiket undangan:", auditErr);
+      }
 
       committedBooking = newBooking;
       committedBookingsList = allBookings;
@@ -3855,6 +3944,12 @@ export async function requestTicketRefund(
     if (committedBookingsList) {
       syncBookingsToLocalDiskAndCache(committedBookingsList, Date.now());
       markStorageSyncSynced("event_bookings.json");
+
+      const allEvents = loadEventsFromDisk();
+      if (recalculateAllPromoUsageCounts(allEvents, committedBookingsList)) {
+        await saveEventsToDisk(allEvents);
+        syncEventsToLocalDiskAndCache(allEvents, Date.now());
+      }
     }
 
     if (!committedOrder) {
@@ -3944,6 +4039,12 @@ export async function adminProcessTicketRefund(
     if (committedBookingsList) {
       syncBookingsToLocalDiskAndCache(committedBookingsList, Date.now());
       markStorageSyncSynced("event_bookings.json");
+
+      const allEvents = loadEventsFromDisk();
+      if (recalculateAllPromoUsageCounts(allEvents, committedBookingsList)) {
+        await saveEventsToDisk(allEvents);
+        syncEventsToLocalDiskAndCache(allEvents, Date.now());
+      }
     }
 
     if (!committedOrder) {
@@ -4131,9 +4232,7 @@ export async function createEventBooking(
         }
 
         // Tier Quota Check
-        const tierBooked = activeBookings
-          .filter((b) => b.ticketTierId === selectedTier!.id)
-          .reduce((sum, b) => sum + b.ticketCount, 0);
+        const tierBooked = getEventActiveBookedTicketCountForTier(event.id, selectedTier!.id, allBookings);
         const tierRemaining = selectedTier.quota - tierBooked;
         if (payload.ticketCount > tierRemaining) {
           throw new Error(
@@ -4146,7 +4245,7 @@ export async function createEventBooking(
       }
 
       const maxCapacity = getEventCapacity(event);
-      const currentlyBooked = activeBookings.reduce((sum, b) => sum + b.ticketCount, 0);
+      const currentlyBooked = getEventActiveBookedTicketCount(event.id, allBookings);
       const remainingQuota = maxCapacity - currentlyBooked;
 
       if (payload.ticketCount > remainingQuota) {
@@ -4989,6 +5088,13 @@ export async function deleteEventBooking(
 
     const updatedBookings = allBookings.filter((b) => b.id !== booking.id);
     await saveBookingsToDisk(updatedBookings);
+    syncBookingsToLocalDiskAndCache(updatedBookings, Date.now());
+
+    const allEvents = loadEventsFromDisk();
+    if (recalculateAllPromoUsageCounts(allEvents, updatedBookings)) {
+      await saveEventsToDisk(allEvents);
+      syncEventsToLocalDiskAndCache(allEvents, Date.now());
+    }
 
     // Audit log
     try {

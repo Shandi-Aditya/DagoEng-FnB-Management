@@ -22,7 +22,7 @@ export async function POST(
     }
 
     const adminAuth = await assertEventAdmin(req);
-    const organizerAuth = await assertOrganizerAuth(req, body.organizerEmail || event.organizerEmail);
+    const organizerAuth = await assertOrganizerAuth(req, event.organizerEmail);
 
     if (!adminAuth.authorized && !organizerAuth.authorized) {
       return NextResponse.json(

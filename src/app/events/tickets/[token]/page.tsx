@@ -288,6 +288,8 @@ export default function PrivateTicketViewPage() {
                 eventDate={ticket.eventDate}
                 location={ticket.eventLocation}
                 paymentStatus={ticket.paymentStatus}
+                ticketTierName={ticket.ticketTierName}
+                isInvitation={ticket.isInvitation}
               />
 
               <TicketQRSection
@@ -311,6 +313,12 @@ export default function PrivateTicketViewPage() {
                 institution={ticket.institution}
                 ticketCount={ticket.ticketCount}
                 totalPrice={ticket.totalPrice}
+                ticketTierName={ticket.ticketTierName}
+                isInvitation={ticket.isInvitation}
+                invitationNote={ticket.invitationNote}
+                promoCode={ticket.promoCode}
+                discountAmount={ticket.discountAmount}
+                subtotalPrice={ticket.subtotalPrice}
               />
 
               {isMultiTicket && (

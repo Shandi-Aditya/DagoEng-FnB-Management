@@ -14,6 +14,12 @@ interface TicketOrderSummaryProps {
   institution?: string | null;
   ticketCount: number;
   totalPrice: number;
+  ticketTierName?: string | null;
+  isInvitation?: boolean;
+  invitationNote?: string | null;
+  discountAmount?: number;
+  subtotalPrice?: number;
+  promoCode?: string | null;
 }
 
 export function TicketOrderSummary({
@@ -24,6 +30,12 @@ export function TicketOrderSummary({
   institution,
   ticketCount,
   totalPrice,
+  ticketTierName,
+  isInvitation,
+  invitationNote,
+  discountAmount,
+  subtotalPrice,
+  promoCode,
 }: TicketOrderSummaryProps) {
   const [isCopied, setIsCopied] = useState(false);
 
@@ -81,14 +93,50 @@ export function TicketOrderSummary({
             <span className="font-medium text-foreground">{institution}</span>
           </div>
         )}
+        {ticketTierName && (
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Jenis tiket:</span>
+            <span className="font-medium text-foreground">{ticketTierName}</span>
+          </div>
+        )}
+        {isInvitation && (
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Status tiket:</span>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+              Tiket undangan
+            </span>
+          </div>
+        )}
+        {isInvitation && invitationNote && (
+          <div className="flex justify-between items-start gap-2">
+            <span className="text-muted-foreground shrink-0">Keterangan:</span>
+            <span className="font-medium text-foreground text-right">{invitationNote}</span>
+          </div>
+        )}
         <div className="flex justify-between items-center">
           <span className="text-muted-foreground">Jumlah tiket:</span>
           <span className="font-medium text-foreground tabular-nums">{ticketCount} tiket</span>
         </div>
+        {typeof subtotalPrice === "number" && typeof discountAmount === "number" && discountAmount > 0 && (
+          <>
+            <div className="flex justify-between items-center pt-1 border-t border-border/50">
+              <span className="text-muted-foreground">Subtotal:</span>
+              <span className="font-medium text-foreground font-mono tabular-nums">
+                {formatCurrencyIDR(subtotalPrice)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-success">
+              <span className="font-medium">Potongan promo {promoCode ? `(${promoCode})` : ""}:</span>
+              <span className="font-semibold font-mono tabular-nums">
+                -{formatCurrencyIDR(discountAmount)}
+              </span>
+            </div>
+          </>
+        )}
         <div className="flex justify-between items-center pt-2 border-t border-border">
           <span className="font-medium text-foreground">Total tagihan:</span>
           <span className="font-semibold text-sm text-foreground font-mono tabular-nums">
-            {totalPrice > 0 ? formatCurrencyIDR(totalPrice) : "Gratis (RSVP)"}
+            {totalPrice > 0 ? formatCurrencyIDR(totalPrice) : isInvitation ? "Gratis (Tiket Undangan)" : "Gratis (RSVP)"}
           </span>
         </div>
       </div>

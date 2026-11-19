@@ -40,6 +40,8 @@ import { OrganizerBankGuardDialog } from "@/features/events-portal/OrganizerBank
 import { OrganizerQRScannerDialog } from "@/features/events-portal/OrganizerQRScannerDialog";
 import { OrganizerSignedOut } from "@/features/events-portal/OrganizerSignedOut";
 import { EventSubmissionForm } from "@/features/events-portal/EventSubmissionForm";
+import { EventPromosDialog } from "@/components/events/EventPromosDialog";
+import type { EventTicketTier } from "@/types/event";
 import type { SectionId } from "@/features/events-portal/OrganizerEventsTab";
 import { eventBalances, groupOrganizerEvents } from "@/features/events-portal/events-portal-groups";
 import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE } from "@/lib/event-validation";
@@ -98,6 +100,8 @@ export default function CommunityOrganizerPortalPage() {
   const [isUploadingRevisionPoster, setIsUploadingRevisionPoster] = useState(false);
   const [revisionUploadError, setRevisionUploadError] = useState<string | null>(null);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
+  const [revisionTiers, setRevisionTiers] = useState<EventTicketTier[]>([]);
+  const [promoEvent, setPromoEvent] = useState<CommunityEvent | null>(null);
 
   // Revenue Split Negotiation Form State
   const [splitOrgPercent, setSplitOrgPercent] = useState<number>(80);
@@ -250,6 +254,7 @@ export default function CommunityOrganizerPortalPage() {
     setRevisionPosterUrl(evt.posterUrl || "");
     setRevisionStartDate(toDateTimeLocal(evt.startDate));
     setRevisionEndDate(toDateTimeLocal(evt.endDate));
+    setRevisionTiers(evt.ticketTiers || []);
     setRevisionUploadError(null);
   };
 
@@ -326,6 +331,7 @@ export default function CommunityOrganizerPortalPage() {
                 : new Date(revisionEndDate).toISOString()
               : revisionEvent.endDate,
             guidelines: revisionGuidelines,
+            ticketTiers: revisionTiers,
           },
         }),
       });
@@ -740,6 +746,7 @@ export default function CommunityOrganizerPortalPage() {
                 onSelectEvent={(evt) => setViewingDetailEvent(evt)}
                 onEditRevision={openRevisionModal}
                 onReviewSplit={(evt) => setNegotiatingEvent(evt)}
+                onManagePromos={(evt) => setPromoEvent(evt)}
                 initialSection={eventsSection}
                 onShowAttendees={(eventId) => {
                   setSelectedEventId(eventId);
@@ -842,6 +849,7 @@ export default function CommunityOrganizerPortalPage() {
         bookings={portalData?.bookings || []}
         onEditRevision={openRevisionModal}
         onReviewSplit={(evt) => setNegotiatingEvent(evt)}
+        onManagePromos={(evt) => setPromoEvent(evt)}
       />
 
       <OrganizerRevisionDialog
@@ -873,6 +881,17 @@ export default function CommunityOrganizerPortalPage() {
         onUploadPoster={handleUploadRevisionPoster}
         onSubmitRevision={handleSaveRevision}
         isSubmitting={isSubmittingRevision}
+        ticketTiers={revisionTiers}
+        setTicketTiers={setRevisionTiers}
+      />
+
+      <EventPromosDialog
+        open={Boolean(promoEvent)}
+        onOpenChange={(open) => {
+          if (!open) setPromoEvent(null);
+        }}
+        event={promoEvent}
+        onPromoUpdated={() => loadPortalData(activeEmail)}
       />
 
       <OrganizerRevenueSplitDialog

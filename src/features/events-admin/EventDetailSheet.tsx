@@ -14,6 +14,7 @@ import {
   Trash2,
   UserCheck,
   XCircle,
+  Tag,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,10 @@ import { StatusBadge } from "@/components/app/status-badge";
 import type { CommunityEvent } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { organizerSharePercent } from "@/features/events-portal/events-portal-groups";
+import {
+  formatEventPriceSummary,
+  isEventPaidEffective,
+} from "@/features/events-catalog/events-catalog-domain";
 import {
   eventCategoryLabel,
   eventStatusLabel,
@@ -48,6 +53,7 @@ export interface EventDetailSheetProps {
   onArchive: (event: CommunityEvent) => void;
   onEdit: (event: CommunityEvent) => void;
   onManageAttendees: (event: CommunityEvent) => void;
+  onManagePromos?: (event: CommunityEvent) => void;
   onDelete?: (event: CommunityEvent) => void;
   isProcessing?: boolean;
 }
@@ -62,6 +68,7 @@ export function EventDetailSheet({
   onArchive,
   onEdit,
   onManageAttendees,
+  onManagePromos,
   onDelete,
   isProcessing,
 }: EventDetailSheetProps) {
@@ -69,7 +76,8 @@ export function EventDetailSheet({
 
   const effStatus = getEffectiveStatus(event);
   const waUrl = formatWhatsAppUrl(event.organizerPhone);
-  const isFree = !event.isPaid || event.price === 0;
+  const isPaid = isEventPaidEffective(event);
+  const priceDisplay = formatEventPriceSummary(event);
 
   const formattedDate = formatDateSafe(event.startDate);
 
@@ -123,7 +131,7 @@ export function EventDetailSheet({
                 <span>Tiket & Kuota</span>
               </span>
               <span className="font-medium text-foreground font-mono tabular-nums">
-                {isFree ? "Gratis" : formatCurrencyIDR(event.price)} ({event.maxCapacity || "—"} kuota)
+                {priceDisplay} ({event.maxCapacity || "—"} kuota)
               </span>
             </div>
 
@@ -135,6 +143,34 @@ export function EventDetailSheet({
               <span className="font-medium text-foreground">{event.location}</span>
             </div>
           </div>
+
+          {/* Rincian Tier Bertingkat */}
+          {event.ticketTiers && event.ticketTiers.length > 0 && (
+            <div className="rounded-lg border p-3.5 space-y-2 text-xs">
+              <div className="flex items-center justify-between border-b pb-1.5">
+                <span className="font-medium text-foreground">Rincian jenis tiket ({event.ticketTiers.length})</span>
+                <Badge variant="outline" className="text-xs font-mono">
+                  Total kuota: {event.ticketTiers.reduce((acc, t) => acc + (t.quota || 0), 0)} tiket
+                </Badge>
+              </div>
+              <div className="space-y-1.5">
+                {event.ticketTiers.map((t) => (
+                  <div key={t.id} className="flex items-center justify-between py-1 border-b border-border/40 last:border-0">
+                    <div>
+                      <span className="font-medium text-foreground block">{t.name}</span>
+                      <span className="text-xs text-muted-foreground block">
+                        Kuota {t.quota} tiket
+                        {t.description ? ` · ${t.description}` : ""}
+                      </span>
+                    </div>
+                    <span className="font-mono font-medium text-foreground">
+                      {t.price > 0 ? formatCurrencyIDR(t.price) : "Gratis"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Info Penyelenggara */}
           <div className="rounded-lg border p-4 space-y-2">
@@ -279,6 +315,19 @@ export function EventDetailSheet({
                   <UserCheck />
                   <span>Peserta</span>
                 </Button>
+                {onManagePromos && (
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => {
+                      onOpenChange(false);
+                      onManagePromos(event);
+                    }}
+                  >
+                    <Tag className="size-4" />
+                    <span>Kelola promo</span>
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="lg"

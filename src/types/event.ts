@@ -244,6 +244,7 @@ export interface PublicCommunityEvent {
   guidelines?: string[] | null;
   ticketTiers?: EventTicketTier[];
   tierAvailability?: EventTicketTierAvailability[];
+  hasActivePromos?: boolean;
   promoCodes?: Pick<EventPromoCode, "code" | "discountType" | "discountValue" | "maxDiscountAmount" | "minOrderAmount" | "validFrom" | "validUntil" | "isActive" | "applicableTierIds">[];
   refundPolicy?: EventRefundPolicy;
   availability?: EventTicketAvailability;

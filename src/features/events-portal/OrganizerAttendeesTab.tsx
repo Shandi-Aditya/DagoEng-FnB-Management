@@ -42,6 +42,7 @@ import {
   paymentStatusTone,
 } from "./events-portal-domain";
 import { checkedInGuests } from "./events-portal-groups";
+import { IssueInvitationDialog } from "@/components/events/IssueInvitationDialog";
 
 interface OrganizerAttendeesTabProps {
   bookings: EventTicketOrder[];
@@ -71,6 +72,7 @@ export function OrganizerAttendeesTab({
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("ALL");
   const [checkInStatusFilter, setCheckInStatusFilter] = useState("ALL");
   const [expandedBookingIds, setExpandedBookingIds] = useState<Set<string>>(new Set());
+  const [isIssueInviteOpen, setIsIssueInviteOpen] = useState(false);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -217,6 +219,14 @@ export function OrganizerAttendeesTab({
               <span>Reset</span>
             </Button>
           ) : null}
+          <Button
+            size="sm"
+            onClick={() => setIsIssueInviteOpen(true)}
+            disabled={!selectedEvent && events.length === 0}
+          >
+            <Mail className="size-4" />
+            <span>Terbitkan tiket undangan</span>
+          </Button>
           <Button variant="outline" size="sm" onClick={() => onExportCSV(filteredAttendees)} disabled={filteredAttendees.length === 0}>
             <Download />
             <span>Ekspor</span>
@@ -431,6 +441,12 @@ export function OrganizerAttendeesTab({
           />
         </div>
       )}
+
+      <IssueInvitationDialog
+        open={isIssueInviteOpen}
+        onOpenChange={setIsIssueInviteOpen}
+        event={selectedEvent || events[0] || null}
+      />
     </div>
   );
 }

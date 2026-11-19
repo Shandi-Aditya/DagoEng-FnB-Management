@@ -7,6 +7,7 @@ import {
   Search,
   Trash2,
   UserCheck,
+  Mail,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ import type { CommunityEvent, EventTicketOrder } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import { downloadCSV } from "@/lib/export-utils";
 import { isEventTodayWita } from "@/features/events-checkin/events-checkin-domain";
+import { IssueInvitationDialog } from "@/components/events/IssueInvitationDialog";
 
 export interface EventAttendeesModalProps {
   open: boolean;
@@ -39,6 +41,7 @@ export interface EventAttendeesModalProps {
   bookings: EventTicketOrder[];
   onToggleCheckIn: (booking: EventTicketOrder) => void;
   onDeleteBooking?: (booking: EventTicketOrder) => void;
+  onInvitationIssued?: () => void;
   isUpdatingCheckInId: string | null;
 }
 
@@ -49,9 +52,11 @@ export function EventAttendeesModal({
   bookings,
   onToggleCheckIn,
   onDeleteBooking,
+  onInvitationIssued,
   isUpdatingCheckInId,
 }: EventAttendeesModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [isIssueInviteOpen, setIsIssueInviteOpen] = useState(false);
 
   useEffect(() => {
     setSearchQuery("");
@@ -148,10 +153,16 @@ export function EventAttendeesModal({
                 {event.title} · Penyelenggara: {event.organizerName}
               </DialogDescription>
             </div>
-            <Button variant="outline" size="lg" onClick={handleExportCSV}>
-              <Download />
-              <span>Ekspor CSV</span>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button size="lg" onClick={() => setIsIssueInviteOpen(true)}>
+                <Mail className="size-4 mr-1" />
+                <span>Terbitkan tiket undangan</span>
+              </Button>
+              <Button variant="outline" size="lg" onClick={handleExportCSV}>
+                <Download />
+                <span>Ekspor CSV</span>
+              </Button>
+            </div>
           </div>
         </DialogHeader>
 
@@ -373,6 +384,13 @@ export function EventAttendeesModal({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <IssueInvitationDialog
+        open={isIssueInviteOpen}
+        onOpenChange={setIsIssueInviteOpen}
+        event={event}
+        onInvitationIssued={() => onInvitationIssued?.()}
+      />
     </Dialog>
   );
 }

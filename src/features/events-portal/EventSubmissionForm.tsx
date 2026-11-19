@@ -16,6 +16,7 @@ import { resolveVenueCapacity } from "@/lib/event-capacity";
 import { cn, formatCurrencyIDR } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { isCheckInStaffRole, CHECKIN_STAFF_SUBMISSION_BLOCKED_MESSAGE } from "@/lib/event-validation";
+import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
 
 import {
   EVENT_CATEGORIES,
@@ -333,6 +334,21 @@ export function EventSubmissionForm({ mode, organizer, onSubmitted, onCancel, si
                   )}
                 </div>
               )}
+
+              {/* Editor Jenis Tiket Bertingkat (Opsional jika ingin multi-tier) */}
+              <div className="border-t pt-3">
+                <TicketTiersEditor
+                  tiers={form.ticketTiers || []}
+                  onChange={(tiers) => {
+                    set("ticketTiers", tiers);
+                    const sumQ = tiers.reduce((acc, t) => acc + (Number(t.quota) || 0), 0);
+                    if (sumQ > 0) set("maxCapacity", sumQ);
+                    const hasPaid = tiers.some((t) => Number(t.price) > 0);
+                    if (hasPaid) set("isPaid", true);
+                  }}
+                  maxVenueCapacity={capacityHint.capacity}
+                />
+              </div>
             </FieldGroup>
           </CardContent>
         </Card>

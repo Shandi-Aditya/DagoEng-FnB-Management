@@ -10,7 +10,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import type { PublicCommunityEvent } from "@/types/event";
 import {
   eventCategoryLabel,
-  eventPriceLabel,
+  formatEventPriceSummary,
   formatEventSchedule,
   parseEventDateBadge,
 } from "./events-catalog-domain";
@@ -23,7 +23,7 @@ interface EventCardProps {
 export function EventCard({ event, isPast }: EventCardProps) {
   const dateBadge = parseEventDateBadge(event.startDate);
   const scheduleFormatted = formatEventSchedule(event.startDate, event.endDate);
-  const priceDisplay = eventPriceLabel(event.isPaid, event.price, event.ticketTiers);
+  const priceDisplay = formatEventPriceSummary(event);
 
   return (
     <Card className={`group flex flex-col justify-between overflow-hidden pt-0 transition-colors ${

@@ -16,6 +16,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import type { CommunityEvent, EventCategory } from "@/types/event";
 import { eventCategoryLabel } from "./events-admin-domain";
 import { validateEventPrice, validateEventCapacity } from "@/lib/event-validation";
+import { TicketTiersEditor } from "@/components/events/TicketTiersEditor";
 
 function toWitaDateTimeLocal(value?: string): string {
   if (!value) return "";
@@ -272,6 +273,25 @@ export function EventEditModal({
               onChange={(e) => onGuidelinesTextChange(e.target.value)}
               placeholder="Contoh:&#10;Bawa laptop masing-masing&#10;Dilarang membawa makanan dari luar"
               className="w-full rounded-md border bg-card p-2 text-xs text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+
+          {/* Editor Jenis Tiket Bertingkat */}
+          <div className="border-t pt-3">
+            <TicketTiersEditor
+              tiers={formData.ticketTiers || []}
+              onChange={(newTiers) => {
+                const isPaid = newTiers.some((t) => Number(t.price) > 0);
+                const sumQuota = newTiers.reduce((acc, t) => acc + (Number(t.quota) || 0), 0);
+                onFormDataChange({
+                  ...formData,
+                  ticketTiers: newTiers,
+                  isPaid,
+                  price: isPaid ? Math.min(...newTiers.filter((t) => t.price > 0).map((t) => t.price)) : 0,
+                  maxCapacity: sumQuota > 0 ? sumQuota : formData.maxCapacity,
+                });
+                if (sumQuota > 0) setRawQuota(String(sumQuota));
+              }}
             />
           </div>
         </div>

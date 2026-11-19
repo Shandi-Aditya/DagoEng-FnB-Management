@@ -86,29 +86,54 @@ export function filterPublicEvents(
   });
 }
 
+export function isEventPaidEffective(
+  event?: {
+    isPaid?: boolean;
+    price?: number;
+    ticketTiers?: readonly Pick<EventTicketTier, "price" | "isActive">[] | null;
+  } | null
+): boolean {
+  if (!event) return false;
+  if (event.ticketTiers && event.ticketTiers.length > 0) {
+    return event.ticketTiers.some((t) => t.isActive !== false && Number(t.price) > 0);
+  }
+  return Boolean(event.isPaid && Number(event.price) > 0);
+}
+
+export function formatEventPriceSummary(
+  event?: {
+    isPaid?: boolean;
+    price?: number;
+    ticketTiers?: readonly Pick<EventTicketTier, "price" | "isActive">[] | null;
+  } | null
+): string {
+  if (!event || !isEventPaidEffective(event)) {
+    return "Gratis";
+  }
+  if (event.ticketTiers && event.ticketTiers.length > 0) {
+    const paidTiers = event.ticketTiers.filter(
+      (tier) => tier.isActive !== false && Number(tier.price) > 0
+    );
+    if (paidTiers.length === 0) {
+      return "Gratis";
+    }
+    const prices = paidTiers.map((t) => Number(t.price));
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    if (minPrice !== maxPrice) {
+      return `Mulai dari ${formatCurrencyIDR(minPrice)}`;
+    }
+    return formatCurrencyIDR(minPrice);
+  }
+  return formatCurrencyIDR(Number(event.price) || 0);
+}
+
 export function eventPriceLabel(
   isPaid?: boolean,
   price?: number,
   ticketTiers?: readonly Pick<EventTicketTier, "price" | "isActive">[]
 ): string {
-  if (!isPaid) {
-    return "Gratis";
-  }
-  if (price && price > 0) {
-    return formatCurrencyIDR(price);
-  }
-  const paidTiers = (ticketTiers ?? []).filter(
-    (tier) => tier.isActive !== false && tier.price > 0
-  );
-  if (paidTiers.length === 0) {
-    return "Gratis";
-  }
-  const minTierPrice = Math.min(...paidTiers.map((tier) => tier.price));
-  const maxTierPrice = Math.max(...paidTiers.map((tier) => tier.price));
-  if (minTierPrice !== maxTierPrice) {
-    return `Mulai ${formatCurrencyIDR(minTierPrice)}`;
-  }
-  return formatCurrencyIDR(minTierPrice);
+  return formatEventPriceSummary({ isPaid, price, ticketTiers });
 }
 
 /**

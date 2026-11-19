@@ -34,6 +34,10 @@ import {
 import type { CommunityEvent } from "@/types/event";
 import { formatCurrencyIDR } from "@/lib/utils";
 import {
+  formatEventPriceSummary,
+  isEventPaidEffective,
+} from "@/features/events-catalog/events-catalog-domain";
+import {
   eventCategoryLabel,
   eventStatusLabel,
   eventStatusTone,
@@ -115,16 +119,8 @@ export function EventsModerationTable({
           <TableBody>
             {pagedEvents.map((event) => {
               const effStatus = getEffectiveStatus(event);
-              const activePaidTiers = (event.ticketTiers ?? []).filter(
-                (t) => t.isActive !== false && t.price > 0
-              );
-              const effectivePrice =
-                event.price > 0
-                  ? event.price
-                  : activePaidTiers.length > 0
-                  ? Math.min(...activePaidTiers.map((t) => t.price))
-                  : 0;
-              const isFree = !event.isPaid || effectivePrice === 0;
+              const isPaid = isEventPaidEffective(event);
+              const priceSummary = formatEventPriceSummary(event);
               const bookedCount = (event as any).bookedCount || 0;
               const maxCapacity = event.maxCapacity || 0;
               const waUrl = formatWhatsAppUrl(event.organizerPhone);
@@ -169,7 +165,7 @@ export function EventsModerationTable({
                         {eventCategoryLabel(event.category)}
                       </span>
                       <span className="text-xs text-muted-foreground font-mono tabular-nums">
-                        {isFree ? "Gratis" : formatCurrencyIDR(effectivePrice)}
+                        {priceSummary}
                       </span>
                     </div>
                   </TableCell>

@@ -51,6 +51,7 @@ import {
 } from "@/features/events-admin/PayoutActionDialog";
 import { BankFormData, BankModal } from "@/features/events-admin/BankModal";
 import { EventEditModal } from "@/features/events-admin/EventEditModal";
+import { EventPromosDialog } from "@/components/events/EventPromosDialog";
 
 export default function AdminEventsPage() {
   const { user } = useAuth();
@@ -120,6 +121,7 @@ export default function AdminEventsPage() {
   const [editFormData, setEditFormData] = useState<Partial<CommunityEvent>>({});
   const [editGuidelinesText, setEditGuidelinesText] = useState("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [promoEvent, setPromoEvent] = useState<CommunityEvent | null>(null);
 
   // Settings State
   const [businessPolicy, setBusinessPolicy] = useState<any>(null);
@@ -1046,8 +1048,16 @@ export default function AdminEventsPage() {
           setSelectedEventForAttendees(e);
           setIsAttendeesModalOpen(true);
         }}
+        onManagePromos={(e) => setPromoEvent(e)}
         onDelete={handleDeleteEvent}
         isProcessing={isProcessingModeration}
+      />
+
+      <EventPromosDialog
+        open={Boolean(promoEvent)}
+        onOpenChange={(open) => !open && setPromoEvent(null)}
+        event={promoEvent}
+        onPromoUpdated={loadAdminEvents}
       />
 
       <EventAttendeesModal

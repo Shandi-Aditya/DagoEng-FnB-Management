@@ -8,7 +8,7 @@ import { StatusBadge } from "@/components/app/status-badge";
 import type { SubTicketInfo } from "./ticket-pass-domain";
 
 interface TicketQRSectionProps {
-  paymentStatus: "PENDING" | "PAID" | "CANCELLED";
+  paymentStatus: "PENDING" | "PAID" | "CANCELLED" | "EXPIRED" | "REFUNDED" | string;
   isMultiTicket: boolean;
   ticketCount: number;
   selectedTicketIndex: number;

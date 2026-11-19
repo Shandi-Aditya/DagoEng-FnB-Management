@@ -29,6 +29,12 @@ export function EventDetailSidebar({
   const hasTiers = Boolean(event.ticketTiers && event.ticketTiers.length > 0);
   const tiers = event.ticketTiers || [];
   const tierAvailabilities = event.availability?.tiers || event.tierAvailability || [];
+  const hasOnSaleTier = hasTiers
+    ? tiers.some((t) => {
+        const a = tierAvailabilities.find((ta) => ta.tierId === t.id);
+        return a ? !a.isSoldOut && a.salesStatus === "ON_SALE" : true;
+      })
+    : !isSoldOut;
 
   const minTierPrice = hasTiers
     ? Math.min(...tiers.map((t) => Number(t.price || 0)))
@@ -130,10 +136,18 @@ export function EventDetailSidebar({
               {tiers.map((t) => {
                 const avail = tierAvailabilities.find((a) => a.tierId === t.id);
                 const isSoldOutTier = avail?.isSoldOut;
+                const isUpcoming = avail?.salesStatus === "UPCOMING";
+                const isEnded = avail?.salesStatus === "ENDED";
+
+                const witaRange =
+                  t.salesStartDate || t.salesEndDate
+                    ? `${t.salesStartDate ? new Date(t.salesStartDate).toLocaleDateString("id-ID", { timeZone: "Asia/Makassar", day: "numeric", month: "short" }) : ""} – ${t.salesEndDate ? new Date(t.salesEndDate).toLocaleDateString("id-ID", { timeZone: "Asia/Makassar", day: "numeric", month: "short" }) : ""} WITA`
+                    : null;
+
                 return (
                   <div
                     key={t.id}
-                    className="flex items-center justify-between text-xs py-1 border-b border-border/40 last:border-0"
+                    className="flex items-center justify-between text-xs py-1.5 border-b border-border/40 last:border-0"
                   >
                     <div className="min-w-0 pr-2">
                       <span className="font-medium text-foreground block truncate">
@@ -142,10 +156,19 @@ export function EventDetailSidebar({
                       <span className="text-xs text-muted-foreground block">
                         {isSoldOutTier
                           ? "Habis terjual"
+                          : isUpcoming
+                          ? "Penjualan belum dibuka"
+                          : isEnded
+                          ? "Penjualan berakhir"
                           : avail
                           ? `Sisa ${avail.remaining} tiket`
-                          : `Kuota ${t.quota}`}
+                          : `Kuota ${t.quota} tiket`}
                       </span>
+                      {witaRange && (
+                        <span className="text-[10px] text-muted-foreground/80 block">
+                          {witaRange}
+                        </span>
+                      )}
                     </div>
                     <span className="font-mono font-medium text-foreground text-xs shrink-0">
                       {t.price > 0 ? formatCurrencyIDR(t.price) : "Gratis"}
@@ -163,9 +186,9 @@ export function EventDetailSidebar({
             <Button disabled variant="outline" size="lg" className="w-full">
               Event telah selesai
             </Button>
-          ) : isSoldOut ? (
+          ) : isSoldOut || (hasTiers && !hasOnSaleTier) ? (
             <Button disabled variant="outline" size="lg" className="w-full text-destructive">
-              Tiket habis terjual
+              Tiket tidak tersedia
             </Button>
           ) : (
             <Button
@@ -175,7 +198,7 @@ export function EventDetailSidebar({
               className="w-full"
             >
               <Ticket />
-              <span>{event.isPaid ? "Pesan tiket sekarang" : "Daftar gratis"}</span>
+              <span>{event.isPaid || (hasTiers && maxTierPrice > 0) ? "Pesan tiket sekarang" : "Daftar gratis"}</span>
             </Button>
           )}
         </div>

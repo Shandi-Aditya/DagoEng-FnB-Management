@@ -10,6 +10,7 @@ import {
   ExternalLink,
   AlertTriangle,
   ArrowRight,
+  Tag,
 } from "lucide-react";
 import {
   Dialog,
@@ -24,6 +25,10 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/app/status-badge";
 import { formatCurrencyIDR } from "@/lib/utils";
 import type { CommunityEvent, EventTicketOrder } from "@/types/event";
+import {
+  formatEventPriceSummary,
+  isEventPaidEffective,
+} from "@/features/events-catalog/events-catalog-domain";
 import {
   calculateEventOccupancy,
   calculateEventSalesSummary,
@@ -42,6 +47,7 @@ export interface OrganizerEventDetailModalProps {
   bookings: EventTicketOrder[];
   onEditRevision: (event: CommunityEvent) => void;
   onReviewSplit: (event: CommunityEvent) => void;
+  onManagePromos?: (event: CommunityEvent) => void;
 }
 
 export function OrganizerEventDetailModal({
@@ -51,12 +57,13 @@ export function OrganizerEventDetailModal({
   bookings,
   onEditRevision,
   onReviewSplit,
+  onManagePromos,
 }: OrganizerEventDetailModalProps) {
   if (!event) return null;
 
   const effStatus = getEffectiveStatus(event);
   const occupancy = calculateEventOccupancy(event, bookings);
-  const isFree = !event.isPaid || event.price === 0;
+  const isPaid = isEventPaidEffective(event);
 
   const eventBookings = bookings.filter((b) => b.eventId === event.id);
   const paidBookings = eventBookings.filter((b) => b.paymentStatus === "PAID");
@@ -130,7 +137,7 @@ export function OrganizerEventDetailModal({
             <div className="rounded-md border p-2.5 bg-muted/20">
               <span className="text-muted-foreground block text-xs">Harga tiket</span>
               <span className="font-mono font-medium block mt-0.5 text-foreground">
-                {isFree ? "Gratis" : formatCurrencyIDR(event.price)}
+                {formatEventPriceSummary(event)}
               </span>
             </div>
             <div className="rounded-md border p-2.5 bg-muted/20">
@@ -272,21 +279,36 @@ export function OrganizerEventDetailModal({
           )}
 
           {event.status === "APPROVED" && (
-            <Button
-              variant="outline"
-              size="sm"
-              render={
-                <Link
-                  href={`/events/${event.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                />
-              }
-              nativeButton={false}
-            >
-              <ExternalLink />
-              <span>Lihat di katalog publik</span>
-            </Button>
+            <>
+              {onManagePromos && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onManagePromos(event);
+                  }}
+                >
+                  <Tag className="size-3.5" />
+                  <span>Kelola promo</span>
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                render={
+                  <Link
+                    href={`/events/${event.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+                nativeButton={false}
+              >
+                <ExternalLink />
+                <span>Lihat di katalog publik</span>
+              </Button>
+            </>
           )}
 
           <Button
