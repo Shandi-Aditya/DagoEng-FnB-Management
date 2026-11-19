@@ -6,6 +6,7 @@ import {
   resolveDestinationBankAccount,
   resolveActiveTransferBankForBooking,
   getEventBankAccounts,
+  isPlaceholderBankAccount,
   expirePendingBookings,
 } from "@/lib/events";
 import { CommunityEvent } from "@/types/event";
@@ -61,6 +62,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ token: st
     const allEvents = await getAdminEvents();
     const matchingEvent = allEvents.find((e: CommunityEvent) => e.id === booking.eventId);
 
+    const resolvedTransferBank = resolveActiveTransferBankForBooking(booking, matchingEvent);
+    const platformBanks = getEventBankAccounts().filter(
+      (b) => b.isActive && b.accountType === "PLATFORM" && !isPlaceholderBankAccount(b)
+    );
+
     const safeTicketData = {
       id: booking.id,
       ticketCode: booking.ticketCode,
@@ -101,20 +107,35 @@ export async function GET(req: NextRequest, props: { params: Promise<{ token: st
       destinationBankSnapshot:
         booking.destinationBankSnapshot ||
         (matchingEvent ? resolveDestinationBankAccount(matchingEvent) : null),
-      activeDestinationBank: resolveActiveTransferBankForBooking(booking, matchingEvent).activeBank,
-      isOriginalBankDeactivated: resolveActiveTransferBankForBooking(booking, matchingEvent).isSnapshotDeactivated,
-      activeBankAccounts: getEventBankAccounts()
-        .filter((b) => b.isActive)
-        .map((b) => ({
-          bankId: b.id,
-          label: b.label,
-          bankName: b.bankName,
-          accountNumber: b.accountNumber,
-          accountHolder: b.accountHolder,
-          branch: b.branch,
-          badge: b.badge,
-          accountType: b.accountType,
-        })),
+      activeDestinationBank: resolvedTransferBank.activeBank,
+      isOriginalBankDeactivated: resolvedTransferBank.isSnapshotDeactivated,
+      activeBankAccounts: (resolvedTransferBank.activeBank
+        ? platformBanks.filter((b) => b.accountNumber === resolvedTransferBank.activeBank?.accountNumber)
+        : platformBanks
+      ).length > 0
+        ? (resolvedTransferBank.activeBank
+            ? platformBanks.filter((b) => b.accountNumber === resolvedTransferBank.activeBank?.accountNumber)
+            : platformBanks
+          ).map((b) => ({
+            bankId: b.id,
+            label: b.label,
+            bankName: b.bankName,
+            accountNumber: b.accountNumber,
+            accountHolder: b.accountHolder,
+            branch: b.branch,
+            badge: b.badge,
+            accountType: b.accountType,
+          }))
+        : platformBanks.map((b) => ({
+            bankId: b.id,
+            label: b.label,
+            bankName: b.bankName,
+            accountNumber: b.accountNumber,
+            accountHolder: b.accountHolder,
+            branch: b.branch,
+            badge: b.badge,
+            accountType: b.accountType,
+          })),
       paidAt: booking.paidAt,
       createdAt: booking.createdAt,
       eventDetails: matchingEvent

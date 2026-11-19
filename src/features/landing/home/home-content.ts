@@ -3,6 +3,7 @@
  * come from the project's own landing content; nothing here is invented.
  */
 import { CONTACT } from "@/features/landing/landing-content";
+import { OFFICIAL_CS_DISPLAY_PHONE, buildOfficialCsWhatsAppUrl } from "@/lib/contact-config";
 
 export const NAV_LINKS: readonly { href: string; label: string }[] = [
   { href: "/#kerja", label: "Ruang kerja" },
@@ -19,6 +20,8 @@ export const INSTAGRAM = {
   handle: CONTACT.instagram.label,
   url: CONTACT.instagram.href,
 };
+export const WHATSAPP_DISPLAY = OFFICIAL_CS_DISPLAY_PHONE;
+export const WHATSAPP_URL = buildOfficialCsWhatsAppUrl();
 export const MAP_URL = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(CONTACT.address)}`;
 
 export const WORKSPACES: readonly { name: string; line: string; price: string }[] = [

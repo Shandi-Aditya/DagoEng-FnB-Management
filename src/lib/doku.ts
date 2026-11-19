@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { EventTicketOrder } from "@/types/event";
+import { OFFICIAL_CS_WHATSAPP_NUMBER } from "@/lib/contact-config";
 
 export interface DokuConfig {
   clientId: string;
@@ -257,7 +258,7 @@ export async function createDokuCheckoutSession(
       id: booking.guestEmail.trim().toLowerCase(),
       name: booking.guestName,
       email: booking.guestEmail.trim().toLowerCase(),
-      phone: phone || "628120000000",
+      phone: phone || OFFICIAL_CS_WHATSAPP_NUMBER,
     },
   };
 

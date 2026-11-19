@@ -15,6 +15,7 @@ import {
 } from "./organizer-activation";
 import { revokeUserSessionsAfter } from "./session-revocation";
 import { normalizeLoyaltyPhone } from "./master-data-defaults";
+import { OFFICIAL_CS_DISPLAY_PHONE } from "./contact-config";
 
 export interface UnifiedUserAccount {
   id: string;
@@ -324,7 +325,7 @@ export async function activateOrganizerSelfService(
     const regResult = await registerUnifiedUser({
       email: normalizedEmail,
       name: payload.contactPerson || payload.organizationName,
-      phone: payload.phone || "+62 812-0000-0000",
+      phone: payload.phone || OFFICIAL_CS_DISPLAY_PHONE,
       role: "CUSTOMER",
     });
     user = regResult.user;

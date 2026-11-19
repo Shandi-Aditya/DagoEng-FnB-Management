@@ -35,6 +35,7 @@ import { usePrinter } from "@/contexts/PrinterContext";
 import { KitchenTicketData } from "@/types/printer";
 import { CashDrawerShiftModal, buildCashDrawerShiftSummary } from "@/features/pos/CashDrawerShiftModal";
 import { formatCurrencyIDR } from "@/lib/utils";
+import { OFFICIAL_CS_WHATSAPP_NUMBER } from "@/lib/contact-config";
 import { isTenantActive, DEFAULT_FNB_TENANTS, getAllFnbTenants, getTenantName } from "@/lib/tenant";
 import { resolveProductModifierGroups } from "@/lib/pos-modifiers";
 import {
@@ -1867,6 +1868,7 @@ export default function POSPage() {
           storedServiceCharge={closingShiftSummary.storedServiceCharge}
           isTaxEnabled={isTaxEnabled}
           taxRatePercent={taxRatePercent}
+          tenantPhone={(user?.tenant as { phone?: string } | undefined)?.phone || OFFICIAL_CS_WHATSAPP_NUMBER}
           onConfirmClose={(actualCash, notes) => {
             closeShift(activeShift.id, actualCash, notes);
           }}

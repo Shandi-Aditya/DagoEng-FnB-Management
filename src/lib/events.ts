@@ -929,8 +929,22 @@ export function buildCreateEventBankAccount(
   if (isReconciliationGateActive("event_settings.json")) {
     throw new Error("Gagal menambahkan rekening bank: Proses sinkronisasi database sedang berlangsung.");
   }
-  if (!data.label || !data.bankName || !data.accountNumber || !data.accountHolder) {
-    throw new Error("Label rekening, nama bank, nomor rekening, dan nama pemilik rekening wajib diisi.");
+  const effectiveLabel = data.label?.trim() || `${data.bankName ? data.bankName.trim() : "Bank"} Resmi`;
+  if (!data.bankName || !data.accountNumber || !data.accountHolder) {
+    throw new Error("Nama bank, nomor rekening, dan nama pemilik rekening wajib diisi.");
+  }
+
+  const accountType = data.accountType || "PLATFORM";
+  if (
+    accountType === "PLATFORM" &&
+    process.env.NODE_ENV !== "test" &&
+    isPlaceholderBankAccount({
+      accountNumber: data.accountNumber,
+      accountHolder: data.accountHolder,
+      label: effectiveLabel,
+    })
+  ) {
+    throw new Error("Rekening platform resmi tidak boleh menggunakan nomor atau nama rekening placeholder/demo.");
   }
 
   // Deep clone to guarantee request isolation
@@ -957,7 +971,7 @@ export function buildCreateEventBankAccount(
       const now = new Date().toISOString();
       const updatedAccount: EventBankAccount = {
         ...currentAccounts[existingIndex],
-        label: data.label.trim(),
+        label: effectiveLabel,
         bankName: data.bankName.trim(),
         accountNumber: cleanNumber,
         accountHolder: data.accountHolder.trim(),
@@ -1019,7 +1033,7 @@ export function buildCreateEventBankAccount(
 
   const newAccount: EventBankAccount = {
     id: `bank-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    label: data.label.trim(),
+    label: effectiveLabel,
     bankName: data.bankName.trim(),
     accountNumber: cleanNumber,
     accountHolder: data.accountHolder.trim(),
@@ -4862,10 +4876,10 @@ export async function deleteEventBooking(
  */
 export const MANUAL_TRANSFER_BANK_ACCOUNTS = [
   {
-    bankName: "Bank BRI",
-    accountNumber: "000011223344",
-    accountHolder: "PT DAGO CREATIVE HUB (DEMO)",
-    branch: "KC Singaraja",
+    bankName: "BCA (Bank Central Asia)",
+    accountNumber: "8830192841",
+    accountHolder: "PT DAGO CREATIVE HUB",
+    branch: "KCU Singaraja",
     badge: "Rekening Operasional",
   },
 ];

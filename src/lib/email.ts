@@ -5,6 +5,8 @@
  * As per guidelines, we provide clean interfaces without fabricating false delivery status.
  */
 
+import { OFFICIAL_CS_DISPLAY_PHONE, buildOfficialCsWhatsAppUrl } from "@/lib/contact-config";
+
 export interface PaidTicketItem {
   ticketCode: string;
   seatNumber: number;
@@ -129,7 +131,7 @@ export function generatePaidTicketEmailHtml(payload: TicketConfirmationEmailPayl
 
       <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 12px; color: #94a3b8; text-align: center;">
         <p style="margin: 0;">Simpan email ini atau unduh gambar e-tiket Anda sebelum tiba di lokasi acara.</p>
-        <p style="margin: 4px 0 0;">Butuh bantuan? Hubungi WhatsApp resmi CS Dago Creative Hub.</p>
+        <p style="margin: 4px 0 0;">Butuh bantuan? Hubungi WhatsApp resmi CS Dago Creative Hub di <a href="${buildOfficialCsWhatsAppUrl()}" style="color: #0f172a; text-decoration: underline;">${OFFICIAL_CS_DISPLAY_PHONE}</a>.</p>
       </div>
     </div>
   </div>

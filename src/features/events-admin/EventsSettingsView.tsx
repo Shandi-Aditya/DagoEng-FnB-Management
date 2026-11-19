@@ -181,98 +181,117 @@ export function EventsSettingsView({
           </Button>
         </CardHeader>
         <CardContent>
-          {bankAccountsList.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">
-              Belum ada rekening bank yang didaftarkan.
-            </p>
-          ) : (
-            <div className="overflow-hidden rounded-lg border bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Bank & Rekening</TableHead>
-                    <TableHead>Atas Nama</TableHead>
-                    <TableHead className="hidden sm:table-cell">Cabang</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-0 text-right">
-                      <span className="sr-only">Aksi</span>
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {bankAccountsList.map((acc) => (
-                    <TableRow key={acc.id}>
-                      <TableCell>
-                        <div className="flex flex-col gap-0.5">
+          {(() => {
+            const platformBanks = bankAccountsList.filter((b) => b.accountType !== "ORGANIZER");
+            if (platformBanks.length === 0) {
+              return (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  Belum ada rekening bank yang didaftarkan.
+                </p>
+              );
+            }
+            return (
+              <div className="overflow-hidden rounded-lg border bg-card">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Bank & Rekening</TableHead>
+                      <TableHead>Atas Nama</TableHead>
+                      <TableHead className="hidden sm:table-cell">Cabang</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="w-0 text-right">
+                        <span className="sr-only">Aksi</span>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {platformBanks.map((acc) => (
+                      <TableRow key={acc.id}>
+                        <TableCell>
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-foreground">{acc.bankName}</span>
+                              {acc.isDefault ? (
+                                <Badge variant="outline" className="text-xs">
+                                  Utama
+                                </Badge>
+                              ) : null}
+                            </div>
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {acc.accountNumber}
+                            </span>
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <span className="text-sm text-foreground">{acc.accountHolder}</span>
+                        </TableCell>
+
+                        <TableCell className="hidden sm:table-cell">
+                          <span className="text-xs text-muted-foreground">{acc.branch || "—"}</span>
+                        </TableCell>
+
+                        <TableCell>
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-foreground">{acc.bankName}</span>
-                            {acc.isDefault ? (
-                              <Badge variant="outline" className="text-xs">
-                                Utama
-                              </Badge>
+                            <Badge variant={acc.isActive ? "default" : "secondary"}>
+                              {acc.isActive ? "Aktif" : "Nonaktif"}
+                            </Badge>
+                            {onToggleBankActive && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={acc.isDefault && acc.isActive}
+                                onClick={() => onToggleBankActive(acc.id, acc.isActive)}
+                                className="text-xs h-7 px-2"
+                              >
+                                {acc.isActive ? "Nonaktifkan" : "Aktifkan"}
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {acc.isActive && !acc.isDefault ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onSetDefaultBank(acc.id)}
+                                title="Jadikan rekening utama"
+                              >
+                                <Star />
+                                <span className="sr-only">Jadikan utama</span>
+                              </Button>
+                            ) : null}
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onEditBank(acc)}
+                            >
+                              <Edit />
+                              <span className="sr-only">Edit</span>
+                            </Button>
+
+                            {!acc.isDefault ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => onDeleteBank(acc.id)}
+                              >
+                                <Trash2 />
+                                <span className="sr-only">Hapus</span>
+                              </Button>
                             ) : null}
                           </div>
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {acc.accountNumber}
-                          </span>
-                        </div>
-                      </TableCell>
-
-                      <TableCell>
-                        <span className="text-sm text-foreground">{acc.accountHolder}</span>
-                      </TableCell>
-
-                      <TableCell className="hidden sm:table-cell">
-                        <span className="text-xs text-muted-foreground">{acc.branch || "—"}</span>
-                      </TableCell>
-
-                      <TableCell>
-                        <Badge variant={acc.isActive ? "default" : "secondary"}>
-                          {acc.isActive ? "Aktif" : "Nonaktif"}
-                        </Badge>
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {!acc.isDefault ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => onSetDefaultBank(acc.id)}
-                              title="Jadikan rekening utama"
-                            >
-                              <Star />
-                              <span className="sr-only">Jadikan utama</span>
-                            </Button>
-                          ) : null}
-
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onEditBank(acc)}
-                          >
-                            <Edit />
-                            <span className="sr-only">Edit</span>
-                          </Button>
-
-                          {!acc.isDefault ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => onDeleteBank(acc.id)}
-                            >
-                              <Trash2 />
-                              <span className="sr-only">Hapus</span>
-                            </Button>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
@@ -300,22 +319,26 @@ export function EventsSettingsView({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {bankChangeHistory.slice(0, 10).map((h, i) => (
-                    <TableRow key={i}>
-                      <TableCell className="text-xs text-muted-foreground font-mono">
-                        {new Date(h.timestamp || h.createdAt).toLocaleString("id-ID")}
-                      </TableCell>
-                      <TableCell className="text-xs font-medium text-foreground">
-                        {h.action || h.bankName}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {h.actorName || h.userEmail || "Admin"}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {h.description || h.reason || "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {bankChangeHistory.slice(0, 10).map((h, i) => {
+                    const rawTime = h.changedAt || h.timestamp || h.createdAt;
+                    const formattedTime = rawTime ? new Date(rawTime).toLocaleString("id-ID") : "—";
+                    return (
+                      <TableRow key={i}>
+                        <TableCell className="text-xs text-muted-foreground font-mono">
+                          {formattedTime}
+                        </TableCell>
+                        <TableCell className="text-xs font-medium text-foreground">
+                          {h.action || h.bankName}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {h.changedBy || h.actorName || h.userEmail || "Admin"}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {h.details || h.description || h.reason || "—"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

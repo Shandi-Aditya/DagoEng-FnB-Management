@@ -212,7 +212,8 @@ export default function AdminEventsPage() {
       }
       const banksData = await banksRes.json();
       if (banksData.success) {
-        setBankAccountsList(banksData.data.bankAccounts || []);
+        const rawAccounts = banksData.data.bankAccounts || [];
+        setBankAccountsList(rawAccounts.filter((b: any) => b.accountType !== "ORGANIZER"));
         setBankChangeHistory(banksData.data.bankHistory || []);
       }
     } catch (e) {
@@ -609,6 +610,7 @@ export default function AdminEventsPage() {
     setBankForm({
       label: "",
       bankName: "BCA",
+      customBankName: "",
       accountNumber: "",
       accountHolder: "",
       branch: "",
@@ -620,9 +622,12 @@ export default function AdminEventsPage() {
 
   const handleOpenEditBank = (acc: any) => {
     setEditingBank(acc);
+    const knownBanks = ["BCA", "Mandiri", "BNI", "BRI", "BSI", "CIMB", "Permata"];
+    const isKnown = knownBanks.includes(acc.bankName);
     setBankForm({
       label: acc.label || "",
-      bankName: acc.bankName || "BCA",
+      bankName: isKnown ? acc.bankName : "Other",
+      customBankName: isKnown ? "" : acc.bankName,
       accountNumber: acc.accountNumber || "",
       accountHolder: acc.accountHolder || "",
       branch: acc.branch || "",
@@ -639,7 +644,16 @@ export default function AdminEventsPage() {
       const isEdit = Boolean(editingBank);
       const url = "/api/events/admin/settings/banks";
       const method = isEdit ? "PATCH" : "POST";
-      const body = isEdit ? { id: editingBank.id, ...bankForm } : bankForm;
+      const effectiveBankName =
+        bankForm.bankName === "Other" && bankForm.customBankName?.trim()
+          ? bankForm.customBankName.trim()
+          : bankForm.bankName;
+      const normalizedBankForm: any = {
+        ...bankForm,
+        bankName: effectiveBankName,
+      };
+      delete normalizedBankForm.customBankName;
+      const body = isEdit ? { id: editingBank.id, ...normalizedBankForm } : normalizedBankForm;
 
       const res = await fetch(url, {
         method,
@@ -651,7 +665,7 @@ export default function AdminEventsPage() {
         throw new Error(data.error || "Gagal menyimpan rekening bank.");
       }
 
-      setActionSuccessMessage(`Rekening ${bankForm.bankName} berhasil ${isEdit ? "diperbarui" : "ditambahkan"}!`);
+      setActionSuccessMessage(`Rekening ${effectiveBankName} berhasil ${isEdit ? "diperbarui" : "ditambahkan"}!`);
       setIsAddBankModalOpen(false);
       setEditingBank(null);
       await loadBusinessSettings();

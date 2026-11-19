@@ -116,6 +116,24 @@ describe("TASK S-01 — Official Bank Account Guard & Fail-Closed Booking Verifi
     it("2.1 should reject paid booking when default platform bank is placeholder/demo", async () => {
       await saveEventsToDisk([mockPaidEvent]);
       await saveBookingsToDisk([]);
+      const placeholderPolicy: EventRevenueSharingPolicy = {
+        ...getEventRevenuePolicy(),
+        bankAccounts: [
+          {
+            id: "bank-demo",
+            label: "Akun Demo",
+            bankName: "BCA Demo",
+            accountNumber: "000011223344",
+            accountHolder: "PT DAGO CREATIVE HUB (DEMO)",
+            isDefault: true,
+            isActive: true,
+            accountType: "PLATFORM",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+      };
+      await saveEventSettingsToDisk(placeholderPolicy);
 
       await expect(
         createEventBooking({

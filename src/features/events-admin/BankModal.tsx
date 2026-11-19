@@ -16,6 +16,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 export interface BankFormData {
   label: string;
   bankName: string;
+  customBankName?: string;
   accountNumber: string;
   accountHolder: string;
   branch: string;
@@ -71,6 +72,20 @@ export function BankModal({
               <NativeSelectOption value="Other">Lainnya</NativeSelectOption>
             </NativeSelect>
           </div>
+
+          {formData.bankName === "Other" && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="customBankName">Nama bank kustom</Label>
+              <Input
+                id="customBankName"
+                type="text"
+                placeholder="Masukkan nama bank"
+                value={formData.customBankName || ""}
+                onChange={(e) => onFormChange({ ...formData, customBankName: e.target.value })}
+                required
+              />
+            </div>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="accountNumber">Nomor rekening</Label>

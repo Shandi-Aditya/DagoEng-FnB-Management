@@ -10,6 +10,7 @@ import { UnitScope } from "@/components/app/unit-scope";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/app/empty-state";
 import { downloadTicketAsImage } from "@/lib/ticket-download";
+import { buildOfficialCsWhatsAppUrl } from "@/lib/contact-config";
 
 import {
   TicketPassHeader,
@@ -237,7 +238,9 @@ export default function PrivateTicketViewPage() {
   );
 
   const bankAccounts =
-    ticket.activeBankAccounts && ticket.activeBankAccounts.length > 0
+    ticket.paymentStatus === "PAID" && ticket.destinationBankSnapshot
+      ? [ticket.destinationBankSnapshot]
+      : ticket.activeBankAccounts && ticket.activeBankAccounts.length > 0
       ? ticket.activeBankAccounts
       : ticket.destinationBankSnapshot
       ? [ticket.destinationBankSnapshot]
@@ -347,6 +350,24 @@ export default function PrivateTicketViewPage() {
             onDownloadAll={handleDownloadAllTickets}
             isPaidOrFree={isPaidOrFree}
           />
+
+          <div className="rounded-xl border bg-card p-4 text-center text-sm text-muted-foreground flex flex-col sm:flex-row items-center justify-between gap-3">
+            <span>Butuh bantuan pembayaran atau mengalami kendala tiket?</span>
+            <Button
+              variant="outline"
+              size="sm"
+              render={
+                <a
+                  href={buildOfficialCsWhatsAppUrl(`Halo CS Dago Creative Hub, saya butuh bantuan untuk tiket ${ticket.ticketCode}`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              }
+              nativeButton={false}
+            >
+              Hubungi CS via WhatsApp
+            </Button>
+          </div>
         </main>
       </div>
 

@@ -17,6 +17,7 @@ import {
   type PrinterDeviceConfig,
 } from "@/types/printer";
 import type { FnbPartnerInfo, TenantProfileData } from "@/lib/tenant";
+import { OFFICIAL_CS_DISPLAY_PHONE } from "@/lib/contact-config";
 import type {
   WifiCalculationBasis,
   WifiCoworkingRule,
@@ -118,7 +119,7 @@ export const SEED_TENANT_PROFILES: Record<string, Partial<TenantProfileData>> = 
     brandName: "Kopi Senja",
     tagline: "Specialty Coffee & Beverages",
     description: "Single origin espresso blend Kintamani, olahan susu segar & gula aren organik Bali.",
-    contactPhone: "+62 812-3456-7890",
+    contactPhone: OFFICIAL_CS_DISPLAY_PHONE,
     receiptHeader: "Kopi Senja — Specialty Coffee & Beverages",
     receiptFooter: "Terima kasih telah berkunjung ke Kopi Senja!",
     lowStockThresholdPercent: 35,
@@ -1040,7 +1041,7 @@ export function buildTenantProfileWithDefaults(
     brandName: fnbInfo.name,
     tagline: fnbInfo.tagline,
     description: fnbInfo.desc,
-    contactPhone: "+62 812-0000-0000",
+    contactPhone: OFFICIAL_CS_DISPLAY_PHONE,
     receiptHeader: `${fnbInfo.name} — ${fnbInfo.tagline}`,
     receiptFooter: `Terima kasih telah berkunjung ke ${fnbInfo.name}!`,
     lowStockThresholdPercent: 30,

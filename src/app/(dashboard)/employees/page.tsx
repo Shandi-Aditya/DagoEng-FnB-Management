@@ -12,6 +12,7 @@ import { useEmployeeShift } from "@/contexts/EmployeeShiftContext";
 import { useOrders } from "@/contexts/OrderContext";
 import { useOutlet } from "@/contexts/OutletContext";
 import { downloadCSV, downloadExcel } from "@/lib/export-utils";
+import { OFFICIAL_CS_DISPLAY_PHONE } from "@/lib/contact-config";
 import type { EmployeeProfile, ShiftRecord } from "@/types/shift";
 
 import { AddEmployeeModal } from "@/features/employees/AddEmployeeModal";
@@ -375,7 +376,7 @@ export default function EmployeesPage() {
           setSelectedShiftForClosingPDF(null);
         }}
         shiftId={selectedShiftForClosingPDF?.id}
-        managerPhone="+62 812-3456-7890"
+        managerPhone={OFFICIAL_CS_DISPLAY_PHONE}
         reportData={buildClosingReportData(
           selectedShiftForClosingPDF || activeShift,
           filteredOrders,

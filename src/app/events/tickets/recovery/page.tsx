@@ -29,6 +29,7 @@ import {
   DEFAULT_CS_WHATSAPP_NUMBER,
   type RecoveryChannel,
 } from "@/features/events-tickets-recovery";
+import { OFFICIAL_CS_WHATSAPP_NUMBER } from "@/lib/contact-config";
 
 interface RecoverySuccessState {
   channel: RecoveryChannel;
@@ -58,9 +59,8 @@ export default function TicketRecoveryPage() {
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [phoneSuccess, setPhoneSuccess] = useState<RecoverySuccessState | null>(null);
 
-  // CS WhatsApp Contact (configurable via NEXT_PUBLIC_CS_WHATSAPP, fallback to central contact)
-  const csWhatsappNumber =
-    process.env.NEXT_PUBLIC_CS_WHATSAPP || DEFAULT_CS_WHATSAPP_NUMBER;
+  // CS WhatsApp Contact (central contact configuration)
+  const csWhatsappNumber = OFFICIAL_CS_WHATSAPP_NUMBER;
 
   // Handler for Tab 1: Cari dengan Kode Booking
   const handleRecoverWithCode = async (e: React.FormEvent) => {
