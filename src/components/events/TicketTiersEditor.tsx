@@ -112,7 +112,6 @@ export function TicketTiersEditor({
               size="sm"
               variant="outline"
               onClick={handleAddTier}
-              className="h-8 text-xs"
             >
               <Plus className="size-3.5 mr-1" />
               <span>Tambah jenis tiket</span>
@@ -140,7 +139,7 @@ export function TicketTiersEditor({
               size="sm"
               variant="outline"
               onClick={handleAddTier}
-              className="mt-3 text-xs"
+              className="mt-3"
             >
               <Plus className="size-3.5 mr-1" />
               <span>Tambah jenis tiket</span>

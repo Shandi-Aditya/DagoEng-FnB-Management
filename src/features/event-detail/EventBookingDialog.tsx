@@ -215,7 +215,7 @@ export function EventBookingDialog({
                         </p>
                       )}
                       {(tier.salesStartDate || tier.salesEndDate) && (
-                        <p className="text-[10px] text-muted-foreground/80">
+                        <p className="text-xs text-muted-foreground/80">
                           {tier.salesStartDate ? new Date(tier.salesStartDate).toLocaleDateString("id-ID", { timeZone: "Asia/Makassar", day: "numeric", month: "short" }) : ""} – {tier.salesEndDate ? new Date(tier.salesEndDate).toLocaleDateString("id-ID", { timeZone: "Asia/Makassar", day: "numeric", month: "short" }) : ""} WITA
                         </p>
                       )}

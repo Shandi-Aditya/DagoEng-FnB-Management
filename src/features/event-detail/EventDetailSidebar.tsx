@@ -165,7 +165,7 @@ export function EventDetailSidebar({
                           : `Kuota ${t.quota} tiket`}
                       </span>
                       {witaRange && (
-                        <span className="text-[10px] text-muted-foreground/80 block">
+                        <span className="text-xs text-muted-foreground/80 block">
                           {witaRange}
                         </span>
                       )}

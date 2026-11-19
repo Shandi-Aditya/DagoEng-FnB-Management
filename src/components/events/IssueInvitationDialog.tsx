@@ -178,7 +178,7 @@ export function IssueInvitationDialog({
                   size="sm"
                   variant="outline"
                   onClick={handleCopyLink}
-                  className="h-8 text-xs shrink-0"
+                  className="shrink-0"
                 >
                   {isCopied ? <Check className="size-3.5 text-success mr-1" /> : <Copy className="size-3.5 mr-1" />}
                   <span>{isCopied ? "Disalin" : "Salin"}</span>
@@ -219,7 +219,6 @@ export function IssueInvitationDialog({
                 variant="outline"
                 size="sm"
                 onClick={resetForm}
-                className="h-8 text-xs"
               >
                 Terbitkan tiket lain
               </Button>
@@ -354,7 +353,6 @@ export function IssueInvitationDialog({
                 variant="outline"
                 size="sm"
                 onClick={() => handleOpenChange(false)}
-                className="h-8 text-xs"
               >
                 Batal
               </Button>
@@ -362,7 +360,6 @@ export function IssueInvitationDialog({
                 type="submit"
                 size="sm"
                 disabled={isSubmitting || !guestName.trim() || !guestEmail.trim()}
-                className="h-8 text-xs"
               >
                 {isSubmitting ? "Menerbitkan..." : "Terbitkan tiket undangan"}
               </Button>

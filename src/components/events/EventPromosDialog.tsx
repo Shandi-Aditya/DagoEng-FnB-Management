@@ -190,7 +190,6 @@ export function EventPromosDialog({
               size="sm"
               onClick={fetchPromos}
               disabled={isLoading}
-              className="h-8 text-xs"
             >
               <RefreshCw className={`size-3.5 mr-1 ${isLoading ? "animate-spin" : ""}`} />
               <span>Muat ulang</span>
@@ -239,7 +238,7 @@ export function EventPromosDialog({
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
                   placeholder="Contoh: HEMAT20K / EARLYPASS"
-                  className="h-8 text-xs font-mono uppercase"
+                  className="h-8 text-xs font-mono"
                 />
               </div>
 
@@ -376,7 +375,6 @@ export function EventPromosDialog({
                 variant="outline"
                 size="sm"
                 onClick={() => setIsFormOpen(false)}
-                className="h-8 text-xs"
               >
                 Batal
               </Button>
@@ -384,7 +382,6 @@ export function EventPromosDialog({
                 type="submit"
                 size="sm"
                 disabled={isCreating || !code.trim()}
-                className="h-8 text-xs"
               >
                 {isCreating ? "Menyimpan..." : "Simpan kode promo"}
               </Button>
@@ -421,7 +418,7 @@ export function EventPromosDialog({
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-sm text-foreground">
+                      <span className="font-mono font-semibold text-sm text-foreground">
                         {p.code}
                       </span>
                       <Badge variant={p.isActive ? "default" : "outline"} className="text-xs">
